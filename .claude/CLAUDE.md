@@ -8,13 +8,13 @@ Stack: React 19 + Vite 8 + Tailwind v4 + SVG hex board + Zustand + Immer + Supab
 Supabase ID: wynccumuisjxbptjlfwq · URL: https://wynccumuisjxbptjlfwq.supabase.co
 GitHub: mahilh/neotopia (public) · Domain: neotopia.io · Vercel: auto-deploy from main
 
-STATUS (as of S3 end):
+STATUS (as of S3-S4):
   ✅ ANON AUTH ENABLED (June 25 2026)
   ✅ TWO-CLIENT E2E VERIFIED LIVE (commit 7802096 · T3 S3)
   ✅ NEAR-MISS ENGINE LIVE (usePatternHighlight · T2 S3)
   ✅ SCORECARDFLASH LIVE (ScoreFlash civilization moment · T1 S3)
   ✅ BONUS TOKENS: automatization + subsidy + initiative (T2 S4)
-  ⏳ PENDING: /lobby route wire (T1 S4) · permits bonus (T2 S5) · browser E2E UI (T3 S4)
+  ⏳ PENDING: /lobby route (T1 S4) · permits (T2 S5) · browser UI E2E (T3 S4)
 
 TERMINAL LANES:
   T1: src/components/ · src/pages/ · src/App.jsx · src/utils/ · src/hooks/useGameActions.js
@@ -36,9 +36,20 @@ RULES — ABSOLUTE:
 
 SELF-RATING: Forge /100 before tasks (<85=rewrite) · Task /50 after (<35=redo) · Session /300
 
-BOOT: cat .claude/CLAUDE.md | head -80 · cat .claude/comms/tomorrow.md · git log --oneline -8 · git status --short · npm run build 2>&1 | tail -3
+GIT PULL — FULLY AUTOMATED:
+  BOOT SEQUENCE now starts with git pull --rebase (line 1 below).
+  start.sh handles Mac terminal pull: bash ~/NeoTopia/start.sh (run ONCE before opening tabs).
+  Terminals handle mid-session sync via git pull --rebase --autostash before every push.
+  You never need to manually git pull. Everything is automated.
 
-COMMS: .claude/comms/tomorrow.md · Format: T[N] LESSON: · T[N]→T[M]: · T[N] S[N+1] FIRST:
+BOOT SEQUENCE (run at start of every session — first line is git pull):
+  git pull --rebase                              ← FIRST — syncs from main before anything
+  cat .claude/CLAUDE.md | head -80
+  cat .claude/comms/tomorrow.md 2>/dev/null
+  git log --oneline -8 && git status --short
+  npm run build 2>&1 | tail -3
+
+COMMS: .claude/comms/tomorrow.md · T[N] LESSON: · T[N]→T[M]: · T[N] S[N+1] FIRST:
 
 CODEWORDS:
   T[N] AUTODRIVE! → paste output · I: GitHub verify + XRAY!/200 + next forge (no session # needed)
@@ -47,21 +58,18 @@ CODEWORDS:
   DEEPDIVE! → 10-step analysis · OVERDRIVE! → 6-agent LLM Council · NIGHTSAVE! → Google Drive
   Rate it → /300 session rating
 
-ENGINE ARCHITECTURE (current state):
-  Pattern matching owner: patternMatcher.findBuildableCards (never reimplement)
+ENGINE ARCHITECTURE:
+  Pattern matching: patternMatcher.findBuildableCards (never reimplement)
   Near-miss: usePatternHighlight(regionId) → {completeKeys, partialKeys, completionCandidates[{cardId,missingKey,requiredType,filledKeys}]}
-  Scoring owner: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean · scoreCard delegates to it
-  Optimistic move: useGameSync.sendMove(mutate,eventType,eventData)→boolean (T3 single owner)
-  serialization: serializableState()=JSON.parse(JSON.stringify(store)) · NOT structuredClone
-  Bonus tokens: automatization(free action) · subsidy(draw 2 Offer-first) · initiative(place from reserve) · permits(TODO)
-  1-bonus-per-turn enforcement: NOT YET BUILT (T2 S5)
-  Bonus earn paths: NOT YET BUILT (T2 S5)
+  Scoring owner: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean · scoreCard delegates
+  Optimistic move: useGameSync.sendMove(mutate,eventType,eventData)→boolean (T3)
+  Serialization: serializableState()=JSON.parse(JSON.stringify(store)) · NOT structuredClone
+  Bonus: automatization · subsidy(draw 2 Offer-first) · initiative(place from reserve) · permits(TODO)
+  1-bonus-per-turn: NOT YET BUILT (T2 S5) · Bonus earn paths: NOT YET BUILT (T2 S5)
 
 DB CONTRACT GATE (rule 26 — before ANY Supabase code):
-  Column types · FK targets · CHECK/UNIQUE · RLS per-command · auth-provider config
-  is_identity/is_generated for columns that may be GENERATED ALWAYS (rule 30)
+  Column types · FK targets · CHECK/UNIQUE · RLS per-command · auth config · is_identity (rule 30)
   Dashboard: https://supabase.com/dashboard/project/wynccumuisjxbptjlfwq
-  FULL DB GATE CHECK:
   node --input-type=module <<'EOF'
   import { createClient } from '@supabase/supabase-js'
   import { readFileSync } from 'fs'
@@ -81,14 +89,11 @@ SUPABASE SCHEMA (verified T3 S2-S3):
   game_events.session_id → FK game_sessions.id (uuid · NOT room_id)
   game_events.sequence_num: GENERATED ALWAYS AS IDENTITY · DO NOT set explicitly (rule 30)
   RLS: migration 001(GRANT) · 002(INSERT/UPDATE policies) · 003(player_count trigger)
-  migration 003: SECURITY DEFINER + SET search_path='' + schema-qualified (hardened)
-  serializableState(): JSON.parse(JSON.stringify(store)) — store holds functions, structuredClone throws
+  migration 003: SECURITY DEFINER + SET search_path='' + schema-qualified
 
 RED ERROR PREVENTION:
-  RE-1: No @ in bash globs → node -e
-  RE-2: "permission denied" ≠ "does not exist"
-  RE-3: Raw SQL needs GRANT · migration 001
-  RE-4: Known-cause gate + independent tasks = parallel
+  RE-1: No @ in bash globs → node -e · RE-2: "permission denied" ≠ "does not exist"
+  RE-3: Raw SQL needs GRANT · RE-4: Known-cause gate + independent tasks = parallel
 
 GAME MECHANICS:
   BOARD: Region 0 Sacred City(#7F77DD)cq=0cr=0 · Region 1 Living Earth(#1D9E75)cq=8cr=-4 · Region 2 Free Energy(#E24B4A)cq=4cr=5
@@ -96,10 +101,11 @@ GAME MECHANICS:
   4 ELEMENTS: energy(red #E24B4A ⚡) · biofarming(green #1D9E75 ◈) · technology(purple #7F77DD ◉) · community(blue #378ADD ✦)
   TURN=3 ACTIONS: draw card OR move element factory→adjacent region
   PLACEMENT: empty · first→center · else→adjacent · key 'q,r'
-  SCORING: 6 rotations · completing-element · Diverse City (no same illustration consecutive per region)
-  FACTORY SEEDING: 1-of-each at start · tiles=REFILLS ONLY · FINAL SCORE: best+second+(worst×3)+(unused×3)+cluster
-  56 CARDS: 12×2pt 18×3pt 18×4pt 8×5pt · src/lib/projectCards.js · district field is NUMBER not string
-  BONUS TOKENS: 4 types · free actions · 1 per turn (not yet enforced) · earn: cover bonus hex OR score track 7/13/18
+  SCORING: 6 rotations · completing-element · Diverse City (no same illustration consecutive)
+  FACTORY SEEDING: 1-of-each at start · tiles=REFILLS ONLY
+  FINAL SCORE: best+second+(worst×3)+(unused×3)+cluster
+  56 CARDS: 12×2pt 18×3pt 18×4pt 8×5pt · district field is NUMBER not string
+  BONUS TOKENS: earn by covering bonus hex OR crossing score track 7/13/18
   REALTIME: DB changes=authoritative · Broadcast=ephemeral<32KB · Presence=lobby
 
 ELEMENT → CIVILIZATION: energy→Energy/Invention · biofarming→Food/Regeneration · technology→Tech/AI · community→Source/Culture
@@ -133,10 +139,9 @@ PERMANENT ANTI-REGRESS RULES (30):
   25. Re-read other lane's module right before integration (T1 S2)
   26. Premise-check DB contract: types · FKs · CHECKs · RLS per-command · auth config (T3 S2)
   27. Run code against tests before trusting either · grep consumers first (T2 S3)
-  28. Premise check is stale the moment you move on · re-run the gate right before acting on it (T1 S3)
+  28. Premise check is stale the moment you move on · re-run right before acting (T1 S3)
   29. For any "spend X to do Y" action, validate Y fully BEFORE debiting X (T2 S4)
-  30. information_schema ≠ full DB contract · GENERATED ALWAYS AS IDENTITY rejects explicit inserts · read is_identity or run live INSERT (T3 S3)
+  30. information_schema ≠ full DB contract · GENERATED ALWAYS AS IDENTITY rejects explicit inserts (T3 S3)
 
 HEX MATH: redblobgames.com/grids/hexagons · flat-top · axial (q,r)
-  Neighbors: (1,0)(1,-1)(0,-1)(-1,0)(-1,1)(0,1)
 COLONIST.IO: 15M+ games · 65% mobile · our edge: pure strategy + consciousness theme
