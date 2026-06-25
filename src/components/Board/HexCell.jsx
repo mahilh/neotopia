@@ -7,6 +7,7 @@ export default function HexCell({
   isValidTarget = false, // pulsing ring · player can place here
   isPatternMatch = false,// glowing · part of a buildable card pattern
   isFactory = false,    // factory hex · distinct look
+  isSelected = false,   // factory the player has picked up from · brightened ring
   bonusCovered = false, // this hex has/had a bonus token
   regionColor = '#888888',
   onClick = () => {},
@@ -27,14 +28,14 @@ export default function HexCell({
     : `${regionColor}0F`             // base: 6% region color
 
   const stroke = isFactory
-    ? 'rgba(255,255,255,0.25)'
+    ? (isSelected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.25)')
     : element
     ? ELEMENT_COLORS[element]
     : isValidTarget
     ? regionColor
     : `${regionColor}44`
 
-  const strokeWidth = isFactory ? 1.5 : element ? 1 : 0.5
+  const strokeWidth = isFactory ? (isSelected ? 2.5 : 1.5) : element ? 1 : 0.5
 
   return (
     <g
@@ -61,6 +62,17 @@ export default function HexCell({
           stroke={regionColor}
           strokeWidth={2}
           opacity={0.7}
+          style={{animation: 'hexPulse 1.4s ease-in-out infinite'}}
+        />
+      )}
+
+      {/* Selected factory pulsing ring · feedback that this factory is picked up from */}
+      {isFactory && isSelected && (
+        <polygon
+          points={points}
+          fill="none"
+          stroke="rgba(255,255,255,0.9)"
+          strokeWidth={2.5}
           style={{animation: 'hexPulse 1.4s ease-in-out infinite'}}
         />
       )}

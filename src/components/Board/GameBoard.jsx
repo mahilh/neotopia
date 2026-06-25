@@ -83,6 +83,7 @@ export default function GameBoard({
             <HexCell
               q={factory.q} r={factory.r}
               isFactory
+              isSelected={factory.id === selectedFactory}
               regionColor="rgba(255,255,255,0.15)"
               onClick={() => {}}
             />
