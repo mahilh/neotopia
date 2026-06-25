@@ -135,20 +135,27 @@ export function useGameActions() {
   }, [uiPhase, selectedFactory, selectedElement, selectedRegion, validTargets, currentSeat, reset])
 
   // Scoring: player clicks a glowing card in their hand.
+  // Returns the scored card + region on a real award (drives GameRoom's ScoreFlash), else null.
   const handleCardScore = useCallback((cardId) => {
-    if (uiPhase !== 'scorePending') return
-    if (selectedRegion === null) return
+    if (uiPhase !== 'scorePending') return null
+    if (selectedRegion === null) return null
     const match = buildableMatches.find(m => m.cardId === cardId)
-    if (!match) return
+    if (!match) return null
     const store = useGameStore.getState()
+    const player = store.players.find(p => p.seat === currentSeat)
+    const scoredCard = player?.hand.find(c => c.id === cardId) ?? null // capture before scoreCard removes it
+    const regionId = selectedRegion
+    const before = player?.scores[regionId]
     // 4th arg lastPlacedKey · scoreCard re-validates the completion against the board and
-    // rejects SILENTLY (void) on any mismatch. Snapshot the region score and only tear down
-    // scorePending on a real award · otherwise keep the prompt so the player can retry/End Turn.
-    // (Mirrors handleHexClick's commit-confirmation · matters once T3 realtime sync can diverge.)
-    const before = store.players.find(p => p.seat === currentSeat)?.scores[selectedRegion]
-    store.scoreCard(currentSeat, cardId, selectedRegion, lastPlacedKey)
-    const after = useGameStore.getState().players.find(p => p.seat === currentSeat)?.scores[selectedRegion]
-    if (after !== before) reset()
+    // rejects SILENTLY (void) on any mismatch. Only tear down scorePending on a real award
+    // (mirrors handleHexClick's commit-confirm · matters once T3 realtime sync can diverge).
+    store.scoreCard(currentSeat, cardId, regionId, lastPlacedKey)
+    const after = useGameStore.getState().players.find(p => p.seat === currentSeat)?.scores[regionId]
+    if (after !== before) {
+      reset()
+      return { card: scoredCard, regionId }
+    }
+    return null
   }, [uiPhase, selectedRegion, buildableMatches, lastPlacedKey, currentSeat, reset])
 
   const handleEndTurn = useCallback(() => {

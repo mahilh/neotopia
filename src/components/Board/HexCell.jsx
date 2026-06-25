@@ -1,14 +1,18 @@
 import { hexToPixel, hexCorners, ELEMENT_COLORS, ELEMENT_SYMBOLS, HEX_SIZE } from '../../utils/hexUtils'
 
-// Visual state priority: factory > element > validTarget > patternMatch > empty
+// Visual state priority (highest wins):
+//   factory > element > completionCandidate > patternMatch(complete) > partialMatch(near-miss)
+//   > validTarget > base · the 3 pattern states map to the near-miss psychology loop.
 export default function HexCell({
   q, r,
-  element = null,       // null | 'energy'|'biofarming'|'technology'|'community'
-  isValidTarget = false, // pulsing ring · player can place here
-  isPatternMatch = false,// glowing · part of a buildable card pattern
-  isFactory = false,    // factory hex · distinct look
-  isSelected = false,   // factory the player has picked up from · brightened ring
-  bonusCovered = false, // this hex has/had a bonus token
+  element = null,            // null | 'energy'|'biofarming'|'technology'|'community'
+  isValidTarget = false,    // pulsing ring · player can place here
+  isPatternMatch = false,   // green · this occupied hex is part of a COMPLETE buildable pattern
+  isPartialMatch = false,   // amber · near-miss · 2+ hexes match but the pattern is not complete
+  isCompletionCandidate = false, // white pulse · the SINGLE empty hex that would complete a near-miss
+  isFactory = false,        // factory hex · distinct look
+  isSelected = false,       // factory the player has picked up from · brightened ring
+  bonusCovered = false,     // this hex has/had a bonus token
   regionColor = '#888888',
   onClick = () => {},
 }) {
@@ -21,8 +25,12 @@ export default function HexCell({
     ? 'rgba(255,255,255,0.04)'
     : element
     ? `${ELEMENT_COLORS[element]}22`  // 13% opacity tint when occupied
+    : isCompletionCandidate
+    ? 'rgba(255,255,255,0.25)'        // bright · "place here to score"
     : isPatternMatch
-    ? `${regionColor}38`              // 22% glow when pattern matches
+    ? 'rgba(30,200,100,0.22)'         // green · pattern complete
+    : isPartialMatch
+    ? 'rgba(255,180,50,0.14)'         // amber · near-miss · "you're close"
     : isValidTarget
     ? `${regionColor}1A`              // subtle highlight for valid placement
     : `${regionColor}0F`             // base: 6% region color
@@ -54,8 +62,9 @@ export default function HexCell({
         }}
       />
 
-      {/* Valid target pulsing ring */}
-      {isValidTarget && (
+      {/* Valid target pulsing ring · suppressed when this hex is the completion candidate
+          (the white completion pulse below is the stronger, more specific signal) */}
+      {isValidTarget && !isCompletionCandidate && (
         <polygon
           points={points}
           fill="none"
@@ -64,6 +73,27 @@ export default function HexCell({
           opacity={0.7}
           style={{animation: 'hexPulse 1.4s ease-in-out infinite'}}
         />
+      )}
+
+      {/* Completion candidate · the ONE hex that completes a near-miss · "place here to score" */}
+      {isCompletionCandidate && (
+        <>
+          <polygon points={points} fill="none" stroke="white" strokeWidth={2.5}
+            opacity={0.9} style={{animation: 'hexPulse 0.9s ease-in-out infinite'}} />
+          <polygon points={points} fill="none" stroke={regionColor} strokeWidth={1} opacity={0.6} />
+        </>
+      )}
+
+      {/* Complete pattern · green ring · "pattern is complete · score the card" */}
+      {isPatternMatch && !isCompletionCandidate && (
+        <polygon points={points} fill="none" stroke="rgba(30,200,100,0.8)"
+          strokeWidth={1.5} style={{animation: 'hexPulse 1.2s ease-in-out infinite'}} />
+      )}
+
+      {/* Near-miss · amber ring · "you're close" */}
+      {isPartialMatch && !isPatternMatch && !isCompletionCandidate && (
+        <polygon points={points} fill="none" stroke="rgba(255,180,50,0.5)"
+          strokeWidth={1} opacity={0.7} />
       )}
 
       {/* Selected factory pulsing ring · feedback that this factory is picked up from */}

@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { ELEMENT_COLORS } from '../utils/hexUtils'
 import { useGameActions } from '../hooks/useGameActions'
+import { usePatternHighlight } from '../hooks/usePatternHighlight'
 import GameBoard from '../components/Board/GameBoard'
+import ProjectCard, { ScoreFlash } from '../components/ProjectCard'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 
+const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
+
 export default function GameRoom() {
   const [initialized, setInitialized] = useState(false)
+  const [scoreFlash, setScoreFlash] = useState(null) // { card, regionName } · the score story moment
 
   // Subscribe to individual slices · avoids a full re-render on every state change.
   const actionsLeft   = useGameStore(s => s.actionsRemaining)
@@ -41,8 +46,32 @@ export default function GameRoom() {
 
   const factory = factories.find(f => f.id === selectedFactory)
 
+  // Near-miss psychology · usePatternHighlight (T2) computes per region · merge all 3.
+  // Only nudge "place here" while the player can still act (no actions = no placement).
+  const ph0 = usePatternHighlight(0)
+  const ph1 = usePatternHighlight(1)
+  const ph2 = usePatternHighlight(2)
+  const keyToQR = (k) => { const [q, r] = k.split(',').map(Number); return { q, r } }
+  const partialHighlight = useMemo(
+    () => (actionsLeft > 0 ? [ph0, ph1, ph2].flatMap(ph => [...ph.partialKeys].map(keyToQR)) : []),
+    [ph0, ph1, ph2, actionsLeft],
+  )
+  const completionCandidates = useMemo(
+    () => (actionsLeft > 0 ? [ph0, ph1, ph2].flatMap(ph => ph.completionCandidates.map(c => keyToQR(c.missingKey))) : []),
+    [ph0, ph1, ph2, actionsLeft],
+  )
+
   return (
     <div style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}>
+
+      {/* SCORE FLASH · the civilization "story moment" after a card is scored */}
+      {scoreFlash && (
+        <ScoreFlash
+          card={scoreFlash.card}
+          regionName={scoreFlash.regionName}
+          onDone={() => setScoreFlash(null)}
+        />
+      )}
 
       {/* HEADER */}
       <header style={{
@@ -99,6 +128,8 @@ export default function GameRoom() {
             factories={factories}
             validTargets={validTargets}
             patternHighlight={patternHighlight}
+            partialHighlight={partialHighlight}
+            completionCandidates={completionCandidates}
             selectedFactory={selectedFactory}
             onHexClick={handleHexClick}
             onFactoryClick={handleFactoryClick}
@@ -184,22 +215,10 @@ export default function GameRoom() {
                 <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, padding: '8px 0' }}>Deck empty</div>
               )}
               {theOffer.map((card, i) => (
-                <button key={card.id}
-                  onClick={() => actionsLeft > 0 && useGameStore.getState().drawCard(currentSeat, 'offer', i)}
+                <ProjectCard key={card.id} card={card}
                   disabled={actionsLeft === 0}
-                  style={{
-                    padding: '10px 12px', borderRadius: 8, textAlign: 'left',
-                    cursor: actionsLeft > 0 ? 'pointer' : 'default',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.025)',
-                    opacity: actionsLeft === 0 ? 0.5 : 1,
-                  }}
-                >
-                  <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: 500 }}>{card.name}</div>
-                  <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                    {card.points}pt · District {card.district}
-                  </div>
-                </button>
+                  onClick={() => useGameStore.getState().drawCard(currentSeat, 'offer', i)}
+                />
               ))}
             </div>
           </div>
@@ -211,23 +230,12 @@ export default function GameRoom() {
               {currentPlayer?.hand?.map(card => {
                 const isScoreable = uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === card.id)
                 return (
-                  <div key={card.id}
-                    onClick={() => isScoreable && handleCardScore(card.id)}
-                    style={{
-                      padding: '10px 12px', borderRadius: 8,
-                      border: isScoreable ? '1px solid rgba(30,200,100,0.5)' : '1px solid rgba(255,255,255,0.07)',
-                      background: isScoreable ? 'rgba(30,200,100,0.08)' : 'rgba(255,255,255,0.02)',
-                      cursor: isScoreable ? 'pointer' : 'default',
-                      animation: isScoreable ? 'hexPulse 1.4s ease-in-out infinite' : 'none',
-                    }}
-                  >
-                    <div style={{ color: isScoreable ? '#1DC864' : 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: 500 }}>
-                      {card.name}
-                    </div>
-                    <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 }}>
-                      {card.points}pt · {card.description?.slice(0, 48)}…
-                    </div>
-                  </div>
+                  <ProjectCard key={card.id} card={card} isScoreable={isScoreable}
+                    onClick={isScoreable ? () => {
+                      const scored = handleCardScore(card.id)
+                      if (scored?.card) setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })
+                    } : undefined}
+                  />
                 )
               })}
             </div>

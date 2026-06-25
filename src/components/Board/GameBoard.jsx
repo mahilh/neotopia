@@ -6,7 +6,9 @@ export default function GameBoard({
   regions = REGIONS.map(r => ({...r, hexes: {}})),
   factories = FACTORIES.map(f => ({...f, elements: []})),
   validTargets = [],        // [{q,r}] valid placement hexes for current action
-  patternHighlight = [],    // [{q,r}] hexes that form a buildable pattern
+  patternHighlight = [],    // [{q,r}] occupied hexes that form a COMPLETE buildable pattern
+  partialHighlight = [],     // [{q,r}] near-miss hexes (n-1 filled) · usePatternHighlight.partialKeys
+  completionCandidates = [], // [{q,r}] empty hexes that would complete a near-miss · "place here to score"
   selectedFactory = null,   // factory id player selected for element pickup
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
@@ -30,6 +32,8 @@ export default function GameBoard({
 
   const isValidTarget = (q, r) => validTargets.some(t => t.q === q && t.r === r)
   const isPatternMatch = (q, r) => patternHighlight.some(t => t.q === q && t.r === r)
+  const isPartialMatch = (q, r) => partialHighlight.some(t => t.q === q && t.r === r)
+  const isCompletionCandidate = (q, r) => completionCandidates.some(t => t.q === q && t.r === r)
 
   return (
     <svg
@@ -65,6 +69,8 @@ export default function GameBoard({
               bonusCovered={bonusCovered}
               isValidTarget={isValidTarget(hex.q, hex.r)}
               isPatternMatch={isPatternMatch(hex.q, hex.r)}
+              isPartialMatch={isPartialMatch(hex.q, hex.r)}
+              isCompletionCandidate={isCompletionCandidate(hex.q, hex.r)}
               regionColor={reg.color}
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
