@@ -280,6 +280,7 @@ describe('tryScoreCard (boolean scoring signal)', () => {
 describe('bonus tokens (subsidy + initiative)', () => {
   const playerWith = (tokens, extra = {}) => ({
     currentSeat: 0,
+    bonusUsedThisTurn: false, // reset · setState merges, so a prior test's flag would leak otherwise
     players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [], bonusTokens: tokens, scores: [0, 0, 0] }],
     ...extra,
   })
@@ -320,6 +321,86 @@ describe('bonus tokens (subsidy + initiative)', () => {
     const s = useGameStore.getState()
     expect(s.regions[0].hexes['0,0'].element).toBe('energy') // unchanged
     expect(s.players[0].bonusTokens).toEqual(['initiative']) // token preserved
+  })
+})
+
+describe('one bonus per turn', () => {
+  test('useBonus is rejected when a bonus was already used this turn', () => {
+    useGameStore.setState({
+      currentSeat: 0,
+      bonusUsedThisTurn: true, // already spent a bonus this turn
+      actionsRemaining: 3,
+      players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [], bonusTokens: ['automatization'], scores: [0, 0, 0] }],
+    })
+    useGameStore.getState().useBonus(0, 'automatization')
+    const s = useGameStore.getState()
+    expect(s.actionsRemaining).toBe(3) // no extra action granted
+    expect(s.players[0].bonusTokens).toEqual(['automatization']) // token not consumed
+  })
+
+  test('bonusUsedThisTurn resets to false after endTurn', () => {
+    useGameStore.setState({
+      currentSeat: 0,
+      bonusUsedThisTurn: true,
+      players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [], bonusTokens: [], scores: [0, 0, 0] }],
+      theOffer: [],
+      deck: [],
+      endGameTriggered: false,
+    })
+    useGameStore.getState().endTurn()
+    expect(useGameStore.getState().bonusUsedThisTurn).toBe(false)
+  })
+})
+
+describe('bonus earn paths (cover-hex + score-threshold)', () => {
+  const solarGarden = PROJECT_CARDS.find(c => c.id === 'card_01') // 2pt energy line at (0,0)+(1,0)
+  const line2pt = (id, points) => ({ id, illustration: id, points, pattern: solarGarden.pattern })
+
+  test('placeElement on a bonus hex awards the placer that token', () => {
+    useGameStore.setState({
+      currentSeat: 0,
+      actionsRemaining: 3,
+      bonusUsedThisTurn: false,
+      players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [], bonusTokens: [], scores: [0, 0, 0] }],
+      factories: [{ id: 0, betweenRegions: [0, 1], q: 4, r: -2, elements: [{ type: 'energy', count: 1 }] }],
+      // Region 0's center (0,0) is flagged as a 'subsidy' bonus space.
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { bonusType: 'subsidy' } }, lastBuiltIllustration: null, scores: {}, bonusPile: [] }],
+      productionTiles: [],
+      productionTilesRemaining: 0,
+    })
+    useGameStore.getState().placeElement(0, 0, 'energy', 0, 0, 0)
+    const s = useGameStore.getState()
+    expect(s.regions[0].hexes['0,0'].element).toBe('energy')
+    expect(s.players[0].bonusTokens).toEqual(['subsidy'])
+  })
+
+  test('tryScoreCard awards the top bonus-pile token when the score crosses a threshold (7)', () => {
+    useGameStore.setState({
+      currentSeat: 0,
+      bonusUsedThisTurn: false,
+      players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [solarGarden], bonusTokens: [], scores: [6, 0, 0] }],
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {}, bonusPile: ['automatization'] }],
+    })
+    expect(useGameStore.getState().tryScoreCard(0, 'card_01', 0, '1,0')).toBe(true)
+    const s = useGameStore.getState()
+    expect(s.players[0].scores[0]).toBe(8) // 6 + 2 · crosses 7
+    expect(s.players[0].bonusTokens).toEqual(['automatization'])
+    expect(s.regions[0].bonusPile).toEqual([]) // top token consumed
+  })
+
+  test('crossing two thresholds (7 and 13) in one score awards two tokens, in pile order', () => {
+    const bigCard = line2pt('mega', 7) // synthetic 7pt card · jumps the marker past both 7 and 13
+    useGameStore.setState({
+      currentSeat: 0,
+      bonusUsedThisTurn: false,
+      players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [bigCard], bonusTokens: [], scores: [6, 0, 0] }],
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {}, bonusPile: ['subsidy', 'permits', 'initiative'] }],
+    })
+    expect(useGameStore.getState().tryScoreCard(0, 'mega', 0, '1,0')).toBe(true)
+    const s = useGameStore.getState()
+    expect(s.players[0].scores[0]).toBe(13) // 6 + 7 · crosses 7 AND 13 (not 18)
+    expect(s.players[0].bonusTokens).toEqual(['subsidy', 'permits']) // top two, in order
+    expect(s.regions[0].bonusPile).toEqual(['initiative'])
   })
 })
 

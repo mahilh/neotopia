@@ -41,14 +41,19 @@ export function shuffleArray(arr) {
 
 // Region centers in the global axial frame (per CLAUDE.md). The first element placed
 // in an empty region must land on its center; later ones must touch an existing element.
+// bonusPile = this region's stack of bonus tokens awarded when the score marker crosses a
+// threshold (top = index 0). Seeded EMPTY · fill from rulebook data in initGame once it exists.
 const createInitialRegions = () => [
-  { id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes: {}, lastBuiltIllustration: null, scores: {} },
-  { id: 1, name: 'Living Earth', center: { q: 8, r: -4 }, hexes: {}, lastBuiltIllustration: null, scores: {} },
-  { id: 2, name: 'Free Energy', center: { q: 4, r: 5 }, hexes: {}, lastBuiltIllustration: null, scores: {} },
+  { id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: [] },
+  { id: 1, name: 'Living Earth', center: { q: 8, r: -4 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: [] },
+  { id: 2, name: 'Free Energy', center: { q: 4, r: 5 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: [] },
 ]
 
 // Six axial neighbor directions (flat-top), shared by placement-adjacency checks.
 const NEIGHBOR_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+
+// Score-track positions that award a bonus token when the marker crosses them (CLAUDE.md).
+const SCORE_THRESHOLDS = [7, 13, 18]
 
 const createInitialFactories = () => [
   { id: 0, betweenRegions: [0, 1], q: 4, r: -2, elements: [] },
@@ -91,6 +96,7 @@ export const useGameStore = create(immer((set, get) => ({
   players: [],
   currentSeat: 0,
   actionsRemaining: 3,
+  bonusUsedThisTurn: false, // CLAUDE.md: only 1 bonus per turn · reset each endTurn
   turnNumber: 1,
   regions: createInitialRegions(),
   factories: createInitialFactories(),
@@ -126,6 +132,7 @@ export const useGameStore = create(immer((set, get) => ({
     state.productionTilesRemaining = orderedTiles.length
     state.currentSeat = 0
     state.actionsRemaining = 3
+    state.bonusUsedThisTurn = false
     state.turnNumber = 1
     state.regions = createInitialRegions()
     state.factories = createInitialFactories()
@@ -184,6 +191,14 @@ export const useGameStore = create(immer((set, get) => ({
 
     if (!region.hexes[hexKey]) region.hexes[hexKey] = {}
     region.hexes[hexKey].element = elementType
+
+    // Bonus earn: covering a hex that carries a bonus token awards it to the placer. One-shot ·
+    // the hex is now occupied and can never be covered again. (bonusType is seeded on hexes in
+    // initGame from rulebook data · no hex carries one yet, so this is a no-op until that lands.)
+    if (region.hexes[hexKey].bonusType) {
+      const placer = state.players.find(p => p.seat === seat)
+      if (placer) placer.bonusTokens.push(region.hexes[hexKey].bonusType)
+    }
 
     state.actionsRemaining--
 
@@ -250,8 +265,18 @@ export const useGameStore = create(immer((set, get) => ({
       const idx = p.hand.findIndex(c => c.id === cardId)
       if (idx === -1) return
       p.hand.splice(idx, 1)
-      p.scores[regionId] = (p.scores[regionId] ?? 0) + card.points
+      const prevScore = p.scores[regionId] ?? 0
+      p.scores[regionId] = prevScore + card.points
       r.lastBuiltIllustration = card.illustration
+
+      // Bonus earn: each score-track threshold newly crossed awards the TOP of this region's
+      // bonus pile (rulebook: deterministic top-of-pile · NOT random). Pile is empty until
+      // initGame seeds it from rulebook data, so this is a no-op until that data lands.
+      for (const t of SCORE_THRESHOLDS) {
+        if (prevScore < t && p.scores[regionId] >= t && r.bonusPile?.length > 0) {
+          p.bonusTokens.push(r.bonusPile.shift())
+        }
+      }
     })
     return true
   },
@@ -284,6 +309,7 @@ export const useGameStore = create(immer((set, get) => ({
 
     state.currentSeat = nextSeat
     state.actionsRemaining = 3
+    state.bonusUsedThisTurn = false // fresh turn · the next player may use a bonus
     state.turnNumber++
   }),
 
@@ -295,6 +321,7 @@ export const useGameStore = create(immer((set, get) => ({
     if (!player) return
     const tokenIdx = player.bonusTokens.indexOf(bonusType)
     if (tokenIdx === -1) return
+    if (state.bonusUsedThisTurn) return // CLAUDE.md: only 1 bonus per turn · reject silently
 
     let consumed = false
 
@@ -342,7 +369,10 @@ export const useGameStore = create(immer((set, get) => ({
         break
     }
 
-    if (consumed) player.bonusTokens.splice(tokenIdx, 1)
+    if (consumed) {
+      player.bonusTokens.splice(tokenIdx, 1)
+      state.bonusUsedThisTurn = true // one bonus per turn · reset in endTurn
+    }
   }),
 
   // Called when Supabase realtime pushes updated state · server wins on conflicts.
