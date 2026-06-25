@@ -1,0 +1,328 @@
+// NeoTopia game state · Zustand + Immer.
+// This is the CLIENT-SIDE MIRROR of Supabase game_sessions.state (jsonb).
+// RULE: the Supabase DB is the source of truth. syncFromServer() lets the server win.
+
+import { create } from 'zustand'
+import { immer } from 'zustand/middleware/immer'
+import { enableMapSet } from 'immer'
+import { findBuildableCards, findLargestCluster, calculateFinalScore } from '../lib/patternMatcher'
+
+// Immer does not draft Map/Set unless this is enabled. pendingMoves is a Set that
+// the optimistic-update flow mutates, so without this the first mutation throws.
+enableMapSet()
+
+// Production tile definitions (12 total · these are the game clock).
+// When a factory empties, the top tile is consumed to refill it.
+export const PRODUCTION_TILES = [
+  { id: 0, elements: { energy: 2, biofarming: 1, technology: 1, community: 0 } },
+  { id: 1, elements: { energy: 0, biofarming: 2, technology: 0, community: 2 } },
+  { id: 2, elements: { energy: 1, biofarming: 0, technology: 2, community: 1 } },
+  { id: 3, elements: { energy: 2, biofarming: 2, technology: 0, community: 0 } },
+  { id: 4, elements: { energy: 0, biofarming: 1, technology: 2, community: 1 } },
+  { id: 5, elements: { energy: 1, biofarming: 0, technology: 1, community: 2 } },
+  { id: 6, elements: { energy: 2, biofarming: 0, technology: 2, community: 0 } },
+  { id: 7, elements: { energy: 0, biofarming: 2, technology: 1, community: 1 } },
+  { id: 8, elements: { energy: 1, biofarming: 1, technology: 0, community: 2 } },
+  { id: 9, elements: { energy: 2, biofarming: 1, technology: 1, community: 0 } },
+  { id: 10, elements: { energy: 0, biofarming: 0, technology: 2, community: 2 } },
+  // Tile 11 = end-of-game flag tile (all 4 element types = 1 each).
+  { id: 11, elements: { energy: 1, biofarming: 1, technology: 1, community: 1 }, isEndFlag: true },
+]
+
+export function shuffleArray(arr) {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+// Region centers in the global axial frame (per CLAUDE.md). The first element placed
+// in an empty region must land on its center; later ones must touch an existing element.
+const createInitialRegions = () => [
+  { id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes: {}, lastBuiltIllustration: null, scores: {} },
+  { id: 1, name: 'Living Earth', center: { q: 8, r: -4 }, hexes: {}, lastBuiltIllustration: null, scores: {} },
+  { id: 2, name: 'Free Energy', center: { q: 4, r: 5 }, hexes: {}, lastBuiltIllustration: null, scores: {} },
+]
+
+// Six axial neighbor directions (flat-top), shared by placement-adjacency checks.
+const NEIGHBOR_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
+
+const createInitialFactories = () => [
+  { id: 0, betweenRegions: [0, 1], q: 4, r: -2, elements: [] },
+  { id: 1, betweenRegions: [1, 2], q: 6, r: 1, elements: [] },
+  { id: 2, betweenRegions: [0, 2], q: 2, r: 3, elements: [] },
+]
+
+// Convert a production tile's element counts into a factory's element list.
+function tileToFactoryElements(tile) {
+  return Object.entries(tile.elements)
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => ({ type, count }))
+}
+
+// Pure draft mutation: refill `factoryId` from the top production tile.
+// Defined at module scope so it can run INSIDE an existing Immer producer.
+// (Calling a store action via get() from within set() would commit to a throwaway
+// draft and silently lose the mutation · this avoids that.)
+function refillFactoryDraft(state, factoryId) {
+  const factory = state.factories.find(f => f.id === factoryId)
+  if (!factory) return
+  if (state.productionTilesRemaining === 0) return
+
+  const discarded = state.productionTiles.shift()
+  state.productionTilesRemaining--
+
+  if (discarded?.isEndFlag || state.productionTilesRemaining === 0) {
+    state.endGameTriggered = true
+  }
+
+  if (state.productionTiles.length > 0) {
+    factory.elements = tileToFactoryElements(state.productionTiles[0])
+  }
+}
+
+export const useGameStore = create(immer((set, get) => ({
+  // State
+  phase: 'lobby',
+  roomId: null,
+  players: [],
+  currentSeat: 0,
+  actionsRemaining: 3,
+  turnNumber: 1,
+  regions: createInitialRegions(),
+  factories: createInitialFactories(),
+  theOffer: [],
+  deck: [],
+  productionTiles: [],
+  productionTilesRemaining: 12,
+  endGameTriggered: false,
+  endGameRoundsRemaining: 2,
+  pendingMoves: new Set(), // optimistic-update tracking
+  lastError: null,
+
+  // Actions
+  initGame: (playerConfigs, shuffledDeck, shuffledTiles) => set(state => {
+    state.phase = 'playing'
+    state.players = playerConfigs.map((p, i) => ({
+      seat: i,
+      userId: p.userId,
+      username: p.username,
+      color: ['blue', 'red', 'green', 'purple'][i],
+      hand: [],
+      bonusTokens: [],
+      scores: [0, 0, 0],
+    }))
+    state.deck = shuffledDeck
+    // Pin the end-flag tile to the bottom regardless of how the caller shuffled, so
+    // end-game triggers only when the stack is nearly exhausted (spec: the flag is last).
+    const orderedTiles = [
+      ...shuffledTiles.filter(t => !t.isEndFlag),
+      ...shuffledTiles.filter(t => t.isEndFlag),
+    ]
+    state.productionTiles = orderedTiles
+    state.productionTilesRemaining = orderedTiles.length
+    state.currentSeat = 0
+    state.actionsRemaining = 3
+    state.turnNumber = 1
+    state.regions = createInitialRegions()
+    state.factories = createInitialFactories()
+    state.theOffer = []
+    state.endGameTriggered = false
+    state.endGameRoundsRemaining = 2
+
+    // Deal 3 cards to each player.
+    for (const player of state.players) {
+      player.hand = state.deck.splice(0, 3)
+    }
+    // The Offer: 4 face-up cards.
+    state.theOffer = state.deck.splice(0, 4)
+
+    // Seed factories from the first production tile.
+    if (state.productionTiles.length > 0) {
+      const firstTile = state.productionTiles[0]
+      state.factories.forEach(factory => {
+        factory.elements = tileToFactoryElements(firstTile)
+      })
+    }
+  }),
+
+  placeElement: (seat, fromFactoryId, elementType, toQ, toR, regionId) => set(state => {
+    // Validate fully BEFORE mutating, so a rejected move never consumes an element.
+    if (state.currentSeat !== seat) return
+    if (state.actionsRemaining <= 0) return
+
+    const factory = state.factories.find(f => f.id === fromFactoryId)
+    if (!factory) return
+    if (!factory.betweenRegions.includes(regionId)) return // factory must border the region
+
+    const el = factory.elements.find(e => e.type === elementType && e.count > 0)
+    if (!el) return
+
+    const region = state.regions.find(r => r.id === regionId)
+    if (!region) return
+
+    const hexKey = `${toQ},${toR}`
+    if (region.hexes[hexKey]?.element) return // hex must be empty
+
+    // Placement rule (CLAUDE.md): first element in an empty region must be the center;
+    // every later element must be adjacent to an existing one. Keeps each region a single
+    // contiguous shape, which cluster scoring (BFS) and pattern matching both depend on.
+    const regionHasElement = Object.values(region.hexes).some(h => h.element)
+    if (!regionHasElement) {
+      if (toQ !== region.center.q || toR !== region.center.r) return
+    } else {
+      const touchesExisting = NEIGHBOR_DIRS.some(([dq, dr]) => region.hexes[`${toQ + dq},${toR + dr}`]?.element)
+      if (!touchesExisting) return
+    }
+
+    // Commit: pull from factory, place in region.
+    el.count--
+    if (el.count === 0) factory.elements = factory.elements.filter(e => e.count > 0)
+
+    if (!region.hexes[hexKey]) region.hexes[hexKey] = {}
+    region.hexes[hexKey].element = elementType
+
+    state.actionsRemaining--
+
+    // Auto-refill when the factory is emptied (runs on THIS draft · see refillFactoryDraft).
+    const totalInFactory = factory.elements.reduce((sum, e) => sum + e.count, 0)
+    if (totalInFactory === 0) {
+      refillFactoryDraft(state, fromFactoryId)
+    }
+
+    // Buildable-card detection is informational · scoring is an explicit scoreCard action.
+    // T1 reads getBuildableCards(regionId, hexKey) to highlight completions.
+  }),
+
+  drawCard: (seat, source, cardIndex) => set(state => {
+    if (state.currentSeat !== seat) return
+    if (state.actionsRemaining <= 0) return
+
+    const player = state.players.find(p => p.seat === seat)
+    if (!player) return
+
+    if (source === 'offer') {
+      const card = state.theOffer[cardIndex]
+      if (!card) return
+      player.hand.push(card)
+      state.theOffer.splice(cardIndex, 1)
+      // Offer is replenished in endTurn().
+    } else {
+      const card = state.deck.shift()
+      if (card) player.hand.push(card)
+    }
+
+    state.actionsRemaining--
+  }),
+
+  // lastPlacedKey ('q,r') is the just-placed hex · pass it to honor the completing-element rule.
+  scoreCard: (seat, cardId, regionId, lastPlacedKey = null) => set(state => {
+    if (state.currentSeat !== seat) return
+    const player = state.players.find(p => p.seat === seat)
+    const region = state.regions.find(r => r.id === regionId)
+    if (!player || !region) return
+
+    const cardIdx = player.hand.findIndex(c => c.id === cardId)
+    if (cardIdx === -1) return
+    const card = player.hand[cardIdx]
+
+    // Diverse City: cannot build the same illustration consecutively in this region.
+    if (region.lastBuiltIllustration === card.illustration) return
+
+    // Authoritative build check: the card's pattern must actually be completed on the
+    // board (and include the completing hex, if given). Without this, any in-hand card
+    // could be banked against any region for free points · the core scoring exploit.
+    const matches = findBuildableCards(region.hexes, [card], region.lastBuiltIllustration, lastPlacedKey)
+    if (matches.length === 0) return
+
+    player.hand.splice(cardIdx, 1)
+    player.scores[regionId] += card.points
+    region.lastBuiltIllustration = card.illustration
+  }),
+
+  factoryRefill: (factoryId) => set(state => {
+    refillFactoryDraft(state, factoryId)
+  }),
+
+  endTurn: () => set(state => {
+    // Replenish The Offer to 4 cards.
+    while (state.theOffer.length < 4 && state.deck.length > 0) {
+      state.theOffer.push(state.deck.shift())
+    }
+
+    // End-game round tracking: once triggered, each completed full round burns one
+    // of the two remaining rounds. (Seat wrap to 0 marks a round boundary.)
+    const nextSeat = (state.currentSeat + 1) % state.players.length
+    if (state.endGameTriggered && nextSeat === 0 && state.endGameRoundsRemaining > 0) {
+      state.endGameRoundsRemaining--
+      if (state.endGameRoundsRemaining === 0) {
+        state.phase = 'scoring'
+      }
+    }
+
+    state.currentSeat = nextSeat
+    state.actionsRemaining = 3
+    state.turnNumber++
+  }),
+
+  useBonus: (seat, bonusType /* , bonusData */) => set(state => {
+    const player = state.players.find(p => p.seat === seat)
+    if (!player) return
+    const tokenIdx = player.bonusTokens.indexOf(bonusType)
+    if (tokenIdx === -1) return
+
+    player.bonusTokens.splice(tokenIdx, 1)
+
+    switch (bonusType) {
+      case 'automatization': // one free extra action
+        state.actionsRemaining++
+        break
+      case 'subsidy':     // draw 2 cards · handled via drawCard calls by caller (TODO S2)
+      case 'initiative':  // place any element from reserve · TODO S2 (needs bonusData)
+      case 'permits':     // place from factory in outer semi-circle · TODO S2
+        break
+      default:
+        break
+    }
+  }),
+
+  // Called when Supabase realtime pushes updated state · server wins on conflicts.
+  syncFromServer: (serverState) => set(state => {
+    // pendingMoves is client-local optimistic-update bookkeeping and is not JSON-serializable
+    // (a Set). Never let a server payload clobber it with an array · that would break the next
+    // pendingMoves.add()/.has(). Merge everything else; rehydrate the Set deliberately.
+    const { pendingMoves, ...serverGameState } = serverState
+    Object.assign(state, serverGameState)
+    if (pendingMoves !== undefined) {
+      state.pendingMoves = new Set(Array.isArray(pendingMoves) ? pendingMoves : [])
+    }
+  }),
+
+  setPhase: (phase) => set(state => { state.phase = phase }),
+
+  // Computed: buildable cards for the current player in a region.
+  // Pass lastPlacedKey ('q,r') after a placement to honor the completing-element rule.
+  getBuildableCards: (regionId, lastPlacedKey = null) => {
+    const state = get()
+    const player = state.players.find(p => p.seat === state.currentSeat)
+    const region = state.regions.find(r => r.id === regionId)
+    if (!player || !region) return []
+    return findBuildableCards(region.hexes, player.hand, region.lastBuiltIllustration, lastPlacedKey)
+  },
+
+  // Computed: largest same-element cluster in a region (final-scoring helper).
+  getLargestCluster: (regionId, elementType) => {
+    const region = get().regions.find(r => r.id === regionId)
+    if (!region) return 0
+    return findLargestCluster(region.hexes, elementType)
+  },
+
+  // Computed: final score for a player (best + 2nd + worst*3 + unusedBonus*3).
+  getFinalScore: (seat) => {
+    const player = get().players.find(p => p.seat === seat)
+    if (!player) return 0
+    return calculateFinalScore(player.scores, player.bonusTokens.length)
+  },
+})))
