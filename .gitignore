@@ -34,3 +34,6 @@ dist-ssr
 
 # Session comms between terminals (local only)
 .claude/comms/
+
+# Playwright MCP browser-verification output (local only)
+.playwright-mcp/

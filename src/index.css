@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+@keyframes hexPulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hex-cell polygon { animation: none !important; }
+}
