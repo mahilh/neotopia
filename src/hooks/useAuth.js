@@ -20,27 +20,37 @@ export function useAuth() {
 
   useEffect(() => {
     let mounted = true
+    let signingIn = false
 
-    async function init() {
-      // Reuse existing session if available
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user && mounted) {
+    // Drive auth ENTIRELY off onAuthStateChange. INITIAL_SESSION fires once, AFTER the client
+    // has hydrated the persisted session from storage · so we never race getSession() against
+    // hydration. (The old bug: getSession() resolved null on reload before hydration finished,
+    // we fell through to signInAnonymously(), and that MINTED A NEW USER + overwrote the stored
+    // token · the user_id changed on every reload, breaking RLS membership and rejoin.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+
+      if (session?.user) {
+        // Persisted / refreshed / freshly-signed-in session · adopt it.
         setUser(session.user)
         setIsLoading(false)
         return
       }
-      // Anonymous sign-in (returns existing anon user on subsequent calls)
-      const { data, error } = await supabase.auth.signInAnonymously()
-      if (!mounted) return
-      if (error) { setAuthError(error.message); setIsLoading(false); return }
-      setUser(data.user)
-      setIsLoading(false)
-    }
 
-    init()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setUser(session?.user ?? null)
+      // No session. Mint an anonymous user ONLY when INITIAL_SESSION confirms none is persisted
+      // (and only once · a later SIGNED_OUT must not silently re-create one).
+      if (event === 'INITIAL_SESSION' && !signingIn) {
+        signingIn = true
+        supabase.auth.signInAnonymously().then(({ data, error }) => {
+          if (!mounted) return
+          if (error) { setAuthError(error.message); setIsLoading(false); return }
+          setUser(data.user) // the subsequent SIGNED_IN event will reaffirm this idempotently
+          setIsLoading(false)
+        })
+      } else {
+        setUser(null)
+        setIsLoading(false)
+      }
     })
 
     return () => { mounted = false; subscription.unsubscribe() }

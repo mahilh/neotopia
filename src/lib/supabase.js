@@ -19,6 +19,14 @@ export const supabase = createClient(url, key, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    // Explicit storage so the anon session is deterministically restored on reload. The SSR
+    // guard keeps this safe if the module is ever imported outside a browser (build/test).
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    // Explicit, app-owned key (vs the default sb-<ref>-auth-token) · stable + collision-proof.
+    storageKey: 'neotopia-auth',
+    // Anon-only app · no OAuth/magic-link fragment to parse · disabling URL detection removes
+    // an async step that can race session hydration on load.
+    detectSessionInUrl: false,
   },
 })
 
