@@ -11,7 +11,7 @@ const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#7F77DD'] // blue · red 
 export default function Lobby({ onGameStart }) {
   const { user, username, isLoading: authLoading, isClaimed, claimUsername } = useAuth()
   const {
-    roomCode, isHost, isReady, lobbyPlayers, lobbyError, roomPhase,
+    roomId, roomCode, isHost, isReady, lobbyPlayers, lobbyError, roomPhase,
     createRoom, joinRoom, setReady, startGame, leaveRoom,
   } = useGameRoom(user, username)
 
@@ -21,10 +21,11 @@ export default function Lobby({ onGameStart }) {
   const [view, setView] = useState('home') // home | join
 
   // Game start is a side effect · never call onGameStart during render (it would update a parent
-  // mid-render). Fire it from an effect once the room transitions to playing.
+  // mid-render). Fire it from an effect once the room transitions to playing. Pass roomId so the
+  // parent can route to /game/:roomId (T1 · roomId must cross the boundary outside synced state).
   useEffect(() => {
-    if (roomPhase === 'playing') onGameStart?.()
-  }, [roomPhase, onGameStart])
+    if (roomPhase === 'playing' && roomId) onGameStart?.(roomId)
+  }, [roomPhase, roomId, onGameStart])
 
   async function handleClaim() {
     setClaimError(null)

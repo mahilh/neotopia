@@ -25,7 +25,11 @@ function computeValidTargets(region, regionDef, factory, regionId) {
   })
 }
 
-export function useGameActions() {
+// Options:
+//   sync   · the useGameSync handle ({ pushState, ... }) in multiplayer · null in solo. After a
+//            committed local mutation we pushState() so every client syncs via postgres_changes.
+//   mySeat · this client's seat number · null in solo. Turn-gate: only the seat whose turn it is acts.
+export function useGameActions({ sync = null, mySeat = null } = {}) {
   // Placement state machine: idle → factorySelected → elementSelected → regionSelected → scorePending
   const [selectedFactory, setSelectedFactory] = useState(null)   // factory id (0/1/2)
   const [selectedElement, setSelectedElement] = useState(null)   // element type string
@@ -41,6 +45,11 @@ export function useGameActions() {
   const actionsRemaining = useGameStore(s => s.actionsRemaining)
   const currentSeat = useGameStore(s => s.currentSeat)
 
+  // Multiplayer turn ownership: only the active seat may act. null mySeat = solo (always your turn).
+  const isMyTurn = mySeat == null || currentSeat === mySeat
+  // Persist authoritative state after a committed local move so every client syncs · no-op in solo.
+  const persist = useCallback((eventType) => { sync?.pushState?.(eventType) }, [sync])
+
   const reset = useCallback(() => {
     setSelectedFactory(null)
     setSelectedElement(null)
@@ -54,6 +63,7 @@ export function useGameActions() {
 
   // Step 1: player clicks a factory hex.
   const handleFactoryClick = useCallback((factoryId) => {
+    if (!isMyTurn) return // not your turn (multiplayer)
     if (actionsRemaining <= 0) return
     if (selectedFactory === factoryId) { reset(); return } // toggle off
     setSelectedFactory(factoryId)
@@ -64,7 +74,7 @@ export function useGameActions() {
     setBuildableMatches([])
     setLastPlacedKey(null)
     setUiPhase('factorySelected')
-  }, [actionsRemaining, selectedFactory, reset])
+  }, [isMyTurn, actionsRemaining, selectedFactory, reset])
 
   // Step 2: player clicks an element type in the factory.
   const handleElementSelect = useCallback((elementType) => {
@@ -99,6 +109,7 @@ export function useGameActions() {
 
   // Step 4: player clicks a valid hex → place element + check for buildable cards.
   const handleHexClick = useCallback((q, r, regionId) => {
+    if (!isMyTurn) return
     if (uiPhase !== 'regionSelected') return
     if (selectedFactory === null || selectedElement === null || selectedRegion === null) return
     if (regionId !== selectedRegion) return // clicked outside the target region
@@ -111,6 +122,7 @@ export function useGameActions() {
 
     // placeElement validates and rejects silently · confirm it actually committed.
     if (useGameStore.getState().actionsRemaining === beforeActions) { reset(); return }
+    persist('place') // committed · sync to other clients
 
     // Completing-element rule: pass the just-placed hex so only completions that include it surface.
     const placedKey = `${q},${r}`
@@ -132,41 +144,52 @@ export function useGameActions() {
     } else {
       reset()
     }
-  }, [uiPhase, selectedFactory, selectedElement, selectedRegion, validTargets, currentSeat, reset])
+  }, [isMyTurn, uiPhase, selectedFactory, selectedElement, selectedRegion, validTargets, currentSeat, reset, persist])
+
+  // Draw a card (The Offer at cardIndex, or the deck top) · one action. Turn-gated + synced.
+  const handleDrawCard = useCallback((source, cardIndex) => {
+    if (!isMyTurn) return
+    const store = useGameStore.getState()
+    if (store.actionsRemaining <= 0) return
+    const beforeActions = store.actionsRemaining
+    store.drawCard(currentSeat, source, cardIndex)
+    if (useGameStore.getState().actionsRemaining !== beforeActions) persist('draw') // committed · sync
+  }, [isMyTurn, currentSeat, persist])
 
   // Scoring: player clicks a glowing card in their hand.
   // Returns the scored card + region on a real award (drives GameRoom's ScoreFlash), else null.
   const handleCardScore = useCallback((cardId) => {
+    if (!isMyTurn) return null
     if (uiPhase !== 'scorePending') return null
     if (selectedRegion === null) return null
     const match = buildableMatches.find(m => m.cardId === cardId)
     if (!match) return null
     const store = useGameStore.getState()
     const player = store.players.find(p => p.seat === currentSeat)
-    const scoredCard = player?.hand.find(c => c.id === cardId) ?? null // capture before scoreCard removes it
+    const scoredCard = player?.hand.find(c => c.id === cardId) ?? null // capture before it leaves the hand
     const regionId = selectedRegion
-    const before = player?.scores[regionId]
-    // 4th arg lastPlacedKey · scoreCard re-validates the completion against the board and
-    // rejects SILENTLY (void) on any mismatch. Only tear down scorePending on a real award
-    // (mirrors handleHexClick's commit-confirm · matters once T3 realtime sync can diverge).
-    store.scoreCard(currentSeat, cardId, regionId, lastPlacedKey)
-    const after = useGameStore.getState().players.find(p => p.seat === currentSeat)?.scores[regionId]
-    if (after !== before) {
+    // tryScoreCard (T2) re-validates the completion against the board and returns whether it awarded.
+    // 4th arg lastPlacedKey honors the completing-element rule. Only tear down + flash on a real award.
+    const scored = store.tryScoreCard(currentSeat, cardId, regionId, lastPlacedKey)
+    if (scored) {
+      persist('score') // committed · sync to other clients
       reset()
       return { card: scoredCard, regionId }
     }
     return null
-  }, [uiPhase, selectedRegion, buildableMatches, lastPlacedKey, currentSeat, reset])
+  }, [isMyTurn, uiPhase, selectedRegion, buildableMatches, lastPlacedKey, currentSeat, reset, persist])
 
   const handleEndTurn = useCallback(() => {
+    if (!isMyTurn) return
     useGameStore.getState().endTurn()
+    persist('endTurn') // committed · sync (advances currentSeat for every client)
     reset()
-  }, [reset])
+  }, [isMyTurn, reset, persist])
 
   return {
     selectedFactory, selectedElement, selectedRegion,
-    validTargets, patternHighlight, buildableMatches, uiPhase,
+    validTargets, patternHighlight, buildableMatches, uiPhase, isMyTurn,
     handleFactoryClick, handleElementSelect, handleRegionSelect,
-    handleHexClick, handleCardScore, handleEndTurn,
+    handleHexClick, handleCardScore, handleDrawCard, handleEndTurn,
   }
 }

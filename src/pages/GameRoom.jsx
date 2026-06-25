@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
 import { ELEMENT_COLORS } from '../utils/hexUtils'
+import { useAuth } from '../hooks/useAuth'
+import { useGameSync } from '../hooks/useGameSync'
 import { useGameActions } from '../hooks/useGameActions'
 import { usePatternHighlight } from '../hooks/usePatternHighlight'
 import GameBoard from '../components/Board/GameBoard'
@@ -11,10 +14,21 @@ import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
 
 export default function GameRoom() {
+  // Route-param multiplayer: /game/:roomId → real game · /game (no param) → solo dev.
+  // roomId from the URL survives a refresh (free rejoin · T3) · it is the clean signal for
+  // "this is a real session" · NOT useGameStore.getState().roomId (T3 never populates that).
+  const { roomId } = useParams()
+  const { user } = useAuth()
+
+  // useGameSync subscribes to game_sessions + seeds the store when roomId is set (no-op when null).
+  // Lives here so moves persist (pushState) and remote moves stream in for the whole /game lifetime.
+  const sync = useGameSync(roomId ?? null, user?.id)
+
   const [initialized, setInitialized] = useState(false)
   const [scoreFlash, setScoreFlash] = useState(null) // { card, regionName } · the score story moment
 
   // Subscribe to individual slices · avoids a full re-render on every state change.
+  const phase         = useGameStore(s => s.phase)
   const actionsLeft   = useGameStore(s => s.actionsRemaining)
   const currentSeat   = useGameStore(s => s.currentSeat)
   const turnNumber    = useGameStore(s => s.turnNumber)
@@ -24,9 +38,17 @@ export default function GameRoom() {
   const players       = useGameStore(s => s.players)
   const currentPlayer = players.find(p => p.seat === currentSeat)
 
-  // DEV: auto-init a solo game (lobby is owned by T3 in S2).
-  // Dependency: [initialized] ONLY · adding the store object causes an infinite re-render.
+  // This client's seat · derived from the synced roster by matching our auth id (no need to thread
+  // seat through navigation · it also restores correctly on rejoin-after-refresh). null in solo.
+  const mySeat = useMemo(
+    () => players.find(p => p.userId && p.userId === user?.id)?.seat ?? null,
+    [players, user?.id],
+  )
+
+  // DEV solo-init: ONLY when there is no route roomId (a real game is seeded by useGameSync).
+  // Gated on the route roomId per T3 · never inits a solo game over a real session.
   useEffect(() => {
+    if (roomId) return
     if (!initialized && useGameStore.getState().phase === 'lobby') {
       useGameStore.getState().initGame(
         [{ userId: 'dev-1', username: 'Builder' }],
@@ -35,14 +57,14 @@ export default function GameRoom() {
       )
       setInitialized(true)
     }
-  }, [initialized])
+  }, [initialized, roomId])
 
   const {
     selectedFactory, selectedElement, selectedRegion,
-    validTargets, patternHighlight, buildableMatches, uiPhase,
+    validTargets, patternHighlight, buildableMatches, uiPhase, isMyTurn,
     handleFactoryClick, handleElementSelect, handleRegionSelect,
-    handleHexClick, handleCardScore, handleEndTurn,
-  } = useGameActions()
+    handleHexClick, handleCardScore, handleDrawCard, handleEndTurn,
+  } = useGameActions({ sync, mySeat })
 
   const factory = factories.find(f => f.id === selectedFactory)
 
@@ -60,6 +82,16 @@ export default function GameRoom() {
     () => (actionsLeft > 0 ? [ph0, ph1, ph2].flatMap(ph => ph.completionCandidates.map(c => keyToQR(c.missingKey))) : []),
     [ph0, ph1, ph2, actionsLeft],
   )
+
+  // Multiplayer loading gate (AFTER all hooks · Rules of Hooks): in a real room, wait for
+  // useGameSync to seed the store before rendering the board. Solo (no roomId) skips this.
+  if (roomId && phase !== 'playing') {
+    return (
+      <div style={{ height: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, letterSpacing: 1 }}>Connecting to the board…</p>
+      </div>
+    )
+  }
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}>
@@ -84,6 +116,16 @@ export default function GameRoom() {
         <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
           Turn {turnNumber}
         </span>
+        {mySeat !== null && (
+          <span style={{
+            padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500,
+            background: isMyTurn ? 'rgba(30,200,100,0.15)' : 'rgba(255,255,255,0.05)',
+            border: isMyTurn ? '1px solid rgba(30,200,100,0.3)' : '1px solid rgba(255,255,255,0.08)',
+            color: isMyTurn ? '#1DC864' : 'rgba(255,255,255,0.4)',
+          }}>
+            {isMyTurn ? 'Your turn' : `${currentPlayer?.username ?? 'Player'}'s turn`}
+          </span>
+        )}
         {uiPhase === 'scorePending' && (
           <span style={{
             marginLeft: 8, padding: '4px 12px', borderRadius: 20,
@@ -104,13 +146,13 @@ export default function GameRoom() {
           </span>
           <button
             onClick={handleEndTurn}
-            disabled={actionsLeft !== 0}
+            disabled={actionsLeft !== 0 || !isMyTurn}
             style={{
               height: 44, padding: '0 20px', borderRadius: 8, fontSize: 12,
-              cursor: actionsLeft === 0 ? 'pointer' : 'default',
+              cursor: (actionsLeft === 0 && isMyTurn) ? 'pointer' : 'default',
               border: '1px solid rgba(255,255,255,0.2)',
-              background: actionsLeft === 0 ? 'rgba(255,255,255,0.12)' : 'transparent',
-              color: actionsLeft === 0 ? 'white' : 'rgba(255,255,255,0.3)',
+              background: (actionsLeft === 0 && isMyTurn) ? 'rgba(255,255,255,0.12)' : 'transparent',
+              color: (actionsLeft === 0 && isMyTurn) ? 'white' : 'rgba(255,255,255,0.3)',
             }}
           >
             End Turn
@@ -216,8 +258,8 @@ export default function GameRoom() {
               )}
               {theOffer.map((card, i) => (
                 <ProjectCard key={card.id} card={card}
-                  disabled={actionsLeft === 0}
-                  onClick={() => useGameStore.getState().drawCard(currentSeat, 'offer', i)}
+                  disabled={actionsLeft === 0 || !isMyTurn}
+                  onClick={() => handleDrawCard('offer', i)}
                 />
               ))}
             </div>

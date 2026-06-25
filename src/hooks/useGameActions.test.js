@@ -42,6 +42,29 @@ describe('useGameActions', () => {
     expect(result.current.validTargets).toEqual([{ q: 0, r: 0 }])
   })
 
+  test('multiplayer turn-gate · not your turn (currentSeat ≠ mySeat) blocks all actions', () => {
+    act(() => { useGameStore.setState({ actionsRemaining: 3, currentSeat: 0 }) })
+    // We are seat 1, but it is seat 0's turn → isMyTurn false → every action is a no-op.
+    const { result } = renderHook(() => useGameActions({ mySeat: 1 }))
+
+    expect(result.current.isMyTurn).toBe(false)
+    act(() => { result.current.handleFactoryClick(0) })
+    expect(result.current.uiPhase).toBe('idle')          // factory click blocked
+    expect(result.current.selectedFactory).toBe(null)
+    act(() => { result.current.handleEndTurn() })
+    expect(useGameStore.getState().currentSeat).toBe(0)  // end turn blocked · seat unchanged
+  })
+
+  test('multiplayer turn-gate · your turn (currentSeat === mySeat) allows actions', () => {
+    act(() => { useGameStore.setState({ actionsRemaining: 3, currentSeat: 2 }) })
+    const { result } = renderHook(() => useGameActions({ mySeat: 2 }))
+
+    expect(result.current.isMyTurn).toBe(true)
+    act(() => { result.current.handleFactoryClick(1) })
+    expect(result.current.uiPhase).toBe('factorySelected')
+    expect(result.current.selectedFactory).toBe(1)
+  })
+
   test('reset clears all state back to idle', () => {
     const { result } = renderHook(() => useGameActions())
 

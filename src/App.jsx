@@ -1,36 +1,24 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
+import Lobby from './pages/Lobby'
 import GameRoom from './pages/GameRoom'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<LandingStub />} />
+        <Route path="/" element={<LobbyRoute />} />
+        {/* Route-param carries roomId across the lobby→game boundary · survives refresh (free rejoin). */}
+        <Route path="/game/:roomId" element={<GameRoom />} />
+        {/* No param · solo dev entry (GameRoom auto-inits a local game, no realtime). */}
         <Route path="/game" element={<GameRoom />} />
-        <Route path="/lobby" element={<LobbyStub />} />
       </Routes>
     </BrowserRouter>
   )
 }
 
-function LandingStub() {
-  return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',
-      justifyContent:'center',background:'#0a0a0f',color:'rgba(255,255,255,0.8)',
-      flexDirection:'column',gap:16}}>
-      <h1 style={{fontSize:32,fontWeight:300,letterSpacing:4}}>NEOTOPIA</h1>
-      <p style={{color:'rgba(255,255,255,0.4)',fontSize:14}}>
-        A consciousness civilization · 2055
-      </p>
-      <a href="/game" style={{marginTop:8,padding:'10px 24px',
-        border:'1px solid rgba(255,255,255,0.2)',borderRadius:8,
-        color:'rgba(255,255,255,0.7)',textDecoration:'none',fontSize:13}}>
-        Enter Game (dev)
-      </a>
-    </div>
-  )
-}
-
-function LobbyStub() {
-  return <div style={{color:'white',padding:'2rem'}}>Lobby · Session 2</div>
+// Lobby owns auth + room lifecycle (T3). On game start it hands us the roomId · we route into the
+// game by URL so the id survives an unmount/refresh and useGameSync can re-subscribe + reseed.
+function LobbyRoute() {
+  const navigate = useNavigate()
+  return <Lobby onGameStart={(roomId) => navigate(`/game/${roomId}`)} />
 }
