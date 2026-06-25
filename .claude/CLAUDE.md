@@ -33,7 +33,7 @@ SELF-RATING SYSTEM (mandatory — game cannot improve without this):
   ONE evolution lesson mandatory per session — written to .claude/comms/tomorrow.md
 
 BOOT SEQUENCE (run every session, do not skip):
-  cat .claude/CLAUDE.md | head -50
+  cat .claude/CLAUDE.md | head -60
   cat .claude/comms/tomorrow.md 2>/dev/null || echo "no cross-terminal messages"
   git log --oneline -3
   git status --short
@@ -48,7 +48,68 @@ CROSS-TERMINAL COMMUNICATION PROTOCOL:
     T[N] S[N+1] FILES TO CREATE: [list]
   Read all messages. Acknowledge each. Proceed.
 
-GAME MECHANICS (memorize completely — every algorithm depends on these):
+═══════════════════════════════════════════════════════
+RED ERROR PREVENTION PROTOCOL — 4 PERMANENT RULES
+(These eliminated the S1 false-positive exit code 1)
+═══════════════════════════════════════════════════════
+
+RULE RE-1: NEVER use @ package names in bash glob checks.
+  WRONG: for p in @supabase/supabase-js zustand; do test -d node_modules/$p
+  RIGHT: use Python or node -e to check packages:
+    node -e "const p=require('./package.json'); console.log(Object.keys(p.dependencies).join(' '))"
+  WHY: zsh treats @scope/package as a glob, exits 1 on non-match even when package exists.
+
+RULE RE-2: ALWAYS distinguish error types before treating as blocker.
+  "permission denied for table" ≠ "table does not exist"
+  "relation does not exist" = table is genuinely missing (real blocker)
+  "permission denied" = table exists, RLS/GRANT issue (diagnose, then decide)
+  NEVER stop S1 engine work because of a Supabase GRANT issue — engine code is DB-independent.
+
+RULE RE-3: Supabase tables created via raw SQL ALWAYS need explicit GRANT.
+  Supabase dashboard auto-grants SELECT/INSERT/UPDATE/DELETE to anon + authenticated.
+  Raw SQL migrations DO NOT auto-grant. You must add:
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated;
+  The migration is at: scripts/migrations/001_grant_permissions.sql
+  Run via Supabase MCP or dashboard SQL editor BEFORE any DB integration tests.
+
+RULE RE-4: Hard gates must be precise, not binary.
+  A gate that fails with a known, solvable, documented cause is NOT a full stop.
+  The gate intent is "don't build on a broken foundation."
+  If the failure is: known root cause + fix exists + S1 tasks are provably independent of it
+  → Document the fix, proceed with independent tasks, fix the gate in parallel.
+  The gate IS a full stop only when: tables don't exist, env vars missing, build broken.
+
+SUPABASE GATE DIAGNOSIS PATTERN (use this exact check):
+  node --input-type=module <<'EOF'
+  import { createClient } from '@supabase/supabase-js'
+  import { readFileSync } from 'fs'
+  const env = Object.fromEntries(
+    readFileSync('.env.local','utf8').trim().split('\n')
+    .filter(l => l && !l.startsWith('#'))
+    .map(l => { const i=l.indexOf('='); return [l.slice(0,i).trim(), l.slice(i+1).trim()] })
+  )
+  const s = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+  for (const t of ['player_profiles','game_rooms','game_sessions','room_players','game_events']) {
+    const {error} = await s.from(t).select('count').limit(1).single()
+    const status = !error ? '✅' : error.message.includes('does not exist') ? '❌ MISSING' : '⚠️ GRANT'
+    console.log(t+':', status, error?.message ?? '')
+  }
+  EOF
+  ✅ = good · ❌ MISSING = tables need creating · ⚠️ GRANT = run 001_grant_permissions.sql
+
+PACKAGE CHECK PATTERN (safe, no zsh glob issues):
+  node -e "
+  const p = require('./package.json')
+  const deps = {...p.dependencies, ...p.devDependencies}
+  const check = ['zustand','immer','@supabase/supabase-js','vitest','framer-motion']
+  check.forEach(d => console.log(d+':', deps[d] ? '✅ '+deps[d] : '❌ MISSING'))
+  "
+
+═══════════════════════════════════════════════════════
+GAME MECHANICS (memorize completely)
+═══════════════════════════════════════════════════════
 
   BOARD STRUCTURE:
     3 Regions (hexagonal clusters, ~19 hexes each, radius=2 in axial coords):
@@ -70,7 +131,7 @@ GAME MECHANICS (memorize completely — every algorithm depends on these):
     Action A: Draw 1 project card (from The Offer face-up row OR top of deck)
     Action B: Move 1 element from any Factory into an ADJACENT Region
 
-  ELEMENT PLACEMENT RULES (T1+T2 must enforce together):
+  ELEMENT PLACEMENT RULES:
     Hex must be EMPTY
     AND either: region is empty → place at center, region has elements → must be adjacent to 1+
     "Adjacent" = hex shares an edge (6 neighbors in flat-top hex, axial coords)
@@ -84,7 +145,7 @@ GAME MECHANICS (memorize completely — every algorithm depends on these):
     Diverse City rule: cannot score same card.illustration type consecutively in same region
     Check region.lastBuiltIllustration before scoring
 
-  PATTERN ROTATION ALGORITHM (mandatory — implement before ANY card scoring):
+  PATTERN ROTATION ALGORITHM (mandatory before ANY card scoring):
     Cube rotation 60° CCW: (q,r) → (-r, q+r)  [where s=-q-r in cube coords]
     Get 6 rotations: apply rotation 6 times, normalize each to (0,0) origin
     Match: for each rotation, try each occupied hex as anchor, check all pattern cells
@@ -97,107 +158,91 @@ GAME MECHANICS (memorize completely — every algorithm depends on these):
     This is in src/lib/patternMatcher.js — DO NOT reimplement
 
   FACTORY AUTO-PRODUCTION (the game clock):
-    Factory cleared (all elements moved) → IMMEDIATELY refill from top production tile
-    Discard that production tile → productionTilesRemaining--
-    When last production tile revealed → endGameTriggered = true
+    Factory cleared → IMMEDIATELY refill from top production tile
+    Discard that tile → productionTilesRemaining--
+    When last tile revealed → endGameTriggered = true
     All players finish current round + ONE MORE complete round → final scoring
 
   12 PRODUCTION TILES: defined in src/store/gameStore.js as PRODUCTION_TILES
     Tile 11 = end-of-game flag tile (isEndFlag: true)
 
   4 BONUS TOKEN TYPES (free actions, do NOT count toward 3-action limit):
-    subsidy: draw 2 cards from Offer/deck
-    automatization: one free extra action (either type)
-    initiative: place any element from reserve in any region center or adjacent
-    permits: place element from factory in outer semi-circle of adjacent region
-    RULE: only 1 bonus per turn — unused at game end = 3pts each
+    subsidy · automatization · initiative · permits
+    RULE: only 1 bonus per turn · unused at end = 3pts each
     Earn by: covering bonus token spaces OR score marker passing 7/13/18
-
-  END GAME TRIGGER: last production tile revealed
-    Current round completes
-    One more complete round
-    Final scoring
 
   FINAL SCORING FORMULA:
     Step 1: cluster scoring (1pt per element in biggest same-color cluster per region)
     Step 2: best_region + second_region + (worst_region × 3) + (unused_bonus × 3)
-    This is in src/lib/patternMatcher.js calculateFinalScore()
+    In src/lib/patternMatcher.js calculateFinalScore()
 
-  56 PROJECT CARDS: defined in src/lib/projectCards.js
-    Points: 12 cards×2pt, 18 cards×3pt, 18 cards×4pt, 8 cards×5pt = 56 total
-    Each card: id, name, pattern, points, illustration, district, description
-    illustration field drives Diverse City enforcement (must have 3+ cards per illustration type)
+  56 PROJECT CARDS: in src/lib/projectCards.js
+    12×2pt · 18×3pt · 18×4pt · 8×5pt = 56 total
+    illustration field drives Diverse City (need 3+ cards per illustration type)
 
-  SUPABASE SCHEMA (5 tables, all RLS enabled, all Realtime enabled):
+  SUPABASE SCHEMA (5 tables, all RLS + Realtime enabled, GRANT applied via migration 001):
     player_profiles: user_id · username · avatar_color · elo_rating · games_played · games_won · neotopia_index
     game_rooms:      id · room_code · host_id · status · max_players · player_count
     room_players:    room_id · user_id · username · player_color · seat_number · is_ready · character
     game_sessions:   room_id · state(jsonb) · current_seat · turn_number · actions_remaining · phase · production_tiles_remaining
     game_events:     session_id · seat_number · event_type · event_data · sequence_num
 
-  SUPABASE REALTIME USAGE (T3 — always specify type):
-    DB changes    → authoritative game state (verified moves, scored cards)
-    Broadcast     → ephemeral events (hover, animation sync, cursor — bypass DB)
-    Presence      → lobby state (who is connected, ready status)
+  SUPABASE REALTIME (always specify channel type — never generic):
+    DB changes  → authoritative game state (verified moves)
+    Broadcast   → ephemeral events (hover, animation — no DB write)
+    Presence    → lobby state (connected players, ready status)
 
-  OPTIMISTIC UPDATES PATTERN (for any Supabase write):
-    1. Apply move locally in Zustand immediately
-    2. Send to Supabase
-    3. On error → rollback Zustand to snapshot taken before step 1
-    4. On success → Realtime event arrives, Zustand ignores if state already matches
-    Use pendingMoves: Set<string> to track in-flight operations
+  OPTIMISTIC UPDATES:
+    1. Snapshot Zustand state
+    2. Apply locally immediately
+    3. Write to Supabase
+    4. On error → rollback to snapshot
+    5. On success → incoming Realtime event ignored if state already matches
 
-  AUTHORITY: Supabase DB is SINGLE SOURCE OF TRUTH
-    Zustand store = local mirror only
-    syncFromServer() action merges server state → server always wins conflicts
-    Never trust only client state for scoring or move validation
-
-ELEMENT → CIVILIZATION MAPPING (the soul behind the game):
+ELEMENT → CIVILIZATION MAPPING:
   energy:     Energy and Invention District · AetherFlux · Free Energy Lab
-  biofarming: Food and Regeneration · Living Earth District · BioFarm Collective
-  technology: Technology and AI · AetherNet · Conscious Tech District
-  community:  Source and Spirituality · Culture and Symbols · Seats 1 + 8
+  biofarming: Food and Regeneration · Living Earth · BioFarm Collective
+  technology: Technology and AI · AetherNet
+  community:  Source and Spirituality · Culture and Symbols · Seats 1+8
 
-NEOTOPIA CIVILIZATION (why this game exists):
-  Stage 2 of 5 in Mahil's civilization roadmap (website → game → virtual world → community → land)
+NEOTOPIA CIVILIZATION:
+  Stage 2 of 5 (website → game → virtual world → community → land)
   Every project card scored = rehearsal of a real district that will exist by 2055
-  Global NeoTopia Index: accumulate across all games → connects to real-world metrics
-  9 Council Districts: Source/Spirituality · Healing · Education · Energy · Food · Architecture · Tech · Culture · Diplomacy
+  Global NeoTopia Index connects game contributions to real-world civilization metrics
+  9 Districts: Source · Healing · Education · Energy · Food · Architecture · Tech · Culture · Diplomacy
 
-SKILLS (380 available via symlink to AetherProject/.claude/skills/):
-  Top skills for NeoTopia tasks:
-    aether-prompt-evolution, aether-self-rating, impeccable, apple-hig-expert
-    aether-security, verification-quality, diagnose, aether-intelligence-layer
-    aether-session-compass (DEEPDIVE), aether-ui-audit (XRAY), llm-council
+SKILLS: 380 via symlink to AetherProject/.claude/skills/
+  Best for NeoTopia: aether-prompt-evolution · aether-self-rating · impeccable · apple-hig-expert
+  aether-security · verification-quality · diagnose · llm-council
 
-PERMANENT ANTI-REGRESS RULES (learned through sessions — never repeat these mistakes):
-  1. NEVER git add -A in multi-terminal — always pathspec
-  2. NO em dashes — use · (middle dot)
-  3. NO window.confirm() — hold-to-confirm (1000ms)
-  4. 44px minimum touch targets everywhere
-  5. tabular-nums on all numbers
-  6. npm run build must pass before commit
-  7. Read files before prescribing anything (PREMISE CHECK)
-  8. pixelToHex ALWAYS implemented alongside hexToPixel — they are a paired function
-  9. Pattern rotation algorithm MUST exist before any card scoring is written
-  10. Cluster BFS MUST exist before any final scoring is written
+PERMANENT ANTI-REGRESS RULES (20 rules — S1 added rules 17-20):
+  1.  NEVER git add -A — always pathspec
+  2.  NO em dashes — use · (middle dot)
+  3.  NO window.confirm() — hold-to-confirm (1000ms)
+  4.  44px minimum touch targets everywhere
+  5.  tabular-nums on all game numbers
+  6.  npm run build must pass before commit
+  7.  PREMISE CHECK — read source files before prescribing anything
+  8.  pixelToHex ALWAYS paired with hexToPixel
+  9.  Pattern rotation algorithm MUST exist before any card scoring
+  10. Cluster BFS MUST exist before any final scoring
   11. Production tile data structure MUST be initialized before factory logic
-  12. Diverse City enforcement requires region.lastBuiltIllustration field
-  13. Rate forge /100 BEFORE executing — if < 85, rewrite
-  14. Rate task /50 AFTER each task — if < 35, redo before moving on
+  12. Diverse City needs region.lastBuiltIllustration field
+  13. Rate forge /100 BEFORE executing — < 85 = rewrite
+  14. Rate task /50 AFTER each task — < 35 = redo
   15. Write ONE evolution lesson to .claude/comms/tomorrow.md every session
-  16. Server is source of truth — never trust only client state for scoring
+  16. Server is source of truth — never trust only client state
+  17. NEVER use @ package names in bash glob checks — use Python or node -e (S1 LESSON)
+  18. "permission denied" ≠ "does not exist" — always diagnose exact error type (S1 LESSON)
+  19. Supabase raw SQL tables need explicit GRANT — dashboard auto-grants, SQL does not (S1 LESSON)
+  20. Hard gate failure with known/solvable cause + DB-independent tasks = proceed, fix in parallel (S1 LESSON)
 
-COLONIST.IO REFERENCE (our primary benchmark, 15M+ games in 2025):
-  Stack: React + TypeScript + CSS + relational DB + REST APIs
-  Mobile-first: 65% of their games are on mobile — match this
-  Performance: game must feel smooth under heavy load
-  Lesson: pure strategy (no dice) is NeoTopia's advantage
-  Comparison: we use Supabase Realtime instead of Redis+WebSockets
+HEX MATH REFERENCE: redblobgames.com/grids/hexagons
+  Flat-top orientation · axial (q,r) storage · cube (q,r,s) for algorithms
+  Neighbor offsets (flat-top): (1,0),(1,-1),(0,-1),(-1,0),(-1,1),(0,1)
+  pixelToHex: q=(2/3*x)/size, r=(-1/3*x + √3/3*y)/size → hexRound()
 
-HEX MATH CANONICAL REFERENCE:
-  redblobgames.com/grids/hexagons — use this for any uncertain hex algorithm
-  Use: axial (q,r) for storage, cube (q,r,s where q+r+s=0) for algorithms
-  Orientation: FLAT-TOP hexagons
-  Neighbor offsets (flat-top axial): (1,0),(1,-1),(0,-1),(-1,0),(-1,1),(0,1)
-  pixelToHex formula (flat-top): q=(2/3*x)/size, r=(-1/3*x + √3/3*y)/size → hexRound()
+COLONIST.IO REFERENCE (benchmark — 15M+ games 2025):
+  Mobile-first: 65% mobile play — 44px targets non-negotiable
+  Performance: smooth under heavy load
+  Our edge: pure strategy (no dice) + consciousness civilization theme
