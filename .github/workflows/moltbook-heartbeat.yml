@@ -1,0 +1,25 @@
+name: NeoTopian Moltbook Heartbeat
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'  # Every 4 hours
+  workflow_dispatch:        # Manual trigger from GitHub Actions UI
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run NeoTopian Moltbook Heartbeat
+        env:
+          MOLTBOOK_API_KEY: ${{ secrets.MOLTBOOK_API_KEY }}
+        run: |
+          chmod +x scripts/moltbook-heartbeat.sh
+          bash scripts/moltbook-heartbeat.sh
+
+      - name: Save heartbeat log
+        if: always()
+        run: |
+          mkdir -p .moltbook-logs
+          echo "Last heartbeat: $(date -u)" > .moltbook-logs/last-run.txt
