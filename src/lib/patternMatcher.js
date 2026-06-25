@@ -7,12 +7,11 @@
 //
 // Coords: axial (q,r), flat-top hexes. Hexes are keyed as 'q,r' strings in the store.
 
-// 60deg rotation in cube space (per CLAUDE.md): (q,r) -> (-r, q+r).
-// Order-6, so applying it 6 times enumerates all rotational orientations · the
-// direction (CW vs CCW) is irrelevant since we collect all six.
-function rotate60(q, r) {
-  return { q: -r, r: q + r }
-}
+// Geometry has ONE owner: the 60deg cube-rotation primitive lives in hexUtils
+// (hexRotate60CCW: (q,r) -> (-r, q+r)). Importing it here keeps pattern matching and the
+// board layer from drifting. Order-6, so applying it 6 times enumerates all orientations ·
+// the direction (CW vs CCW) is irrelevant since we collect all six.
+import { hexRotate60CCW } from '../utils/hexUtils'
 
 // All 6 rotations of a pattern (array of {q,r,type}), each normalized so its
 // first cell sits at the origin (0,0).
@@ -28,7 +27,7 @@ function getAllRotations(pattern) {
     }))
     rotations.push(normalized)
     current = current.map(cell => ({
-      ...rotate60(cell.q, cell.r),
+      ...hexRotate60CCW(cell.q, cell.r),
       type: cell.type,
     }))
   }

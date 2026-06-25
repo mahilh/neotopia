@@ -25,6 +25,26 @@ describe('gameStore', () => {
     expect(state.theOffer).toHaveLength(4)
   })
 
+  test('initGame seeds every factory with exactly 1 of each element type', () => {
+    // Rulebook setup: factories start 1-of-each · production tiles are refills only.
+    useGameStore.getState().initGame(
+      [{ userId: 'u1', username: 'P1' }, { userId: 'u2', username: 'P2' }],
+      shuffleArray(PROJECT_CARDS),
+      shuffleArray(PRODUCTION_TILES),
+    )
+    const state = useGameStore.getState()
+    for (const factory of state.factories) {
+      expect(factory.elements).toEqual([
+        { type: 'energy', count: 1 },
+        { type: 'biofarming', count: 1 },
+        { type: 'technology', count: 1 },
+        { type: 'community', count: 1 },
+      ])
+    }
+    // Seeding must NOT consume the production stack · all 12 tiles remain for the clock.
+    expect(state.productionTilesRemaining).toBe(12)
+  })
+
   test('actionsRemaining decrements on drawCard', () => {
     const state = useGameStore.getState()
     const initialActions = state.actionsRemaining
@@ -162,6 +182,44 @@ describe('scoreCard authoritative build validation', () => {
     expect(s.players[0].scores[0]).toBe(2)    // 2pt card banked
     expect(s.players[0].hand).toHaveLength(0) // card consumed
     expect(s.regions.find(r => r.id === 0).lastBuiltIllustration).toBe('garden')
+  })
+})
+
+describe('getValidPlacements', () => {
+  const freshGame = () =>
+    useGameStore.getState().initGame(
+      [{ userId: 'u1', username: 'P1' }, { userId: 'u2', username: 'P2' }],
+      shuffleArray(PROJECT_CARDS),
+      shuffleArray(PRODUCTION_TILES),
+    )
+
+  test('returns [] when actionsRemaining is 0', () => {
+    freshGame()
+    useGameStore.setState({ actionsRemaining: 0 })
+    // Factory 0 borders region 0, but no actions remain.
+    expect(useGameStore.getState().getValidPlacements(0, 0)).toEqual([])
+  })
+
+  test('returns only the region center when the region is empty', () => {
+    freshGame()
+    // Region 0 (Sacred City) center is (0,0); factory 0 borders it.
+    expect(useGameStore.getState().getValidPlacements(0, 0)).toEqual([{ q: 0, r: 0 }])
+  })
+
+  test('returns the adjacent empty hexes when the region already has elements', () => {
+    freshGame()
+    // Drop one element on region 0's center, then ask where the next can go.
+    useGameStore.getState().placeElement(0, 0, 'energy', 0, 0, 0)
+    const valid = useGameStore.getState().getValidPlacements(0, 0)
+    const keys = valid.map(h => `${h.q},${h.r}`).sort()
+    // All 6 neighbors of (0,0) are empty and within radius 2 → all valid, center excluded.
+    expect(keys).toEqual(['-1,0', '-1,1', '0,-1', '0,1', '1,-1', '1,0'].sort())
+  })
+
+  test('returns [] when the factory does not border the region', () => {
+    freshGame()
+    // Factory 0 borders regions 0 and 1 · region 2 is not adjacent.
+    expect(useGameStore.getState().getValidPlacements(0, 2)).toEqual([])
   })
 })
 

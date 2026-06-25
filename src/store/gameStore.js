@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
 import { findBuildableCards, findLargestCluster, calculateFinalScore } from '../lib/patternMatcher'
+import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
 
 // Immer does not draft Map/Set unless this is enabled. pendingMoves is a Set that
 // the optimistic-update flow mutates, so without this the first mutation throws.
@@ -139,13 +140,13 @@ export const useGameStore = create(immer((set, get) => ({
     // The Offer: 4 face-up cards.
     state.theOffer = state.deck.splice(0, 4)
 
-    // Seed factories from the first production tile.
-    if (state.productionTiles.length > 0) {
-      const firstTile = state.productionTiles[0]
-      state.factories.forEach(factory => {
-        factory.elements = tileToFactoryElements(firstTile)
-      })
-    }
+    // Rulebook setup: each factory starts with exactly 1 of each element type.
+    // Production tiles exist ONLY for refills (when a factory empties during play) ·
+    // the stack is left untouched here so all 12 tiles drive the game clock.
+    const STARTING_ELEMENTS = ['energy', 'biofarming', 'technology', 'community']
+    state.factories.forEach(factory => {
+      factory.elements = STARTING_ELEMENTS.map(type => ({ type, count: 1 }))
+    })
   }),
 
   placeElement: (seat, fromFactoryId, elementType, toQ, toR, regionId) => set(state => {
@@ -310,6 +311,46 @@ export const useGameStore = create(immer((set, get) => ({
     const region = state.regions.find(r => r.id === regionId)
     if (!player || !region) return []
     return findBuildableCards(region.hexes, player.hand, region.lastBuiltIllustration, lastPlacedKey)
+  },
+
+  // Computed: every hex in `regionId` where the current player could legally drop an
+  // element from `factoryId` this turn. T1 renders these as validTargets · the rule is
+  // owned here so the board layer can never drift from placeElement's own validation.
+  // Uses static imports (hexesInRadius + REGION_DEFS) · an `await import()` inside this
+  // synchronous selector would throw at call time.
+  getValidPlacements: (factoryId, regionId) => {
+    const state = get()
+
+    // Gate: placement only when actions remain (mirrors placeElement's gate).
+    if (state.actionsRemaining <= 0) return []
+
+    const factory = state.factories.find(f => f.id === factoryId)
+    if (!factory) return []
+    if (!factory.betweenRegions.includes(regionId)) return [] // factory must border this region
+
+    const region = state.regions.find(r => r.id === regionId)
+    if (!region) return []
+
+    const regionDef = REGION_DEFS.find(rd => rd.id === regionId)
+    if (!regionDef) return []
+
+    // All hexes that belong to this region (bounded by its radius).
+    const allRegionHexes = hexesInRadius(regionDef.cq, regionDef.cr, regionDef.radius)
+
+    const hasExistingElement = Object.values(region.hexes).some(h => h.element)
+
+    // First placement in an empty region: only the center is legal (CLAUDE.md rule).
+    if (!hasExistingElement) {
+      return [{ q: region.center.q, r: region.center.r }]
+    }
+
+    // Later placements: hex must be empty AND adjacent to at least one existing element
+    // (contiguous-region rule that cluster scoring + pattern matching both depend on).
+    return allRegionHexes.filter(hex => {
+      const key = `${hex.q},${hex.r}`
+      if (region.hexes[key]?.element) return false // occupied
+      return NEIGHBOR_DIRS.some(([dq, dr]) => region.hexes[`${hex.q + dq},${hex.r + dr}`]?.element)
+    })
   },
 
   // Computed: largest same-element cluster in a region (final-scoring helper).
