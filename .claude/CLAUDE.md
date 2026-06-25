@@ -8,13 +8,22 @@ Stack: React 19 + Vite 8 + Tailwind v4 + SVG hex board + Zustand + Immer + Supab
 Supabase ID: wynccumuisjxbptjlfwq · URL: https://wynccumuisjxbptjlfwq.supabase.co
 GitHub: mahilh/neotopia (public) · Domain: neotopia.io · Vercel: auto-deploy from main
 
-STATUS (as of S3-S4):
-  ✅ ANON AUTH ENABLED (June 25 2026)
-  ✅ TWO-CLIENT E2E VERIFIED LIVE (commit 7802096 · T3 S3)
-  ✅ NEAR-MISS ENGINE LIVE (usePatternHighlight · T2 S3)
-  ✅ SCORECARDFLASH LIVE (ScoreFlash civilization moment · T1 S3)
-  ✅ BONUS TOKENS: automatization + subsidy + initiative (T2 S4)
-  ⏳ PENDING: /lobby route (T1 S4) · permits (T2 S5) · browser UI E2E (T3 S4)
+STATUS (as of S4-S5):
+  ✅ ANON AUTH ENABLED · ✅ E2E VERIFIED LIVE (7802096) · ✅ NEAR-MISS ENGINE LIVE
+  ✅ SCORECARDFLASH LIVE · ✅ BONUS TOKENS: automatization+subsidy+initiative
+  ✅ 1-BONUS-PER-TURN ENFORCED (T2 S5) · ✅ DETERMINISTIC EARN PATHS (data-pending)
+  ✅ RECONNECT HARDENING: window.online + visibilitychange (T3 S4)
+  ✅ ROUTING: /lobby → /game/:roomId · GameRoom seeded from DB (T1 S4)
+  ✅ MOLTBOOK: neotopian claimed · /m/neotopia live · GitHub Actions heartbeat 4h
+  ❌ BLOCKER: anon-auth session not persisting across page reload (T2 S6 fixes this)
+  ⏳ PENDING: auth fix (T2 S6 #1) · two-tab browser E2E (T1 S5, T3 S5) · permits (T2 S6)
+
+CRITICAL AUTH BUG (T2 S6 must fix first):
+  signInAnonymously() creates a NEW user every call · getSession() returning null on reload
+  Root cause: src/lib/supabase.js client config · persistSession or storage not working
+  Effect: page reload changes user_id → RLS 403 on writes → rejoin fails
+  Fix location: src/lib/supabase.js (verify auth: {persistSession:true,storage:localStorage})
+  AND: useAuth.js must not call signInAnonymously() if localStorage has a valid refresh_token
 
 TERMINAL LANES:
   T1: src/components/ · src/pages/ · src/App.jsx · src/utils/ · src/hooks/useGameActions.js
@@ -22,28 +31,16 @@ TERMINAL LANES:
       NOT: useGameActions.js(T1) · useGameRoom.js · useGameSync.js · usePresence.js (T3)
   T3: src/hooks/useGameRoom.js · useGameSync.js · usePresence.js · src/pages/Lobby.jsx
   COLLISION: git status --short [lane] before every edit. M from other terminal = STOP.
-  AMBIGUITY: src/hooks/ → T2 broadly. Named T1/T3 files above override.
 
 RULES — ABSOLUTE:
-  NO em dashes · use · (middle dot)
-  NO window.confirm() · hold-to-confirm (1000ms)
-  44px touch targets everywhere
-  tabular-nums on all game numbers
-  npm run build before commit
-  NEVER git add -A · pathspec from git status at commit time
-  Read comms/tomorrow.md on boot · write at session end
-  End with bash .claude/relay.sh
+  NO em dashes · use · · NO window.confirm() · 44px touch targets · tabular-nums
+  npm run build before commit · NEVER git add -A · Read+write comms/tomorrow.md
+  git pull --rebase FIRST in boot · End with bash .claude/relay.sh
 
-SELF-RATING: Forge /100 before tasks (<85=rewrite) · Task /50 after (<35=redo) · Session /300
+SELF-RATING: Forge /100 before (<85=rewrite) · Task /50 after (<35=redo) · Session /300
 
-GIT PULL — FULLY AUTOMATED:
-  BOOT SEQUENCE now starts with git pull --rebase (line 1 below).
-  start.sh handles Mac terminal pull: bash ~/NeoTopia/start.sh (run ONCE before opening tabs).
-  Terminals handle mid-session sync via git pull --rebase --autostash before every push.
-  You never need to manually git pull. Everything is automated.
-
-BOOT SEQUENCE (run at start of every session — first line is git pull):
-  git pull --rebase                              ← FIRST — syncs from main before anything
+BOOT SEQUENCE:
+  git pull --rebase
   cat .claude/CLAUDE.md | head -80
   cat .claude/comms/tomorrow.md 2>/dev/null
   git log --oneline -8 && git status --short
@@ -52,24 +49,28 @@ BOOT SEQUENCE (run at start of every session — first line is git pull):
 COMMS: .claude/comms/tomorrow.md · T[N] LESSON: · T[N]→T[M]: · T[N] S[N+1] FIRST:
 
 CODEWORDS:
-  T[N] AUTODRIVE! → paste output · I: GitHub verify + XRAY!/200 + next forge (no session # needed)
-  FORGE! T[N] → just write forge · XRAY! [thing] → just audit
-  REFORGE! → 7-phase transcendence · .claude/skills/reforge/SKILL.md
-  DEEPDIVE! → 10-step analysis · OVERDRIVE! → 6-agent LLM Council · NIGHTSAVE! → Google Drive
-  Rate it → /300 session rating
+  T[N] AUTODRIVE! → paste output · I: GitHub verify + XRAY!/200 + next forge
+  FORGE! T[N] → just write forge · XRAY! → just audit · REFORGE! → 7-phase transcendence
+  DEEPDIVE! → 10-step · OVERDRIVE! → 7-agent council (incl. NEOTOPIAN Moltbook agent)
+  NIGHTSAVE! → Google Drive · Rate it → /300
+
+MOLTBOOK:
+  Agent: neotopian · API key: $MOLTBOOK_API_KEY (in .env.local)
+  Submolt owned: /m/neotopia · Profile: https://www.moltbook.com/u/neotopian
+  Heartbeat: GitHub Actions every 4h (MOLTBOOK_API_KEY secret required)
+  Skills: .claude/skills/moltbook/SKILL.md · .claude/skills/moltbook-scan/SKILL.md
+  Privacy: never post architecture details, schema, or roadmap specifics
 
 ENGINE ARCHITECTURE:
   Pattern matching: patternMatcher.findBuildableCards (never reimplement)
-  Near-miss: usePatternHighlight(regionId) → {completeKeys, partialKeys, completionCandidates[{cardId,missingKey,requiredType,filledKeys}]}
-  Scoring owner: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean · scoreCard delegates
-  Optimistic move: useGameSync.sendMove(mutate,eventType,eventData)→boolean (T3)
+  Near-miss: usePatternHighlight(regionId) → {completeKeys, partialKeys, completionCandidates}
+  Scoring: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean · scoreCard delegates
+  Optimistic move: useGameSync.sendMove (T3 single owner)
   Serialization: serializableState()=JSON.parse(JSON.stringify(store)) · NOT structuredClone
-  Bonus: automatization · subsidy(draw 2 Offer-first) · initiative(place from reserve) · permits(TODO)
-  1-bonus-per-turn: NOT YET BUILT (T2 S5) · Bonus earn paths: NOT YET BUILT (T2 S5)
+  Bonus: automatization+subsidy+initiative done · permits TODO · earn paths wired (data pending)
+  Routing: / → Lobby · /game/:roomId → multiplayer GameRoom · /game → solo dev
 
-DB CONTRACT GATE (rule 26 — before ANY Supabase code):
-  Column types · FK targets · CHECK/UNIQUE · RLS per-command · auth config · is_identity (rule 30)
-  Dashboard: https://supabase.com/dashboard/project/wynccumuisjxbptjlfwq
+DB CONTRACT GATE (rule 26):
   node --input-type=module <<'EOF'
   import { createClient } from '@supabase/supabase-js'
   import { readFileSync } from 'fs'
@@ -84,34 +85,23 @@ DB CONTRACT GATE (rule 26 — before ANY Supabase code):
   }
   EOF
 
-SUPABASE SCHEMA (verified T3 S2-S3):
-  room_code: char(6) CHECK(length=6) · status CHECK IN ('waiting','playing','finished')
-  game_events.session_id → FK game_sessions.id (uuid · NOT room_id)
-  game_events.sequence_num: GENERATED ALWAYS AS IDENTITY · DO NOT set explicitly (rule 30)
-  RLS: migration 001(GRANT) · 002(INSERT/UPDATE policies) · 003(player_count trigger)
-  migration 003: SECURITY DEFINER + SET search_path='' + schema-qualified
-
-RED ERROR PREVENTION:
-  RE-1: No @ in bash globs → node -e · RE-2: "permission denied" ≠ "does not exist"
-  RE-3: Raw SQL needs GRANT · RE-4: Known-cause gate + independent tasks = parallel
+SUPABASE SCHEMA: room_code char(6) · status IN ('waiting','playing','finished')
+  game_events.session_id → FK game_sessions.id · sequence_num GENERATED ALWAYS AS IDENTITY
+  RLS: migration 001+002+003 · serializableState()=JSON.parse(JSON.stringify(store))
 
 GAME MECHANICS:
-  BOARD: Region 0 Sacred City(#7F77DD)cq=0cr=0 · Region 1 Living Earth(#1D9E75)cq=8cr=-4 · Region 2 Free Energy(#E24B4A)cq=4cr=5
-  Factories: F0(4,-2) bet 0+1 · F1(6,1) bet 1+2 · F2(2,3) bet 0+2
-  4 ELEMENTS: energy(red #E24B4A ⚡) · biofarming(green #1D9E75 ◈) · technology(purple #7F77DD ◉) · community(blue #378ADD ✦)
-  TURN=3 ACTIONS: draw card OR move element factory→adjacent region
-  PLACEMENT: empty · first→center · else→adjacent · key 'q,r'
-  SCORING: 6 rotations · completing-element · Diverse City (no same illustration consecutive)
-  FACTORY SEEDING: 1-of-each at start · tiles=REFILLS ONLY
-  FINAL SCORE: best+second+(worst×3)+(unused×3)+cluster
-  56 CARDS: 12×2pt 18×3pt 18×4pt 8×5pt · district field is NUMBER not string
-  BONUS TOKENS: earn by covering bonus hex OR crossing score track 7/13/18
-  REALTIME: DB changes=authoritative · Broadcast=ephemeral<32KB · Presence=lobby
+  BOARD: R0 Sacred City(#7F77DD)cq=0cr=0 · R1 Living Earth(#1D9E75)cq=8cr=-4 · R2 Free Energy(#E24B4A)cq=4cr=5
+  Factories: F0(4,-2)·F1(6,1)·F2(2,3) · 4 ELEMENTS: energy⚡·biofarming◈·technology◉·community✦
+  TURN=3 ACTIONS · PLACEMENT: empty·first→center·else→adjacent·key 'q,r'
+  SCORING: 6 rotations·completing-element·Diverse City · FACTORY SEEDING: 1-of-each (tiles=refills only)
+  FINAL SCORE: best+second+(worst×3)+(unused×3)+cluster · 56 CARDS · district=NUMBER not string
+  BONUS: earn by covering bonus hex OR crossing score track 7/13/18 · 1 per turn enforced
+  REALTIME: DB=authoritative · Broadcast=ephemeral<32KB · Presence=lobby
 
-ELEMENT → CIVILIZATION: energy→Energy/Invention · biofarming→Food/Regeneration · technology→Tech/AI · community→Source/Culture
+ELEMENT→CIVILIZATION: energy→Energy/Invention·biofarming→Food/Regen·technology→Tech/AI·community→Source/Culture
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (30):
+PERMANENT ANTI-REGRESS RULES (33):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -137,11 +127,14 @@ PERMANENT ANTI-REGRESS RULES (30):
   23. useCallback deps never include store reference (T2 S1)
   24. Channel MUST be removed before new one (REFORGE!)
   25. Re-read other lane's module right before integration (T1 S2)
-  26. Premise-check DB contract: types · FKs · CHECKs · RLS per-command · auth config (T3 S2)
+  26. Premise-check DB contract: types·FKs·CHECKs·RLS per-command·auth config (T3 S2)
   27. Run code against tests before trusting either · grep consumers first (T2 S3)
-  28. Premise check is stale the moment you move on · re-run right before acting (T1 S3)
-  29. For any "spend X to do Y" action, validate Y fully BEFORE debiting X (T2 S4)
+  28. Premise check is stale · re-run right before acting (T1 S3)
+  29. Validate Y fully BEFORE debiting X in any spend action (T2 S4)
   30. information_schema ≠ full DB contract · GENERATED ALWAYS AS IDENTITY rejects explicit inserts (T3 S3)
+  31. When live verification is blocked by a dependency you don't own: isolate precisely, prove wiring fires (a 403 means your code ran · the wall is external), convert to deterministic test (T1 S4)
+  32. Never bake guessed game data into engine · wire deterministically · seed as dormant TODO · never Math.random() in synced/replayable actions (T2 S5)
+  33. Run unit tests first · live E2E second · NEVER concurrently · same event loop + sockets = false reds · isolate before believing a regression (T3 S4)
 
 HEX MATH: redblobgames.com/grids/hexagons · flat-top · axial (q,r)
 COLONIST.IO: 15M+ games · 65% mobile · our edge: pure strategy + consciousness theme
