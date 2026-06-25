@@ -218,30 +218,49 @@ export const useGameStore = create(immer((set, get) => ({
     state.actionsRemaining--
   }),
 
+  // Score a card · returns true on a real award, false if rejected (wrong seat, card not in
+  // hand, Diverse-City violation, or the pattern isn't actually complete on the board).
+  // SINGLE OWNER of the scoring rule · the void scoreCard below delegates here.
   // lastPlacedKey ('q,r') is the just-placed hex · pass it to honor the completing-element rule.
-  scoreCard: (seat, cardId, regionId, lastPlacedKey = null) => set(state => {
-    if (state.currentSeat !== seat) return
+  tryScoreCard: (seat, cardId, regionId, lastPlacedKey = null) => {
+    // Validate against current state BEFORE mutating, so a rejected call changes nothing.
+    const state = get()
+    if (state.currentSeat !== seat) return false
     const player = state.players.find(p => p.seat === seat)
     const region = state.regions.find(r => r.id === regionId)
-    if (!player || !region) return
+    if (!player || !region) return false
 
     const cardIdx = player.hand.findIndex(c => c.id === cardId)
-    if (cardIdx === -1) return
+    if (cardIdx === -1) return false
     const card = player.hand[cardIdx]
 
     // Diverse City: cannot build the same illustration consecutively in this region.
-    if (region.lastBuiltIllustration === card.illustration) return
+    if (region.lastBuiltIllustration === card.illustration) return false
 
     // Authoritative build check: the card's pattern must actually be completed on the
     // board (and include the completing hex, if given). Without this, any in-hand card
     // could be banked against any region for free points · the core scoring exploit.
     const matches = findBuildableCards(region.hexes, [card], region.lastBuiltIllustration, lastPlacedKey)
-    if (matches.length === 0) return
+    if (matches.length === 0) return false
 
-    player.hand.splice(cardIdx, 1)
-    player.scores[regionId] += card.points
-    region.lastBuiltIllustration = card.illustration
-  }),
+    set(s => {
+      const p = s.players.find(p => p.seat === seat)
+      const r = s.regions.find(r => r.id === regionId)
+      if (!p || !r) return
+      const idx = p.hand.findIndex(c => c.id === cardId)
+      if (idx === -1) return
+      p.hand.splice(idx, 1)
+      p.scores[regionId] = (p.scores[regionId] ?? 0) + card.points
+      r.lastBuiltIllustration = card.illustration
+    })
+    return true
+  },
+
+  // Void wrapper · kept for callers that don't need the outcome. Delegates to tryScoreCard
+  // so the scoring rule lives in exactly ONE place.
+  scoreCard: (seat, cardId, regionId, lastPlacedKey = null) => {
+    get().tryScoreCard(seat, cardId, regionId, lastPlacedKey)
+  },
 
   factoryRefill: (factoryId) => set(state => {
     refillFactoryDraft(state, factoryId)
@@ -268,25 +287,62 @@ export const useGameStore = create(immer((set, get) => ({
     state.turnNumber++
   }),
 
-  useBonus: (seat, bonusType /* , bonusData */) => set(state => {
+  // Bonus tokens are FREE actions (do not consume actionsRemaining). The token is removed
+  // ONLY if the bonus actually applies · a rejected bonus (e.g. an illegal initiative hex)
+  // must never silently burn a token that is worth 3pts at game end.
+  useBonus: (seat, bonusType, bonusData) => set(state => {
     const player = state.players.find(p => p.seat === seat)
     if (!player) return
     const tokenIdx = player.bonusTokens.indexOf(bonusType)
     if (tokenIdx === -1) return
 
-    player.bonusTokens.splice(tokenIdx, 1)
+    let consumed = false
 
     switch (bonusType) {
       case 'automatization': // one free extra action
         state.actionsRemaining++
+        consumed = true
         break
-      case 'subsidy':     // draw 2 cards · handled via drawCard calls by caller (TODO S2)
-      case 'initiative':  // place any element from reserve · TODO S2 (needs bonusData)
-      case 'permits':     // place from factory in outer semi-circle · TODO S2
+
+      case 'subsidy': {
+        // Government Subsidy: draw 2 cards · prefer The Offer (more choice), then the deck.
+        // (Front cards for now · a future version can take chosen Offer indices via bonusData.)
+        let drawn = 0
+        while (drawn < 2 && state.theOffer.length > 0) { player.hand.push(state.theOffer.shift()); drawn++ }
+        while (drawn < 2 && state.deck.length > 0) { player.hand.push(state.deck.shift()); drawn++ }
+        consumed = drawn > 0 // nothing to draw → don't waste the token
         break
+      }
+
+      case 'initiative': {
+        // Private Initiative: place ANY element (from reserve) into ANY region · no factory
+        // constraint, but the same empty/center/adjacency rule as placeElement.
+        // bonusData = { elementType, toQ, toR, regionId }
+        if (!bonusData) break
+        const { elementType, toQ, toR, regionId } = bonusData
+        const region = state.regions.find(r => r.id === regionId)
+        if (!region) break
+        const hexKey = `${toQ},${toR}`
+        if (region.hexes[hexKey]?.element) break // hex must be empty
+        const regionHasElement = Object.values(region.hexes).some(h => h.element)
+        if (!regionHasElement) {
+          if (toQ !== region.center.q || toR !== region.center.r) break // first must be center
+        } else {
+          const touches = NEIGHBOR_DIRS.some(([dq, dr]) => region.hexes[`${toQ + dq},${toR + dr}`]?.element)
+          if (!touches) break // later must be adjacent to an existing element
+        }
+        if (!region.hexes[hexKey]) region.hexes[hexKey] = {}
+        region.hexes[hexKey].element = elementType
+        consumed = true
+        break
+      }
+
+      case 'permits': // place from a factory onto a free outer semicircle space · TODO (needs outer-space tracking)
       default:
         break
     }
+
+    if (consumed) player.bonusTokens.splice(tokenIdx, 1)
   }),
 
   // Called when Supabase realtime pushes updated state · server wins on conflicts.

@@ -236,3 +236,90 @@ describe('production-tile end-game timing', () => {
     }
   })
 })
+
+describe('tryScoreCard (boolean scoring signal)', () => {
+  const solarGarden = PROJECT_CARDS.find(c => c.id === 'card_01') // energy at (0,0)+(1,0) · illustration 'garden'
+  const seat0 = (hexes, lastBuilt = null) => ({
+    currentSeat: 0,
+    players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [solarGarden], bonusTokens: [], scores: [0, 0, 0] }],
+    regions: [{ id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes, lastBuiltIllustration: lastBuilt, scores: {} }],
+  })
+
+  test('returns false when the pattern is not complete · no mutation', () => {
+    useGameStore.setState(seat0({}))
+    expect(useGameStore.getState().tryScoreCard(0, 'card_01', 0, null)).toBe(false)
+    const s = useGameStore.getState()
+    expect(s.players[0].scores[0]).toBe(0)
+    expect(s.players[0].hand).toHaveLength(1)
+  })
+
+  test('returns true when complete · card removed from hand · score incremented', () => {
+    useGameStore.setState(seat0({ '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }))
+    expect(useGameStore.getState().tryScoreCard(0, 'card_01', 0, '1,0')).toBe(true)
+    const s = useGameStore.getState()
+    expect(s.players[0].scores[0]).toBe(2)
+    expect(s.players[0].hand).toHaveLength(0)
+    expect(s.regions.find(r => r.id === 0).lastBuiltIllustration).toBe('garden')
+  })
+
+  test('returns false on a Diverse City violation', () => {
+    // Region's last build was already 'garden' · card_01 is also 'garden' → rejected.
+    useGameStore.setState(seat0({ '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, 'garden'))
+    expect(useGameStore.getState().tryScoreCard(0, 'card_01', 0, '1,0')).toBe(false)
+    expect(useGameStore.getState().players[0].scores[0]).toBe(0)
+  })
+
+  test('does not mutate state when returning false (wrong seat)', () => {
+    useGameStore.setState(seat0({ '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }))
+    const before = JSON.stringify(useGameStore.getState().players)
+    expect(useGameStore.getState().tryScoreCard(1, 'card_01', 0, '1,0')).toBe(false) // currentSeat is 0
+    expect(JSON.stringify(useGameStore.getState().players)).toBe(before)
+  })
+})
+
+describe('bonus tokens (subsidy + initiative)', () => {
+  const playerWith = (tokens, extra = {}) => ({
+    currentSeat: 0,
+    players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [], bonusTokens: tokens, scores: [0, 0, 0] }],
+    ...extra,
+  })
+
+  test('subsidy draws up to 2 cards (Offer first) and consumes the token', () => {
+    useGameStore.setState(playerWith(['subsidy'], {
+      theOffer: [{ id: 'o1' }, { id: 'o2' }, { id: 'o3' }],
+      deck: [{ id: 'd1' }],
+    }))
+    useGameStore.getState().useBonus(0, 'subsidy')
+    const s = useGameStore.getState()
+    expect(s.players[0].hand.map(c => c.id)).toEqual(['o1', 'o2'])
+    expect(s.theOffer.map(c => c.id)).toEqual(['o3'])
+    expect(s.players[0].bonusTokens).toHaveLength(0)
+  })
+
+  test('subsidy draws 2 from the deck when the Offer is empty', () => {
+    useGameStore.setState(playerWith(['subsidy'], { theOffer: [], deck: [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }] }))
+    useGameStore.getState().useBonus(0, 'subsidy')
+    expect(useGameStore.getState().players[0].hand.map(c => c.id)).toEqual(['d1', 'd2'])
+  })
+
+  test('initiative places an element at a valid adjacent hex and consumes the token', () => {
+    useGameStore.setState(playerWith(['initiative'], {
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {} }],
+    }))
+    useGameStore.getState().useBonus(0, 'initiative', { elementType: 'community', toQ: 1, toR: 0, regionId: 0 })
+    const s = useGameStore.getState()
+    expect(s.regions[0].hexes['1,0'].element).toBe('community')
+    expect(s.players[0].bonusTokens).toHaveLength(0)
+  })
+
+  test('initiative is rejected on an occupied hex and does NOT waste the token', () => {
+    useGameStore.setState(playerWith(['initiative'], {
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {} }],
+    }))
+    useGameStore.getState().useBonus(0, 'initiative', { elementType: 'community', toQ: 0, toR: 0, regionId: 0 })
+    const s = useGameStore.getState()
+    expect(s.regions[0].hexes['0,0'].element).toBe('energy') // unchanged
+    expect(s.players[0].bonusTokens).toEqual(['initiative']) // token preserved
+  })
+})
+
