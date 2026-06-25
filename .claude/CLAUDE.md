@@ -10,9 +10,9 @@ GitHub: mahilh/neotopia (public) | Domain target: neotopia.io
 Vercel: auto-deploy from main branch
 
 TERMINAL LANES (strict — check before every edit):
-  T1: src/components/ src/pages/ src/App.jsx src/utils/   (board + visual layer)
-  T2: src/lib/ src/store/ src/hooks/ api/ scripts/         (engine + backend)
-  T3: src/hooks/useGameRoom.js src/hooks/useGameSync.js api/game-action.js  (realtime)
+  T1: src/components/ src/pages/ src/App.jsx src/utils/                          (board + visual layer)
+  T2: src/lib/ src/store/ src/hooks/ api/ scripts/                               (engine + backend)
+  T3: src/hooks/useGameRoom.js src/hooks/useGameSync.js src/hooks/usePresence.js src/pages/Lobby.jsx
   COLLISION RULE: git status --short [your lane] before every edit. M from other terminal = STOP.
 
 RULES — ABSOLUTE (violating any = task fail):
@@ -25,6 +25,7 @@ RULES — ABSOLUTE (violating any = task fail):
   NEVER git add -A — always explicit pathspec: git add [specific files]
   ALWAYS read .claude/comms/tomorrow.md on boot to get cross-terminal messages
   ALWAYS write to .claude/comms/tomorrow.md at session end
+  ALWAYS end every session with: bash .claude/relay.sh
 
 SELF-RATING SYSTEM (mandatory — game cannot improve without this):
   FORGE SELF-RATE /100 BEFORE any task — if < 85 rewrite before executing
@@ -33,9 +34,9 @@ SELF-RATING SYSTEM (mandatory — game cannot improve without this):
   ONE evolution lesson mandatory per session — written to .claude/comms/tomorrow.md
 
 BOOT SEQUENCE (run every session, do not skip):
-  cat .claude/CLAUDE.md | head -60
+  cat .claude/CLAUDE.md | head -80
   cat .claude/comms/tomorrow.md 2>/dev/null || echo "no cross-terminal messages"
-  git log --oneline -3
+  git log --oneline -5
   git status --short
   npm run build 2>&1 | tail -3
 
@@ -48,40 +49,44 @@ CROSS-TERMINAL COMMUNICATION PROTOCOL:
     T[N] S[N+1] FILES TO CREATE: [list]
   Read all messages. Acknowledge each. Proceed.
 
+CODEWORD DICTIONARY (permanent — these never change):
+  FORGE!        → write maximum-quality forge prompt · self-rate /100 · apply last ONE THING from comms
+  XRAY!         → brutal audit /200 · evidence mandate · root causes with line citations
+  DEEPDIVE!     → 10-step enforced analysis sequence · cannot skip steps
+  OVERDRIVE!    → 6-agent LLM Council (BRUTUS/SOPHIA/MARCUS/ISABELLA/KARPATHY/CAESAR) · simultaneous verdicts
+  NIGHTSAVE!    → end-of-session intelligence save to Google Drive
+  REFORGE!      → 7-phase prompt transcendence · DESTROY → EVIDENCE → FOUNDATION → CONSTRUCT → STRESS TEST → SEAL → EVOLVE
+                   skill file: .claude/skills/reforge/SKILL.md
+                   output must: prevent a failure class the original could not · add 1 new rubric dimension
+                   seal rating: must score ≥ 100/120 across 6 dimensions before claiming done
+  XRAY! RELAY:  → paste terminal output here after bash .claude/relay.sh · triggers GitHub code verification + next forge
+  Rate it       → 5-dimension /300 session rating (Prompt /100 + Code /200)
+  BACKGROUND! S[N] → run during terminal sessions: update CLAUDE.md · push migration scripts · pre-write next forges
+  LLM Council   → same as OVERDRIVE! 6 agents · use when 2+ approaches would give genuinely different outcomes
+
 ═══════════════════════════════════════════════════════
 RED ERROR PREVENTION PROTOCOL — 4 PERMANENT RULES
-(These eliminated the S1 false-positive exit code 1)
 ═══════════════════════════════════════════════════════
 
 RULE RE-1: NEVER use @ package names in bash glob checks.
   WRONG: for p in @supabase/supabase-js zustand; do test -d node_modules/$p
-  RIGHT: use Python or node -e to check packages:
-    node -e "const p=require('./package.json'); console.log(Object.keys(p.dependencies).join(' '))"
-  WHY: zsh treats @scope/package as a glob, exits 1 on non-match even when package exists.
+  RIGHT: node -e "const p=require('./package.json'); console.log(Object.keys(p.dependencies).join(' '))"
+  WHY: zsh treats @scope/package as a glob, exits 1 even when package exists.
 
 RULE RE-2: ALWAYS distinguish error types before treating as blocker.
   "permission denied for table" ≠ "table does not exist"
-  "relation does not exist" = table is genuinely missing (real blocker)
-  "permission denied" = table exists, RLS/GRANT issue (diagnose, then decide)
-  NEVER stop S1 engine work because of a Supabase GRANT issue — engine code is DB-independent.
+  "relation does not exist" = table missing (real blocker)
+  "permission denied" = GRANT issue (diagnose, fix in parallel with independent work)
 
 RULE RE-3: Supabase tables created via raw SQL ALWAYS need explicit GRANT.
-  Supabase dashboard auto-grants SELECT/INSERT/UPDATE/DELETE to anon + authenticated.
-  Raw SQL migrations DO NOT auto-grant. You must add:
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA public
-      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated;
-  The migration is at: scripts/migrations/001_grant_permissions.sql
-  Run via Supabase MCP or dashboard SQL editor BEFORE any DB integration tests.
+  Migration at: scripts/migrations/001_grant_permissions.sql
+  Run via Supabase MCP or dashboard SQL editor BEFORE DB integration tests.
 
 RULE RE-4: Hard gates must be precise, not binary.
-  A gate that fails with a known, solvable, documented cause is NOT a full stop.
-  The gate intent is "don't build on a broken foundation."
-  If the failure is: known root cause + fix exists + S1 tasks are provably independent of it
-  → Document the fix, proceed with independent tasks, fix the gate in parallel.
-  The gate IS a full stop only when: tables don't exist, env vars missing, build broken.
+  Known root cause + fix exists + tasks are DB-independent = proceed and fix in parallel.
+  Full stop only when: tables missing, env vars absent, build broken.
 
-SUPABASE GATE DIAGNOSIS PATTERN (use this exact check):
+SUPABASE GATE DIAGNOSIS PATTERN:
   node --input-type=module <<'EOF'
   import { createClient } from '@supabase/supabase-js'
   import { readFileSync } from 'fs'
@@ -97,9 +102,8 @@ SUPABASE GATE DIAGNOSIS PATTERN (use this exact check):
     console.log(t+':', status, error?.message ?? '')
   }
   EOF
-  ✅ = good · ❌ MISSING = tables need creating · ⚠️ GRANT = run 001_grant_permissions.sql
 
-PACKAGE CHECK PATTERN (safe, no zsh glob issues):
+PACKAGE CHECK PATTERN (safe — no zsh glob issues):
   node -e "
   const p = require('./package.json')
   const deps = {...p.dependencies, ...p.devDependencies}
@@ -133,9 +137,9 @@ GAME MECHANICS (memorize completely)
 
   ELEMENT PLACEMENT RULES:
     Hex must be EMPTY
-    AND either: region is empty → place at center, region has elements → must be adjacent to 1+
+    AND either: region is empty → place at center · region has elements → must be adjacent to 1+
     "Adjacent" = hex shares an edge (6 neighbors in flat-top hex, axial coords)
-    Key format for hexes in store: 'q,r' string (e.g. '0,0', '1,-1', '-2,3')
+    Key format for hexes in store: 'q,r' string (e.g. '0,0' · '1,-1' · '-2,3')
 
   BUILDING PROJECT CARDS (THE CORE SCORING MECHANIC):
     After placing element, check if region now matches any card pattern in player hand
@@ -143,30 +147,30 @@ GAME MECHANICS (memorize completely)
     Player MUST be the one who placed the COMPLETING element
     Only ONE card scored per completing move
     Diverse City rule: cannot score same card.illustration type consecutively in same region
-    Check region.lastBuiltIllustration before scoring
 
   PATTERN ROTATION ALGORITHM (mandatory before ANY card scoring):
-    Cube rotation 60° CCW: (q,r) → (-r, q+r)  [where s=-q-r in cube coords]
-    Get 6 rotations: apply rotation 6 times, normalize each to (0,0) origin
-    Match: for each rotation, try each occupied hex as anchor, check all pattern cells
-    This is in src/lib/patternMatcher.js — DO NOT reimplement, import from there
+    Cube rotation 60° CCW: (q,r) → (-r, q+r)
+    Get 6 rotations · normalize each to (0,0) · try at each occupied hex as anchor
+    In src/lib/patternMatcher.js — DO NOT reimplement
 
   CLUSTER DETECTION ALGORITHM (mandatory for final scoring):
-    BFS from each unvisited element of target type
-    Track visited set, find connected component size
-    Largest component = cluster score for that player+region+element
-    This is in src/lib/patternMatcher.js — DO NOT reimplement
+    BFS from each unvisited element of target type · largest component = cluster score
+    In src/lib/patternMatcher.js — DO NOT reimplement
 
   FACTORY AUTO-PRODUCTION (the game clock):
     Factory cleared → IMMEDIATELY refill from top production tile
-    Discard that tile → productionTilesRemaining--
+    Discard tile → productionTilesRemaining--
     When last tile revealed → endGameTriggered = true
     All players finish current round + ONE MORE complete round → final scoring
 
-  12 PRODUCTION TILES: defined in src/store/gameStore.js as PRODUCTION_TILES
-    Tile 11 = end-of-game flag tile (isEndFlag: true)
+  FACTORY INITIAL SETUP (RULEBOOK — different from refill):
+    Each factory starts with 1 of EACH element type: energy:1 · biofarming:1 · technology:1 · community:1
+    Production tiles are for REFILLS ONLY (not initial seeding)
 
-  4 BONUS TOKEN TYPES (free actions, do NOT count toward 3-action limit):
+  12 PRODUCTION TILES: in src/store/gameStore.js as PRODUCTION_TILES
+    Tile 11 = end-of-game flag tile (isEndFlag: true) · always sorted to end of shuffled stack
+
+  4 BONUS TOKEN TYPES (free actions · do NOT count toward 3-action limit):
     subsidy · automatization · initiative · permits
     RULE: only 1 bonus per turn · unused at end = 3pts each
     Earn by: covering bonus token spaces OR score marker passing 7/13/18
@@ -180,24 +184,27 @@ GAME MECHANICS (memorize completely)
     12×2pt · 18×3pt · 18×4pt · 8×5pt = 56 total
     illustration field drives Diverse City (need 3+ cards per illustration type)
 
-  SUPABASE SCHEMA (5 tables, all RLS + Realtime enabled, GRANT applied via migration 001):
+  SUPABASE SCHEMA (5 tables · all RLS + Realtime enabled · GRANT via migration 001):
     player_profiles: user_id · username · avatar_color · elo_rating · games_played · games_won · neotopia_index
     game_rooms:      id · room_code · host_id · status · max_players · player_count
     room_players:    room_id · user_id · username · player_color · seat_number · is_ready · character
     game_sessions:   room_id · state(jsonb) · current_seat · turn_number · actions_remaining · phase · production_tiles_remaining
     game_events:     session_id · seat_number · event_type · event_data · sequence_num
 
-  SUPABASE REALTIME (always specify channel type — never generic):
-    DB changes  → authoritative game state (verified moves)
-    Broadcast   → ephemeral events (hover, animation — no DB write)
-    Presence    → lobby state (connected players, ready status)
+  SUPABASE REALTIME (always specify type — never generic "channel"):
+    DB changes  → authoritative game state (verified moves · all clients sync)
+    Broadcast   → ephemeral ONLY (hover · cursor · animation · NEVER game state · max 32KB)
+    Presence    → lobby player tracking (who is connected · ready status)
 
   OPTIMISTIC UPDATES:
-    1. Snapshot Zustand state
+    1. Snapshot Zustand state (structuredClone with pendingMoves as [])
     2. Apply locally immediately
     3. Write to Supabase
     4. On error → rollback to snapshot
     5. On success → incoming Realtime event ignored if state already matches
+
+  SUPABASE BROADCAST PAYLOAD RULE: NEVER send deck · hand · tiles via Broadcast (32KB limit)
+    Game start signal: {signal:'game_start', roomId} ONLY · clients pull state from DB themselves
 
 ELEMENT → CIVILIZATION MAPPING:
   energy:     Energy and Invention District · AetherFlux · Free Energy Lab
@@ -214,8 +221,10 @@ NEOTOPIA CIVILIZATION:
 SKILLS: 380 via symlink to AetherProject/.claude/skills/
   Best for NeoTopia: aether-prompt-evolution · aether-self-rating · impeccable · apple-hig-expert
   aether-security · verification-quality · diagnose · llm-council
+  reforge: .claude/skills/reforge/SKILL.md (7-phase prompt transcendence)
+  relay:   bash .claude/relay.sh (auto-relay at session end)
 
-PERMANENT ANTI-REGRESS RULES (20 rules — S1 added rules 17-20):
+PERMANENT ANTI-REGRESS RULES (24 rules — adds compound on every session):
   1.  NEVER git add -A — always pathspec
   2.  NO em dashes — use · (middle dot)
   3.  NO window.confirm() — hold-to-confirm (1000ms)
@@ -231,11 +240,15 @@ PERMANENT ANTI-REGRESS RULES (20 rules — S1 added rules 17-20):
   13. Rate forge /100 BEFORE executing — < 85 = rewrite
   14. Rate task /50 AFTER each task — < 35 = redo
   15. Write ONE evolution lesson to .claude/comms/tomorrow.md every session
-  16. Server is source of truth — never trust only client state
-  17. NEVER use @ package names in bash glob checks — use Python or node -e (S1 LESSON)
-  18. "permission denied" ≠ "does not exist" — always diagnose exact error type (S1 LESSON)
-  19. Supabase raw SQL tables need explicit GRANT — dashboard auto-grants, SQL does not (S1 LESSON)
-  20. Hard gate failure with known/solvable cause + DB-independent tasks = proceed, fix in parallel (S1 LESSON)
+  16. Server is source of truth — never trust only client state for scoring
+  17. NEVER use @ package names in bash glob checks — use node -e instead (S1)
+  18. "permission denied" ≠ "does not exist" — diagnose exact error before stopping (S1)
+  19. Supabase raw SQL tables need explicit GRANT — dashboard auto-grants, SQL does not (S1)
+  20. Hard gate failure with known cause + independent tasks = proceed in parallel (S1)
+  21. Supabase Broadcast max 32KB · never send deck/hand/tiles · signal only + clients pull from DB (REFORGE! T3)
+  22. Zustand state written to Supabase must be JSON-serializable · Set/Map/undefined are NOT (REFORGE! T3)
+  23. useCallback dependency arrays NEVER include store object reference · use getState() inside instead (T2 S1)
+  24. Supabase Realtime channel MUST be removed before creating a new one · never overwrite channelRef without cleanup (REFORGE! T3)
 
 HEX MATH REFERENCE: redblobgames.com/grids/hexagons
   Flat-top orientation · axial (q,r) storage · cube (q,r,s) for algorithms
