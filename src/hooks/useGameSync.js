@@ -112,12 +112,14 @@ export function useGameSync(roomId, currentUserId) {
 
     if (eventType && sessionIdRef.current) {
       // session_id MUST be game_sessions.id (uuid FK) · room_id here would FK-fail every event.
+      // sequence_num is GENERATED ALWAYS AS IDENTITY · do NOT provide it · the DB owns the
+      // monotonic order (an explicit value errors "cannot insert a non-DEFAULT value"). Letting
+      // the DB assign it also gives a globally correct cross-client ordering for replay.
       await supabase.from('game_events').insert({
         session_id: sessionIdRef.current,
         seat_number: s.currentSeat,
         event_type: eventType,
         event_data: eventData,
-        sequence_num: s.turnNumber * 1000 + (3 - s.actionsRemaining),
       }) // best-effort · ignore errors so a flaky audit insert never reverts a valid move
     }
     return { error: null }
