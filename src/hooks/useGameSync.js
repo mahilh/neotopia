@@ -80,14 +80,28 @@ export function useGameSync(roomId, currentUserId) {
   useEffect(() => {
     if (!roomId) return
     connect(roomId)
+
+    // Real-world recovery beyond Supabase's own WS retry · the 'system'/CHANNEL_ERROR paths above
+    // do not fire reliably on every drop (laptop sleep, Chrome network-throttle, mobile tab-suspend):
+    //   · 'online'         → the browser regained network · do a FULL reconnect (fresh channel + reseed).
+    //   · visibilitychange → a backgrounded tab often has its WS suspended (esp. mobile · 65% of play) ·
+    //                        on return, reseed from the DB so the board is current even if the socket
+    //                        silently missed UPDATEs. Cheap (one row) · Supabase auto-reconnects the WS.
+    const onOnline = () => connect(roomId)
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchAndSeed(roomId) }
+    window.addEventListener('online', onOnline)
+    document.addEventListener('visibilitychange', onVisible)
+
     return () => {
+      window.removeEventListener('online', onOnline)
+      document.removeEventListener('visibilitychange', onVisible)
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
       sessionIdRef.current = null
     }
-  }, [roomId, connect])
+  }, [roomId, connect, fetchAndSeed])
 
   // Low-level persist: write current store state to game_sessions (→ every client syncs) plus a
   // best-effort append to the game_events audit log. Returns { error } from the state write only ·
