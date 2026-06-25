@@ -10,6 +10,7 @@ export default function GameBoard({
   partialHighlight = [],     // [{q,r}] near-miss hexes (n-1 filled) · usePatternHighlight.partialKeys
   completionCandidates = [], // [{q,r}] empty hexes that would complete a near-miss · "place here to score"
   selectedFactory = null,   // factory id player selected for element pickup
+  regionScores = [],        // current player's per-region score · index = region id · shown under each label
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
 }) {
@@ -115,18 +116,29 @@ export default function GameBoard({
         )
       })}
 
-      {/* Region name labels */}
+      {/* Region name labels + current player's region score (sits above each region · never over hexes) */}
       {REGIONS.map(reg => {
         const {x, y} = hexToPixel(reg.cq, reg.cr)
+        const score = regionScores[reg.id] ?? 0
         return (
-          <text key={`label-${reg.id}`}
-            x={x} y={y - HEX_SIZE * 3.2}
-            textAnchor="middle" dominantBaseline="central"
-            fill={reg.color} fontSize={11} fontWeight={500}
-            style={{userSelect:'none', opacity: 0.7, textTransform:'uppercase', letterSpacing:2}}
-          >
-            {reg.name}
-          </text>
+          <g key={`label-${reg.id}`} style={{userSelect:'none'}}>
+            <text
+              x={x} y={y - HEX_SIZE * 3.55}
+              textAnchor="middle" dominantBaseline="central"
+              fill={reg.color} fontSize={11} fontWeight={500}
+              style={{opacity: 0.7, textTransform:'uppercase', letterSpacing:2}}
+            >
+              {reg.name}
+            </text>
+            <text
+              x={x} y={y - HEX_SIZE * 2.78}
+              textAnchor="middle" dominantBaseline="central"
+              fill="white" fontSize={18} fontWeight={700}
+              style={{opacity: 0.92, fontVariantNumeric: 'tabular-nums'}}
+            >
+              {score}
+            </text>
+          </g>
         )
       })}
     </svg>

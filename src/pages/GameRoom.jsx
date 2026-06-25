@@ -7,6 +7,7 @@ import { useGameSync } from '../hooks/useGameSync'
 import { useGameActions } from '../hooks/useGameActions'
 import { usePatternHighlight } from '../hooks/usePatternHighlight'
 import GameBoard from '../components/Board/GameBoard'
+import ActionBar from '../components/ActionBar'
 import ProjectCard, { ScoreFlash } from '../components/ProjectCard'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
@@ -116,16 +117,6 @@ export default function GameRoom() {
         <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
           Turn {turnNumber}
         </span>
-        {mySeat !== null && (
-          <span style={{
-            padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 500,
-            background: isMyTurn ? 'rgba(30,200,100,0.15)' : 'rgba(255,255,255,0.05)',
-            border: isMyTurn ? '1px solid rgba(30,200,100,0.3)' : '1px solid rgba(255,255,255,0.08)',
-            color: isMyTurn ? '#1DC864' : 'rgba(255,255,255,0.4)',
-          }}>
-            {isMyTurn ? 'Your turn' : `${currentPlayer?.username ?? 'Player'}'s turn`}
-          </span>
-        )}
         {uiPhase === 'scorePending' && (
           <span style={{
             marginLeft: 8, padding: '4px 12px', borderRadius: 20,
@@ -135,29 +126,7 @@ export default function GameRoom() {
             Pattern complete · select card to score
           </span>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Actions</span>
-          <span style={{
-            color: actionsLeft > 0 ? 'white' : '#E24B4A',
-            fontWeight: 700, fontSize: 24,
-            fontVariantNumeric: 'tabular-nums', minWidth: 28, textAlign: 'center',
-          }}>
-            {actionsLeft}
-          </span>
-          <button
-            onClick={handleEndTurn}
-            disabled={actionsLeft !== 0 || !isMyTurn}
-            style={{
-              height: 44, padding: '0 20px', borderRadius: 8, fontSize: 12,
-              cursor: (actionsLeft === 0 && isMyTurn) ? 'pointer' : 'default',
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: (actionsLeft === 0 && isMyTurn) ? 'rgba(255,255,255,0.12)' : 'transparent',
-              color: (actionsLeft === 0 && isMyTurn) ? 'white' : 'rgba(255,255,255,0.3)',
-            }}
-          >
-            End Turn
-          </button>
-        </div>
+        {/* Actions counter, turn status, and End Turn now live in the bottom ActionBar. */}
       </header>
 
       {/* MAIN */}
@@ -173,6 +142,7 @@ export default function GameRoom() {
             partialHighlight={partialHighlight}
             completionCandidates={completionCandidates}
             selectedFactory={selectedFactory}
+            regionScores={currentPlayer?.scores ?? []}
             onHexClick={handleHexClick}
             onFactoryClick={handleFactoryClick}
           />
@@ -305,6 +275,16 @@ export default function GameRoom() {
           )}
         </aside>
       </div>
+
+      {/* ACTION BAR · turn status · action dots · bonus tokens · End Turn */}
+      <ActionBar
+        playerName={currentPlayer?.username ?? 'Builder'}
+        mySeat={mySeat}
+        isMyTurn={isMyTurn}
+        actionsRemaining={actionsLeft}
+        bonusTokens={currentPlayer?.bonusTokens ?? []}
+        onEndTurn={handleEndTurn}
+      />
     </div>
   )
 }
