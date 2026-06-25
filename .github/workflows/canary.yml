@@ -1,21 +1,41 @@
-name: NeoTopia Canary
+name: NeoTopia CI
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     - cron: '0 */6 * * *'
+
 jobs:
-  canary:
+  quality:
+    name: Quality Gate
     runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
-      - run: npm ci
-      - run: npm run build
-      - run: npx vitest run
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint || echo "lint warnings (non-blocking)"
+
+      - name: Test
+        run: npx vitest run
+        continue-on-error: false
+
+      - name: Build
+        run: npm run build
+
+      - name: Build size report
+        run: |
+          echo "=== Bundle sizes ==="
+          ls -lh dist/assets/*.js dist/assets/*.css 2>/dev/null || true
