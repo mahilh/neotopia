@@ -97,6 +97,8 @@ export default function GameBoard({
         return (
           <g key={`factory-${factory.id}`}
             className={pulse ? 'factory-pulse' : undefined}
+            data-factory={factory.id}
+            data-testid="factory"
             onClick={() => onFactoryClick(factory.id)}
             style={{cursor: 'pointer'}}
           >

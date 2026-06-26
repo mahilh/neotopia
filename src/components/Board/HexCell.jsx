@@ -48,6 +48,8 @@ export default function HexCell({
   return (
     <g
       className="hex-cell"
+      data-valid={isValidTarget ? 'true' : undefined}
+      data-testid={isValidTarget ? 'hex-valid' : undefined}
       onClick={() => onClick(q, r)}
       style={{cursor: (isValidTarget || isFactory) ? 'pointer' : 'default'}}
     >

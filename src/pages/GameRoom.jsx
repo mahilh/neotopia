@@ -271,12 +271,12 @@ export default function GameRoom() {
           {/* THE OFFER */}
           <div>
             <div style={sectionLabel}>The Offer</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div data-offer style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {theOffer.length === 0 && (
                 <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, padding: '8px 0' }}>Deck empty</div>
               )}
               {theOffer.map((card, i) => (
-                <ProjectCard key={card.id} card={card}
+                <ProjectCard key={card.id} card={card} testid="card-offer"
                   disabled={actionsLeft === 0 || !isMyTurn}
                   onClick={() => handleDrawCard('offer', i)}
                 />
@@ -287,11 +287,11 @@ export default function GameRoom() {
           {/* HAND */}
           <div>
             <div style={sectionLabel}>Hand · {currentPlayer?.hand?.length ?? 0}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div data-hand style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {currentPlayer?.hand?.map(card => {
                 const isScoreable = uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === card.id)
                 return (
-                  <ProjectCard key={card.id} card={card} isScoreable={isScoreable}
+                  <ProjectCard key={card.id} card={card} isScoreable={isScoreable} testid="card-hand"
                     onClick={isScoreable ? () => {
                       const scored = handleCardScore(card.id)
                       if (scored?.card) setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })

@@ -43,11 +43,15 @@ export default function ActionBar({
           background: isMyTurn ? '#1DC864' : 'rgba(255,255,255,0.25)',
           boxShadow: isMyTurn ? '0 0 8px rgba(30,200,100,0.6)' : 'none',
         }} />
-        <span style={{
-          color: isMyTurn ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.45)',
-          fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
+        <span
+          className={isMyTurn ? 'my-turn-badge' : undefined}
+          data-testid="my-turn-badge"
+          style={{
+            color: isMyTurn ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.45)',
+            fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap',
+            overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
           {status}
         </span>
       </div>
@@ -100,6 +104,7 @@ export default function ActionBar({
           </div>
         )}
         <button
+          data-testid="end-turn-btn"
           onClick={onEndTurn}
           disabled={!canEndTurn}
           style={{

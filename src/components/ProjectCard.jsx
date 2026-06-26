@@ -73,7 +73,7 @@ export function ScoreFlash({ card, regionName, onDone }) {
 
 // Compact card for the Hand / The Offer lists. `isScoreable` glows it green + pulses ·
 // `disabled` dims it and suppresses the click (used by The Offer at 0 actions remaining).
-export default function ProjectCard({ card, isScoreable = false, disabled = false, onClick }) {
+export default function ProjectCard({ card, isScoreable = false, disabled = false, onClick, testid }) {
   if (!card) return null
 
   const districtName = DISTRICT_NAMES[card.district] ?? `District ${card.district}`
@@ -81,6 +81,8 @@ export default function ProjectCard({ card, isScoreable = false, disabled = fals
 
   return (
     <div
+      className="project-card"
+      data-testid={testid}
       onClick={clickable ? onClick : undefined}
       style={{
         padding: '10px 12px', borderRadius: 10, minHeight: 44,
