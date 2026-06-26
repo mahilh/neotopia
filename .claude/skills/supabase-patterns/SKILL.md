@@ -1,7 +1,7 @@
 # SUPABASE PATTERNS — HARD-WON LESSONS
-# Version: 1.0 · Rating: new · Created: June 25 2026
+# Version: 1.1 · Rating: new · Updated: June 25 2026 (Bug 13 resolved)
 # Purpose: Every Supabase bug NeoTopia has hit is documented here as a pattern.
-#          Read this before ANY Supabase code. 12 bugs prevented = 12 sessions saved.
+#          Read this before ANY Supabase code. 13 bugs prevented = 13 sessions saved.
 
 ## ACTIVATION
 
@@ -12,90 +12,75 @@ Read this skill when:
   · Creating any new migration
   · Any Supabase-related error appears in terminal output
 
-## CRITICAL BUGS HIT IN NEOTOPIA — NEVER HIT AGAIN
+## CRITICAL BUGS HIT IN NEOTOPIA
 
-### Bug 1 · RLS SELECT-only blocks writes (T3 S2)
-SIMPTOM: DB rows appear fine via SELECT · INSERT/UPDATE silently fails · RLS error in logs
-CAUSE: GRANTs give table access · RLS policies control per-command access SEPARATELY
-  Having a SELECT policy does NOT imply INSERT/UPDATE/DELETE policies exist
-FIX: Always define RLS policies for each command separately: SELECT · INSERT · UPDATE · DELETE
-CHECK: SELECT pg_policies.* WHERE tablename='game_sessions' — list all policies by command
-FIX APPLIED: migration 002 added INSERT+UPDATE policies membership-scoped
+### Bug 1 · RLS SELECT-only blocks writes (T3 S2 · FIXED migration 002)
+SYMPTOM: INSERT/UPDATE silently fails with RLS error
+FIX: Define RLS policies per-command separately. migration 002 added INSERT+UPDATE.
 
 ### Bug 2 · room_code CHECK constraint mismatch (T3 S2)
-SIMPTOM: 23514 error on game_rooms insert
-CAUSE: Forge generated 4-char codes · DB has CHECK(length=6)
-FIX: Always read CHECK constraints before generating IDs · room_code is char(6)
-CHECK: SELECT column_name, check_clause FROM information_schema.check_constraints
+SYMPTOM: 23514 on game_rooms insert
+FIX: room_code is char(6) CHECK(length=6) · codes must be 6 chars exactly
 
 ### Bug 3 · status CHECK constraint mismatch (T3 S2)
-SIMPTOM: 23514 on status update
-CAUSE: Code used 'lobby'/'closed' · DB CHECK IN ('waiting','playing','finished')
-FIX: Status strings must match DB CHECK exactly · waiting/playing/finished are the only valid values
+SYMPTOM: 23514 on status update
+FIX: Status ∈ {waiting, playing, finished} only. NOT 'lobby' or 'closed'.
 
 ### Bug 4 · game_events.session_id FK mismatch (T3 S2)
-SIMPTOM: FK violation on game_events insert
-CAUSE: Code used room_id as session_id · game_events.session_id FKs to game_sessions.id (uuid)
-FIX: Fetch game_sessions.id after initGame · cache in sessionIdRef · use ONLY that for game_events
-  NEVER pass room_id where session_id is required
+SYMPTOM: FK violation on game_events insert
+FIX: game_events.session_id → FK game_sessions.id (uuid) · NOT room_id
 
-### Bug 5 · structuredClone throws on store state (T3 S2)
-SIMPTOM: DataCloneError when snapshotting Zustand store
-CAUSE: structuredClone cannot clone functions · Zustand store state includes function references
-FIX: Always use serializableState() = JSON.parse(JSON.stringify(store.getState()))
-  NEVER use structuredClone for Zustand state snapshots
+### Bug 5 · structuredClone throws on store state (T3 S2 · FIXED)
+SYMPTOM: DataCloneError when snapshotting Zustand store
+FIX: serializableState() = JSON.parse(JSON.stringify(store.getState())) · NEVER structuredClone
 
-### Bug 6 · GENERATED ALWAYS AS IDENTITY rejects explicit inserts (T3 S3)
-SIMPTOM: 'column game_events.sequence_num was generated but can't be overridden'
-CAUSE: information_schema shows NOT NULL + no default · but is_identity = YES
-  IS_IDENTITY is NOT visible in information_schema.columns without explicit check
+### Bug 6 · GENERATED ALWAYS AS IDENTITY rejects explicit inserts (T3 S3 · FIXED)
+SYMPTOM: column game_events.sequence_num cannot be overridden
 FIX: Never set sequence_num in INSERT · DB assigns it (1,2,3 auto)
-CHECK: SELECT column_name, is_identity FROM information_schema.columns WHERE table_name='game_events'
 
-### Bug 7 · anon session not persisting across reload (T1 S4 — ACTIVE BUG)
-SIMPTOM: page reload creates a new anonymous user · RLS 403 on writes
-CAUSE: signInAnonymously() creates a NEW user every call
-  getSession() returns null on reload if Supabase client storageKey isn't set
-FIX (pending T2 S6): add explicit auth config to createClient:
-  auth: { persistSession:true, autoRefreshToken:true, storage:window.localStorage, storageKey:'neotopia-auth' }
-  AND: use INITIAL_SESSION event instead of calling getSession() directly
+### Bug 7 · Supabase Broadcast 32KB limit (REFORGE! T3)
+SYMPTOM: Broadcast silently dropped, never arrives
+FIX: Signal only {type:'game_start',roomId} · clients pull state from DB
 
-### Bug 8 · Supabase Broadcast 32KB limit silently drops payload (REFORGE! T3)
-SIMPTOM: Broadcast never arrives at subscribers · no error
-CAUSE: Payload > 32KB is silently dropped
-FIX: NEVER send deck/hand/tiles via Broadcast · signal only {type:'game_start',roomId}
-  Clients pull full state from DB themselves via postgres_changes
+### Bug 8 · Channel overwrite without cleanup (REFORGE! T3)
+SYMPTOM: React 18 StrictMode creates duplicate subscriptions
+FIX: Always supabase.removeChannel(channelRef.current) BEFORE creating new channel
 
-### Bug 9 · channel overwrite without cleanup (REFORGE! T3)
-SIMPTOM: React 18 strict mode creates 2 channel subscriptions · duplicate events
-CAUSE: channelRef.current overwritten without removing old channel first
-FIX: Always: if (channelRef.current) supabase.removeChannel(channelRef.current)
-  BEFORE: channelRef.current = supabase.channel(...)
+### Bug 9 · Zustand Set not JSON-serializable (REFORGE! T3)
+SYMPTOM: pendingMoves serializes as {} · rehydrates as wrong type
+FIX: { ...state, pendingMoves: [...state.pendingMoves] } before DB write
 
-### Bug 10 · Zustand Set not JSON-serializable (REFORGE! T3)
-SIMPTOM: pendingMoves Set serializes as {} · rehydrates as wrong type
-FIX: Always: { ...state, pendingMoves: [...state.pendingMoves] } before DB write
-  In syncFromServer: new Set(Array.isArray(pendingMoves) ? pendingMoves : [])
-
-### Bug 11 · useCallback with store object reference (T2 S1)
-SIMPTOM: infinite re-renders · stale closures
-CAUSE: [store] in dependency array creates new reference every render
+### Bug 10 · useCallback with store object reference (T2 S1)
+SYMPTOM: infinite re-renders · stale closures
 FIX: Never put store object in deps · use useGameStore.getState() inside callback
 
-### Bug 12 · player_count race condition (T3 S3)
-SIMPTOM: two joiners simultaneously → both write count=2 → one player lost
-FIX: Use SECURITY DEFINER trigger that COUNTs actual rows:
-  migration 003: trigger on room_players INSERT/DELETE → UPDATE game_rooms.player_count
+### Bug 11 · player_count race condition (T3 S3 · FIXED migration 003)
+SYMPTOM: two joiners simultaneously → one player lost
+FIX: SECURITY DEFINER trigger on room_players INSERT/DELETE → COUNT actual rows
 
-## THE SUPABASE GATE (run before ANY Supabase code)
+### Bug 12 · game_events 400 on insert (T1 S5 · ACTIVE · T2 S7 fixes)
+SYMPTOM: game_events INSERT returns 400 · sync still works (events are best-effort)
+CAUSE: likely session_id not yet populated in store when first move fires
+FIX PENDING: T2 S7 · ensure sessionId set before first pushState call
+
+### Bug 13 · Anon session not persisting across reload (T2 S6 · FIXED d420342)
+SYMPTOM: page reload = new user_id · RLS 403 · lost seat
+ROOT CAUSE: getSession() raced against localStorage hydration · StrictMode double-mount fired signInAnonymously() twice
+FIX: Drive auth entirely off onAuthStateChange INITIAL_SESSION event
+  · signingIn flag prevents double-mint from StrictMode
+  · storageKey: 'neotopia-auth' (explicit)
+  · detectSessionInUrl: false (removes async racing step)
+CONFIRMED: Node two-client test · same user_id across reloads ✓
+
+## THE SUPABASE GATE
 
 node --input-type=module -e "
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'fs'
 const env = Object.fromEntries(readFileSync('.env.local','utf8').trim().split('\n').filter(l=>l&&!l.startsWith('#')).map(l=>{const i=l.indexOf('=');return[l.slice(0,i).trim(),l.slice(i+1).trim()]}))
-const s = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
+const s = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {auth:{storageKey:'neotopia-auth'}})
 const {data:{session}} = await s.auth.getSession()
-console.log('session:', session?'EXISTS ✅ uid='+session.user.id.slice(0,8):'NULL ❌ auth bug active')
+console.log('session:', session?'EXISTS ✅ uid='+session.user.id.slice(0,8):'NULL ❌ check storageKey')
 for (const t of ['player_profiles','game_rooms','game_sessions','room_players','game_events']) {
   const {error} = await s.from(t).select('count').limit(1).single()
   console.log(t+':', !error?'✅':error.message.includes('does not exist')?'❌ MISSING':'⚠️ '+error.message.slice(0,60))
@@ -103,27 +88,10 @@ for (const t of ['player_profiles','game_rooms','game_sessions','room_players','
 "
 
 ## SUPABASE REALTIME RULES
-
-  DB CHANGES (postgres_changes): authoritative game state · all game moves go here
-  BROADCAST: ephemeral signals ONLY · max 32KB · never game state · never deck/hand/tiles
-  PRESENCE: lobby player tracking · who is connected · ready status
-
-  Channel cleanup: ALWAYS remove before create (rule 24)
-  Reconnect: window 'online' event → full channel recreation + fetchAndSeed
-  Mobile: document visibilitychange → visible → fetchAndSeed (WS suspends in background)
-
-## RLS TEMPLATE (membership-scoped, the correct pattern)
-
--- Game sessions: only room members can update
-CREATE POLICY sessions_update_member ON game_sessions FOR UPDATE
-  USING (EXISTS (SELECT 1 FROM room_players WHERE room_id = game_sessions.room_id AND user_id = auth.uid()));
-
--- Always test policies with a real auth.uid() — RLS with anon key may behave differently than expected
+  DB CHANGES: authoritative game state · BROADCAST: ephemeral signals <32KB · PRESENCE: lobby only
+  Channel cleanup: remove before create (rule 24)
+  Reconnect: window 'online' + visibilitychange → fetchAndSeed (T3 S4)
+  Mobile: visibilitychange → visible → fetchAndSeed (WS suspends in background)
 
 ## SELF-IMPROVEMENT HOOK
-
-Every time a new Supabase bug is found:
-  1. Add it as Bug N+1 to this file
-  2. State: symptom → cause → fix → check command
-  3. Run SKILLUPGRADE! supabase-patterns to push the updated file
-  This skill grows with every bug hit. The compounding value increases over time.
+  Every new bug: add as Bug N+1 · symptom+cause+fix+confirmation · run SKILLUPGRADE! supabase-patterns
