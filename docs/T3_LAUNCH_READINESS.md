@@ -1,8 +1,12 @@
 # NeoTopia · Launch Readiness — T3 (Realtime Multiplayer) view
 
-_Authored by T3 · Sessions 7–9 · 2026-06-26. Scope: the realtime/multiplayer layer (auth, room
+_Authored by T3 · Sessions 7–10 · 2026-06-26. Scope: the realtime/multiplayer layer (auth, room
 lifecycle, state sync, reconnect, audit log, presence, end-of-game propagation). "Evidence" below
 means a test or a live proof T3 can point to — not a claim. Other lanes' work is labelled as theirs._
+
+**S10 verification:** full E2E suite **5/5 green** in a fresh rate-limit window (25s) · the
+`globalTeardown` purged residual profiles end-to-end (`{rooms_deleted:0, profiles_deleted:4}`) — the
+proof the S9 rate limit had blocked. Bot v3 + UX scan run against production — see Remaining → Bot.
 
 ## ✅ Fully verified — T3 owns the evidence
 
@@ -30,9 +34,16 @@ means a test or a live proof T3 can point to — not a claim. Other lanes' work 
 
 ## ⏳ Remaining for launch
 
-1. **Bot harness selectors** — `scripts/bot-simulate.js` (T2) still targets class-name selectors; needs
-   T1 to ship `data-testid` on the Board components first (NOT present yet · T3 S9 gate-skipped the
-   bot-selector task and flagged it). Tracks the playtest's "players didn't place elements" finding.
+1. **Bot reaches the board but cannot play yet** (the playtest's "players didn't place elements", now
+   measured by the harness). S10 run vs the baseline `{ready-failed:3, no-tutorial:3, stuck-state:90}`:
+   now `{ready-failed:1, no-tutorial:1, stuck-state:20}` — **the lobby block is FIXED** (T2 · bot does
+   create→join→ready→start→board) and `data-testid` shipped (T1 S9). But `totalPlaced:0, completed:0`:
+   the blockers moved IN-GAME — `stuck-state` (the bot can't detect its turn via `my-turn-badge`) and the
+   tutorial gate ("decouple from `isMyTurn`"). Both are T1 (badge render + tutorial gate) / T2 (bot turn
+   detection) · NOT T3 (sync itself is proven by the two-human + phase-over-wire E2E). Routed in comms.
+   _UX scan: 14 "issues" are all false-positive `missing-testid` — the scan checks IN-GAME testids on the
+   Landing/Lobby routes (where they don't exist); it never reaches `/game`. No real touch/font/contrast/aria
+   violations · loads Landing 1.35s / Lobby 0.88s. Fix is in T2's `ux-scan.js` (scope testids to `/game`)._
 2. **True cross-machine play** (two physical devices / networks) — not automatable in single-browser
    Playwright. Manual smoke before launch.
 3. **Natural-end E2E through real play** — `phase-over-wire.e2e.js` drives the terminal phase via an
