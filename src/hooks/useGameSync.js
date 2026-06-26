@@ -54,6 +54,20 @@ export function resolveDbEventType(eventType) {
   return EVENT_TYPE_DB[eventType]                        // legacy shorthand · else undefined
 }
 
+// game_sessions.phase has its OWN CHECK (verified live · pg_constraint): 'playing' | 'endgame' | 'finished'.
+// That vocabulary DIFFERS from the store phase ('lobby' | 'playing' | 'scoring'). The store's terminal
+// 'scoring' is NOT a valid column value · writing it un-mapped 400s the ENTIRE game_sessions UPDATE, so the
+// game-over state never persists and NO client ever receives the terminal phase via postgres_changes (the
+// natural game-end was silently un-syncable · latent because no game had reached it · T3 S8 · found by the
+// phase-over-wire E2E). Map at the write boundary: the jsonb `state` still carries the true store phase
+// (what syncFromServer reads), the denormalised column just has to be CHECK-valid.
+const SESSION_PHASE_COL = new Set(['playing', 'endgame', 'finished'])
+export function sessionPhaseColumn(storePhase) {
+  if (SESSION_PHASE_COL.has(storePhase)) return storePhase  // already a valid column value
+  if (storePhase === 'scoring') return 'finished'           // store terminal → column terminal
+  return 'playing'                                          // 'lobby'/unknown · never block the state write
+}
+
 export function useGameSync(roomId, currentUserId) {
   const channelRef = useRef(null)
   const sessionIdRef = useRef(null)   // game_sessions.id · required for game_events FK (NOT room_id)
@@ -152,7 +166,7 @@ export function useGameSync(roomId, currentUserId) {
         turn_number: s.turnNumber,
         actions_remaining: s.actionsRemaining,
         production_tiles_remaining: s.productionTilesRemaining,
-        phase: s.phase,
+        phase: sessionPhaseColumn(s.phase), // store 'scoring' → 'finished' · else the terminal UPDATE 400s
       })
       .eq('room_id', roomId)
 

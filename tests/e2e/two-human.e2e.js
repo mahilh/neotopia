@@ -26,12 +26,13 @@
 //   "Enter the Civilization" CTA when present, else '/' is already the lobby. So this test is valid
 //   against the committed contract (what CI runs today) and against T1's new entry once it lands.
 //
-// CLEANUP
+// CLEANUP (T3 S8 · now leaves 0 rooms)
 //   migration 005 (rooms_delete_host · T2) lets a host DELETE its own FINISHED room → one statement
-//   cascades away its room_players + game_sessions + game_events. Test 2's room is admin-owned, so we
-//   hard-delete it. Test 1's rooms are owned by the BROWSERS' anon users (not reachable from this Node
-//   client), so they remain as inert 'finished'/'playing' rows tagged 'E2E…' until a service-role
-//   purge · documented, not silently dropped.
+//   cascades away its room_players + game_sessions + game_events. Test 1's room is BROWSER-owned, so we
+//   adopt the host page's OWN session (deleteRoomAsHost · setSession with its localStorage token) and
+//   delete it as the host — no service role. Test 2's room is admin-owned and hard-deleted directly.
+//   Residual: the per-game player_profiles rows (UNIQUE username · no DELETE policy) still need a
+//   privileged purge · tagged 'E2E…' · flagged to T2 in comms (not silently dropped).
 
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
