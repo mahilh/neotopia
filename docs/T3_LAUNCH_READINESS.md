@@ -8,6 +8,14 @@ means a test or a live proof T3 can point to — not a claim. Other lanes' work 
 `globalTeardown` purged residual profiles end-to-end (`{rooms_deleted:0, profiles_deleted:4}`) — the
 proof the S9 rate limit had blocked. Bot v3 + UX scan run against production — see Remaining → Bot.
 
+**S12 verification:** full E2E suite **6/6 green** in a fresh window (32.8s) · `globalTeardown`
+purged 6 residual profiles. **CIVILIZATION MILESTONE — first machine-placed elements, DB-confirmed**
+(11 elements committed to live `game_sessions` board state). The bot's `totalPlaced=0` is root-caused
+to a single automation issue (the valid-hex pulse animation defeats Playwright's click-stability
+check) with a one-line fix (`force:true`) — see Resolved below. `game-ux.e2e.js` extended with a
+**placement guard** that drives factory→element→region→hex and asserts the element commits
+(`hex-element-in` token 0→1) — a permanent CI regression test for the placement-commit class.
+
 ## ✅ Fully verified — T3 owns the evidence
 
 | Capability | Proof |
@@ -34,16 +42,19 @@ proof the S9 rate limit had blocked. Bot v3 + UX scan run against production —
 
 ## ⏳ Remaining for launch
 
-1. **Bot reaches the board but cannot play yet** (the playtest's "players didn't place elements", now
-   measured by the harness). S10 run vs the baseline `{ready-failed:3, no-tutorial:3, stuck-state:90}`:
-   now `{ready-failed:1, no-tutorial:1, stuck-state:20}` — **the lobby block is FIXED** (T2 · bot does
-   create→join→ready→start→board) and `data-testid` shipped (T1 S9). But `totalPlaced:0, completed:0`:
-   the blockers moved IN-GAME — `stuck-state` (the bot can't detect its turn via `my-turn-badge`) and the
-   tutorial gate ("decouple from `isMyTurn`"). Both are T1 (badge render + tutorial gate) / T2 (bot turn
-   detection) · NOT T3 (sync itself is proven by the two-human + phase-over-wire E2E). Routed in comms.
-   _UX scan: 14 "issues" are all false-positive `missing-testid` — the scan checks IN-GAME testids on the
-   Landing/Lobby routes (where they don't exist); it never reaches `/game`. No real touch/font/contrast/aria
-   violations · loads Landing 1.35s / Lobby 0.88s. Fix is in T2's `ux-scan.js` (scope testids to `/game`)._
+1. **Bot now plays a full turn loop · ONE automation issue left before `totalPlaced>0` in the committed
+   bot** (S12). Progression: baseline `{ready-failed:3, no-tutorial:3, stuck-state:90}` → S10
+   `{…, stuck-state:20}` → **S12: room-code read FIXED** (v4.1 compound `[style*="letter-spacing"][style*="monospace"]`
+   selector · T2 8a11930) and **turn detection FIXED** (bot detects all turns via `data-my-turn`, T1 S11) —
+   `stuck-state` is gone, the bot draws cards and runs the whole turn loop. The lone remaining blocker is
+   **the placement hex-click**: the valid-target hex's ring runs an infinite `hexPulse` scale animation
+   (`src/index.css`), so the `<g data-valid>` bbox never settles and Playwright's click-stability check
+   times out BEFORE `onClick→placeElement` fires. **DB-proven**: committed bot → board empty (0 placed) ·
+   the same chain with `click({force:true})` → real elements committed to `game_sessions` (server state
+   confirmed, 11 elements). Fix is a one-liner in T2's `scripts/bot-simulate.js` (the step-4 hex click →
+   `{force:true}`). A human click is unaffected — this is automation-only, NOT a UI bug. T3 has converted
+   the finding into a permanent guard: `game-ux.e2e.js` now force-clicks the chain and asserts the commit.
+   _UX scan (T2): scope IN-GAME testids to `/game` — they false-positive on Landing/Lobby (never reaches /game)._
 2. **True cross-machine play** (two physical devices / networks) — not automatable in single-browser
    Playwright. Manual smoke before launch.
 3. **Natural-end E2E through real play** — `phase-over-wire.e2e.js` drives the terminal phase via an
@@ -52,7 +63,7 @@ proof the S9 rate limit had blocked. Bot v3 + UX scan run against production —
 4. **`neotopia.io` domain** — Vercel → add domain → DNS. _Mahil action · not a T3 item._
 5. **Bonus earn data + 56 card images** — _Mahil_ (physical board positions; art generation in progress).
 
-## 🛠 Issues resolved across S7–S9
+## 🛠 Issues resolved across S7–S12
 
 - **game_events was silently empty** (S7) — two lanes both "fixed" the S5 400; the combination skipped
   every audit insert. `resolveDbEventType` pass-through + translate · guarded · replay unblocked.
@@ -64,6 +75,15 @@ proof the S9 rate limit had blocked. Bot v3 + UX scan run against production —
 - **E2E test-data accrual** (S8–S9) — browser-owned rooms now self-clean (host-session 005 delete);
   residual `player_profiles` (UNIQUE username · no DELETE policy) cleaned by the `purge_e2e_test_data`
   RPC (T2 · 006 + 007-hardened to authenticated) via the Playwright `globalTeardown`. Suite now leaves 0.
+- **Bot `totalPlaced=0` root-caused (S12)** — isolated, not inferred. Instrumented the placement chain
+  and proved every UI link fires (factory→element→region→valid-hex-lit), then proved against the live DB
+  that the committed bot's hex click commits **nothing** (board empty) while a `force:true` click commits
+  **real** elements (11, server-confirmed). Cause: the valid-hex pulse animation (`transform: scale`)
+  keeps the `<g>` bbox moving, so Playwright never sees it "stable" and the click times out before
+  `placeElement`. One-line fix routed to T2 (`scripts/bot-simulate.js` step-4 → `{force:true}`); guard
+  added by T3 (`game-ux.e2e.js`). Rule-49 catch: the bot's `placed` counter is a proxy (counts
+  `tryPlaceElement===true`, which is unconditional after the swallowed click error) — the **DB**, not the
+  proxy, is the source of truth for "an element was placed."
 
 ## ⚠️ Known environmental note (not a code issue)
 

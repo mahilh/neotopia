@@ -1,7 +1,9 @@
 // NeoTopia · in-game UX audit (T3 S11). Reaches the /game route the standalone ux-scan.js (T2) cannot:
 // it needs two signed-in users + a started game. This is an E2E (tests/e2e/ · T3's lane), not a script
 // change (scripts/ · T2's lane). It drives the SAME verified lobby flow as two-human.e2e.js to a live
-// active-player board, then audits touch-target sizes, font sizes, and the in-game testid contract.
+// active-player board, then (1) audits touch-target sizes, font sizes, and the in-game testid contract,
+// and (2) PLACEMENT GUARD (T3 S12): drives factory→element→region→hex and asserts an element commits to
+// the board — the regression guard for the totalPlaced=0 class (force-click rationale at placeOneElement).
 //
 // SCOPE: the audit asserts the REAL a11y minimums (44px touch targets · 12px fonts · CLAUDE.md rules 4/5)
 // on interactive/text elements. testid presence is logged (informational · routed to T1/T2), not asserted —
@@ -77,9 +79,38 @@ async function fontViolations(page) {
   })
 }
 
+// The 4-element / 3-region names rendered as plain-text buttons in the placement sidebar.
+const ELEMENT_RE = /energy|biofarming|technology|community/i
+const REGION_RE  = /sacred city|living earth|free energy/i
+
+// Drive the live placement chain as the active player: factory → element → region → a lit hex.
+// Returns true once a valid hex has been clicked (an empty factory shows no element buttons · skip it).
+//
+// force:true on the hex is REQUIRED, not a workaround: the valid-target hex's ring runs an infinite
+// `hexPulse` scale animation (src/index.css · transform: scale(1)↔1.08), so the <g data-valid> bbox
+// never settles and Playwright's click-stability check times out BEFORE onClick→placeElement fires.
+// DB-proven (T3 S12): the bot's normal click commits 0 elements (board empty), a force click commits
+// real placements (server state confirmed). A human click is unaffected — this is automation-only.
+async function placeOneElement(page) {
+  for (const factory of await page.locator('[data-testid="factory"]').all()) {
+    await factory.click({ timeout: 3000 }).catch(() => {})
+    const elBtn = page.getByRole('button').filter({ hasText: ELEMENT_RE }).first()
+    if (!(await elBtn.isVisible({ timeout: 1500 }).catch(() => false))) continue // empty factory · next
+    await elBtn.click()
+    const regBtn = page.getByRole('button').filter({ hasText: REGION_RE }).first()
+    await expect(regBtn).toBeVisible({ timeout: 3000 })
+    await regBtn.click()
+    const validHex = page.locator('[data-valid="true"], [data-testid="hex-valid"]').first()
+    await expect(validHex).toBeVisible({ timeout: 3000 })
+    await validHex.click({ force: true }) // see note above · bypasses the perpetual-animation stability wait
+    return true
+  }
+  return false
+}
+
 test.describe('In-game UX audit (T3 S11)', () => {
 
-  test('the /game route meets touch-target + font minimums for the active player', async ({ browser }) => {
+  test('the active player audits the /game board AND commits a placement', async ({ browser }) => {
     const ctx1 = await browser.newContext()
     const ctx2 = await browser.newContext()
     const p1 = await ctx1.newPage() // host · seat 0 · active first
@@ -127,6 +158,29 @@ test.describe('In-game UX audit (T3 S11)', () => {
       // flavor text (7px "◆ NEOTOPIA 2055 ◆"/card-id · 8px element labels · the tarot-from-2055 aesthetic)
       // and 10-11px region/section labels. Reported to T1 (not gated) · T1 owns the call to bump the labels.
       console.log(`[game-ux] AUDIT: touch=0 · fonts(${fonts.length}, informational) · testids ${JSON.stringify(testids)} · data-my-turn=${dataMyTurn}`)
+
+      // ── PLACEMENT GUARD · the 4-step chain must COMMIT an element to the board ───────────
+      // A placed element renders a <g class="hex-element-in"> token (HexCell.jsx). On a fresh game
+      // the board is empty, so a committed placement takes the count 0 → ≥1. This locks in that the
+      // factory→element→region→hex flow actually mutates the store (not just lights up the UI) — the
+      // exact gap behind the bot's totalPlaced=0 (DB-proven this session). p1 is the active seat.
+      //
+      // First dismiss the first-turn tutorial — its overlay intercepts board clicks until skipped
+      // (the audit above saw "Step 1 of 3", so it is up on this fresh game).
+      const tutDismiss = p1.getByTestId('tutorial-skip').or(p1.getByTestId('tutorial-dismiss')).first()
+      if (await tutDismiss.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await tutDismiss.click()
+        await expect(p1.getByTestId('tutorial-skip')).toBeHidden({ timeout: 4000 }).catch(() => {})
+      }
+      const placedBefore = await p1.locator('.hex-element-in').count()
+      const reachedHex = await placeOneElement(p1)
+      expect(reachedHex, 'no factory yielded a valid hex — placement chain broke before the board').toBe(true)
+      await expect.poll(() => p1.locator('.hex-element-in').count(), {
+        message: 'no element token rendered after the hex click — placeElement did not commit',
+        timeout: 6000,
+      }).toBeGreaterThan(placedBefore)
+      const placedAfter = await p1.locator('.hex-element-in').count()
+      console.log(`[game-ux] PLACEMENT committed · hex-element tokens ${placedBefore} → ${placedAfter}`)
     } finally {
       try {
         hostSession = await p1.evaluate(() => localStorage.getItem('neotopia-auth')).catch(() => null)
