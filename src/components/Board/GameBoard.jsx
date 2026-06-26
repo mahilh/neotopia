@@ -88,6 +88,11 @@ export default function GameBoard({
           50% { filter: brightness(1.55) drop-shadow(0 0 6px rgba(255,255,255,0.35)); }
         }
         @media (prefers-reduced-motion: reduce) { .factory-pulse { animation: none; } }
+
+        /* Element scale-in on placement · scales around the icon's own center (fill-box). */
+        .hex-element-in { animation: hex-appear 0.35s ease-out; transform-box: fill-box; transform-origin: center; }
+        @keyframes hex-appear { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+        @media (prefers-reduced-motion: reduce) { .hex-element-in { animation: none; } }
       `}</style>
 
       {/* Factory hexes */}
