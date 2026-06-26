@@ -7,6 +7,7 @@ import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
 import { findBuildableCards, findLargestCluster, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
+import { TURN_TIME_LIMIT } from './gameConfig'
 
 // Immer does not draft Map/Set unless this is enabled. pendingMoves is a Set that
 // the optimistic-update flow mutates, so without this the first mutation throws.
@@ -98,6 +99,12 @@ export const useGameStore = create(immer((set, get) => ({
   actionsRemaining: 3,
   bonusUsedThisTurn: false, // CLAUDE.md: only 1 bonus per turn · reset each endTurn
   turnNumber: 1,
+  // Per-turn countdown (seconds) · reset to TURN_TIME_LIMIT each endTurn · synced via pushState so the
+  // WAITING player sees the active player's clock (T3 S8 request). The per-second DECREMENT is LOCAL view
+  // state in T1's component (gated on isMyTurn · never a pushState per tick · that would write-storm) ·
+  // endTurn only RESETS it to a constant (no clock in the reducer · rule 32). gameConfig.TURN_TIME_LIMIT
+  // is the single source for the value · T1 imports it for the cap.
+  turnTimeRemaining: TURN_TIME_LIMIT,
   regions: createInitialRegions(),
   factories: createInitialFactories(),
   theOffer: [],
@@ -135,6 +142,7 @@ export const useGameStore = create(immer((set, get) => ({
     state.actionsRemaining = 3
     state.bonusUsedThisTurn = false
     state.turnNumber = 1
+    state.turnTimeRemaining = TURN_TIME_LIMIT
     state.regions = createInitialRegions()
     state.factories = createInitialFactories()
     state.theOffer = []
@@ -315,6 +323,7 @@ export const useGameStore = create(immer((set, get) => ({
     state.currentSeat = nextSeat
     state.actionsRemaining = 3
     state.bonusUsedThisTurn = false // fresh turn · the next player may use a bonus
+    state.turnTimeRemaining = TURN_TIME_LIMIT // fresh turn budget · synced to every client via pushState
     state.turnNumber++
   }),
 

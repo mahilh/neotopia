@@ -1787,5 +1787,6 @@
   "endGameTriggered": false,
   "endGameRoundsRemaining": 2,
   "pendingMoves": {},
-  "lastError": null
+  "lastError": null,
+  "turnTimeRemaining": 90
 }

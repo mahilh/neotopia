@@ -930,3 +930,127 @@ T1 S9 FIRST TASK: visual polish per PLAYTEST_AUDIT (region color saturation +30%
   larger element tokens · card art wiring once T2's ade9219 art-gen lands) · hand-count signal (BUG-06) ·
   and verify the bot reaches the board + places elements once T2 fixes the /lobby navigation (true tutorial
   effectiveness measurement).
+
+═══════════════════════════════════════════════════════════
+T3 S9 · AUTHENTICATED globalTeardown PURGE · launch readiness · 2026-06-26
+commit (pending) (playwright.config.js · tests/e2e/global-teardown.js · docs/T3_LAUNCH_READINESS.md)
+═══════════════════════════════════════════════════════════
+
+T3 S9 STATUS: 99 vitest green (14 files) · build clean · phase-over-wire E2E PASS (Gate 4) · globalTeardown
+  authenticated purge WIRED + PROVEN. Forge self-rate 88/100. Gates: 1✅ sessionPhaseColumn · 2✅ purge auth
+  (mig 007) · 3❌ data-testid not shipped → Task B gate-skipped · 4✅ phase-over-wire green.
+
+T3 S9 TASK A · tests/e2e/global-teardown.js + playwright.config.js (globalTeardown) · DONE + PROVEN:
+  Runs ONCE after the suite · signInAnonRetry → the `authenticated` role (mig 007 · anon sign-in yields
+  authenticated · only no-JWT is anon) → rpc('purge_e2e_test_data') · soft-fails (cleanup must never fail
+  the suite). PROVEN this session: (a) signed call → {rooms_deleted, profiles_deleted} (cleaned 20 residual
+  S8 profiles live); (b) UNSIGNED call REJECTED ("permission denied" · 007 effective); (c) the teardown FIRES
+  in a real run → "[teardown] purge_e2e_test_data → {...}". Per-test cleanup (deleteRoomAsHost/005) handles
+  rooms · the RPC's unique value is the residual player_profiles (UNIQUE username · no DELETE policy). T2's
+  006/007 are exactly the SECURITY-DEFINER, no-service-role-key design I asked for in S8 — thank you · wired.
+  ⚠ The RPC deletes only FINISHED rooms hosted by E2E%/BotAlpha%/BotBeta% + those profiles (scoped by
+  username prefix · NEVER by status alone · read the migration · real names are spared). Safe for a teardown.
+
+T3 S9 TASK B · BOT SELECTOR UPDATE · GATE-SKIPPED (Gate 3 failed · rule 34 pause-not-abort).
+  grep'd: ZERO data-testid anywhere in src/ (Board/ included). The bot (scripts/bot-simulate.js) is T2's
+  lane anyway · the dependency chain is: T1 ships data-testid on Board components → THEN the bot selectors
+  (T2 scripts/) can switch off brittle class-name matching → bot error count drops (the 32 the playtest hit).
+  T3→T1: please add data-testid to the Board hexes/factories/offer cards (factory, hex-valid, card-offer,
+  my-turn-badge). T3→T2: once they land, update bot-simulate.js selectors. T3 did NOT touch either lane.
+  UPDATE (rule 38 · re-checked the gate · the tree moved DURING my session): T1 SHIPPED data-testid in
+  53cba84 ("data-testid + data-* selectors for bot harness · T1 S9") — Gate 3 now PASSES. Available now:
+  data-testid factory · my-turn-badge · end-turn-btn · the valid-hex marker (data-valid / hex-valid
+  ternary) · per-card testid (ProjectCard). T3→T2: the bot-selector swap (scripts/ · YOUR lane) is now
+  UNBLOCKED — switch [class*=...] → these testids · expect the playtest's 32 errors to drop. (My E2E tests
+  don't click factories/hexes so they don't need these · left green/unchanged · testids are there for any
+  future board-interaction E2E.)
+
+T3 S9 TASK C · docs/T3_LAUNCH_READINESS.md updated to S7→S9: phase-over-wire + the natural-end
+  sessionPhaseColumn fix moved to VERIFIED · 0-room E2E cleanup (per-test + authenticated teardown) ·
+  CI secrets now added · turn timer noted as T2's LOCAL-UI decision (no T3 sync work) · remaining =
+  bot data-testid, cross-machine smoke, domain, bonus data + card art (Mahil).
+
+T3 S9 ENV NOTE (same as S8 · not a code bug): the FULL local suite re-run hit Supabase's anon sign-in
+  hourly rate limit (many runs this session) · 4/5 passed, the 5th + the teardown soft-failed at sign-in.
+  The teardown's soft-fail is BY DESIGN (proven · it logged + did not fail the run). Individually green
+  this session: phase-over-wire + the RPC premise + the teardown fire. CI runs once → under the limit.
+
+T3 S9 NOTE (housekeeping · NOT actioned): stash@{0} ("WIP on main: d414d7d") from the S8 autostash incident
+  still exists · per 92b7ce0 it holds T2/T3 WIP. My S8 work is all committed (8840885 on origin · verified)
+  so I need nothing from it · leaving it for its owner to recover/drop (never drop another lane's stash).
+
+T3 S9 EVOLUTION LESSON (extends rule 26): before wiring a DESTRUCTIVE shared function (a purge RPC) into an
+  unattended hook (globalTeardown that runs after EVERY suite), read its DEFINITION and prove its SCOPE +
+  its AUTH boundary live — not just that it "works". I confirmed it deletes ONLY username-prefixed test rows
+  (never by status alone · real names spared) AND that an unsigned call is rejected, BEFORE trusting it to
+  run automatically. An automated cleanup you didn't scope-check is a foot-gun pointed at prod data.
+
+T3 S10 FIRST TASK: integrate the bot data-testid selectors once T1 ships them (and/or move the per-test
+  deleteRoomAsHost cleanup into globalTeardown-only now that the authenticated purge covers rooms+profiles,
+  simplifying the test bodies) · re-confirm the full suite green in a fresh rate-limit window.
+
+═══════════════════════════════════════════════════════════
+T2 S10 · turnTimeRemaining (synced) + terrain biomes + bonus 5th request · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T2 S10 STATUS: turnTimeRemaining added to the store (synced) · src/lib/terrainBiomes.js for T1's terrain
+  visuals · bonus 5th request · 102 tests green (14 files) · build clean · migrations 004-007 live. Forge
+  self-rate 82/100 → rewrote Task A's store shape (1 field not 2 · sourced from the constant · fixture kept green).
+
+### ✅ Task A · turnTimeRemaining · NOW IN THE STORE (conceding S9's constant-only · the team's call + the MP need)
+  S9 I kept the turn budget as a gameConfig CONSTANT (no synced field) · right for one screen but it can't show
+  the WAITING player the active player's clock. T3 S8/S9 explicitly want a synced field for a cross-tab timer
+  E2E, and a synced value is the correct multiplayer choice · so I added it:
+  · gameStore.js — turnTimeRemaining: TURN_TIME_LIMIT in initial state · reset to TURN_TIME_LIMIT in BOTH
+    initGame and endTurn. The VALUE stays sourced from gameConfig.TURN_TIME_LIMIT (single source · no magic 90
+    in two places). I added ONE field (turnTimeRemaining), NOT turnTimeLimit-as-state — the limit is already the
+    constant. endTurn only RESETS it (a constant · NO clock read in the reducer · rule 32).
+  · ⚠ T3 — your "1-line store add · 0 code change" was incomplete: ANY new store field changes the engine state
+    SHAPE, which trips YOUR OWN seededState guard (17→18 keys). To keep CI green I added the one key to
+    tests/e2e/fixtures/seededState.json (turnTimeRemaining: 90 · values preserved · via script, not hand-made ·
+    per your regenerate note). HEADS-UP: I touched your fixture (1 key · the mechanical counterpart of the shape
+    change) · regenerate fully if you prefer · the guard is green now.
+  → T3: turnTimeRemaining syncs via pushState automatically (your S8 confirmation holds) · endTurn resets it for
+    BOTH players · your cross-tab timer E2E is unblocked. NOTE the sync is per-MOVE (pushState), not per-second —
+    the waiting player's clock updates when the active player ACTS, not smoothly. A smooth shared clock later =
+    a synced turnStartedAt + local compute (deferred · not needed now).
+  → T1 · the LOCAL countdown (the per-second tick belongs in the component, NOT the store/DB):
+      import { TURN_TIME_LIMIT } from '../store/gameConfig'
+      const remaining = useGameStore(s => s.turnTimeRemaining)
+      useEffect(() => {
+        if (!isMyTurn) return                          // only the active player ticks
+        if (remaining <= 0) { handleEndTurn(); return }
+        const id = setTimeout(() => useGameStore.setState(s => { s.turnTimeRemaining = s.turnTimeRemaining - 1 }), 1000)
+        return () => clearTimeout(id)
+      }, [remaining, isMyTurn])
+      // render MM:SS · tabular-nums · 44px (rules 4,5). Use the IMMER form setState(s => { s.x = ... }) — the
+      // forge's setState(s => ({...s,...})) spreads an immer DRAFT and misbehaves. Do NOT pushState per tick.
+    HEED T3 S8's UX flag: wire this only AFTER the tutorial lands · a timer on confused players rushes them.
+
+### ✅ Task B · terrain biome constants · src/lib/terrainBiomes.js (NEW · pure data · my lane)
+  TERRAIN_BIOMES (per region: hex/border/gradient/accent colors · atmosphere · svgPattern) + getBiomeForRegion
+  (regionId → biome · falls back to Sacred City). Colors mirror CLAUDE.md element colors (#7F77DD / #1D9E75 /
+  #E24B4A) so terrain + tokens stay coherent · zero external assets.
+  → T1: import { getBiomeForRegion } from '../lib/terrainBiomes' in GameBoard · use biome.colors.hex as the
+    empty-hex fill + biome.colors.hexBorder as the empty-hex border · gives the 3 regions distinct identities.
+
+### ⏳ Task C · bonus earn DATA · 5th request to Mahil (still the ONLY data dependency in the whole game)
+
+### T2 → MAHIL (5th request · bonus earn paths · please provide from the physical Neotopia board)
+  PER REGION (Sacred City / Living Earth / Free Energy):
+  1. Which 4 hexes have circular bonus-space markers? Position relative to the region's CENTER hex (how many
+     hexes out + which direction · or axial q,r if you can read them off the board).
+  2. At score-track 7, 13, 18: which token type sits there? (subsidy / automatization / initiative / permits)
+  Without this, the earn paths stay dormant (covering a bonus hex / crossing 7-13-18 awards nothing). Every
+  OTHER mechanic works · this is the last missing data. (Mechanism shipped+tested T2 S5 · ~10 lines to activate.)
+
+### T2 S10 EVOLUTION LESSON (extends rule 15)
+  Architectural purity is not always the right hill. When the TEAM (forge + T3, 3×) asks for a design that has a
+  VALID use case (here: the waiting player needs the active player's clock · a local constant can't show it),
+  CONCEDE and implement it WELL rather than re-refuse a 4th time. S9 I correctly flagged the store-field costs
+  (shape change · fixture break) and chose a constant · but I should have shipped the synced field THEN with the
+  fixture bump, not made the team ask twice more. Hold a strong opinion weakly: surface the trade-off once, take
+  the team's reasonable path, and absorb the small cost (a 1-key fixture update) yourself.
+
+T2 S11 FIRST TASK: (bonus data arrives → activate the earn paths + tests) ELSE the game_sessions.phase CHECK
+  migration to add 'scoring' (retire T3's sessionPhaseColumn boundary map · the vocab-drift T3 flagged for T2).
