@@ -8,56 +8,60 @@ Stack: React 19 + Vite 8 + Tailwind v4 + SVG hex board + Zustand + Immer + Supab
 Supabase ID: wynccumuisjxbptjlfwq · URL: https://wynccumuisjxbptjlfwq.supabase.co
 GitHub: mahilh/neotopia (public) · Domain: neotopia.io · Vercel: auto-deploy from main
 
-STATUS (post S8-S9 · June 26 2026 · ALL TERMINALS COMPLETE):
-  ✅ TUTORIAL SHIPPED · Tutorial.jsx · 3-step · first-turn only · 5/5 checks · GAME NOW PLAYABLE
-  ✅ FACTORY PULSE + INSTRUCTION TEXT · uiPhase machine · dynamic "Pick an element..." text
-  ✅ COPY CODE BUTTON · 44px · "✓ Copied" · room code UX fixed
-  ✅ USERNAME EDIT · pencil → Save · claimUsername upserts
-  ✅ 6 BANNED NAMES REMOVED · incl Hameed (sacred boundary) · 56/56 unique
-  ✅ game_end WIRED · buildGameEndEvent→sync.pushState · lowest-seat · per-room guard
-  ✅ FINALSCORE STAGGER + COUNT-UP · reduced-motion aware · solo no-ops correctly
+STATUS (post S9 · June 26 2026):
+  ✅ TUTORIAL SHIPPED · Tutorial.jsx · 3-step · first-turn only · game now playable
+  ✅ FACTORY PULSE + INSTRUCTION TEXT · uiPhase machine
+  ✅ COPY CODE BUTTON · 44px · username edit · 6 banned names removed
+  ✅ game_end WIRED · buildGameEndEvent→sync.pushState
+  ✅ FINALSCORE STAGGER + COUNT-UP · reduced-motion aware
   ✅ ENGINE FUZZ · 150 games · 100% terminate · 0 violations · permanent guard
-  ✅ purge_e2e_test_data() RPC · migration 006 · authenticated-only (migration 007)
-  ✅ MIGRATION 007 · restrict purge to authenticated · anon_can_execute=false
-  ✅ TURN_TIME_LIMIT CONFIG · in store · T1 wiring recipe in comms
+  ✅ purge_e2e_test_data() · migration 006 · authenticated-only (007)
   ✅ 99 TESTS GREEN (14 files) · BUILD CLEAN
-  ✅ PHASE-OVER-WIRE E2E · phase-over-wire.e2e.js · PASS 2×+ · definitive proof
-  ✅ E2E CLEANUP · 0 rooms after test · browser-owned rooms self-clean via setSession
-  ✅ CARD FRAME · src/components/CardFrame.jsx · ancient esoteric · dark obsidian + element color
-  ✅ ART PIPELINE · scripts/generate-art.js · 56 cards defined · OpenAI API ready
-  🔴 CRITICAL BUG FIXED (T3 S8): game_sessions.phase CHECK rejects 'scoring' → 400 on every
-     natural game-end. No game could ever naturally end before this fix. Fixed by sessionPhaseColumn()
-     map at the write boundary. The playtest died at T17 so this never surfaced until T3 S8.
+  ✅ PHASE-OVER-WIRE E2E · PASS 2×+ · definitive proof
+  ✅ GLOBAL TEARDOWN · tests/e2e/global-teardown.js · signInAnon→purge · authenticated
+  ✅ data-testid SHIPPED · T1 S9 53cba84 · factory · my-turn-badge · end-turn-btn · hex-valid
+  ✅ CARD FRAME · src/components/CardFrame.jsx · ancient esoteric
+  ✅ ART PIPELINE · scripts/generate-art.js · 56 cards defined
+  🔴 CRITICAL BUG FIXED (T3 S8): sessionPhaseColumn · game_sessions.phase CHECK rejects 'scoring'
+     Natural game-end was silently 400ing on every game. Fixed in useGameSync.js.
 
-  ⏳ T1 S9: data-testid attributes (bot selectors) · SVG element icons on hexes · board terrain biomes
-  ⏳ T2 S10: turnTimeRemaining in store · bonus data activation if provided
-  ⏳ T3 S9: globalTeardown with signInAnonymously+purge RPC · turn timer E2E
-  ⏳ MAHIL: git pull (CardFramePreview.html on disk) · bonus hex data · neotopia.io domain
-  ⏳ MAHIL: OpenAI API key in .env.local (platform.openai.com/api-keys · ~$5 credit)
-  ⏳ MAHIL: ChatGPT Batch 1 images → public/art/cards/ (MTG painterly style prompts in chat)
+  ⏳ T1 S10: data-testid for Ready + tutorial-dismiss · SVG element icons · CardFrame in hand
+  ⏳ T2 S10: turnTimeRemaining in store · terrain biomes · bonus data (6th ask if needed)
+  ⏳ T3 S10: bot selector update with data-testid · rate-limit handling
+  ⏳ MAHIL: git pull · bonus hex data · neotopia.io domain · pixel art card generation
+
+BOT SIMULATION ANALYSIS (prod run · June 26 2026 · full breakdown):
+  WORKING: Landing → room creation (TAB357/JMDDFY/TTU4N5) → joining → game board ✅
+  ERROR BREAKDOWN: { ready-failed:3, no-tutorial:3, stuck-state:90 }
+  ROOT CAUSE CASCADE:
+    ready-failed:3 → bot uses button:has-text("Ready") but button text/timing changed in T1 S8
+    → game starts with player sync broken
+    → isMyTurn never correctly set for bot player
+    → tutorial gate {showTutorial && isMyTurn}: isMyTurn=false → tutorial never mounts
+    → no-tutorial:3 (tutorial IS there but never renders because isMyTurn=false)
+    → text=/your turn/i never matches (no data-testid yet at time of run)
+    → stuck-state:30 per game × 3 games = 90
+  FIX REQUIRED (T1 S10):
+    Add data-testid="ready-btn" to Ready button
+    Add data-testid="tutorial-dismiss" to tutorial dismiss button
+    Decouple tutorial gate from isMyTurn: show tutorial on game mount, not on isMyTurn
 
 CRITICAL BUG FIXED (T3 S8 · sessionPhaseColumn):
   game_sessions.phase CHECK is (playing|endgame|finished) — NOT 'scoring'
-  The store's terminal phase is 'scoring' — pushState was writing s.phase directly
-  Result: every natural game-end UPDATE → 400 → game-over state never persisted
-  Fix: sessionPhaseColumn('scoring')→'finished' at the write boundary in useGameSync.js
-       The jsonb keeps 'scoring' that syncFromServer reads correctly
-  Guard: useGameSync.phasecolumn.test.js — locked by unit test
-  Implication: No game in production could ever reach FinalScore via natural end before this fix.
-               The playtest died at T17 → latent until T3's phase-over-wire E2E proof surfaced it.
+  pushState wrote s.phase='scoring' → CHECK rejected → 400 → game-over never persisted
+  Fix: sessionPhaseColumn('scoring')→'finished' at write boundary in useGameSync.js
+  Guard: useGameSync.phasecolumn.test.js locked by unit test
+  Implication: No game could ever reach FinalScore via natural end before this fix.
 
-BOT SIMULATION FINDINGS (production run · June 26 2026):
-  Result: 3 games · Landing page → rooms created → both bots on game board ✅
-          THEN: placed 0 · drew 0 · 32 errors per game
-  Root cause: CSS Modules hash class names at Vite build time
-    Bot selectors [class*="factory"] → empty arrays in production (class = "factory_abc123")
-    Bot selectors [class*="offer"] → same problem
-  Fix: T1 must add data-testid attributes to key interactive elements:
-    data-testid="factory-[regionId]" on factory hex elements
-    data-testid="card-offer" on offer card rows
-    data-testid="my-turn-badge" on Your Turn indicator
-  The 32 errors = stuck-state (isMyTurn never detected) + action-errors (empty locators)
-  Room creation + multiplayer routing: FULLY WORKING ✅ (TAB357, JMDDFY, TTU4N5 all worked)
+CARD ART DIRECTION (FINAL · after 3 iterations):
+  REJECTED: photorealistic 3D render (too AI-sloppy, unreadable at card size)
+  REJECTED: MTG painterly (beautiful but direction pivoted · second image 155/200)
+  FINAL: 16-bit isometric pixel art · SNES RPG style · esoteric solarpunk
+  Why: reads at 120px card size · cannot look like AI slop · unique genre nobody has
+  Style: Stardew Valley + Chrono Trigger + ancient mystery school
+  Palette: jewel-tone · teal blue green amber gold · limited 8-16 colors
+  Frame: CardFrame.jsx (dark obsidian frame unchanged) + pixel art inside
+  Prompts: docs/ART_DIRECTION_PIXEL.md · batch 1 reprompts + batch 2 prompts
 
 CRITICAL PATTERNS (confirmed fixed · never revert):
   Auth: INITIAL_SESSION event · signingIn flag · storageKey 'neotopia-auth' · detectSessionInUrl:false
@@ -66,30 +70,16 @@ CRITICAL PATTERNS (confirmed fixed · never revert):
   FinalScore: triggers on phase==='scoring' (NOT 'ended') · navigate('/lobby') for lobby
   calculateFinalScore: (scores[], unusedCount)→number (NOT breakdown object)
   Global index RPCs: get_global_neotopia_index() · increment_neotopia_index()
-  Dev gate: Cmd+Shift+E (NOT Cmd+F) · triggers phase='scoring' LOCAL ONLY · does NOT push to DB
+  Dev gate: Cmd+Shift+E · triggers phase='scoring' LOCAL ONLY · does NOT push to DB
   Landing route: / → Landing.jsx · /lobby → Lobby.jsx · /game/:roomId → GameRoom
   sessionPhaseColumn: maps store 'scoring'→'finished' at game_sessions write boundary
-  gameEndEvent: buildGameEndEvent(state) (NOT buildGameEndPayload) · in src/lib/gameEndEvent.js
+  gameEndEvent: buildGameEndEvent(state) (NOT buildGameEndPayload)
   purge_e2e_test_data RPC: requires signInAnonymously() first · authenticated-only (mig 007)
+  Tutorial gate: decouple from isMyTurn — show on game mount (T1 S10 fix needed)
 
-CARD NAMES (BANNED — never use in any card):
+CARD NAMES (BANNED):
   AetherMind · AetherNet · AetherFlux · AetherProject · KnowBrand · Hameed · Mahil
-  All 6 removed from projectCards.js in T1 S8 · 56/56 unique names confirmed
-
-CARD ART DIRECTION:
-  Style: MTG card art · painterly oil illustration · single focal building · visible brushstrokes
-         NOT photorealistic · NOT 3D render · dramatic sky background
-  Frame: src/components/CardFrame.jsx · ancient esoteric · dark obsidian · serif Roman numerals
-  Art files: public/art/cards/[card-id].png · auto-detected by CardFrame
-  Generation: node scripts/generate-art.js (needs OPENAI_API_KEY in .env.local)
-  Manual: docs/ART_PROMPTS_BATCH1.md (MTG painterly prompts for ChatGPT)
-
-BOT SIMULATION:
-  Script: scripts/bot-simulate.js (fixed for Landing page routing)
-  Run against dev: npm run dev (tab 1) · node scripts/bot-simulate.js (tab 2)
-  Run against prod: BOT_URL=https://neotopia.vercel.app node scripts/bot-simulate.js
-  KNOWN: prod run gives 32 errors (CSS Module class names hashed · need data-testid in T1 S9)
-  Reports: .bot-reports/report-[timestamp].json
+  All removed in T1 S8 · 56/56 unique confirmed
 
 TERMINAL LANES:
   T1: src/components/ src/pages/ src/App.jsx src/utils/ src/hooks/useGameActions.js
@@ -111,8 +101,7 @@ COMMS: .claude/comms/tomorrow.md · T[N] LESSON: · T[N]→T[M]: · T[N] S[N+1] 
 
 MOLTBOOK:
   Agent: neotopian · API key: $MOLTBOOK_API_KEY (in .env.local)
-  Submolt owned: /m/neotopia · 1 organic follower · last active confirmed
-  Heartbeat: GitHub Actions every 4h
+  Submolt: /m/neotopia · 1 organic follower · heartbeat 4h
 
 ENGINE ARCHITECTURE:
   Pattern matching: patternMatcher.findBuildableCards (never reimplement)
@@ -149,7 +138,7 @@ GAME MECHANICS:
 ELEMENT→CIVILIZATION: energy→Energy/Invention·biofarming→Food/Regen·technology→Tech/AI·community→Source/Culture
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (45 · cumulative):
+PERMANENT ANTI-REGRESS RULES (46 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -180,31 +169,28 @@ PERMANENT ANTI-REGRESS RULES (45 · cumulative):
   28. Premise check is stale · re-run right before acting
   29. Validate Y fully BEFORE debiting X in any spend action
   30. information_schema != full DB contract · GENERATED ALWAYS AS IDENTITY rejects explicit inserts
-  31. When live verification blocked: isolate precisely, prove wiring fires (403=code ran), convert to deterministic test
+  31. When live verification blocked: isolate precisely, prove wiring fires, convert to deterministic test
   32. Never bake guessed game data into engine · never Math.random() in synced/replayable actions
   33. Run unit tests first · live E2E second · NEVER concurrently
   34. Gate-skip is a pause not an abort · re-check gate when tree moves
   35. Prove data layer when browser unavailable · never claim 'fixed live' when only 'data-proven'
   36. Test harness must mirror real code setup path exactly
-  37. A fixed CSS height is a request not a guarantee · flex children shrink past it · pin flexShrink:0
+  37. A fixed CSS height is a request not a guarantee · flex children shrink past it
   38. In live multi-terminal repo, boot premise check has shelf life of minutes · 'file modified since read' = collision signal
   39. HTTP status is a witness · 400 proves insert reached DB · null ref = no HTTP call
-  40. When two lanes touch one seam, trace the composed value after both edits · verify against HEAD-of-tree not boot-of-session (T1 S7)
+  40. When two lanes touch one seam, trace the composed value after both edits · verify against HEAD-of-tree (T1 S7)
   41. Before writing a cross-lane bug flag, re-read the owner's current files · the bug may already be mid-fix (T2 S8)
   42. "Two lanes both fixed it" can ADD a bug · trace composed behavior end-to-end (T3 S7)
-  43. In a shared .git, commit per task not per session · uncommitted work can be silently stashed by another terminal's pull --rebase --autostash · recover shared autostash per-file (never pop) · commit immediately after recovery (T1 S8)
-  44. A SECURITY DEFINER function callable by anon is an unauthenticated-destruction vector · destructive RPCs must require authenticated role · verify with pg_proc.proacl after GRANT (T2 S9)
-  45. A denormalized column is a second contract · when pushState writes both jsonb blob and mirror columns, premise-check every mirror column's CHECK against every value the blob can carry — especially terminal states never reached in testing (T3 S8 · found: game_sessions.phase rejects 'scoring' · every natural game-end was silently 400ing)
+  43. In a shared .git, commit per task not per session · uncommitted work can be silently stashed · recover autostash per-file (T1 S8)
+  44. A SECURITY DEFINER function callable by anon is an unauthenticated-destruction vector · destructive RPCs must require authenticated (T2 S9)
+  45. A denormalized column is a second contract · premise-check mirror column CHECKs against all blob values — especially terminal states (T3 S8 · game_sessions.phase)
+  46. Before wiring a destructive function into an unattended hook, read its definition and prove scope + auth boundary live · an automated cleanup you didn't scope-check is a foot-gun pointed at prod data (T3 S9)
 
 CODEWORDS:
   T[N] AUTODRIVE! → paste output · I run: GitHub verify + XRAY!/200 + next forge
   FORGE! T[N] → just write forge · XRAY! → just audit · REFORGE! → 7-phase transcendence
-  SKILLUPGRADE! → 6-phase · destroy worst skill · rebuild · push
-  SCANSKILLS! → audit all skills · runs inside AUTODRIVE!
-  DEEPDIVE! → 10-step · OVERDRIVE! → 7-agent council (NEOTOPIAN has Moltbook mandate)
-  NIGHTSAVE! → save to Google Drive · Rate it → /300 session rating
+  SKILLUPGRADE! → 6-phase · SCANSKILLS! → audit all · DEEPDIVE! → 10-step
+  OVERDRIVE! → 7-agent council · NIGHTSAVE! → Google Drive · Rate it → /300
 
 HEX MATH: redblobgames.com/grids/hexagons · flat-top · axial (q,r)
-SKILLS: .claude/skills/ · overdrive/SKILL.md · reforge/SKILL.md · supabase-patterns/SKILL.md
-       neotopia-forge-patterns/SKILL.md · skillupgrade/SKILL.md · scanskills/SKILL.md
-       moltbook/SKILL.md · moltbook-scan/SKILL.md · _registry/INDEX.md
+SKILLS: .claude/skills/ · reforge · supabase-patterns · neotopia-forge-patterns · moltbook
