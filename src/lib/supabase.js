@@ -30,4 +30,38 @@ export const supabase = createClient(url, key, {
   },
 })
 
+// ── Global NeoTopia Index ─────────────────────────────────────────────────────
+// The civilization counter shown on FinalScore · total consciousness districts built across ALL
+// games. The real total is SUM(player_profiles.neotopia_index), but player_profiles RLS is own-row
+// only (profiles_own · user_id = auth.uid()), so a client SELECT can't sum across players. Migration
+// 004 adds a SECURITY DEFINER aggregate (get_global_neotopia_index) that returns ONLY the summed
+// number · no per-player data. We anchor it on a canonical seed so the index always reflects the
+// civilization's existing momentum (psychology doc · matches T1's FinalScore GLOBAL_INDEX_BASE).
+export const GLOBAL_INDEX_BASE = 147823
+
+// Real global index = base seed + every district recorded across all games. Resilient by design:
+// any failure (RPC absent pre-migration, offline, RLS) falls back to the seed, so FinalScore never
+// shows a broken number · it simply isn't yet enriched with the live aggregate.
+export async function getGlobalIndex() {
+  try {
+    const { data, error } = await supabase.rpc('get_global_neotopia_index')
+    if (error || data == null) return GLOBAL_INDEX_BASE
+    return GLOBAL_INDEX_BASE + Number(data)
+  } catch {
+    return GLOBAL_INDEX_BASE
+  }
+}
+
+// Record this game's districts onto the CALLER's own profile (atomic · auth.uid()-scoped and clamped
+// to [0,56] inside the DB function). Best-effort · fire ONCE when a game ends. Returns { error } so
+// the caller can log but never block the end screen on it. Deliberately NOT part of the synced game
+// store · this is a post-game side effect, never part of the replayable reducer (rule 32 · a network
+// write inside endTurn would fire on every client that applies the synced move → N× over-count).
+export async function recordCivilizationContribution(districtCount) {
+  const n = Number(districtCount) || 0
+  if (n <= 0) return { error: null }
+  const { error } = await supabase.rpc('increment_neotopia_index', { amount: n })
+  return { error: error?.message ?? null }
+}
+
 export default supabase

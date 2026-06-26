@@ -8,9 +8,69 @@ One `git pull` in ANY terminal (Mac terminal, T1, T2, T3) updates the shared .gi
 Every forge boot sequence now starts with `git pull --rebase` — you never need to pull manually.
 If unsure: run `bash ~/NeoTopia/start.sh` from Mac terminal before opening Claude Code tabs.
 
-## SESSION STATUS (S6 in progress)
-Last verified HEAD: T2 S6 (anon-auth persistence FIX) / e76c017 (T1 S4) / 4a1f1d8 (T3 S4)
-Tests: 73 green · Build: clean · E2E: ✅ data-layer live · two-tab move-sync now UNBLOCKED (auth fixed)
+## SESSION STATUS (S7 in progress)
+Last verified HEAD: T2 S7 (Global NeoTopia Index · migration 004) · T1 S6 WIP live in tree (FinalScore + scoredCardIds)
+Tests: 77 green · Build: clean · migration 004 APPLIED LIVE (get_global_neotopia_index + increment_neotopia_index)
+
+## T2 S7 → ALL (Global NeoTopia Index · game_events 400 ROOT CAUSE · scoredCardIds note)
+
+### 🔴 game_events 400 — ROOT CAUSE FOUND (T1's S5 flag · it's a T1-lane fix, one string each)
+T1 S5 saw the audit insert 400 on event_type='place' and guessed "event_data shape". It is NOT that.
+The live CHECK constraint game_events_event_type_check allows ONLY:
+  draw_card · place_element · build_project · use_bonus · factory_refill · turn_end · game_end
+src/hooks/useGameActions.js (T1 lane) passes NON-canonical strings, so EVERY audit insert 400s (not
+just 'place' · all four) and the audit log is silently empty for ALL event types:
+  line 125  persist('place')   → 'place_element'
+  line 156  persist('draw')    → 'draw_card'
+  line 175  persist('score')   → 'build_project'
+  line 185  persist('endTurn') → 'turn_end'
+FIX (T1): pass the canonical strings above. (T3 could instead normalize in useGameSync.pushState, but
+the source strings live in useGameActions · fixing them there is correct.) seat_number is fine (0-3).
+EVIDENCE: pg_constraint definition, read live from the DB this session.
+
+### ✅ Global NeoTopia Index — REAL aggregation wired (your FinalScore "T2 wires real aggregation later")
+Migration 004 applied live (scripts/migrations/004_global_neotopia_index.sql · SECURITY DEFINER, same
+posture as mig 003). player_profiles RLS is own-row (profiles_own · user_id = auth.uid()), so a client
+`select sum(neotopia_index)` returns ONLY the caller's own index · the migration adds an aggregate RPC
+that returns the TRUE global with no per-row leak (verified live: brand-new anon sees global=N while its
+own SELECT returns 0 rows). src/lib/supabase.js now exports:
+  · GLOBAL_INDEX_BASE = 147823  (same seed you hardcoded · import it instead of redefining locally)
+  · getGlobalIndex() → Promise<number> = base + SUM(all neotopia_index) · falls back to base on ANY error
+  · recordCivilizationContribution(count) → Promise<{error}> · atomic · auth.uid()-scoped · capped [0,56]
+
+T2 → T1 · FinalScore.jsx integration (replaces the local `const GLOBAL_INDEX_BASE = 147823`):
+  import { GLOBAL_INDEX_BASE, getGlobalIndex, recordCivilizationContribution } from '../lib/supabase'
+  const [globalIndex, setGlobalIndex] = useState(GLOBAL_INDEX_BASE + totalProjectsBuilt)
+  useEffect(() => { getGlobalIndex().then(n => setGlobalIndex(n + totalProjectsBuilt)) }, [totalProjectsBuilt])
+  // then render {globalIndex.toLocaleString()} in place of (GLOBAL_INDEX_BASE + totalProjectsBuilt)
+  // To make the counter GROW over time, fire ONE contribution per game in the reveal effect, LOCAL
+  // player only, guarded so a reload during 'scoring' cannot double-count (pass roomId + myUserId in):
+  useEffect(() => {
+    const key = `neotopia_recorded_${roomId}`
+    if (localStorage.getItem(key)) return
+    const me = players.find(p => p.userId === myUserId)
+    const n = me?.scoredCardIds?.length ?? 0
+    if (n > 0) { recordCivilizationContribution(n); localStorage.setItem(key, '1') }
+  }, [])
+  NOTE: best-effort flavor counter (client-fired · server-side game-end detection is out of scope). The
+  DB caps each contribution at 56 so it can't be grossly inflated. The live global was reset to 0 this
+  session (all prior nonzero values were T2 test writes · no real game has recorded a contribution yet).
+
+### scoredCardIds — already done by T1 in the working tree · NOT duplicated (rule 27)
+T1 S6 added scoredCardIds to gameStore.js (initGame + tryScoreCard, with the defensive guard) plus a
+test. That is T2-lane code · it is correct, I verified it (74 green) and did NOT re-implement it. My
+first edit attempt failed with "file modified since read" — that was the collision signal. Going
+forward T2 owns src/store · ping T2 for a new store field rather than editing gameStore.js directly.
+
+### Task C (bonus earn DATA) — STILL PENDING from Mahil (re-stated · see T2 → MAHIL below)
+Mechanism shipped + tested T2 S5 (cover-hex + 7/13/18 pile). Zero code change until positions/piles land.
+
+### T2 S7 EVOLUTION LESSON (extends rule 28)
+In a LIVE multi-terminal repo, a boot-time premise check has a shelf life of minutes. At boot the tree
+was clean, FinalScore did not exist, and scoredCardIds was absent — all TRUE then, all STALE 20 min
+later once T1's concurrent forge landed both. Re-run `git status` right before EACH edit, not just at
+boot · and treat an Edit "file modified since read" error as a COLLISION SIGNAL (stop + diff the lane),
+not a mechanical re-read-and-retry. That one failed edit is what stopped me duplicating T1's scoredCardIds.
 
 ## T1 → T2 (from S3)
 tryScoreCard(seat, cardId, regionId, lastPlacedKey) → boolean · shipped · scoreCard delegates to it
