@@ -294,7 +294,7 @@ export default function GameRoom() {
                 })}
               </div>
               {uiPhase === 'regionSelected' && (
-                <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 8 }}>
+                <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 8 }}>
                   Click a highlighted hex on the board
                 </p>
               )}
@@ -348,7 +348,7 @@ export default function GameRoom() {
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
                 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>{name}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{name}</span>
                   <span style={{
                     color: 'white', fontWeight: 700,
                     fontVariantNumeric: 'tabular-nums', fontSize: 16,
