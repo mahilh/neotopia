@@ -853,3 +853,77 @@ T2 S9 STATUS: engine fuzz proves the engine robust (150 random games · 100% ter
 
 T2 S10 FIRST TASK: (if Mahil sends bonus data) activate the earn paths · ELSE the game_sessions.phase CHECK
   migration to add 'scoring' (retire T3's boundary map) · and/or wire gameEndEvent if still unwired.
+
+═══════════════════════════════════════════════════════════
+T1 S8 · TUTORIAL + ONBOARDING UX + CARD RENAME · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T1 S8 STATUS: commit 0bb807d (6 files · rebased onto ade9219 · PUSHED) · build clean · all four tasks
+  live-verified in browser. Fixes the first playtest's game-breaking finding (Karachi · turn 17 · 0 points ·
+  nobody discovered "place an element").
+
+T1 S8 TASK A (Tutorial · the most important component): src/components/Tutorial.jsx · 3-step first-turn
+  overlay · shows once ever per browser (localStorage 'neotopia_tutorial_v1') · only on isMyTurn + phase
+  'playing' (NOT gated on turnNumber · that would skip the 2nd player's first turn) · reduced-motion guard
+  on the factory pulse. 5/5 checks live: appears turn 1 · 3 steps advance · factory→hex animates · dismiss ·
+  no-reappear after reload.
+
+T1 S8 TASK B (board feels alive): persistent centered instruction line in GameRoom header driven by the
+  REAL uiPhase state machine (idle→factorySelected→...→scorePending) · + factory pulse (GameBoard
+  className 'factory-pulse' when isMyTurn + actions left + no factory selected · reduced-motion-guarded).
+  Verified live: instruction updates on factory click · 3 factories pulse → 0 after selection. (Valid-hex
+  highlight BUG-03 already existed via validTargets/HexCell · not re-done.)
+
+T1 S8 TASK C:
+  · FIX1 copy code (Lobby waiting room · 44px · click→"✓ Copied" · verified live).
+  · FIX2 username edit (Lobby home · pencil 44x44 → prefilled input + Save · claimUsername UPSERTS so it
+    doubles as rename · verified the edit UI opens live).
+  · FIX3 card rename · 6 BANNED names removed from src/lib/projectCards.js (NAME-ONLY · type/pattern/district
+    untouched): AetherFlux Node→Hydrogen Arc Station · AetherNet Tower→Resonance Grid Tower · AetherMind
+    Campus→Quantum Research Center · KnowBrand Studio→Signal Broadcast Tower · AetherFlux Array→Solar Hydrogen
+    Array · Hameed's Observatory→Stellar Observatory (+ description scrubbed of the personal name · "sacred
+    boundary" per ban list). 56/56 names unique · 0 banned in src/.
+  · FIX4 game_end wire · used your REAL recipe (comms T2 S8 L562), NOT the forge's localStorage stopgap:
+    buildGameEndEvent({players}) → sync.pushState(eventType,eventData) from FinalScore. "Exactly one client"
+    = the LOWEST present seat writes it (deterministic · others skip · no duplicate rows) · per-room
+    localStorage guard 'neotopia_gameend_<roomId>' makes a reload during 'scoring' idempotent · skipped in
+    solo (no sync / mySeat null). → T2: confirm the lowest-seat choice is what you meant by "one client".
+
+T1 S8 TASK D: per-player FinalScore card reveal stagger (animationDelay rank*0.18s · keyframes inline) +
+  Global Index count-up (eases from current shown value · reduced-motion shows final instantly). Stagger
+  verified live (fs-card-reveal animating) · count-up is correctly a no-op in solo (0 districts → target==base).
+
+⚠ T1 → T2/T3 · AUTOSTASH INCIDENT (the session's defining event · process lesson for everyone):
+  Mid-session a `git pull --rebase --autostash` (another terminal) STASHED my ~2h of uncommitted work out
+  from under me · `git status` then showed my 5 tracked files as unmodified (reverted to HEAD) · only my new
+  untracked Tutorial.jsx survived. RECOVERED via `git checkout stash@{0} -- <my 5 files>` (extracted only mine,
+  left the stash intact), then committed IMMEDIATELY. → stash@{0} ("WIP on main: d414d7d") STILL CONTAINS YOUR
+  uncommitted WIP captured by the same autostash: src/hooks/useGameSync.js (+16) · src/store/gameStore.js (+5) ·
+  tests/e2e/two-human.e2e.js (+13) · scripts/bot-simulate.js. RECOVER IT with
+  `git checkout stash@{0} -- <your files>` before anyone `git stash drop`s it. A second autostash (4fb7f3d)
+  was created+applied cleanly during my rebase.
+
+⚠ T1 → T2 · BOT HARNESS BROKEN by S7 routing (your lane · scripts/ · I caused it, flagging not fixing):
+  scripts/bot-simulate.js does page.goto(BASE) [=/] then waits for "Create Room" · but S7 moved / → Landing,
+  so ALL bot games fatal at room creation (0 elements placed · the tutorial's effect on bots is unmeasurable
+  until fixed). One-line fix: page.goto(BASE + '/lobby') (or click "Enter the Civilization" first).
+
+⚠ T1 → T2/T3 · STALE E2E FIXTURE: tests/seededState.guard.test.js FAILS · initGame now yields 17 keys
+  (added 'turnTimeLimit' · the turn-timer work) but tests/e2e/fixtures/seededState.json has 16 (no
+  turnTimeLimit). The guard is doing its job (rule 36) · update the fixture. NOT my lane (store + e2e).
+
+⚠ T1 → T3 · LANE: src/pages/Lobby.jsx header still says "T3 owns this file" but the current CLAUDE.md lane
+  table puts src/pages/ under T1, and the S8 forge tasked me with FIX1/FIX2 there (I collision-checked it
+  clean first). Please reconcile the header so it stops contradicting the table.
+
+T1 S8 EVOLUTION LESSON: in a SHARED .git working tree, uncommitted work is not yours to keep · any terminal's
+  `pull --rebase --autostash` will stash it away mid-edit. COMMIT AFTER EVERY TASK (not at session end) · a
+  commit is the only thing an autostash/reset cannot silently revert. Recovery, if caught: `git checkout
+  stash@{N} -- <only your files>` (never `pop` a shared autostash · it holds other lanes' work too), then
+  commit + PUSH immediately. This extends rule 38: "file modified since read" now also means "your unsaved
+  work may already be in a stash."
+
+T1 S9 FIRST TASK: visual polish per PLAYTEST_AUDIT (region color saturation +30% · subtle hex borders ·
+  larger element tokens · card art wiring once T2's ade9219 art-gen lands) · hand-count signal (BUG-06) ·
+  and verify the bot reaches the board + places elements once T2 fixes the /lobby navigation (true tutorial
+  effectiveness measurement).
