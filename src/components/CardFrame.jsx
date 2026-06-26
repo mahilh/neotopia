@@ -10,6 +10,7 @@
 //   <CardFrame card={card} size="full" />   (scored/modal · ~240px wide)
 
 import { useState } from 'react'
+import ElementIcon from './Board/ElementIcon'
 
 const ELEMENT_COLORS = {
   energy: { primary: '#E24B4A', secondary: '#c73b3a', glow: 'rgba(226,75,74,0.4)', symbol: '\u26A1', label: 'Sustainable Energy' },
@@ -270,7 +271,7 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           flexDirection: 'column',
           gap: 4,
         }}>
-          <div style={{ fontSize: s.fontSize + 8, opacity: 0.3 }}>{colors.symbol}</div>
+          <div style={{ opacity: 0.4, lineHeight: 0 }}><ElementIcon element={el} color={colors.primary} size={s.fontSize + 24} /></div>
           <div style={{ fontSize: s.fontSize - 2, color: colors.secondary, opacity: 0.4, fontFamily: 'serif', textAlign: 'center', padding: '0 4px' }}>
             {card.id}
           </div>

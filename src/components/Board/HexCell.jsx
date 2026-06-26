@@ -1,48 +1,5 @@
 import { hexToPixel, hexCorners, ELEMENT_COLORS, HEX_SIZE } from '../../utils/hexUtils'
-
-// Bespoke element icons · pure SVG, centered at local 0,0 (the caller's <g> translates to the hex
-// center). Replaces the plain colored circle + unicode glyph so a placed element reads as a real
-// piece of civilization infrastructure: energy=bolt · biofarming=sprout · technology=gear/atom ·
-// community=figure. Each returns the colored disc + a white icon mark.
-const ELEMENT_ICONS = {
-  energy: (color, size) => (
-    <>
-      <circle cx="0" cy="0" r={size * 0.42} fill={color} fillOpacity="0.9" />
-      <path
-        d={`M0 ${-size * 0.24} L${size * 0.14} ${size * 0.04} L${size * 0.04} ${size * 0.04} L${size * 0.04} ${size * 0.24} L${-size * 0.14} ${-size * 0.04} L${-size * 0.04} ${-size * 0.04} Z`}
-        fill="rgba(255,255,255,0.92)"
-      />
-    </>
-  ),
-  biofarming: (color, size) => (
-    <>
-      <circle cx="0" cy="0" r={size * 0.42} fill={color} fillOpacity="0.9" />
-      <line x1="0" y1={size * 0.22} x2="0" y2={-size * 0.06} stroke="rgba(255,255,255,0.92)" strokeWidth={size * 0.05} />
-      <circle cx="0" cy={-size * 0.16} r={size * 0.1} fill="rgba(255,255,255,0.92)" />
-      <circle cx={-size * 0.14} cy={size * 0.06} r={size * 0.1} fill="rgba(255,255,255,0.92)" />
-      <circle cx={size * 0.14} cy={size * 0.06} r={size * 0.1} fill="rgba(255,255,255,0.92)" />
-    </>
-  ),
-  technology: (color, size) => (
-    <>
-      <circle cx="0" cy="0" r={size * 0.42} fill={color} fillOpacity="0.9" />
-      <line x1={-size * 0.3} y1="0" x2={size * 0.3} y2="0" stroke="rgba(255,255,255,0.5)" strokeWidth={size * 0.035} />
-      <line x1="0" y1={-size * 0.3} x2="0" y2={size * 0.3} stroke="rgba(255,255,255,0.5)" strokeWidth={size * 0.035} />
-      <circle cx="0" cy="0" r={size * 0.22} fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth={size * 0.05} />
-      <circle cx="0" cy="0" r={size * 0.07} fill="rgba(255,255,255,0.92)" />
-    </>
-  ),
-  community: (color, size) => (
-    <>
-      <circle cx="0" cy="0" r={size * 0.42} fill={color} fillOpacity="0.9" />
-      <circle cx="0" cy={-size * 0.12} r={size * 0.09} fill="rgba(255,255,255,0.92)" />
-      <path
-        d={`M${-size * 0.2} ${size * 0.2} Q${-size * 0.16} ${size * 0.04} 0 ${size * 0.01} Q${size * 0.16} ${size * 0.04} ${size * 0.2} ${size * 0.2}`}
-        fill="none" stroke="rgba(255,255,255,0.92)" strokeWidth={size * 0.05}
-      />
-    </>
-  ),
-}
+import { elementIconShapes, hasElementIcon } from './ElementIcon'
 
 // Visual state priority (highest wins):
 //   factory > element > completionCandidate > patternMatch(complete) > partialMatch(near-miss)
@@ -155,10 +112,10 @@ export default function HexCell({
       )}
 
       {/* Element token · bespoke civilization icon · scales in on placement (reduced-motion safe). */}
-      {element && ELEMENT_ICONS[element] && (
+      {element && hasElementIcon(element) && (
         <g transform={`translate(${x},${y})`} style={{ pointerEvents: 'none' }}>
           <g className="hex-element-in">
-            {ELEMENT_ICONS[element](ELEMENT_COLORS[element], HEX_SIZE)}
+            {elementIconShapes(element, ELEMENT_COLORS[element], HEX_SIZE)}
           </g>
         </g>
       )}
