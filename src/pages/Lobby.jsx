@@ -145,6 +145,7 @@ export default function Lobby({ onGameStart }) {
           </button>
         ) : (
           <button
+            data-testid="ready-btn"
             style={{ ...primaryBtn, background: isReady ? 'rgba(30,200,100,0.2)' : 'rgba(255,255,255,0.08)' }}
             onClick={() => setReady(!isReady)}
           >

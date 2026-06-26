@@ -149,8 +149,10 @@ export default function GameRoom() {
       {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
       {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} sync={sync} roomId={roomId} />}
 
-      {/* FIRST-TURN TUTORIAL · the onboarding the first playtest never had · once ever per browser */}
-      {showTutorial && isMyTurn && phase === 'playing' && (
+      {/* FIRST-GAME TUTORIAL · once ever per browser · shows for BOTH players the moment the game starts
+          (NOT gated on isMyTurn · S8's isMyTurn gate meant the joining player never saw it until their
+          first turn · the waiting player should learn the rules while the host moves · T1 S10). */}
+      {showTutorial && phase === 'playing' && (
         <Tutorial onDismiss={() => setShowTutorial(false)} />
       )}
 

@@ -127,6 +127,7 @@ export default function Tutorial({ onDismiss }) {
           {!isLast ? (
             <>
               <button
+                data-testid="tutorial-skip"
                 onClick={dismiss}
                 style={{
                   height: 48, minHeight: 48, flex: '0 0 auto', padding: '0 20px',
@@ -153,6 +154,7 @@ export default function Tutorial({ onDismiss }) {
           ) : (
             <button
               autoFocus
+              data-testid="tutorial-dismiss"
               onClick={dismiss}
               style={{
                 height: 52, minHeight: 52, flex: 1,
