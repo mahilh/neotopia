@@ -18,6 +18,8 @@ export default function ActionBar({
   isMyTurn = true,        // solo is always your turn
   actionsRemaining = 3,
   bonusTokens = [],       // [type, ...] held by the current player
+  turnTimeRemaining = null, // seconds left this turn · null hides the timer (legacy callers / tests)
+  turnTimeLimit = 90,     // full turn budget · drives the progress-bar width
   onEndTurn = () => {},
 }) {
   const used = Math.max(0, TOTAL_ACTIONS - actionsRemaining)
@@ -63,6 +65,36 @@ export default function ActionBar({
         >
           {status}
         </span>
+
+        {/* Turn timer · live per-second readout + shrinking bar (driven by GameRoom's local countdown).
+            Warm amber, turning red under 10s. tabular-nums (rule 5). null hides it for solo/legacy/tests. */}
+        {turnTimeRemaining != null && (
+          <div
+            data-testid="turn-timer"
+            role="progressbar"
+            aria-label="Turn time remaining"
+            aria-valuemin={0}
+            aria-valuemax={turnTimeLimit}
+            aria-valuenow={Math.ceil(turnTimeRemaining)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 2 }}
+          >
+            <span style={{
+              color: turnTimeRemaining <= 10 ? '#E24B4A' : '#E2A23B',
+              fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+              minWidth: 26, textAlign: 'right',
+            }}>
+              {Math.ceil(turnTimeRemaining)}s
+            </span>
+            <div style={{ width: 52, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.max(0, Math.min(100, (turnTimeRemaining / turnTimeLimit) * 100))}%`,
+                background: turnTimeRemaining <= 10 ? '#E24B4A' : '#E2A23B',
+                transition: 'width 1s linear',
+              }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CENTER · action dots (filled = used) */}

@@ -14,6 +14,7 @@ import { ScoreFlash } from '../components/ProjectCard'
 import CardFrame from '../components/CardFrame'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
+import { TURN_TIME_LIMIT } from '../store/gameConfig'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
 
@@ -50,6 +51,7 @@ export default function GameRoom() {
   const actionsLeft   = useGameStore(s => s.actionsRemaining)
   const currentSeat   = useGameStore(s => s.currentSeat)
   const turnNumber    = useGameStore(s => s.turnNumber)
+  const turnTimeRemaining = useGameStore(s => s.turnTimeRemaining)
   const theOffer      = useGameStore(s => s.theOffer)
   const factories     = useGameStore(s => s.factories)
   const regions       = useGameStore(s => s.regions)
@@ -62,6 +64,18 @@ export default function GameRoom() {
     () => players.find(p => p.userId && p.userId === user?.id)?.seat ?? null,
     [players, user?.id],
   )
+
+  // Local per-second turn countdown · DISPLAY ONLY. The store holds no clock (rule 32 · the reducer only
+  // RESETS turnTimeRemaining to TURN_TIME_LIMIT each turn), so we tick a local copy down for a live
+  // readout and re-anchor it whenever the turn changes (currentSeat/turnNumber) or the synced value
+  // updates. Never writes the store · forward-compatible if T2 later drives the decrement via sync (T1 S12).
+  const [turnSecondsLeft, setTurnSecondsLeft] = useState(turnTimeRemaining)
+  useEffect(() => {
+    setTurnSecondsLeft(turnTimeRemaining)
+    if (phase !== 'playing') return
+    const id = setInterval(() => setTurnSecondsLeft(s => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(id)
+  }, [turnTimeRemaining, currentSeat, turnNumber, phase])
 
   // DEV solo-init: ONLY when there is no route roomId (a real game is seeded by useGameSync).
   // Gated on the route roomId per T3 · never inits a solo game over a real session.
@@ -355,6 +369,8 @@ export default function GameRoom() {
         isMyTurn={isMyTurn}
         actionsRemaining={actionsLeft}
         bonusTokens={currentPlayer?.bonusTokens ?? []}
+        turnTimeRemaining={turnSecondsLeft}
+        turnTimeLimit={TURN_TIME_LIMIT}
         onEndTurn={handleEndTurn}
       />
     </div>
