@@ -20,6 +20,20 @@ function serializableState() {
   return JSON.parse(JSON.stringify(useGameStore.getState()))
 }
 
+// game_events.event_type is constrained by a DB CHECK · the app's move loop (useGameActions) emits
+// its own shorthand · this maps each to the DB-allowed vocabulary at the persistence boundary.
+// (draw_card | place_element | build_project | use_bonus | factory_refill | turn_end | game_end)
+// Exported so a unit test guards the vocabulary against the CHECK · no future move can silently 400.
+export const EVENT_TYPE_DB = {
+  place:   'place_element',
+  draw:    'draw_card',
+  score:   'build_project',
+  endTurn: 'turn_end',
+  bonus:   'use_bonus',
+  refill:  'factory_refill',
+  gameEnd: 'game_end',
+}
+
 export function useGameSync(roomId, currentUserId) {
   const channelRef = useRef(null)
   const sessionIdRef = useRef(null)   // game_sessions.id · required for game_events FK (NOT room_id)
@@ -124,7 +138,13 @@ export function useGameSync(roomId, currentUserId) {
 
     if (stateErr) return { error: stateErr }
 
-    if (eventType && sessionIdRef.current) {
+    // Translate the app's event name to the DB-allowed vocabulary FIRST · the game_events
+    // event_type CHECK rejects 'place'/'draw'/'score'/'endTurn' outright, so every move's audit
+    // insert returned HTTP 400 (T1 S5 found this · it was the CHECK, NOT a missing session_id ·
+    // a 400 proves the row reached the DB, so session_id was present). Skip unmapped types rather
+    // than send a value the CHECK will reject.
+    const dbEventType = EVENT_TYPE_DB[eventType]
+    if (dbEventType && sessionIdRef.current) {
       // session_id MUST be game_sessions.id (uuid FK) · room_id here would FK-fail every event.
       // sequence_num is GENERATED ALWAYS AS IDENTITY · do NOT provide it · the DB owns the
       // monotonic order (an explicit value errors "cannot insert a non-DEFAULT value"). Letting
@@ -132,9 +152,11 @@ export function useGameSync(roomId, currentUserId) {
       await supabase.from('game_events').insert({
         session_id: sessionIdRef.current,
         seat_number: s.currentSeat,
-        event_type: eventType,
+        event_type: dbEventType,
         event_data: eventData,
       }) // best-effort · ignore errors so a flaky audit insert never reverts a valid move
+    } else if (eventType && !dbEventType && import.meta.env.DEV) {
+      console.warn(`[T3] no game_events mapping for "${eventType}" · audit row skipped (add it to EVENT_TYPE_DB)`)
     }
     return { error: null }
   }, [roomId])

@@ -37,3 +37,8 @@ dist-ssr
 
 # Playwright MCP browser-verification output (local only)
 .playwright-mcp/
+
+# Playwright E2E artifacts (generated · never commit)
+/test-results/
+/playwright-report/
+/playwright/.cache/

@@ -58,10 +58,16 @@ FIX: Never put store object in deps · use useGameStore.getState() inside callba
 SYMPTOM: two joiners simultaneously → one player lost
 FIX: SECURITY DEFINER trigger on room_players INSERT/DELETE → COUNT actual rows
 
-### Bug 12 · game_events 400 on insert (T1 S5 · ACTIVE · T2 S7 fixes)
+### Bug 12 · game_events 400 on insert (T1 S5 · FIXED T3 S6)
 SYMPTOM: game_events INSERT returns 400 · sync still works (events are best-effort)
-CAUSE: likely session_id not yet populated in store when first move fires
-FIX PENDING: T2 S7 · ensure sessionId set before first pushState call
+REAL CAUSE (the "session_id null" guess was WRONG · a 400 means the row REACHED the DB · a null ref
+  would skip the insert with no HTTP call at all): event_type has a CHECK constraint
+  event_type IN ('draw_card','place_element','build_project','use_bonus','factory_refill','turn_end','game_end').
+  The app emits 'place'/'draw'/'score'/'endTurn' (useGameActions.persist) · NONE are in the set → 23514 → 400.
+FIX: EVENT_TYPE_DB map in useGameSync.js translates app→DB vocabulary at the persistence boundary ·
+  unmapped types skip + dev-warn. Guarded by src/hooks/useGameSync.eventmap.test.js.
+LESSON: read the HTTP status as a witness · 400 (not 403, not "no request") = payload/CHECK, never a
+  missing FK. Premise-check pg_constraint (NOT information_schema) · verify against the live predicate.
 
 ### Bug 13 · Anon session not persisting across reload (T2 S6 · FIXED d420342)
 SYMPTOM: page reload = new user_id · RLS 403 · lost seat

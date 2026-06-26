@@ -1,0 +1,1791 @@
+{
+  "phase": "playing",
+  "roomId": null,
+  "players": [
+    {
+      "seat": 0,
+      "userId": "00000000-0000-0000-0000-000000000001",
+      "username": "Alice",
+      "color": "blue",
+      "hand": [
+        {
+          "id": "card_56",
+          "name": "2055 Horizon",
+          "pattern": [
+            {
+              "q": 0,
+              "r": 0,
+              "type": "energy"
+            },
+            {
+              "q": 1,
+              "r": 0,
+              "type": "biofarming"
+            },
+            {
+              "q": 0,
+              "r": 1,
+              "type": "technology"
+            },
+            {
+              "q": 1,
+              "r": -1,
+              "type": "community"
+            },
+            {
+              "q": -1,
+              "r": 1,
+              "type": "energy"
+            }
+          ],
+          "points": 5,
+          "illustration": "horizon",
+          "district": 1,
+          "description": "The year this civilization exists in physical reality. Every card played brings it closer."
+        },
+        {
+          "id": "card_23",
+          "name": "Free Energy Lab",
+          "pattern": [
+            {
+              "q": 0,
+              "r": 0,
+              "type": "energy"
+            },
+            {
+              "q": 1,
+              "r": 0,
+              "type": "technology"
+            },
+            {
+              "q": 1,
+              "r": -1,
+              "type": "energy"
+            }
+          ],
+          "points": 3,
+          "illustration": "lab",
+          "district": 4,
+          "description": "My grandfather's dream. The invention that cannot be suppressed."
+        },
+        {
+          "id": "card_19",
+          "name": "Quantum Observatory",
+          "pattern": [
+            {
+              "q": 0,
+              "r": 0,
+              "type": "technology"
+            },
+            {
+              "q": 1,
+              "r": -1,
+              "type": "technology"
+            },
+            {
+              "q": 0,
+              "r": 1,
+              "type": "energy"
+            }
+          ],
+          "points": 3,
+          "illustration": "observatory",
+          "district": 7,
+          "description": "We built telescopes to see the stars. Now we build tools to see ourselves."
+        }
+      ],
+      "bonusTokens": [],
+      "scores": [
+        0,
+        0,
+        0
+      ],
+      "scoredCardIds": []
+    },
+    {
+      "seat": 1,
+      "userId": "00000000-0000-0000-0000-000000000002",
+      "username": "Bob",
+      "color": "red",
+      "hand": [
+        {
+          "id": "card_27",
+          "name": "Sound Chamber",
+          "pattern": [
+            {
+              "q": 0,
+              "r": 0,
+              "type": "community"
+            },
+            {
+              "q": 0,
+              "r": 1,
+              "type": "energy"
+            },
+            {
+              "q": 1,
+              "r": -1,
+              "type": "community"
+            }
+          ],
+          "points": 3,
+          "illustration": "chamber",
+          "district": 2,
+          "description": "Frequency is the original medicine. The body remembers."
+        },
+        {
+          "id": "card_41",
+          "name": "Conscious Tech Lab",
+          "pattern": [
+            {
+              "q": 0,
+              "r": 0,
+              "type": "technology"
+            },
+            {
+              "q": 0,
+              "r": 1,
+              "type": "technology"
+            },
+            {
+              "q": 1,
+              "r": -1,
+              "type": "energy"
+            },
+            {
+              "q": -1,
+              "r": 1,
+              "type": "community"
+            }
+          ],
+          "points": 4,
+          "illustration": "lab",
+          "district": 7,
+          "description": "Technology designed with soul · the rarest substance on Earth."
+        },
+        {
+          "id": "card_22",
+          "name": "Frequency Gate",
+          "pattern": [
+            {
+              "q": 0,
+              "r": 0,
+              "type": "technology"
+            },
+            {
+              "q": 1,
+              "r": 0,
+              "type": "community"
+            },
+            {
+              "q": 0,
+              "r": 1,
+              "type": "community"
+            }
+          ],
+          "points": 3,
+          "illustration": "gate",
+          "district": 1,
+          "description": "Some doors are made of sound. You pass through by resonating."
+        }
+      ],
+      "bonusTokens": [],
+      "scores": [
+        0,
+        0,
+        0
+      ],
+      "scoredCardIds": []
+    }
+  ],
+  "currentSeat": 0,
+  "actionsRemaining": 3,
+  "bonusUsedThisTurn": false,
+  "turnNumber": 1,
+  "regions": [
+    {
+      "id": 0,
+      "name": "Sacred City",
+      "center": {
+        "q": 0,
+        "r": 0
+      },
+      "hexes": {},
+      "lastBuiltIllustration": null,
+      "scores": {},
+      "bonusPile": []
+    },
+    {
+      "id": 1,
+      "name": "Living Earth",
+      "center": {
+        "q": 8,
+        "r": -4
+      },
+      "hexes": {},
+      "lastBuiltIllustration": null,
+      "scores": {},
+      "bonusPile": []
+    },
+    {
+      "id": 2,
+      "name": "Free Energy",
+      "center": {
+        "q": 4,
+        "r": 5
+      },
+      "hexes": {},
+      "lastBuiltIllustration": null,
+      "scores": {},
+      "bonusPile": []
+    }
+  ],
+  "factories": [
+    {
+      "id": 0,
+      "betweenRegions": [
+        0,
+        1
+      ],
+      "q": 4,
+      "r": -2,
+      "elements": [
+        {
+          "type": "energy",
+          "count": 1
+        },
+        {
+          "type": "biofarming",
+          "count": 1
+        },
+        {
+          "type": "technology",
+          "count": 1
+        },
+        {
+          "type": "community",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "betweenRegions": [
+        1,
+        2
+      ],
+      "q": 6,
+      "r": 1,
+      "elements": [
+        {
+          "type": "energy",
+          "count": 1
+        },
+        {
+          "type": "biofarming",
+          "count": 1
+        },
+        {
+          "type": "technology",
+          "count": 1
+        },
+        {
+          "type": "community",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "betweenRegions": [
+        0,
+        2
+      ],
+      "q": 2,
+      "r": 3,
+      "elements": [
+        {
+          "type": "energy",
+          "count": 1
+        },
+        {
+          "type": "biofarming",
+          "count": 1
+        },
+        {
+          "type": "technology",
+          "count": 1
+        },
+        {
+          "type": "community",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "theOffer": [
+    {
+      "id": "card_40",
+      "name": "Bio-Energy Nexus",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 4,
+      "illustration": "nexus",
+      "district": 4,
+      "description": "The field knows. The sun gives. Together they power everything."
+    },
+    {
+      "id": "card_20",
+      "name": "Food Forest",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        }
+      ],
+      "points": 3,
+      "illustration": "forest",
+      "district": 5,
+      "description": "A forest that feeds you is a civilization that loves you."
+    },
+    {
+      "id": "card_15",
+      "name": "AetherNet Tower",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 2,
+          "type": "energy"
+        }
+      ],
+      "points": 3,
+      "illustration": "tower",
+      "district": 7,
+      "description": "Signal rises from earth to sky, carrying consciousness upward."
+    },
+    {
+      "id": "card_11",
+      "name": "Code Commons",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        }
+      ],
+      "points": 2,
+      "illustration": "commons",
+      "district": 8,
+      "description": "Open source as a spiritual practice: share the code, share the light."
+    }
+  ],
+  "deck": [
+    {
+      "id": "card_32",
+      "name": "Open Contact Embassy",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "technology"
+        }
+      ],
+      "points": 4,
+      "illustration": "embassy",
+      "district": 9,
+      "description": "A civilization ready for contact with the unknown is a civilization ready for itself."
+    },
+    {
+      "id": "card_01",
+      "name": "Solar Garden",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        }
+      ],
+      "points": 2,
+      "illustration": "garden",
+      "district": 4,
+      "description": "Where sunlight becomes sustenance and the soil remembers."
+    },
+    {
+      "id": "card_53",
+      "name": "Cosmic Council Hall",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 5,
+      "illustration": "hall",
+      "district": 9,
+      "description": "All four elements gathered in service of the ninth district: open contact with the unknown."
+    },
+    {
+      "id": "card_12",
+      "name": "Wind Weave",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "energy"
+        }
+      ],
+      "points": 2,
+      "illustration": "weave",
+      "district": 4,
+      "description": "Invisible force made visible through elegant design."
+    },
+    {
+      "id": "card_03",
+      "name": "Signal Bridge",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "technology"
+        }
+      ],
+      "points": 2,
+      "illustration": "bridge",
+      "district": 7,
+      "description": "Data flows as freely as water in a conscious civilization."
+    },
+    {
+      "id": "card_39",
+      "name": "Council Chamber",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "chamber",
+      "district": 1,
+      "description": "Nine seats. Nine fields of life. One civilization in balance."
+    },
+    {
+      "id": "card_29",
+      "name": "Consciousness Hub",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "technology"
+        }
+      ],
+      "points": 3,
+      "illustration": "hub",
+      "district": 1,
+      "description": "Connection is not a product. It is the civilization."
+    },
+    {
+      "id": "card_47",
+      "name": "Earth Embassy",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 4,
+      "illustration": "embassy",
+      "district": 9,
+      "description": "Every piece of living land is sovereign. We are its ambassadors."
+    },
+    {
+      "id": "card_36",
+      "name": "Hempcrete District",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "district",
+      "district": 6,
+      "description": "Buildings grown from the earth must return to it. Architecture as regeneration."
+    },
+    {
+      "id": "card_10",
+      "name": "Solar Spring",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 2,
+      "illustration": "spring",
+      "district": 5,
+      "description": "Sun feeds water feeds earth in an unbroken sacred loop."
+    },
+    {
+      "id": "card_06",
+      "name": "Seed Vault",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "community"
+        }
+      ],
+      "points": 2,
+      "illustration": "vault",
+      "district": 5,
+      "description": "Every seed holds a civilization inside it."
+    },
+    {
+      "id": "card_14",
+      "name": "BioFarm Collective",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 3,
+      "illustration": "farm",
+      "district": 5,
+      "description": "Three growing things: three generations of memory in the soil."
+    },
+    {
+      "id": "card_44",
+      "name": "Healing Arts Center",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "technology"
+        }
+      ],
+      "points": 4,
+      "illustration": "center",
+      "district": 2,
+      "description": "The body knows how to heal. We build the conditions and step aside."
+    },
+    {
+      "id": "card_17",
+      "name": "Energy Spire",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 2,
+          "r": 0,
+          "type": "energy"
+        }
+      ],
+      "points": 3,
+      "illustration": "spire",
+      "district": 4,
+      "description": "Three aligned sources: a harmonic that amplifies."
+    },
+    {
+      "id": "card_43",
+      "name": "Harmonic Grid",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "grid",
+      "district": 4,
+      "description": "Power distributed equally is power that cannot be corrupted."
+    },
+    {
+      "id": "card_45",
+      "name": "Memory Garden",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "garden",
+      "district": 8,
+      "description": "We plant what our grandparents dreamed. We harvest what our children will know."
+    },
+    {
+      "id": "card_21",
+      "name": "Solarpunk Atrium",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        }
+      ],
+      "points": 3,
+      "illustration": "atrium",
+      "district": 6,
+      "description": "Glass, light, plants, people: the four elements of a living building."
+    },
+    {
+      "id": "card_30",
+      "name": "Seed Library",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        }
+      ],
+      "points": 3,
+      "illustration": "library",
+      "district": 5,
+      "description": "A seed is a whole universe compressed. We keep universes here."
+    },
+    {
+      "id": "card_13",
+      "name": "Sacred Geometry Park",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        }
+      ],
+      "points": 3,
+      "illustration": "park",
+      "district": 6,
+      "description": "Space itself can be a teacher when designed with sacred mathematics."
+    },
+    {
+      "id": "card_54",
+      "name": "Hameed's Observatory",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        }
+      ],
+      "points": 5,
+      "illustration": "observatory",
+      "district": 7,
+      "description": "Named for Hameed Ahmed Khan: inventor, engineer, spiritual scientist. The baton has been passed."
+    },
+    {
+      "id": "card_51",
+      "name": "Infinite Garden",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 5,
+      "illustration": "garden",
+      "district": 5,
+      "description": "Five growing things surrounding one witness. The food forest and its guardian."
+    },
+    {
+      "id": "card_55",
+      "name": "Living City Core",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": -1,
+          "type": "community"
+        }
+      ],
+      "points": 5,
+      "illustration": "core",
+      "district": 6,
+      "description": "Sacred solarpunk futurism made concrete. The city as a living mandala."
+    },
+    {
+      "id": "card_25",
+      "name": "Mushroom Dome",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        }
+      ],
+      "points": 3,
+      "illustration": "dome",
+      "district": 5,
+      "description": "Mycelium computing. The first conscious building material."
+    },
+    {
+      "id": "card_07",
+      "name": "Healing Pool",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        }
+      ],
+      "points": 2,
+      "illustration": "pool",
+      "district": 2,
+      "description": "Clean water and human presence: the first medicine."
+    },
+    {
+      "id": "card_46",
+      "name": "Frequency Research Hub",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "energy"
+        }
+      ],
+      "points": 4,
+      "illustration": "hub",
+      "district": 2,
+      "description": "Everything vibrates. The only question is: what frequency are you building?"
+    },
+    {
+      "id": "card_31",
+      "name": "Solar Temple",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "temple",
+      "district": 1,
+      "description": "The oldest technology is the sacred building. Stone aligned with sun."
+    },
+    {
+      "id": "card_50",
+      "name": "Source Temple",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "technology"
+        }
+      ],
+      "points": 5,
+      "illustration": "temple",
+      "district": 1,
+      "description": "The inner temple of NeoTopia. Where the work of expanding consciousness begins."
+    },
+    {
+      "id": "card_37",
+      "name": "KnowBrand Studio",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 2,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "studio",
+      "district": 8,
+      "description": "Clothing as prayer. What you wear is who you are becoming."
+    },
+    {
+      "id": "card_28",
+      "name": "Living Archive",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 2,
+          "r": 0,
+          "type": "biofarming"
+        }
+      ],
+      "points": 3,
+      "illustration": "archive",
+      "district": 8,
+      "description": "A civilization is remembered through what it chose to preserve."
+    },
+    {
+      "id": "card_49",
+      "name": "NeoTopia Heart",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "community"
+        }
+      ],
+      "points": 5,
+      "illustration": "heart",
+      "district": 1,
+      "description": "The full civilization compressed into five connected hexes. This is what we are building."
+    },
+    {
+      "id": "card_26",
+      "name": "Star Map Center",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 3,
+      "illustration": "starmap",
+      "district": 9,
+      "description": "To know where we are in the cosmos is to know who we are."
+    },
+    {
+      "id": "card_35",
+      "name": "Sacred Water Tower",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 2,
+          "type": "community"
+        }
+      ],
+      "points": 4,
+      "illustration": "tower",
+      "district": 5,
+      "description": "Water carries memory. A NeoTopian water tower carries intention."
+    },
+    {
+      "id": "card_48",
+      "name": "Covenant Node",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        }
+      ],
+      "points": 4,
+      "illustration": "node",
+      "district": 1,
+      "description": "Where all four forces agree: that is the center of NeoTopia."
+    },
+    {
+      "id": "card_42",
+      "name": "Soul Academy",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        }
+      ],
+      "points": 4,
+      "illustration": "academy",
+      "district": 3,
+      "description": "Education that awakens instead of programs. The rarest school."
+    },
+    {
+      "id": "card_38",
+      "name": "Pyramid Research Center",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        }
+      ],
+      "points": 4,
+      "illustration": "pyramid",
+      "district": 4,
+      "description": "Ancient structure. Modern understanding. My grandfather stood here first."
+    },
+    {
+      "id": "card_16",
+      "name": "Healing Sanctuary",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "community"
+        }
+      ],
+      "points": 3,
+      "illustration": "sanctuary",
+      "district": 2,
+      "description": "The body heals fastest in spaces designed for healing."
+    },
+    {
+      "id": "card_05",
+      "name": "AetherFlux Node",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        }
+      ],
+      "points": 2,
+      "illustration": "node",
+      "district": 7,
+      "description": "Clean energy and clean code, speaking the same language."
+    },
+    {
+      "id": "card_52",
+      "name": "AetherFlux Array",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": -1,
+          "r": 1,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        }
+      ],
+      "points": 5,
+      "illustration": "array",
+      "district": 4,
+      "description": "Four aligned energy sources and one intelligence to guide them. Free energy becomes real."
+    },
+    {
+      "id": "card_24",
+      "name": "Crystal Academy",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 3,
+      "illustration": "academy",
+      "district": 3,
+      "description": "Knowledge organized around the soul, not the exam."
+    },
+    {
+      "id": "card_18",
+      "name": "Meditation Hall",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 3,
+      "illustration": "hall",
+      "district": 1,
+      "description": "Still minds change everything. One room changes a district."
+    },
+    {
+      "id": "card_09",
+      "name": "Data Grove",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 2,
+      "illustration": "grove",
+      "district": 7,
+      "description": "Living computation · the forest is the first AI."
+    },
+    {
+      "id": "card_34",
+      "name": "Regeneration Field",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        }
+      ],
+      "points": 4,
+      "illustration": "field",
+      "district": 5,
+      "description": "Four seasons of conscious farming restore what centuries of extraction took."
+    },
+    {
+      "id": "card_33",
+      "name": "AetherMind Campus",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 1,
+          "r": 0,
+          "type": "technology"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        },
+        {
+          "q": 1,
+          "r": -1,
+          "type": "energy"
+        }
+      ],
+      "points": 4,
+      "illustration": "campus",
+      "district": 7,
+      "description": "The first AI that helps instead of traps. Built with love."
+    },
+    {
+      "id": "card_02",
+      "name": "Root Network",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "biofarming"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "biofarming"
+        }
+      ],
+      "points": 2,
+      "illustration": "network",
+      "district": 5,
+      "description": "Mycelium intelligence connecting the living earth beneath our feet."
+    },
+    {
+      "id": "card_08",
+      "name": "Spark Terminal",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "energy"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 2,
+      "illustration": "terminal",
+      "district": 4,
+      "description": "Power that flows toward the people, not away from them."
+    },
+    {
+      "id": "card_04",
+      "name": "Gathering Circle",
+      "pattern": [
+        {
+          "q": 0,
+          "r": 0,
+          "type": "community"
+        },
+        {
+          "q": 0,
+          "r": 1,
+          "type": "community"
+        }
+      ],
+      "points": 2,
+      "illustration": "circle",
+      "district": 1,
+      "description": "The oldest technology: people coming together with intention."
+    }
+  ],
+  "productionTiles": [
+    {
+      "id": 4,
+      "elements": {
+        "energy": 0,
+        "biofarming": 1,
+        "technology": 2,
+        "community": 1
+      }
+    },
+    {
+      "id": 5,
+      "elements": {
+        "energy": 1,
+        "biofarming": 0,
+        "technology": 1,
+        "community": 2
+      }
+    },
+    {
+      "id": 2,
+      "elements": {
+        "energy": 1,
+        "biofarming": 0,
+        "technology": 2,
+        "community": 1
+      }
+    },
+    {
+      "id": 8,
+      "elements": {
+        "energy": 1,
+        "biofarming": 1,
+        "technology": 0,
+        "community": 2
+      }
+    },
+    {
+      "id": 3,
+      "elements": {
+        "energy": 2,
+        "biofarming": 2,
+        "technology": 0,
+        "community": 0
+      }
+    },
+    {
+      "id": 6,
+      "elements": {
+        "energy": 2,
+        "biofarming": 0,
+        "technology": 2,
+        "community": 0
+      }
+    },
+    {
+      "id": 7,
+      "elements": {
+        "energy": 0,
+        "biofarming": 2,
+        "technology": 1,
+        "community": 1
+      }
+    },
+    {
+      "id": 0,
+      "elements": {
+        "energy": 2,
+        "biofarming": 1,
+        "technology": 1,
+        "community": 0
+      }
+    },
+    {
+      "id": 9,
+      "elements": {
+        "energy": 2,
+        "biofarming": 1,
+        "technology": 1,
+        "community": 0
+      }
+    },
+    {
+      "id": 10,
+      "elements": {
+        "energy": 0,
+        "biofarming": 0,
+        "technology": 2,
+        "community": 2
+      }
+    },
+    {
+      "id": 1,
+      "elements": {
+        "energy": 0,
+        "biofarming": 2,
+        "technology": 0,
+        "community": 2
+      }
+    },
+    {
+      "id": 11,
+      "elements": {
+        "energy": 1,
+        "biofarming": 1,
+        "technology": 1,
+        "community": 1
+      },
+      "isEndFlag": true
+    }
+  ],
+  "productionTilesRemaining": 12,
+  "endGameTriggered": false,
+  "endGameRoundsRemaining": 2,
+  "pendingMoves": {},
+  "lastError": null
+}
