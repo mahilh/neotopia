@@ -102,7 +102,7 @@ export default function Lobby({ onGameStart }) {
 
         <div style={codeBox}>
           <p style={label}>Room Code</p>
-          <div style={codeDisplay}>{roomCode}</div>
+          <div style={codeDisplay} data-testid="room-code">{roomCode}</div>
           <button style={copyBtn} onClick={copyCode}>
             {copied ? '✓ Copied' : 'Copy code'}
           </button>
