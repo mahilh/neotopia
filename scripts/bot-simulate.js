@@ -9,13 +9,12 @@
 //
 // Options: BOT_GAMES=5 BOT_TURNS=20 BOT_HEADED=1
 //
-// v4 — June 26 2026:
-//   ROOT CAUSE FOUND: alternating activePage by turn number was wrong.
-//   Seat assignment is DB-driven. BotAlpha might be seat 1 (goes second),
-//   BotBeta might be seat 0 (goes first). The alternation was always
-//   checking the wrong page → stuck-state every turn despite game running.
-//   FIX: poll BOTH pages for the active turn badge · act on whichever one shows.
-//   Also: both players now dismiss tutorial (p2 was missed in prior versions).
+// v4.1 — June 26 2026:
+//   ROOT CAUSE (v4): turn alternation assumption was wrong · seat is DB-driven
+//   FIX (v4): detectActiveTurn polls BOTH pages · acts on whichever shows badge
+//   BUGFIX (v4.1): room code selector — [style*="letter-spacing"] selector was
+//   inadvertently dropped from v4 · it was the selector that actually matched
+//   in production (AZRHUE run) · restored + more fallbacks added
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync } from 'fs'
@@ -98,7 +97,6 @@ async function doRandomAction(page, turn, errors) {
   }
 }
 
-// Dismiss tutorial for one player page — tries all known selectors
 async function dismissTutorial(page, label) {
   const tutorialSelectors = [
     '[data-testid="tutorial-skip"]',
@@ -118,21 +116,14 @@ async function dismissTutorial(page, label) {
   return false
 }
 
-// ============================================================
-// THE CORE FIX (v4):
 // Poll BOTH player pages to detect the active turn.
 // Do NOT assume alternation — seat assignment is DB-driven.
 // BotAlpha might be seat 1 (goes second), BotBeta seat 0 (first).
-// Previous alternating logic (turn%2===0 ? p1 : p2) checked the
-// wrong page on every turn → stuck-state:90 despite game running.
-// ============================================================
 async function detectActiveTurn(p1, p2) {
-  // Check p1 first, then p2. Both checked per turn.
-  // Selectors: .my-turn-badge class (conditionally rendered) + data-my-turn attr (T1 S11)
   const TURN_SELECTORS = [
-    '[data-my-turn="true"]',       // T1 S11: persistent attr on game root · no timing issue
-    '.my-turn-badge',              // T1 S9: CSS class · conditionally mounted
-    'text=/your turn/i',           // Fallback text match
+    '[data-my-turn="true"]',  // T1 S11: persistent attr on game root · no timing issue
+    '.my-turn-badge',         // T1 S9: CSS class · conditionally mounted
+    'text=/your turn/i',      // Fallback text match
   ]
 
   for (const sel of TURN_SELECTORS) {
@@ -145,7 +136,68 @@ async function detectActiveTurn(p1, p2) {
     if (p2Active) return { page: p2, label: 'p2' }
   }
 
-  return null // Neither player has an active turn detected
+  return null
+}
+
+// Extract room code from the lobby page with multiple fallback strategies.
+// v4.1 FIX: restore the [style*="letter-spacing"] selector that matched in production.
+// The room code in NeoTopia lobby is a letter-spaced monospace element (copy-button UI).
+async function extractRoomCode(page) {
+  // Strategy 1: known class names (most reliable when present)
+  const classSelectors = [
+    '[class*="room-code"]',
+    '[class*="roomCode"]',
+    '[class*="RoomCode"]',
+    '[data-testid="room-code"]',
+  ]
+  for (const sel of classSelectors) {
+    try {
+      const el = await page.waitForSelector(sel, { timeout: 2000 })
+      const text = (await el.textContent()).trim().replace(/\s/g, '')
+      const match = text.match(/[A-Z0-9]{4,6}/)
+      if (match) return match[0]
+    } catch { /* continue */ }
+  }
+
+  // Strategy 2: letter-spacing style (matched AZRHUE in production — DO NOT REMOVE)
+  try {
+    const el = await page.waitForSelector(
+      '[style*="letter-spacing"][style*="monospace"], [style*="letter-spacing"] code, [style*="letter-spacing"] span',
+      { timeout: 3000 }
+    )
+    const text = (await el.textContent()).trim().replace(/\s/g, '')
+    const match = text.match(/[A-Z0-9]{4,6}/)
+    if (match) return match[0]
+  } catch { /* continue */ }
+
+  // Strategy 3: <code> tag
+  try {
+    const el = await page.waitForSelector('code', { timeout: 2000 })
+    const text = (await el.textContent()).trim().replace(/\s/g, '')
+    const match = text.match(/[A-Z0-9]{4,6}/)
+    if (match) return match[0]
+  } catch { /* continue */ }
+
+  // Strategy 4: scan ALL visible text for a 6-char uppercase alphanumeric code
+  try {
+    const code = await page.evaluate(() => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+      let node
+      while ((node = walker.nextNode())) {
+        const text = node.textContent.trim().replace(/\s/g, '')
+        const match = text.match(/^[A-Z0-9]{6}$/)
+        if (match) return match[0]
+      }
+      return null
+    })
+    if (code) return code
+  } catch { /* continue */ }
+
+  // Strategy 5: URL may contain the code after room creation
+  const urlMatch = page.url().match(/[A-Z0-9]{6}/)
+  if (urlMatch) return urlMatch[0]
+
+  return null
 }
 
 async function playGame(gameNum, browser) {
@@ -161,33 +213,21 @@ async function playGame(gameNum, browser) {
     const p1 = await enterLobby(ctx1, `BotAlpha${gameNum}_${tag}`)
     const p2 = await enterLobby(ctx2, `BotBeta${gameNum}_${tag}`)
 
-    // p1 creates room
     const createBtn = await p1.waitForSelector(
       'button:has-text("Create Room"), button:has-text("Create")',
       { timeout: 10000 }
     )
     await createBtn.click()
-    await delay(1500)
+    await delay(1800) // extra time for room creation DB write
     log(`[BotAlpha${gameNum}] Created room`)
 
-    // Extract room code
-    let roomCode = null
-    try {
-      const codeEl = await p1.waitForSelector(
-        '[class*="room-code"], [class*="roomCode"], code',
-        { timeout: 6000 }
-      )
-      const raw = (await codeEl.textContent()).trim().replace(/\s/g, '')
-      roomCode = raw.match(/[A-Z0-9]{4,6}/)?.[0] || raw.slice(0, 6)
-      log(`Room code: ${roomCode}`)
-    } catch {
-      const urlMatch = p1.url().match(/[A-Z0-9]{6}/)
-      if (urlMatch) roomCode = urlMatch[0]
-      errors.push({ turn: 0, type: 'room-code-not-visible', message: 'Room code display missing' })
+    const roomCode = await extractRoomCode(p1)
+    if (!roomCode || roomCode.length < 4) {
+      errors.push({ turn: 0, type: 'room-code-not-visible', message: 'All 5 extraction strategies failed — room code UI needs data-testid="room-code"' })
+      throw new Error(`Bad room code: "${roomCode}"`)
     }
-    if (!roomCode || roomCode.length < 4) throw new Error(`Bad room code: "${roomCode}"`)
+    log(`Room code: ${roomCode}`)
 
-    // p2 joins
     const joinBtn = await p2.waitForSelector(
       'button:has-text("Join Room"), button:has-text("Join")',
       { timeout: 8000 }
@@ -203,18 +243,13 @@ async function playGame(gameNum, browser) {
     await delay(1000)
     log(`[BotBeta${gameNum}] Joined ${roomCode}`)
 
-    // Ready up — T1 S10: data-testid="ready-btn" on lobby Ready button
+    // Ready up (soft-fail — host may not have a Ready button in some lobby states)
     const readySelectors = ['[data-testid="ready-btn"]', 'button:has-text("Ready")', 'button:has-text("I\'m Ready")']
-
-    // Host (p1) may not need to click Ready in some lobby implementations.
-    // Try both; soft-fail so the game can still start.
     for (const page of [p1, p2]) {
       for (const sel of readySelectors) {
         const btn = page.locator(sel).first()
         if (await btn.isVisible({ timeout: 2500 }).catch(() => false)) {
-          await btn.click().catch(e => errors.push({
-            turn: 0, type: 'ready-failed', message: e.message.slice(0, 80)
-          }))
+          await btn.click().catch(e => errors.push({ turn: 0, type: 'ready-failed', message: e.message.slice(0, 80) }))
           await delay(300)
           break
         }
@@ -222,7 +257,6 @@ async function playGame(gameNum, browser) {
     }
     await delay(1000)
 
-    // Start game (host action)
     await p1.locator('button:has-text("Start")').click({ timeout: 6000 }).catch(e =>
       errors.push({ turn: 0, type: 'start-failed', message: e.message.slice(0, 80) })
     )
@@ -230,20 +264,19 @@ async function playGame(gameNum, browser) {
     await p1.waitForURL(/\/game\//, { timeout: 15000 })
     await p2.waitForURL(/\/game\//, { timeout: 15000 })
     log('Both on game board')
-    await delay(800) // allow DB state to sync before dismissing tutorial
+    await delay(800)
 
-    // Dismiss tutorial for BOTH players — the overlay blocks all clicks on each player's turn.
-    // Tutorial.jsx gates on phase==='playing' (T1 S10), so BOTH see it on game start.
+    // Dismiss tutorial for BOTH players in parallel
     const [t1ok, t2ok] = await Promise.all([
       dismissTutorial(p1, 'host'),
       dismissTutorial(p2, 'joiner'),
     ])
     if (!t1ok && !t2ok) {
-      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not dismissable · prod deploy lag or gate bug (T1 lane)' })
+      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not dismissable for either player' })
     }
     await delay(500)
 
-    // Play turns — v4: detect WHICH player has the active turn by polling both pages
+    // Play turns — poll BOTH pages for the active turn (v4 core fix)
     let turn = 0, gameEnded = false, stuckCount = 0
 
     while (turn < TURN_LIMIT && !gameEnded) {
@@ -263,22 +296,20 @@ async function playGame(gameNum, browser) {
       stuckCount = 0
       const { page: activePage, label } = active
 
-      // Perform 3 actions
       for (let a = 0; a < 3; a++) {
         const action = await doRandomAction(activePage, turn, errors)
         moves.push({ turn, action, player: label })
         await delay(250)
       }
 
-      // End turn
       await activePage.locator('[data-testid="end-turn-btn"], button:has-text("End Turn")').first()
         .click({ timeout: 3000 }).catch(() => {})
-      await delay(800) // allow DB sync before next turn detection
+      await delay(800)
 
       turn++
-      log(`Turn ${turn} · ${label} acted · placed:${moves.filter(m=>m.action==='placed-element').length}`)
+      const placedSoFar = moves.filter(m => m.action === 'placed-element').length
+      log(`Turn ${turn} · ${label} · placed:${placedSoFar}`)
 
-      // Check if game ended
       const finished = await p1.locator('text=/final score|civilization complete|2055/i')
         .isVisible({ timeout: 500 }).catch(() => false)
       if (finished) { log(`Game ${gameNum} complete at turn ${turn}`); gameEnded = true }
@@ -288,16 +319,9 @@ async function playGame(gameNum, browser) {
     const drew = moves.filter(m => m.action === 'drew-card').length
     log(`Game ${gameNum}: ${turn} turns · placed ${placed} · drew ${drew} · ${errors.length} errors`)
 
-    return {
-      game: gameNum,
-      completed: gameEnded,
-      turns: turn,
+    return { game: gameNum, completed: gameEnded, turns: turn,
       duration: Math.round((Date.now() - start) / 1000),
-      errors: errors.length,
-      placedElements: placed,
-      drewCards: drew,
-      errorList: errors,
-    }
+      errors: errors.length, placedElements: placed, drewCards: drew, errorList: errors }
 
   } catch (err) {
     errors.push({ turn: -1, type: 'fatal', message: err.message.slice(0, 200) })
@@ -309,8 +333,8 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation v4 · ${NUM_GAMES} games · ${BASE}`)
-  log('v4 fix: both-page turn detection · no alternation assumption · parallel tutorial dismiss')
+  log(`NeoTopia Bot Simulation v4.1 · ${NUM_GAMES} games · ${BASE}`)
+  log('v4: both-page turn detection · v4.1: restored room-code selector + 5-strategy extraction')
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 300 : 0 })
@@ -322,9 +346,7 @@ async function main() {
   await browser.close()
 
   const report = {
-    timestamp: new Date().toISOString(),
-    url: BASE,
-    botVersion: 'v4',
+    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.1',
     results: allResults,
     summary: {
       completed: allResults.filter(r => r.completed).length,
@@ -340,20 +362,17 @@ async function main() {
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT (v4) ===')
+  console.log('\n=== BOT SIMULATION REPORT (v4.1) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
   console.log(`Total errors: ${report.summary.totalErrors}`)
   console.log(`Games with element placement: ${report.summary.gamesWithPlacement}/${NUM_GAMES}`)
   console.log(`Elements placed: ${report.summary.totalPlaced} · Cards drawn: ${report.summary.totalDrew}`)
   console.log('Error types:', report.summary.errorTypes)
   console.log(`Report: ${reportPath}`)
-
   if (report.summary.totalErrors > 0) {
     console.log('\nCRITICAL BUGS:')
-    const unique = [...new Set(report.summary.errorTypes && Object.keys(report.summary.errorTypes))]
-    allResults.flatMap(r => r.errorList || []).slice(0, 20).forEach(e =>
-      console.log(` [${e.type}] ${e.message || ''}`)
-    )
+    allResults.flatMap(r => r.errorList || []).slice(0, 15)
+      .forEach(e => console.log(` [${e.type}] ${e.message || ''}`))
   }
 }
 
