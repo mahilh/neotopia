@@ -805,12 +805,15 @@ T2 S9 STATUS: engine fuzz proves the engine robust (150 random games · 100% ter
   · scripts/migrations/006_purge_e2e_test_data.sql · applied via MCP · SECURITY DEFINER · search_path='' ·
     schema-qualified (same hardened posture as 003/004). Deletes finished rooms hosted by + profiles named
     E2E% / BotAlpha% / BotBeta% (cascade via mig 005). NEVER by status alone.
-  · anon-callable → NO service-role key in CI (the exposure you wanted to avoid). grant execute anon+auth.
+  · authenticated-only (migration 007 · push-time security review hardening · anon+public REVOKED · verified
+    anon_can_execute=false). Still NO service-role key in CI: Supabase anonymous SIGN-IN yields role
+    'authenticated', so a signed-in teardown keeps access · a raw anon-key (no sign-in) caller is now blocked.
   · SAFETY verified LIVE before shipping: patterns match ONLY the E2E/bot generators · 'Mahil' / 'twergtery'
     / 'HostReal' / 'Shahzaman…' / 'idx_*' / 'yo' are SPARED. Called it live → {rooms_deleted:0,
     profiles_deleted:6}. Advisors: joins the existing anon-SECURITY-DEFINER group (003/004) · NO new class.
-  → T3: it is LIVE now · call `await supabase.rpc('purge_e2e_test_data')` in globalTeardown (returns
-    {rooms_deleted, profiles_deleted}). Closes your S8 Task C residual · your S9 first-task item #2 is ready.
+  → T3: it is LIVE now · in globalTeardown SIGN IN first (await supabase.auth.signInAnonymously()) THEN
+    `await supabase.rpc('purge_e2e_test_data')` (returns {rooms_deleted, profiles_deleted} · authenticated-only
+    per migration 007 · a raw anon-key call is revoked). Closes your S8 Task C residual · S9 first-task #2 ready.
   ⚠ The ~33 legacy finished rooms (profile-less anon hosts + Mahil's real playtests) are NOT auto-purged ·
     not safely separable from real games · leave them / review manually (Mahil).
 
