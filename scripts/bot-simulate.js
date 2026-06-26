@@ -114,10 +114,14 @@ async function playGame(gameNum, browser) {
   const errors = []
   const moves = []
   const start = Date.now()
+  // Unique per-run names · player_profiles.username is UNIQUE (T3 S7): a fixed name claims fine on run 1
+  // then REJECTS every later run (→ no profile → create/join breaks · the fatal we hit). The BotAlpha/
+  // BotBeta prefix is preserved so purge_e2e_test_data() (migration 006) still matches + cleans them.
+  const tag = Date.now().toString(36).slice(-5)
 
   try {
-    const p1 = await enterLobby(ctx1, `BotAlpha${gameNum}`)
-    const p2 = await enterLobby(ctx2, `BotBeta${gameNum}`)
+    const p1 = await enterLobby(ctx1, `BotAlpha${gameNum}_${tag}`)
+    const p2 = await enterLobby(ctx2, `BotBeta${gameNum}_${tag}`)
 
     // p1 creates room
     const createBtn = await p1.waitForSelector(
@@ -188,35 +192,43 @@ async function playGame(gameNum, browser) {
     await p2.waitForURL(/\/game\//, { timeout: 15000 })
     log('Both on game board')
 
-    // Handle tutorial overlay — T1 S10: data-testid="tutorial-dismiss" expected
+    // Handle the first-turn tutorial overlay. It shows for BOTH players (GameRoom gates on
+    // `showTutorial && phase === 'playing'`, NOT on isMyTurn · Tutorial.jsx), so BOTH must dismiss it —
+    // an un-dismissed overlay (position:fixed · z-index 500) blocks EVERY click on that player's turn,
+    // which is the stuck-state cause (T2 S11 · the old bot only dismissed p1 → p2 stuck on its turns).
+    // tutorial-skip dismisses from any step · tutorial-dismiss only exists on the last step.
     const tutorialSelectors = [
-      '[data-testid="tutorial-dismiss"]',
       '[data-testid="tutorial-skip"]',
+      '[data-testid="tutorial-dismiss"]',
       'button:has-text("Start building the civilization")',
-      'button:has-text(/got it|skip/i)',
+      'button:has-text(/skip|got it/i)',
     ]
-    let tutorialFound = false
-    for (const sel of tutorialSelectors) {
-      const btn = p1.locator(sel).first()
-      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await btn.click().catch(() => {})
-        tutorialFound = true
-        log('Tutorial dismissed')
-        break
+    const dismissTutorial = async (page, label) => {
+      for (const sel of tutorialSelectors) {
+        const btn = page.locator(sel).first()
+        if (await btn.isVisible({ timeout: 2500 }).catch(() => false)) {
+          await btn.click().catch(() => {})
+          log(`Tutorial dismissed (${label})`)
+          return true
+        }
       }
+      return false
     }
-    if (!tutorialFound) {
-      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not found — T1 S10 must fix gate (decouple from isMyTurn)' })
+    const tutOk = (await dismissTutorial(p1, 'host')) | (await dismissTutorial(p2, 'joiner'))
+    if (!tutOk) {
+      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not dismissable for either player — prod deploy lag OR a real gate bug (T1 lane)' })
     }
 
     // Play turns
     let turn = 0, gameEnded = false, stuckCount = 0
     while (turn < TURN_LIMIT && !gameEnded) {
       const activePage = turn % 2 === 0 ? p1 : p2
-      // T1 S9: data-testid="my-turn-badge" in DOM
+      // Detect WHOSE turn it is via the CONDITIONAL signal: the `.my-turn-badge` CLASS and the "Your turn"
+      // text render ONLY when isMyTurn (ActionBar), whereas data-testid="my-turn-badge" is ALWAYS present
+      // (it can't tell turns apart — the old detection bug · T3 S11 flagged "bot turn-detection" to T2).
       const isMyTurn = await activePage.locator(
-        '[data-testid="my-turn-badge"], text=/your turn/i'
-      ).first().isVisible({ timeout: 800 }).catch(() => false)
+        '.my-turn-badge, text=/your turn/i'
+      ).first().isVisible({ timeout: 1200 }).catch(() => false)
 
       if (!isMyTurn) {
         stuckCount++

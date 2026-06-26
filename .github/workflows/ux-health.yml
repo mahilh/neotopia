@@ -1,0 +1,48 @@
+name: NeoTopia UX Health
+
+# Scheduled UX + a11y scan of PRODUCTION (Playwright · headless chromium · scripts/ux-scan.js).
+# Catches regressions the unit gate can't see: shrunk touch targets, font-size/contrast drops,
+# missing data-testid attrs, slow first loads. It drives the DEPLOYED site, so it needs NO Supabase
+# secrets (the prod app carries its own env). Informational by design — it uploads a report for review
+# and does not block merges (ux-scan exits 0 on completion · non-zero only on a crash).
+on:
+  schedule:
+    - cron: '0 */12 * * *'   # every 12 hours
+  workflow_dispatch: {}        # manual run from the Actions tab
+
+concurrency:
+  group: ux-health
+  cancel-in-progress: true
+
+jobs:
+  ux-scan:
+    name: UX + a11y scan (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: UX scan against production
+        run: node scripts/ux-scan.js
+        env:
+          BOT_URL: https://neotopia.vercel.app
+          CI: 'true'
+
+      - name: Upload UX report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-report
+          path: .ux-reports/
+          retention-days: 14

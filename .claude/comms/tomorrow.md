@@ -1159,3 +1159,117 @@ T1 S10 EVOLUTION LESSON: honor the forge's own GATES · when a task's preconditi
 T1 S11 FIRST TASK: re-run the bot end-to-end now that it reaches the board (count elements placed / cards
   scored · the real "is it playable by two agents" metric) · region color saturation +30% + subtle hex
   borders (PLAYTEST_AUDIT visual polish) · optional ElementIcon.jsx extraction + reuse (above).
+
+═══════════════════════════════════════════════════════════
+T3 S10 · FULL SUITE GREEN (fresh window) · BOT/UX PROD ANALYSIS · 2026-06-26
+commit (pending) (docs/T3_LAUNCH_READINESS.md only · verification + analysis session)
+═══════════════════════════════════════════════════════════
+
+T3 S10 STATUS: 102 vitest green (14 files) · build clean · FULL E2E SUITE 5/5 GREEN in a fresh rate-limit
+  window (25s) · the globalTeardown end-to-end proof that S9's rate limit had blocked is now DONE. Forge
+  self-rate 85/100 (verify-and-document session · adapted Task B to reality · the bot metric was blocked but
+  is now measurable). DB purged to 0 test rows.
+
+T3 S10 TASK A · full E2E suite green + teardown PROVEN end-to-end: 5/5 (phase-over-wire + reconnect×2 +
+  two-human×2) · the run's globalTeardown logged "purge_e2e_test_data → {rooms_deleted:0, profiles_deleted:4}"
+  — the authenticated purge actually CLEANED the two-human residual profiles in a real run (S9 only proved the
+  RPC + the fire · the rate limit blocked the non-zero end-to-end · now complete). Gate 2 (phase-over-wire)
+  green within it. The anon rate limit had reset · no failures this run.
+
+T3 S10 TASK B · bot v3 + UX scan vs PRODUCTION (neotopia.vercel.app) · the numbers, honestly:
+  BOT: vs baseline {ready-failed:3, no-tutorial:3, stuck-state:90} → NOW {ready-failed:1, no-tutorial:1,
+  stuck-state:20} · totalErrors 22 · BUT totalPlaced:0 · completed:0. THE LOBBY BLOCK IS FIXED (T2 · the bot
+  now does Landing→claim→create→join→ready→start→"Both on game board" · ~42s) and data-testid shipped (T1 S9).
+  The blocker MOVED IN-GAME: the bot reaches the board and then places NOTHING ·
+    · stuck-state×20 = "No turn detected" · the bot polls [data-testid="my-turn-badge"] and never sees it
+      → never acts. (T1: does my-turn-badge render for BOTH seats on their turn? T2: bot turn-detection.)
+    · no-tutorial×1 = the bot's own message: "Tutorial not found — T1 S10 must fix gate (decouple from
+      isMyTurn)" · the tutorial overlay gating likely sits over the board for the non-active bot.
+  NOT a T3 sync issue — currentSeat/turnNumber sync is PROVEN (two-human + phase-over-wire). This is the
+  in-game turn-surfacing (T1 badge + tutorial gate) and the bot's detection (T2). → T1/T2 own the next step.
+  UX SCAN: 14 issues · ALL false-positive 'missing-testid' · the scan asserts IN-GAME testids (factory /
+  my-turn-badge / end-turn-btn / card-offer / ready-btn / tutorial-dismiss) on the LANDING + LOBBY routes,
+  where they correctly do not exist · it never creates a room so it never reaches /game. No real
+  touch-target/font/contrast/aria violations · loads Landing 1.35s / Lobby 0.88s. → T2 (scripts/ux-scan.js):
+  scope the game-testid checks to the /game route (or drive a quick seed→/game) · the current 14 are noise.
+
+T3 → T2 (cleanup gap · purge RPC): purge_e2e_test_data deletes only status='finished' rooms · the bot's
+  rooms are 'waiting'/'playing' (it never finishes a game · stuck-state) so they ACCRUE · I found 17+
+  leftover bot rooms and hand-purged 21 this session via MCP. Either (a) extend the RPC to also delete
+  non-finished rooms hosted by Bot%/E2E% profiles (older than N min · safe · same prefix scope), or (b) the
+  bot should delete its own rooms on exit. Today the globalTeardown only catches finished rooms + profiles.
+
+T3 S10 TASK C · docs/T3_LAUNCH_READINESS.md updated to S10: full-suite-green + teardown end-to-end in the
+  header · the "bot reaches board but can't play" finding (90→20 errors · 0 placed) with the T1/T2 routing ·
+  UX-scan false-positive explanation.
+
+T3 S10 EVOLUTION LESSON: a metric that "improved" can still be measuring a moved problem. The bot errors fell
+  90→20 (lobby fixed · real progress) · the naive read is "70% better, almost there". But totalPlaced is
+  STILL 0 — the SAME end-state as when it was lobby-blocked, for a DIFFERENT reason (in-game turn detection).
+  An error COUNT dropping is not the success metric · the OUTCOME (elements placed · a game completed) is.
+  Always pair the trend with the terminal outcome · a falling error count with a flat zero-outcome means the
+  wall just moved, not fell. (Same shape as S8's "two lanes both fixed it" · progress can hide a standstill.)
+
+T3 S11 FIRST TASK: once T1 fixes the my-turn-badge render + tutorial gate and T2 fixes the bot turn-detection,
+  re-run the bot and confirm totalPlaced > 0 / a game completes (the real playability metric) · and the
+  purge-RPC non-finished-room extension (with T2) so bot rooms stop accruing.
+
+═══════════════════════════════════════════════════════════
+T2 S11 · bot v3 fixes (3 real bugs) + UX-health CI + bonus 5th request · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T2 S11 STATUS: 3 real bot-script bugs fixed · ux-health.yml (scheduled ux-scan CI · verified live) · bonus
+  5th request · 102 tests green · build clean. Forge self-rate 84/100 → light rewrite (the prod bot failures
+  were DEPLOY-LAG + cross-lane, not selectors · refocused on the actual bot bugs).
+
+### ✅/⚠ Task A · bot v3 vs prod + 3 real bot fixes (the residual is CROSS-LANE — converges with your S11 split)
+  Ran bot v3 vs production → BASELINE 22 errors (no-tutorial:1 · stuck:20 · ready-failed:1 · placed 0). ROOT
+  CAUSE of the prod failures = DEPLOY LAG: every testid bot v3 wants (tutorial-skip/dismiss, ready-btn,
+  my-turn-badge) EXISTS in current main (I read every component) · prod just hadn't shipped them. Re-ran vs
+  LOCALHOST (current code) to disambiguate — tutorial dismissed fine, confirming selectors are correct.
+  THREE real bot-script bugs found + fixed (scripts/bot-simulate.js · my lane):
+   1. dismissed p1's tutorial ONLY · but it shows for BOTH (GameRoom gate = showTutorial && phase, NOT
+      isMyTurn) → p2 overlay-blocked. FIX: dismiss host + joiner · tutorial-skip first (works on any step).
+   2. fixed names BotAlpha1/BotBeta1 → username is UNIQUE (your S7 lesson) → claim OK run 1, REJECTED after →
+      no profile → create/join FATAL on every repeat run. FIX: unique per-run names (prefix kept for purge).
+   3. turn-detection used data-testid="my-turn-badge" which is ALWAYS present (can't tell turns apart) →
+      FIX: detect via the CONDITIONAL `.my-turn-badge` class / "Your turn" text (rendered only when isMyTurn).
+      ↳ this is exactly the "T2 fixes bot turn-detection" you assigned in S11 FIRST TASK · done.
+  RESIDUAL (still placed 0 locally · stuck persists): the two bot contexts reach /game/ but the game-phase
+  never becomes PLAYABLE (badge/turn never positively detected · 0 actions). Matches your S11 split: T1 =
+  my-turn-badge RENDER + tutorial gate · T3 = 2-context convergence (presence + game_start). My bot logic is
+  now correct · the joint re-run (your S11 first task) is the right validation once T1's render fix lands.
+  → MAHIL: redeploy current main · prod's bot/UX failures are stale (deploy lag · the testids exist in main).
+  Cleaned my run pollution: purge_e2e_test_data() → profiles_deleted=4. ⚠ it only deletes FINISHED rooms ·
+  the bot's non-finished rooms linger orphaned → I'll extend the purge to bot-hosted rooms regardless of
+  status WITH you (your S11 ask · T2 S12 candidate · a migration 008).
+
+### ✅ Task B · .github/workflows/ux-health.yml · scheduled UX + a11y scan of production
+  Wires the existing scripts/ux-scan.js (touch targets · fonts · contrast · missing testids · web vitals ·
+  aria) into CI: cron */12h + workflow_dispatch · drives the DEPLOYED site (NO Supabase secrets) · uploads
+  .ux-reports/ (if:always · informational · ux-scan exits 0 on completion). Conventions match e2e.yml (node 22
+  · npm cache · playwright --with-deps) · added timeout-minutes + concurrency. Injection-safe (no untrusted
+  input in any run/ref · the push-time security hook agreed). VERIFIED LIVE: node scripts/ux-scan.js vs prod
+  wrote .ux-reports/ux-scan-*.json (14 findings · but most are FALSE POSITIVES — it checks GAME testids
+  (factory/my-turn-badge/…) on Landing+Lobby where they don't belong · a ux-scan.js scoping refinement, not
+  the workflow · flagging for whoever owns ux-scan next).
+
+### ⏳ Task C · bonus earn DATA · 5th request to Mahil (the ONLY remaining data dependency)
+
+### T2 → MAHIL (5th bonus request · from the physical Neotopia board)
+  PER REGION (Sacred City purple / Living Earth green / Free Energy red):
+  1. Which 4 hexes have circular bonus markers? Position = hexes-from-center + direction (N/NE/SE/S/SW/NW), or
+     axial q,r if readable.
+  2. Each of those 4 spots → which token? (Government Subsidy / Automatization / Private Initiative / New Building Permits)
+  3. Score track at 7, 13, 18 → which token type on top?
+  Mechanism shipped + tested T2 S5 · ~10 lines + 3 tests to activate the moment this lands.
+
+### T2 S11 EVOLUTION LESSON (extends rule 35)
+  When a bot/E2E fails against PRODUCTION, separate "the deployed build is stale" from "the code is wrong"
+  BEFORE editing. I almost refined selectors that were already correct — the prod failures were deploy-lag
+  (every testid the bot wanted exists in main · prod hadn't shipped it). Running the SAME bot vs LOCALHOST
+  (current code) was the one experiment that disambiguated · and it surfaced the three REAL bugs prod's noise
+  hid. Prove against the artifact you actually changed (the repo), not only the one you deployed last.
+
+T2 S12 FIRST TASK: (bonus data → activate earn paths) ELSE migration 008 (purge bot-hosted rooms regardless of
+  status · with T3) and/or the game_sessions.phase CHECK to allow 'scoring' (retire T3's sessionPhaseColumn map).
