@@ -1106,3 +1106,56 @@ T1 S9 EVOLUTION LESSON: read the actual CONSUMER before adding integration hooks
 T1 S10 FIRST TASK: visual polish phase 2 (region color saturation +30% · subtle hex borders per PLAYTEST_AUDIT
   · larger element tokens now that icons exist) · hand-size signal / cap (BUG-06 · now more visible with
   CardFrame tiles) · and re-run the bot to confirm in-game element placement once T2 fixes the lobby flow.
+
+═══════════════════════════════════════════════════════════
+T1 S10 · BOT CASCADE FIX + UX SCAN + ICONS-ALREADY-DONE · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T1 S10 STATUS: 2 tasks shipped (A=c7fcc55 · B=c05edcd · committed + pushed individually · S8/S9 discipline
+  held · no autostash loss). Task C correctly SKIPPED (already shipped S9 · evidence below). 102 vitest green.
+
+T1 S10 TASK A (broke the bot cascade · the forge's root-cause): the cascade was
+  ready-failed → isMyTurn=false → tutorial never mounts → stuck. Three evidence-backed surgical fixes:
+  · FIX1 tutorial gate GameRoom:153 {showTutorial && phase==='playing'} (was && isMyTurn) → BOTH players
+    see the tutorial the moment the game starts (the joining/waiting player learns while the host moves ·
+    S8's isMyTurn gate hid it from them).
+  · FIX2 data-testid="ready-btn" on the non-host Ready button (Lobby).
+  · FIX3 data-testid="tutorial-dismiss" on "Start building" · "tutorial-skip" on "Skip" (Tutorial).
+  LIVE BOT PROOF (the cascade is broken): bot now clicks through Landing → sets username → BotBeta JOINS the
+  room → "Both on game board" → "Tutorial dismissed". It reaches gameplay for the first time (prior sessions
+  fataled at the lobby). Tutorial skip/dismiss testids verified live in /game too.
+
+T1 S10 TASK B (UX scan · scripts/ux-scan.js): 23 → 14 issues · all 9 font-size violations fixed (bumped to
+  12px floor): Landing eyebrow "2055", section labels (The Game/The Purpose), micro-card tags
+  (PLACE/SCORE/BALANCE), footer, github link · Lobby "Choose your name".
+  ⚠ T1 → T2 (ux-scan.js · your lane · scripts/): the remaining 14 "missing-testid" are FALSE POSITIVES · the
+    scan checks GAME testids (factory · my-turn-badge · end-turn-btn · ready-btn · tutorial-dismiss ·
+    card-offer · card-hand) on the Landing + Lobby routes, where they correctly do not exist. Those testids
+    ARE present in /game (verified S9 + S10 · the bot finds them). Fix: scan should drive into /game (or a
+    seeded game state) for game testids, and check Lobby-specific ones (ready-btn) in the WAITING ROOM state,
+    not the home view. Until then, treat the 14 as noise (real issue count is 0 after this task).
+
+T1 S10 TASK C (SVG element icons) · SKIPPED · ALREADY SHIPPED S9 (evidence-backed · the forge's own gate
+  excludes it): Gate 5 ElementIcon.jsx = MISSING, BUT Gate 6 shows HexCell ALREADY renders bespoke
+  ELEMENT_ICONS (energy=bolt · biofarming=sprout · technology=gear/atom · community=figure) + the
+  hex-element-in scale-in (T1 S9 Task B · committed 3d9123f · verified live then). The forge gated Task C
+  "ONLY IF Gate 6 shows current circle rendering" · it shows ICONS, not a circle · so the goal is met and
+  re-creating ElementIcon.jsx would be pure churn on working code. (Also: the forge's Task C used element.type
+  · the field is the type STRING directly, not an object · would have been a bug.)
+  OPTIONAL S11 value-add: extract the inline ELEMENT_ICONS → src/components/Board/ElementIcon.jsx and REUSE
+  it (a) in CardFrame's placeholder (replace the unicode symbol with the real icon) and (b) on factory tokens
+  (currently plain colored circles) for board-wide icon consistency. Refactor only · no new behavior.
+
+T1 → T3 (testid contract for the bot/E2E · stable through the prod minified build):
+  [data-testid="ready-btn"] (Lobby waiting room · non-host) · [data-testid="tutorial-dismiss"] +
+  [data-testid="tutorial-skip"] (Tutorial) · plus S9's [data-factory] · [data-valid="true"] ·
+  [data-offer] [class*="card"] · [data-testid="my-turn-badge"] · [data-testid="end-turn-btn"].
+
+T1 S10 EVOLUTION LESSON: honor the forge's own GATES · when a task's precondition is already satisfied by
+  prior work (Gate 6 "circle rendering" was already icons from S9), the evidence-backed move is to SKIP, not
+  to redundantly re-implement and risk a regression. Reading the actual files before prescribing (the forge's
+  S10 mandate) is what surfaced this · and it caught the Task C element.type field bug before it could ship.
+
+T1 S11 FIRST TASK: re-run the bot end-to-end now that it reaches the board (count elements placed / cards
+  scored · the real "is it playable by two agents" metric) · region color saturation +30% + subtle hex
+  borders (PLAYTEST_AUDIT visual polish) · optional ElementIcon.jsx extraction + reuse (above).
