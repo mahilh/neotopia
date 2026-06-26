@@ -6,16 +6,18 @@
 //       formula: best + 2nd + (worst x 3) + (unusedBonus x 3) · cluster is folded into scores upstream.
 //   · player state: { username, scores:[r0,r1,r2], bonusTokens:[type], scoredCardIds?:[id] }
 //       scoredCardIds is optional · "Districts Built" degrades gracefully when it is absent.
-//   · terminal phase is 'scoring' (gameStore endTurn) · NOT 'ended' · and the lobby lives at '/'.
+//   · terminal phase is 'scoring' (gameStore endTurn) · NOT 'ended' · the lobby lives at '/lobby'
+//     (Landing is at '/' since T1 S7) · the "new civilization" CTA routes to '/lobby'.
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
 import { DECK } from '../lib/projectCards'
+import { getGlobalIndex, recordCivilizationContribution } from '../lib/supabase'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
 const REGION_COLORS = ['#7F77DD', '#1D9E75', '#E24B4A']
-const GLOBAL_INDEX_BASE = 147823 // canonical seed (psychology doc) · T2 wires real aggregation later.
+const GLOBAL_INDEX_BASE = 147823 // canonical seed · fallback only · getGlobalIndex already folds this in.
 
 // One player's final record · derived purely from store-true fields, no fabricated data (rule 32).
 function recordFor(player) {
@@ -36,24 +38,79 @@ function recordFor(player) {
   return { ...player, scores, unusedBonus, total, best, second, worst, worstRegionId, scoredCards }
 }
 
-export default function FinalScore({ players = [] }) {
+// Reactively honors prefers-reduced-motion · true when the user asked for less motion.
+function usePrefersReducedMotion() {
+  const [reduce, setReduce] = useState(
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!mq) return
+    const onChange = () => setReduce(mq.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
+  return reduce
+}
+
+export default function FinalScore({ players = [], mySeat = null }) {
   const [revealed, setRevealed] = useState(false)
+  const [liveIndex, setLiveIndex] = useState(null) // real DB aggregate · null until fetched
+  const didFetchRef = useRef(false)                // getGlobalIndex fires exactly once
+  const didRecordRef = useRef(false)               // our own contribution records exactly once (when valid)
+  const reduceMotion = usePrefersReducedMotion()
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (reduceMotion) { setRevealed(true); return } // prefers-reduced-motion · skip the 0.8s fade
     const t = setTimeout(() => setRevealed(true), 600) // 600ms breath before the reveal.
     return () => clearTimeout(t)
-  }, [])
+  }, [reduceMotion])
 
   const finalScores = useMemo(
     () => players.map(recordFor).sort((a, b) => b.total - a.total),
     [players],
   )
+  const totalProjectsBuilt = useMemo(
+    () => finalScores.reduce((s, p) => s + p.scoredCards.length, 0),
+    [finalScores],
+  )
+  // THIS client's own districts · the only amount we may record (own auth.uid() profile · own seat).
+  const myDistricts = useMemo(
+    () => finalScores.find(p => p.seat === mySeat)?.scoredCards.length ?? 0,
+    [finalScores, mySeat],
+  )
+
+  // Read the real Global NeoTopia Index aggregate exactly once. NO alive-guard: setState-after-unmount
+  // is a safe no-op in React 19, and StrictMode's dev double-invoke must NOT suppress the result (a
+  // single-fetch latch + alive-guard would leave liveIndex null forever in dev → seed-only). getGlobalIndex
+  // itself never throws (it falls back to the seed).
+  useEffect(() => {
+    if (didFetchRef.current) return
+    didFetchRef.current = true
+    getGlobalIndex().then(n => { if (typeof n === 'number') setLiveIndex(n) }).catch(() => {})
+  }, [])
+
+  // Record THIS client's own districts exactly once · own auth.uid() profile · own seat ONLY, so the
+  // global sum is exact across players (never N× over-counted · rule 32 · T2's increment is auth.uid()-
+  // scoped + clamped [0,56] · both RPCs verified SECURITY DEFINER + granted anon · T1 S7). Separate
+  // one-shot ref + live deps so a first render with an unresolved seat (mySeat null / myDistricts 0)
+  // does NOT burn the latch · the effect re-runs until a valid contribution is actually recorded.
+  useEffect(() => {
+    if (didRecordRef.current || mySeat == null || myDistricts <= 0) return
+    didRecordRef.current = true
+    recordCivilizationContribution(myDistricts).catch(() => {})
+  }, [mySeat, myDistricts])
 
   if (finalScores.length === 0) return null
 
   const winner = finalScores[0]
-  const totalProjectsBuilt = finalScores.reduce((s, p) => s + p.scoredCards.length, 0)
+  // Display = real persisted aggregate (already includes the seed) + this whole game's contribution,
+  // shown optimistically as the live delta · seed-only fallback before the fetch resolves / on error.
+  // A bounded, self-healing cosmetic race exists: a peer recording before our read resolves can make
+  // the shown number high by ≤ the peer's district count. The PERSISTED aggregate stays exact (each
+  // client records only its own seat) · acceptable for a vanity civilization counter (T1 S7 review).
+  const displayIndex = (liveIndex ?? GLOBAL_INDEX_BASE) + totalProjectsBuilt
 
   return (
     <div
@@ -190,7 +247,7 @@ export default function FinalScore({ players = [] }) {
           Global NeoTopia Index
         </div>
         <div style={{ fontSize: 44, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.88)', letterSpacing: -1, marginBottom: 8 }}>
-          {(GLOBAL_INDEX_BASE + totalProjectsBuilt).toLocaleString()}
+          {displayIndex.toLocaleString()}
         </div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}>
           consciousness districts built across all NeoTopia games
@@ -204,9 +261,9 @@ export default function FinalScore({ players = [] }) {
         </div>
       </div>
 
-      {/* CTA · civilization language, not game language · lobby lives at '/' */}
+      {/* CTA · civilization language, not game language · lobby now lives at '/lobby' (Landing is '/') */}
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/lobby')}
         style={{
           height: 56, flexShrink: 0, padding: '0 48px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)',
           background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)',

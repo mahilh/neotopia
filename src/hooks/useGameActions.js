@@ -48,9 +48,11 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
   // Multiplayer turn ownership: only the active seat may act. null mySeat = solo (always your turn).
   const isMyTurn = mySeat == null || currentSeat === mySeat
   // Persist authoritative state after a committed local move so every client syncs · no-op in solo.
-  // eventType MUST be one of the game_events CHECK-constraint values (rule 26 · the DB is the
-  // contract): place_element · draw_card · build_project · use_bonus · factory_refill · turn_end ·
-  // game_end. Short names (place/draw/score/endTurn) 400'd every audit insert · now aligned (T1 S6).
+  // eventType is the APP vocabulary (place/draw/score/endTurn) · useGameSync's EVENT_TYPE_DB map
+  // translates it to the game_events CHECK value at the persistence boundary (T3 owns that mapping ·
+  // place→place_element · draw→draw_card · score→build_project · endTurn→turn_end). The action layer
+  // deliberately does NOT speak DB-CHECK vocabulary · emitting the long names here bypassed T3's
+  // translator → every audit row was silently skipped (the S6 double-fix collision · re-aligned T1 S7).
   const persist = useCallback((eventType) => { sync?.pushState?.(eventType) }, [sync])
 
   const reset = useCallback(() => {
@@ -125,7 +127,7 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
 
     // placeElement validates and rejects silently · confirm it actually committed.
     if (useGameStore.getState().actionsRemaining === beforeActions) { reset(); return }
-    persist('place_element') // committed · sync to other clients
+    persist('place') // committed · sync to other clients (→ place_element via EVENT_TYPE_DB)
 
     // Completing-element rule: pass the just-placed hex so only completions that include it surface.
     const placedKey = `${q},${r}`
@@ -156,7 +158,7 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
     if (store.actionsRemaining <= 0) return
     const beforeActions = store.actionsRemaining
     store.drawCard(currentSeat, source, cardIndex)
-    if (useGameStore.getState().actionsRemaining !== beforeActions) persist('draw_card') // committed · sync
+    if (useGameStore.getState().actionsRemaining !== beforeActions) persist('draw') // committed · sync (→ draw_card)
   }, [isMyTurn, currentSeat, persist])
 
   // Scoring: player clicks a glowing card in their hand.
@@ -175,7 +177,7 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
     // 4th arg lastPlacedKey honors the completing-element rule. Only tear down + flash on a real award.
     const scored = store.tryScoreCard(currentSeat, cardId, regionId, lastPlacedKey)
     if (scored) {
-      persist('build_project') // committed · sync to other clients (scoring a card builds its district)
+      persist('score') // committed · sync to other clients (scoring a card builds its district → build_project)
       reset()
       return { card: scoredCard, regionId }
     }
@@ -185,7 +187,7 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
   const handleEndTurn = useCallback(() => {
     if (!isMyTurn) return
     useGameStore.getState().endTurn()
-    persist('turn_end') // committed · sync (advances currentSeat for every client)
+    persist('endTurn') // committed · sync (advances currentSeat for every client → turn_end)
     reset()
   }, [isMyTurn, reset, persist])
 

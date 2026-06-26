@@ -114,7 +114,8 @@ export default function GameRoom() {
     <div style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}>
 
       {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
-      {phase === 'scoring' && <FinalScore players={players} />}
+      {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
+      {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} />}
 
       {/* SCORE FLASH · the civilization "story moment" after a card is scored */}
       {scoreFlash && (
