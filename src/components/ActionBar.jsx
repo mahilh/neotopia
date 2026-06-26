@@ -36,13 +36,22 @@ export default function ActionBar({
       display: 'flex', alignItems: 'center', gap: 16,
       padding: '0 20px',
     }}>
+      {/* Turn-dot pulse when it IS your turn · the clearest human "act now" signal (reduced-motion safe). */}
+      <style>{`
+        .turn-dot-active { animation: turn-pulse 1.5s ease-in-out infinite; }
+        @keyframes turn-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(30,200,100,0.5); } 50% { box-shadow: 0 0 0 6px rgba(30,200,100,0); } }
+        @media (prefers-reduced-motion: reduce) { .turn-dot-active { animation: none; } }
+      `}</style>
       {/* LEFT · turn status */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <span style={{
-          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-          background: isMyTurn ? '#1DC864' : 'rgba(255,255,255,0.25)',
-          boxShadow: isMyTurn ? '0 0 8px rgba(30,200,100,0.6)' : 'none',
-        }} />
+        <span
+          className={isMyTurn ? 'turn-dot-active' : undefined}
+          style={{
+            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            background: isMyTurn ? '#1DC864' : 'rgba(255,255,255,0.25)',
+            boxShadow: isMyTurn ? '0 0 8px rgba(30,200,100,0.6)' : 'none',
+          }}
+        />
         <span
           className={isMyTurn ? 'my-turn-badge' : undefined}
           data-testid="my-turn-badge"

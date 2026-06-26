@@ -143,7 +143,13 @@ export default function GameRoom() {
   }
 
   return (
-    <div style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}>
+    <div
+      // Persistent, turn-sensitive attributes the bot/E2E can waitForSelector on (no isVisible timeout
+      // race against the DB-sync render · T1 S11). data-my-turn flips as soon as currentSeat syncs.
+      data-game-phase={phase}
+      data-my-turn={isMyTurn ? 'true' : 'false'}
+      style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}
+    >
 
       {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
       {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
