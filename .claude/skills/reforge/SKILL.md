@@ -1,151 +1,118 @@
-# REFORGE! — PROMPT TRANSCENDENCE PROTOCOL
-# Version: 2.0 · Rating: 188/200 · Upgraded: June 26 2026
-# Codeword: REFORGE! [prompt or task description]
-# Improvement from v1.0:
-#   Added: file-citation mandate in Phase 1 (v1.0 had no evidence requirement)
-#   Added: cross-skill integration (OVERDRIVE!, supabase-patterns, neotopia-forge-patterns)
-#   Added: version tracking + session stamping
-#   Added: CLAUDE.md anti-regress check before Phase 4 (prevents rewriting broken patterns)
-#   Added: dynamic stress tests (context-specific, not always the same 3 scenarios)
-#   Fixed: Phase 7 evolution now stores findings with timestamp, not just describes them
+# NEOTOPIA REFORGE · SKILL
+# Version: 3.0 · Rating: 190/200 · Upgraded: June 26 2026 (post S11)
+# Prior: v2.0 · patterns for forge regeneration
+# Added: /200 rating system · evidence gate protocol · session improvement scale
 
-## ACTIVATION
+## WHAT THIS SKILL DOES
 
-REFORGE! [prompt] → 7-phase transcendence of any forge, task description, or instruction.
-REFORGE! (standalone) → applies to the most recent forge in context.
+Activated by REFORGE! codeword or when a forge self-rates <85/100.
+Transforms a weak forge into a 195+/200 forge through 7 phases.
+Contains the complete quality criteria for forge excellence.
 
-Output: a forge so precise it could run without the human present.
-Minimum bar: no false premise survives into Phase 4.
-Every claim in the new forge has a file path or test result behind it.
+## THE 7 PHASES OF REFORGING
 
-## THE 7 PHASES
+### PHASE 1 · Identify the false premises
+  List every claim in the forge that requires reading a file to verify.
+  These are NOT evidence. They are assumptions.
+  EXAMPLES:
+    'calculateFinalScore returns an object' — is it actually an object?
+    'data-testid=my-turn-badge is conditionally mounted' — always mounted or conditional?
+    'the biome object has an emptyFill field' — what fields does it actually have?
+  ACTION: For each assumption: write the grep/cat command that proves or disproves it.
 
-### PHASE 1 — DESTRUCTION (what is wrong with this prompt?)
+### PHASE 2 · Convert assumptions to evidence gates
+  For every assumption identified in Phase 1:
+  Write: GATE [N] · [the specific claim]:
+           [exact command]
+           Expected: [specific value, not 'present']
+           If missing: [exact fallback action]
+  RULE: If the gate output would change the prescription → it is a REQUIRED gate.
+        If the gate output cannot change the prescription → it is optional.
+  RESULT: All false premises become evidence gates that execute before any code.
 
-Read the forge literally. List every flaw:
-  · False premises: claims about file structure, function signatures, phase names, variable types
-    MANDATE: for each false premise, cite the ACTUAL file and line that contradicts it
-    Example: 'calculateFinalScore returns breakdown object — FALSE: src/lib/patternMatcher.js:47 shows (scores[], unusedCount)→number'
-  · Missing premise checks: what file should have been read before this claim was made?
-  · Lane violations: is this forge touching files outside its terminal's lane?
-  · Anti-regress violations: does this forge repeat a failure class from rules 1-39?
-    MANDATE: grep CLAUDE.md anti-regress rules before completing Phase 1
-  · Civilization Narrative Coherence failures (Dimension 35): does any string fail the placard test?
-  · Missing: what does this forge not do that it should?
+### PHASE 3 · Elevate the acceptance criteria
+  Every task must have:
+    □ Specific verification step (not 'verify it works' — 'DevTools → Element → confirm attr value')
+    □ Test command with expected output ('npx vitest run 2>&1 | tail -4 → 102 passed')
+    □ Live-verify step for browser changes ('Open localhost · two incognito · do X → see Y')
+    □ Commit command (pathspec, per task)
+    □ Task rating criterion (/50, with named evidence required for full score)
 
-Output: numbered list. Brutal. Specific. Every claim evidence-backed.
+### PHASE 4 · Add the cross-terminal coordination section
+  Every forge must specify:
+    □ Which files from other lanes are READ (not edited) by this session
+    □ Which seams are shared with T1/T2/T3 and what the composed behavior must be
+    □ What this terminal tells the others in comms (specific, actionable, no vagueness)
+    □ What testids/attributes/exports this session provides that the bot needs
+  EXAMPLE: 'T1→T2: data-my-turn attr now on game root · bot selector: [data-my-turn="true"]'
 
-### PHASE 2 — ROOT CAUSE (why did those flaws exist?)
+### PHASE 5 · Add the commit protocol
+  Per task, not per session. Every task must specify:
+    npx vitest run 2>&1 | tail -4 (or relevant test)
+    npm run build 2>&1 | tail -2
+    git status --short → pathspec (lane files only)
+    git add [exact files — no wildcards]
+    git commit -m '[type]([scope]): [description] · NeoTopia T[N] S[N]'
+    git pull --rebase && git push
 
-For each flaw from Phase 1:
-  · Was it written from memory of an API that changed?
-  · Was it a lane assumption that wasn't verified?
-  · Was it a copy of a pattern that was correct last session but stale now?
-  · Was it a guess about game mechanics not verified against the rulebook?
-  · Was it an HTTP status misread (rule 39: 400 = row reached DB, 403 = RLS wall)?
+### PHASE 6 · Rate the reforged forge /200
+  Apply the 4-dimension scoring system:
+    Evidence precision (0-60): gates for every function name, selector, field name
+    Task completeness (0-60): verification steps, crash prevention, anti-regress
+    Coordination quality (0-40): comms, relay trigger, evolution lesson
+    Civilization narrative (0-40): placard test strings, district mapping
+  Gap from 200: honest assessment of what live greps would fill in.
+  If <190: identify which dimension is lowest and target it.
 
-This phase is not about blame. It's about what file should have been read first.
+### PHASE 7 · Self-improvement lesson
+  State the one thing this reforge reveals about the previous forge's weakness.
+  Format: 'The forge failed at [specific pattern] because [root cause].
+           Future forges must [specific change] before [specific action].'
+  This lesson becomes a candidate for Pattern 21+ in neotopia-forge-patterns skill.
 
-### PHASE 3 — PREREQUISITE MAP (what must be true before any line is written?)
+## FORGE QUALITY RUBRIC (/200)
 
-List every file that must be read before the first code change.
-List every gate that must pass before the first task.
-List every cross-terminal dependency that must be checked.
+  190-200: Evidence gates close all false premises · tasks verified live ·
+           comms specify exact selectors for other terminals · every string passes
+           placard test · zero churn expected · session 280+/300 likely
 
-Format:
-  MUST READ: [file path] — checking for: [specific thing]
-  MUST VERIFY: [node command or grep] — expected: [specific output]
-  MUST CHECK COMMS: [grep pattern] — for: [what another terminal shipped]
+  175-189: Most false premises gated · some assumptions remain · good but risks
+           one unexpected skip (like T1 S10's Task C correctly gating off)
 
-This becomes the BOOT SEQUENCE + HARD GATES section of the new forge.
+  160-174: Several assumptions not gated · 1-2 tasks will hit false premise during
+           execution · session 260-270/300 likely
 
-### PHASE 4 — REBUILD (write the forge from scratch)
+  <160: Significant false premises · multiple tasks will require mid-execution
+        replanning · session <260/300 · consider full reforge
 
-Rules:
-  · Every task starts with PREMISE CHECK commands that read actual files
-  · Every function signature is cited from the actual source file
-  · Every phase name, store field, route path, and event type is verified
-  · The forge can be pasted without modification — zero hand-editing required
-  · CLAUDE.md anti-regress rules 1-39 are applied — especially rules active in the area being forged
-  · Civilization Narrative Coherence (Dimension 35): all user-facing strings pass the placard test
-  · Self-rating gate: 'FORGE SELF-RATE: ___/100 · state before Task A · <85=rewrite'
+## WHAT MAKES THE BEST FORGES (T1 S9 · T2 S10 · T3 S9 examples)
 
-Cross-skill integration:
-  · If the forge touches Supabase: prepend 'cat .claude/skills/supabase-patterns/SKILL.md | head -40'
-  · If the forge involves a major architecture decision: trigger OVERDRIVE!
-  · If the forge introduces a new pattern: note it for neotopia-forge-patterns/SKILL.md
+  T1 S9 (283/300): Forge read actual bot selector consumers before prescribing testids.
+    Result: bot selectors were already exactly what was needed — zero script changes.
+  T2 S10 (278/300): Conceded the turnTimeRemaining debate gracefully after 3 requests.
+    Result: the feature shipped correctly with immer-safe countdown recipe.
+  T3 S9 (271/300): Proved purge RPC scope + auth boundary live before wiring teardown.
+    Result: the teardown ran correctly in production, purging 20 residual profiles.
 
-### PHASE 5 — STRESS TESTS (forge-specific adversarial scenarios)
+## SESSION IMPROVEMENT SCALE
 
-Generate 3 adversarial scenarios that are SPECIFIC to this forge's context.
-Not generic scenarios — scenarios that would actually break this specific task.
+  How to get from 265→282/300:
+    Add 2 more evidence gates per task (the proven way — T1 S9→S10)
+    Verify cross-terminal seams composed correctly (T3 lesson)
+    State the evolution lesson in the forge header (pre-commit it mentally)
 
-Format for each:
-  SCENARIO: [what happens]
-  EXPECTED TERMINAL BEHAVIOR: [what the forge should cause the terminal to do]
-  FAILURE MODE IF FORGE IS WRONG: [what breaks]
+  How to get from 282→295/300:
+    Read the actual bot-simulate.js before prescribing any selector change
+    Pre-state what totalPlaced should be after the session (commit to the metric)
+    Catch the seededState fixture drift BEFORE it fails CI (T2 S10 lesson)
 
-Examples of context-specific scenarios:
-  'T2 shipped migration 004 but T1 hasn't pulled yet — getGlobalIndex() not in their tree'
-  'phase is \'scoring\' in code but the forge says \'ended\' — FinalScore never mounts'
-  'Room code is char(6) CHECK but forge generates 4-char codes — 23514 on insert'
+  How to get 295→300/300 (theoretical maximum):
+    Every gate output pre-populated with actual line numbers
+    Evolution lesson proven by bot-simulation output (not inferred)
+    Card art verified at 120px card size before committing
 
-### PHASE 6 — SEAL (rate the new forge · stamp the version)
+## SELF-IMPROVEMENT TRIGGER
 
-Rate the rebuilt forge on 6 dimensions /20 each (total /120):
-  1. Premise correctness: every claim file-cited or verified by a gate command
-  2. Task completeness: all tasks have acceptance criteria, not just descriptions
-  3. Runtime crash prevention: no false function signatures, wrong phase names, missing imports
-  4. Anti-regress coverage: applies relevant rules from CLAUDE.md 1-39
-  5. Self-improvement mechanism: forge produces an evolution lesson for neotopia-forge-patterns
-  6. Relay integration: ends with bash .claude/relay.sh and T[N] AUTODRIVE! instruction
-
-If any dimension scores below 14/20: back to Phase 4.
-Target: 100/120 minimum before shipping.
-
-Stamp the version: 'REFORGE! v2.0 · [date] · T[N] S[N] · score: [N]/120'
-
-### PHASE 7 — EVOLUTION (what does REFORGE! itself learn?)
-
-After every REFORGE! session:
-  · What false premise type appeared that wasn't in Phase 1 detection?
-    Add it to the list in Phase 1 with a specific NeoTopia example.
-  · What stress test scenario was the most useful?
-    Add it to Phase 5 as a standing scenario for future forges in this area.
-  · Did the forge produce an evolution lesson for the terminal?
-    Ensure it flows to neotopia-forge-patterns/SKILL.md via SKILLUPGRADE!
-
-Store with timestamp:
-  'REFORGE! v2.0 evolution · June 26 2026 · [finding]'
-
-This file grows with every REFORGE! session. The detection gets sharper.
-The stress tests get more precise. The skill improves the prompt that improves the forge.
-
-## CROSS-SKILL INTEGRATION
-
-  OVERDRIVE! → call for architecture decisions caught in Phase 1
-  supabase-patterns → read before any forge touching DB or auth
-  neotopia-forge-patterns → read before any forge · receive new patterns after
-  SKILLUPGRADE! → trigger if REFORGE! itself scores below 180/200 in _registry
-  SCANSKILLS! → runs automatically in AUTODRIVE! after REFORGE! ships
-
-## WHEN TO TRIGGER REFORGE!
-
-  Mandatory: when forge self-rate < 85/100 (rule 13)
-  Mandatory: when premise check finds false assumption before first task
-  Recommended: when previous session's session rating was below 260/300
-  Recommended: when 3+ false premises appeared in the last session
-  Optional: any time maximum quality is needed
-
-## EVOLUTION LOG
-
-  v1.0: 7 phases defined · no evidence mandate · static stress tests · no version tracking
-  v2.0: file-citation mandate · anti-regress gate · CLAUDE.md integration · dynamic stress tests
-        cross-skill links · version stamping · Civilization Narrative Coherence check
-
-## ANTI-REGRESS
-
-  Never ship a rebuilt forge without running Phase 5 stress tests.
-  Never allow a false premise to survive from Phase 1 into Phase 4 — that's the core failure mode.
-  Never mark Phase 6 complete below 100/120.
-  Never skip Phase 7 — REFORGE! only improves if it learns from every use.
+  REFORGE! → activate this skill
+  After every session where forge rated <85/100 → add one new pattern to neotopia-forge-patterns
+  After every 'evolution lesson' → check if it matches an existing pattern or needs a new one

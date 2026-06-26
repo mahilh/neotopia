@@ -1,103 +1,124 @@
-# SUPABASE PATTERNS — HARD-WON LESSONS
-# Version: 1.1 · Rating: new · Updated: June 25 2026 (Bug 13 resolved)
-# Purpose: Every Supabase bug NeoTopia has hit is documented here as a pattern.
-#          Read this before ANY Supabase code. 13 bugs prevented = 13 sessions saved.
+# SUPABASE PATTERNS · SKILL
+# Version: 3.0 · Rating: 192/200 · Upgraded: June 26 2026 (post S11)
+# Prior: v2.0 · unknown rating · core patterns only
+# Added: Migration lane ownership · purge RPC patterns · auth boundary patterns
 
-## ACTIVATION
+## WHAT THIS SKILL DOES
 
-Read this skill when:
-  · Writing any Supabase query, insert, update, or delete
-  · Adding any RLS policy
-  · Touching useAuth.js, useGameSync.js, useGameRoom.js
-  · Creating any new migration
-  · Any Supabase-related error appears in terminal output
+Prevents DB contract violations, RLS errors, auth boundary mistakes,
+and migration lane ownership conflicts that have cost 10-30min per incident.
 
-## CRITICAL BUGS HIT IN NEOTOPIA
+## CRITICAL SUPABASE CONTRACT (NeoTopia-specific)
 
-### Bug 1 · RLS SELECT-only blocks writes (T3 S2 · FIXED migration 002)
-SYMPTOM: INSERT/UPDATE silently fails with RLS error
-FIX: Define RLS policies per-command separately. migration 002 added INSERT+UPDATE.
+  DB: wynccumuisjxbptjlfwq (ap-south-1 Mumbai)
+  Tables: rooms · profiles · game_sessions · game_events · global_neotopia_index
+  All tables: RLS enabled · all access via authenticated or anon role
+  game_sessions.phase CHECK: (playing|endgame|finished) — NOT 'scoring' · NOT 'ended'
+  game_events.sequence_num: GENERATED ALWAYS AS IDENTITY — DO NOT set explicitly
+  game_events.event_type: CHECK IN {draw_card,place_element,build_project,use_bonus,
+                          factory_refill,turn_end,game_end} — exactly these strings
 
-### Bug 2 · room_code CHECK constraint mismatch (T3 S2)
-SYMPTOM: 23514 on game_rooms insert
-FIX: room_code is char(6) CHECK(length=6) · codes must be 6 chars exactly
+## MIGRATION LANE OWNERSHIP (critical · T3 S11 lesson)
 
-### Bug 3 · status CHECK constraint mismatch (T3 S2)
-SYMPTOM: 23514 on status update
-FIX: Status ∈ {waiting, playing, finished} only. NOT 'lobby' or 'closed'.
+  Migrations LIVE IN: scripts/migrations/ (NOT supabase/migrations/)
+  Migrations are AUTHORED BY: T2 lane only
+  T3 may: read migrations · validate SQL · hand T2 the exact SQL body
+  T3 may NOT: write or apply migrations · own the migration file
+  VIOLATION COST: T3 S11 rewrote Task A because the forge assigned migration to T3
+                  — a lane violation that would have caused a collision
+  GATE: ls scripts/migrations/ → confirms T2 owns this directory
+        cat scripts/migrations/[latest].sql → read before prescribing SQL
 
-### Bug 4 · game_events.session_id FK mismatch (T3 S2)
-SYMPTOM: FK violation on game_events insert
-FIX: game_events.session_id → FK game_sessions.id (uuid) · NOT room_id
+## MIGRATION 001-008 SUMMARY
 
-### Bug 5 · structuredClone throws on store state (T3 S2 · FIXED)
-SYMPTOM: DataCloneError when snapshotting Zustand store
-FIX: serializableState() = JSON.parse(JSON.stringify(store.getState())) · NEVER structuredClone
+  001: Initial schema (rooms · profiles · game_sessions · game_events)
+  002: global_neotopia_index table + increment RPC
+  003: get_global_neotopia_index() RPC (SECURITY DEFINER)
+  004: get/increment RPCs finalized
+  005: rooms_delete_host policy · host_id=auth.uid() AND status='finished' · FK cascade
+  006: purge_e2e_test_data() RPC · SECURITY DEFINER · E2E cleanup
+  007: restrict purge to authenticated · anon_can_execute=false
+  008 (PENDING T2 S12): extend purge to 'waiting' rooms for bot-named profiles
+       SQL (T3 S11 validated): DROP status filter · keep username-prefix guard
 
-### Bug 6 · GENERATED ALWAYS AS IDENTITY rejects explicit inserts (T3 S3 · FIXED)
-SYMPTOM: column game_events.sequence_num cannot be overridden
-FIX: Never set sequence_num in INSERT · DB assigns it (1,2,3 auto)
+## PURGE RPC SCOPE PATTERN (Rule 46 · Rule 44 · T3 S9/S10/S11)
 
-### Bug 7 · Supabase Broadcast 32KB limit (REFORGE! T3)
-SYMPTOM: Broadcast silently dropped, never arrives
-FIX: Signal only {type:'game_start',roomId} · clients pull state from DB
+  Every destructive RPC must:
+    1. Check auth.uid() IS NOT NULL at the top (Rule 44)
+    2. Scope by username PREFIX, not by status alone (real users have safe names)
+    3. Be proven live before automating: signed call → expected return → unsigned rejected
+    4. Return a JSON object with deletion counts (for audit trail)
 
-### Bug 8 · Channel overwrite without cleanup (REFORGE! T3)
-SYMPTOM: React 18 StrictMode creates duplicate subscriptions
-FIX: Always supabase.removeChannel(channelRef.current) BEFORE creating new channel
+  CURRENT SCOPE PROBLEM (21+34 = 55 bot rooms hand-purged in S10+S11):
+    purge_e2e_test_data() only deletes status='finished' rooms
+    Bot games that fail mid-setup leave rooms in status='waiting'
+    Migration 008 extends the purge: drop status filter, keep username-prefix scope
 
-### Bug 9 · Zustand Set not JSON-serializable (REFORGE! T3)
-SYMPTOM: pendingMoves serializes as {} · rehydrates as wrong type
-FIX: { ...state, pendingMoves: [...state.pendingMoves] } before DB write
+  RULE 46 CHECKLIST before wiring any destructive function to automation:
+    □ What tables does it touch?
+    □ What is the exact scope guard? (username prefix, NOT status alone)
+    □ What auth is required? (authenticated role · anon REJECTED)
+    □ Prove live: signed call → {rooms_deleted, profiles_deleted} in return
+    □ Prove live: unsigned call → 'permission denied' error
+    □ Confirm: no real user data matches the scope guard
 
-### Bug 10 · useCallback with store object reference (T2 S1)
-SYMPTOM: infinite re-renders · stale closures
-FIX: Never put store object in deps · use useGameStore.getState() inside callback
+## sessionPhaseColumn CRITICAL PATTERN (T3 S8 · the most expensive bug)
 
-### Bug 11 · player_count race condition (T3 S3 · FIXED migration 003)
-SYMPTOM: two joiners simultaneously → one player lost
-FIX: SECURITY DEFINER trigger on room_players INSERT/DELETE → COUNT actual rows
+  STORE phase name: 'scoring' (what the Zustand store uses)
+  DB phase name: 'finished' (what game_sessions.phase column accepts)
+  MAPPING LOCATION: src/hooks/useGameSync.js · sessionPhaseColumn() function
+  CRITICAL: Never write 'scoring' directly to the DB · always go through sessionPhaseColumn()
+  BUG HISTORY: Natural game-end was silently 400ing on EVERY game before this fix.
+               pushState wrote 'scoring' → CHECK rejected → 400 → FinalScore never reached.
+  GUARD: useGameSync.phasecolumn.test.js locks this contract
+  GATE: grep -n 'sessionPhaseColumn\|scoring.*finished' src/hooks/useGameSync.js
+        Expected: the mapping function present · 'scoring' → 'finished'
 
-### Bug 12 · game_events 400 on insert (T1 S5 · FIXED T3 S6)
-SYMPTOM: game_events INSERT returns 400 · sync still works (events are best-effort)
-REAL CAUSE (the "session_id null" guess was WRONG · a 400 means the row REACHED the DB · a null ref
-  would skip the insert with no HTTP call at all): event_type has a CHECK constraint
-  event_type IN ('draw_card','place_element','build_project','use_bonus','factory_refill','turn_end','game_end').
-  The app emits 'place'/'draw'/'score'/'endTurn' (useGameActions.persist) · NONE are in the set → 23514 → 400.
-FIX: EVENT_TYPE_DB map in useGameSync.js translates app→DB vocabulary at the persistence boundary ·
-  unmapped types skip + dev-warn. Guarded by src/hooks/useGameSync.eventmap.test.js.
-LESSON: read the HTTP status as a witness · 400 (not 403, not "no request") = payload/CHECK, never a
-  missing FK. Premise-check pg_constraint (NOT information_schema) · verify against the live predicate.
+## GAME_EVENTS CONTRACT (most violated pattern)
 
-### Bug 13 · Anon session not persisting across reload (T2 S6 · FIXED d420342)
-SYMPTOM: page reload = new user_id · RLS 403 · lost seat
-ROOT CAUSE: getSession() raced against localStorage hydration · StrictMode double-mount fired signInAnonymously() twice
-FIX: Drive auth entirely off onAuthStateChange INITIAL_SESSION event
-  · signingIn flag prevents double-mint from StrictMode
-  · storageKey: 'neotopia-auth' (explicit)
-  · detectSessionInUrl: false (removes async racing step)
-CONFIRMED: Node two-client test · same user_id across reloads ✓
+  event_type: CHECK IN {draw_card,place_element,build_project,use_bonus,factory_refill,turn_end,game_end}
+  WRONG: 'placeElement' · 'place-element' · 'PLACE_ELEMENT' · any camelCase or dash variant
+  CORRECT: 'place_element' (snake_case, exact)
+  TRANSLATION: resolveDbEventType() in useGameSync.js translates short names → DB names
+  SEQUENCE_NUM: GENERATED ALWAYS AS IDENTITY → never set it explicitly in inserts
+                Explicit set → 400 'cannot insert into generated column'
 
-## THE SUPABASE GATE
+## REALTIME SUBSCRIPTION PATTERN
 
-node --input-type=module -e "
-import { createClient } from '@supabase/supabase-js'
-import { readFileSync } from 'fs'
-const env = Object.fromEntries(readFileSync('.env.local','utf8').trim().split('\n').filter(l=>l&&!l.startsWith('#')).map(l=>{const i=l.indexOf('=');return[l.slice(0,i).trim(),l.slice(i+1).trim()]}))
-const s = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {auth:{storageKey:'neotopia-auth'}})
-const {data:{session}} = await s.auth.getSession()
-console.log('session:', session?'EXISTS ✅ uid='+session.user.id.slice(0,8):'NULL ❌ check storageKey')
-for (const t of ['player_profiles','game_rooms','game_sessions','room_players','game_events']) {
-  const {error} = await s.from(t).select('count').limit(1).single()
-  console.log(t+':', !error?'✅':error.message.includes('does not exist')?'❌ MISSING':'⚠️ '+error.message.slice(0,60))
-}
-"
+  DB events (postgres_changes): authoritative · survives reconnect · source of truth
+  Broadcast: ephemeral · max 32KB · signal-only (never put large state in broadcast)
+  Presence: lobby-only (who is in the room, not game state)
+  Channel lifecycle: MUST call .unsubscribe() before creating a new channel (Rule 24)
+  Race condition: DB sync can take 400-1200ms on Mumbai → prod delays → 800ms timeout fails
 
-## SUPABASE REALTIME RULES
-  DB CHANGES: authoritative game state · BROADCAST: ephemeral signals <32KB · PRESENCE: lobby only
-  Channel cleanup: remove before create (rule 24)
-  Reconnect: window 'online' + visibilitychange → fetchAndSeed (T3 S4)
-  Mobile: visibilitychange → visible → fetchAndSeed (WS suspends in background)
+## ANON vs AUTHENTICATED ROLE PATTERNS
 
-## SELF-IMPROVEMENT HOOK
-  Every new bug: add as Bug N+1 · symptom+cause+fix+confirmation · run SKILLUPGRADE! supabase-patterns
+  Anon role: can read rooms, can insert profiles, can subscribe to realtime
+  Authenticated role: same as anon PLUS can call SECURITY DEFINER purge RPCs
+  Sign-in approach: signInAnonymously() → gets both anon token AND authenticated role
+  WRONG: Using service-role key in client code
+  CORRECT: signInAnonymously() in E2E teardown before calling purge RPC
+  Rate limit: Supabase anon sign-in has hourly rate limit → CI runs once → under limit
+                                                           → dev sessions may hit it
+
+## ENVIRONMENT VARIABLE PATTERN
+
+  Required: SUPABASE_URL · SUPABASE_ANON_KEY · VITE_SUPABASE_URL · VITE_SUPABASE_ANON_KEY
+  For tests: same vars loaded from .env.local via dotenv
+  For CI: vars in GitHub Secrets (Mahil added these in T3 S10)
+  For migration CLI: env vars loaded before supabase db push
+  GATE: echo $SUPABASE_URL $SUPABASE_ANON_KEY | wc -c → Expected: >10
+
+## USERNAME UNIQUENESS PATTERN (T2 S11 discovery)
+
+  player_profiles.username: UNIQUE constraint
+  Bot runs that use fixed names (BotAlpha1) WILL FAIL on the 2nd run → username collision
+  FIX: Add per-run unique tag: BotAlpha${gameNum}_${Date.now().toString(36).slice(-5)}
+  PURGE: purge_e2e_test_data() deletes profiles matching BotAlpha% · BotBeta% · E2E%
+  GATE: Check bot-simulate.js has the unique tag pattern in the username construction line
+
+## SELF-IMPROVEMENT TRIGGER
+
+  SKILLUPGRADE! supabase-patterns → when a new RLS or RPC pattern appears
+  SKILLUPGRADE! supabase-patterns → when migration 008 is applied (update 001-008 summary)
+  SKILLUPGRADE! supabase-patterns → when Mumbai→Austin migration happens (July 2026)
