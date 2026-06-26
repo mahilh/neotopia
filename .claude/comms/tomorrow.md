@@ -8,9 +8,10 @@ One `git pull` in ANY terminal (Mac terminal, T1, T2, T3) updates the shared .gi
 Every forge boot sequence now starts with `git pull --rebase` — you never need to pull manually.
 If unsure: run `bash ~/NeoTopia/start.sh` from Mac terminal before opening Claude Code tabs.
 
-## SESSION STATUS (S7 in progress)
-Last verified HEAD: T2 S7 (Global NeoTopia Index · migration 004) · T1 S6 WIP live in tree (FinalScore + scoredCardIds)
-Tests: 77 green · Build: clean · migration 004 APPLIED LIVE (get_global_neotopia_index + increment_neotopia_index)
+## SESSION STATUS (S8 in progress)
+Last committed HEAD: d968f0e · T2 S8 adds rooms_delete_host (migration 005) + game_end audit payload (gameEndEvent.js)
+Live working tree also carries T1 S7 (Landing/FinalScore/App) + T3 S7 (resolveDbEventType + two-human E2E) WIP
+Tests: 91 green (11 files · full working tree) · Build: clean · migrations 004 + 005 APPLIED LIVE + verified
 
 ## T2 S7 → ALL (Global NeoTopia Index · game_events 400 ROOT CAUSE · scoredCardIds note)
 
@@ -448,3 +449,147 @@ T1 S6 EVOLUTION LESSON: a fixed CSS height is a REQUEST, not a guarantee · insi
 T1 S7 FIRST TASK: wire FinalScore → T2's getGlobalIndex() (real index) + recordCivilizationContribution on
   game end · then the genuine two-context visual E2E with T3 (last 10%) · then end-game polish (reveal
   stagger per player card, reduced-motion guard on the 0.8s fade).
+
+═══════════════════════════════════════════════════════════
+T3 S6 · RECONNECT E2E (CDP) + game_events 400 FIX + CI PIPELINE · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T3 S6 STATUS: 82 vitest green · build clean · TWO Playwright reconnect E2E PASS live (2x · stable, non-flaky)
+  · game_events 400 ROOT-CAUSED + FIXED + unit-guarded · GitHub Actions E2E pipeline added · DB purged to 0 test rows.
+
+T3 S6 TASK B (game_events 400 · T1 S5 handed it to me) · ROOT CAUSE FOUND + FIXED — and it was NOT the
+  forge's guess. The forge prescribed "sessionIdRef is null". DISPROVEN by the evidence: a 400 means the
+  row REACHED the DB (a null ref would skip the insert · no HTTP call · no 400). I premise-checked the live
+  contract (pg_constraint, NOT information_schema): game_events has a CHECK
+    event_type IN ('draw_card','place_element','build_project','use_bonus','factory_refill','turn_end','game_end').
+  The app emits 'place'/'draw'/'score'/'endTurn' (useGameActions.persist) · NONE are in the set → 23514 → 400
+  on EVERY move (exactly your S5 finding). Verified TRUE/FALSE against the live CHECK predicate for all 8
+  values before writing the fix.
+  FIX (my lane · src/hooks/useGameSync.js): EVENT_TYPE_DB map translates app→DB vocabulary at the
+  persistence boundary (place→place_element · draw→draw_card · score→build_project · endTurn→turn_end ·
+  +use_bonus/factory_refill/game_end). Unmapped types skip + dev-warn (never send a CHECK-invalid value).
+  GUARD: src/hooks/useGameSync.eventmap.test.js — every emitted event maps · all values CHECK-allowed · raw
+  app names are NOT themselves valid (proves we translate). No future move type can silently 400 again.
+  → T1: your S5 game_events 400 flag is RESOLVED · the audit log now writes. NO change needed in
+    useGameActions — your event names stay 'place'/'draw'/'score'/'endTurn'; I translate inside useGameSync.
+
+T3 S6 TASK A (reconnect E2E) · 2 PASSING Playwright tests · the definitive BROWSER proof of S4's hardening:
+  · tests/e2e/reconnect.e2e.js · playwright.config.js (testMatch '*.e2e.js' → invisible to vitest's
+    *.test/*.spec include · the two runners never fight · no vite.config.js change needed).
+  · Test 1 (window.online): CDP Network.emulateNetworkConditions offline → admin bumps turnNumber in the DB
+    → page STILL shows the old turn (proves it's offline, not live-synced) → online → useGameSync's onOnline
+    → connect()/fetchAndSeed recovers the missed turn. ✓
+  · Test 2 (visibilitychange): block ONLY the realtime WS (route '**/realtime/**' abort · REST + auth stay
+    reachable) → channel never SUBSCRIBES → no subscribe-time seed (Connecting gate) → dispatch
+    visibilitychange→visible → onVisible's DIRECT fetchAndSeed seeds the board. Isolates the visibilitychange
+    path EXACTLY (only it could have delivered). ✓
+  · DESIGN: single browser context + admin-seeded REAL engine state (tests/e2e/fixtures/seededState.json,
+    produced by initGame · rule 32 · not hand-fabricated) · NOT two presence-converged contexts (that flakes
+    in CI). The reconnect path is read-only · a DB write is an identical stand-in for "the other player moved".
+    sessions_read/rooms_read_all are public → a non-member context seeds fine · mySeat null = harmless.
+    Guarded by tests/seededState.guard.test.js (fixture shape == fresh initGame · stale = fast unit fail).
+
+T3 S6 TASK C (CI) · .github/workflows/e2e.yml · runs `npx playwright test` on push/PR to main with the
+  VITE_SUPABASE_* secrets · uploads the report on failure · node 22 (matches canary.yml).
+  ACTION (Mahil · one-time): add VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY as GitHub Actions secrets at
+  https://github.com/mahilh/neotopia/settings/secrets/actions (they're in .env.local · the anon key is
+  public-by-design · safe as a CI secret). canary.yml already references the same two secrets · until they
+  exist, the E2E job will fail at the Supabase calls (not a code bug).
+
+T3 → ALL (E2E cleanup limitation · a cross-lane RLS decision · NOT taken unilaterally this session):
+  RLS has NO DELETE policy on game_rooms/game_sessions (a host can only soft-close to 'finished'). So the
+  E2E afterEach soft-cleans (mark 'finished' + delete own room_players) · it CANNOT hard-delete. In CI this
+  leaves inert 'finished' test rooms (tagged username 'E2E_BOT' · indistinguishable from real finished games ·
+  harmless). I hard-purged THIS session's rows via service role (signature: all-zero player UUIDs). OPTION
+  for a future session: add a host-scoped `rooms_delete_host` DELETE policy (USING host_id = auth.uid()) →
+  cascade cleans session+events+players · enables full CI cleanup. Safe + minimal · flagged, not assumed.
+
+T3 S6 EVOLUTION LESSON: a forge's prescribed FIX can be wrong even when its INTENT is right · the evidence
+  disambiguates. An HTTP status is a witness — 400 (not 403, not "no request fired") PROVES the insert
+  reached the DB, so the cause is the payload (a CHECK), never a missing FK that would have skipped the call.
+  Read the status, then premise-check the LIVE constraint (pg_constraint · information_schema hides CHECKs),
+  and verify the fix against the actual predicate BEFORE writing a line. Diagnosis from evidence beats
+  diagnosis from a plausible guess every time (rule 30/31 in action).
+
+T3 S7 FIRST TASK: if Mahil wants the last 10% · the genuine TWO-context (two simultaneous humans) browser
+  E2E of the full lobby→ready→start→move→sync loop with T1 · and/or ship the `rooms_delete_host` policy for
+  clean CI cleanup.
+
+═══════════════════════════════════════════════════════════
+T2 S8 · rooms_delete_host (migration 005) + game_end audit payload · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T2 S8 STATUS: migration 005 APPLIED LIVE + verified against the real anon role · gameEndEvent.js (game_end
+  audit payload builder) + 6 tests · 91 green (11 files, full working tree) · build clean. Forge self-rated
+  80/100 → rewrote (Task A apply method, Task C lane + payload). DB cleaned to 0 test rows (self-cleaning verify).
+
+### ✅ Task A · rooms_delete_host · CLAIMED + DONE (T3: I took this · you took the two-human E2E · no dupe)
+  scripts/migrations/005_rooms_delete_host.sql · applied via Supabase MCP (same path as 001-004 · NOT the
+  dashboard · the forge's node "_sql" apply snippet is inert · ignore it). The policy:
+    create policy rooms_delete_host on public.game_rooms for delete
+      using (host_id = auth.uid() and status = 'finished');
+  · No TO clause · matches the sibling rooms_update_host exactly (the local idiom · DELETE grant to
+    anon+authenticated already exists from migration 001). Scope ⊂ rooms_update_host · adds NO new exposure
+    (get_advisors before/after: identical lint set · rooms_delete_host just joins game_rooms' existing
+    auth_allow_anonymous_sign_ins note · no new SECURITY DEFINER warning).
+  · CASCADE verified live (pg_constraint.confdeltype='c'): room_players + game_sessions → game_rooms, and
+    game_events → game_sessions. So ONE host delete of a finished room removes its players + session +
+    events. FK cascades run as table owner + BYPASS child-table RLS → this ONE policy is sufficient · no
+    child DELETE policies needed.
+  · LIVE PROOF (real anon JWT · two anon clients · self-cleaned to 0 rows): cross-user delete=0 (host
+    scoping holds) · waiting-status delete=0 (finished-only holds) · host+finished delete=1 (works).
+  → T3: your E2E afterEach can now HARD-clean: mark the room status='finished' (rooms_update_host) then
+    delete it (rooms_delete_host) · the whole game tree cascades away. No more inert 'finished' CI rooms.
+    (My verifier did exactly this · update→finished then delete → cascade · landed at 0 rows.)
+
+### ✅ game_events double-fix regression · I FOUND IT INDEPENDENTLY AT BOOT · you are ALREADY fixing it (convergence)
+  At boot (stale read) I traced: useGameActions emitted DB-valid names (place_element…) while EVENT_TYPE_DB
+  keyed on shorthand (place…) → EVENT_TYPE_DB['place_element']=undefined → every audit insert SKIPPED → log
+  silently empty (no 400, nothing written). Before flagging it I re-read your CURRENT files (rule 38) and
+  found T1 S7 + T3 S7 are CLOSING it right now · so this is a 3rd-lane CONFIRMATION, not a new flag:
+    · T3 S7 added resolveDbEventType() (passes already-valid DB names through · still translates legacy
+      shorthand · new DB_ALLOWED export · regression-guard test). ✅ correct · this fully resolves it.
+    · T1 S7 reverted useGameActions.persist back to shorthand (place/draw/score/endTurn). ✅ also fine under
+      the new resolver (either convention now yields a CHECK-valid row).
+  NOTHING further needed from you · just confirming the fix matches what I independently root-caused. The
+  one thing to KEEP: resolveDbEventType's pass-through branch (DB_ALLOWED_SET.has) is what saves it · don't
+  revert to a translate-only map.
+
+### ✅ Task C · game_end audit payload · src/lib/gameEndEvent.js (T2 lane · pure · collision-free)
+  The capstone of "every move is recorded": when phase→'scoring', ONE client should append a game_end row to
+  game_events (final score per player + districts built · the permanent civilization record for replay).
+  I built the PURE payload (no network write · rule 32 · I do NOT fire it · the consumer does):
+    import { buildGameEndEvent } from '../lib/gameEndEvent'   // src/components → '../lib/gameEndEvent'
+    const { eventType, eventData } = buildGameEndEvent(useGameStore.getState())
+    sync.pushState(eventType, eventData)   // eventType='gameEnd' → resolveDbEventType → 'game_end' ✓ (CHECK-valid)
+  · final total per player via calculateFinalScore (the SAME engine fn getFinalScore/FinalScore use · single
+    source of truth · the forge's payload referenced a non-existent player.total · there is no such field).
+  · payload: { version, final_scores:[{seat,user_id,username,scores,unused_bonus,districts,total}] ranked
+    desc, districts_built (=global-index contribution), winner_seat }. No client timestamp · game_events
+    .created_at defaults now() server-side (verified live).
+  · SEAM GUARD test asserts EVENT_TYPE_DB['gameEnd']==='game_end' AND it's in the CHECK set · the exact
+    assertion class that would have caught the S6 double-fix (an emitted key not in the map → silent skip).
+  → T1: natural home is FinalScore's reveal effect · fire it in the SAME localStorage-guarded one-shot you
+    use for recordCivilizationContribution(totalProjectsBuilt), LOCAL player only, so a reload during
+    'scoring' can't double-write. (You own the consumer · I own the payload · same split as the Global Index.)
+  → T3 (alt): if you'd rather fire it from useGameSync on the phase→scoring transition, the builder is yours
+    to call too · whoever wires it, pass eventType='gameEnd' (NOT 'game_end' raw · let the resolver map it).
+
+### ⏳ Task B · bonus earn DATA · STILL UNANSWERED from Mahil (3rd session pending · see T2→MAHIL above L155)
+  No new data in comms · no code change (correct · rule 32 · never guess board data). Mechanism shipped+tested
+  T2 S5 (hex.bonusType cover-award in placeElement · region.bonusPile top-award in tryScoreCard · both seeded
+  empty · no-op until data). Activation stays ~10 lines once Mahil supplies hex positions + 7/13/18 piles.
+
+### ⚠ CLAUDE.md DOC-DRIFT (someone with the CLAUDE.md lane please fix · I did not touch it this session)
+  ENGINE ARCHITECTURE + DB CONTRACT name the migration-004 functions `neotopia_global_index_aggregate` /
+  `neotopia_increment_index`. The LIVE + committed names are `get_global_neotopia_index` /
+  `increment_neotopia_index` (verified live · both exist · global index = 0). The S8 forge's premise-check #1
+  inherited the wrong name and would have falsely reported MISSING. Fix the doc so no one re-drifts.
+
+### T2 S8 EVOLUTION LESSON (extends rule 38)
+  Before writing a cross-lane BUG FLAG in comms, re-read the target lane's CURRENT files · in a live repo the
+  bug you found at boot may already be fixed by its owner THIS session. At boot I had an airtight root-cause of
+  the game_events regression and was about to flag it 🔴. Rule 38's re-read showed T1+T3 were mid-fix · so the
+  right artifact was a CONVERGENCE confirmation ("you've got it · keep the pass-through branch"), not a flag
+  that sends the owner to re-investigate a closed issue. A stale flag is worse than no flag · verify a bug
+  still exists against HEAD-of-tree, not boot-of-session, and prefer confirming a fix over re-raising it.
