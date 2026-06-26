@@ -13,7 +13,7 @@ const GLOBAL_INDEX_BASE = 147823 // fallback only · getGlobalIndex already fold
 
 const BG = '#0a0a0f'
 const sectionLabel = {
-  fontSize: 10, letterSpacing: 4, color: 'rgba(255,255,255,0.5)', // WCAG AA (~5.3:1 on #0a0a0f)
+  fontSize: 12, letterSpacing: 4, color: 'rgba(255,255,255,0.5)', // WCAG AA (~5.3:1 on #0a0a0f) · 12px min (UX scan)
   textTransform: 'uppercase', marginBottom: 16,
 }
 
@@ -23,7 +23,7 @@ function MicroCard({ tag, lines }) {
       flex: '1 1 220px', maxWidth: 300, padding: '24px 22px', borderRadius: 16,
       border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)',
     }}>
-      <div style={{ fontSize: 10, letterSpacing: 4, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
+      <div style={{ fontSize: 12, letterSpacing: 4, color: 'rgba(255,255,255,0.4)', marginBottom: 12 }}>
         {tag}
       </div>
       {lines.map((l, i) => (
@@ -64,7 +64,7 @@ export default function Landing() {
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '64px 24px',
       }}>
-        <div style={{ fontSize: 11, letterSpacing: 8, color: 'rgba(255,255,255,0.5)', marginBottom: 28, textTransform: 'uppercase' }}>
+        <div style={{ fontSize: 12, letterSpacing: 8, color: 'rgba(255,255,255,0.5)', marginBottom: 28, textTransform: 'uppercase' }}>
           2055
         </div>
         <div style={{ fontSize: 13, letterSpacing: 10, color: 'rgba(255,255,255,0.5)', marginBottom: 28 }}>
@@ -233,7 +233,7 @@ export default function Landing() {
 
       {/* ───────────── FOOTER ───────────── */}
       <footer style={{ padding: '32px 24px 48px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={{ fontSize: 11, letterSpacing: 3, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
+        <div style={{ fontSize: 12, letterSpacing: 3, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
           NeoTopia · Building the civilization · 2055
         </div>
         <a
@@ -242,7 +242,7 @@ export default function Landing() {
           rel="noopener noreferrer"
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '10px 16px',
-            fontSize: 11, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', letterSpacing: 0.5,
+            fontSize: 12, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', letterSpacing: 0.5,
           }}
         >
           github.com/mahilh/neotopia
