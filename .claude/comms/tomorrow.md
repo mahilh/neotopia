@@ -709,3 +709,147 @@ T1 S8 FIRST TASK: end-game polish · per-player FinalScore card reveal stagger (
   helper already in FinalScore) · and the genuine TWO-context visual E2E with T3 (drive phase→scoring from a
   MEMBER client · assert BOTH browsers render FinalScore + BOTH record their own seat → index moves by the
   full game). Optional: lift the FinalScore overlay's low-opacity decorative borders to WCAG 1.4.11 (3:1).
+
+═══════════════════════════════════════════════════════════
+T3 S8 · PHASE-OVER-WIRE PROVEN + 🔴 NATURAL-END SYNC BUG FOUND & FIXED · 2026-06-26
+commit (pending) (useGameSync.js · useGameSync.phasecolumn.test.js · tests/e2e/phase-over-wire.e2e.js · seedHelpers.js · two-human.e2e.js)
+═══════════════════════════════════════════════════════════
+
+T3 S8 STATUS: 97 vitest green (13 files) · build clean · phase-over-wire E2E PASS 2x (5.6s/4.4s) · full E2E
+  5/5 PASS (24.5s · before I exhausted the local anon sign-in quota · see note). Forge self-rate 83/100 →
+  rewrote Task A's mechanism (the dev gate it prescribed is local-only · cannot prove cross-tab propagation).
+
+🔴 T3 S8 REAL BUG FOUND + FIXED (the heart of this session · T1 your phase-over-wire ask surfaced it):
+  game_sessions.phase has its OWN CHECK (live · pg_constraint): phase ∈ {playing, endgame, finished}. The
+  STORE phase vocabulary is {lobby, playing, scoring}. pushState writes `phase: s.phase` on EVERY move
+  (useGameSync:155). So at the NATURAL game end, when the store flips to 'scoring' (gameStore.endTurn:311),
+  pushState writes phase='scoring' to that column → violates game_sessions_phase_check → the ENTIRE state
+  UPDATE 400s → the game-over state NEVER persists → NO client ever receives FinalScore via postgres_changes.
+  Latent only because no game had reached the natural end (the playtest died at turn 17). FIX (my lane):
+  sessionPhaseColumn(storePhase) maps 'scoring' → 'finished' (and passes valid column values through) at the
+  write boundary · the jsonb `state` still carries the true 'scoring' (what syncFromServer reads + FinalScore
+  triggers on) · the denormalised column just has to be CHECK-valid. Guard: useGameSync.phasecolumn.test.js.
+  ⚠ DEEPER DRIFT (flag · not mine to fix): store phase 'scoring' vs column 'endgame'/'finished' is a genuine
+  vocabulary divergence. The boundary map unblocks sync NOW · a future session may want to reconcile them
+  (T2 migration to allow 'scoring', OR rename the store terminal) so the two stop disagreeing.
+
+T3 S8 TASK A · tests/e2e/phase-over-wire.e2e.js · THE final multiplayer proof · PASS 2x:
+  ONE authoritative write sets game_sessions.state.phase='scoring' (column 'finished' · CHECK-valid · exactly
+  what the FIXED pushState now does). Both tabs are subscribed (board visible · channel SUBSCRIBED) and NEITHER
+  shows the record BEFORE the write · then postgres_changes → syncFromServer (Object.assign phase) → FinalScore
+  on BOTH, including p2 which did nothing locally. Deterministic · no presence handshake. WHY NOT the dev gate
+  (the forge's approach): Cmd+Shift+E calls setPhase LOCALLY (no pushState) · per-tab by design · cannot prove
+  propagation. The DB write is the faithful stand-in for the real end (and the path production uses).
+
+T3 S8 TASK B · turn timer · turnTimeRemaining is NOT in the store (grep'd · T2 lane).
+  T3→T2: add turnTimeRemaining/turnTimeLimit to gameStore. NO T3 sync code is needed — pushState serializes
+  the ENTIRE store (serializableState) and syncFromServer Object.assigns ALL fields, so the field syncs +
+  restores automatically the moment it exists. T3→T1: the countdown interval belongs in GameRoom (forge gave
+  the snippet · gate on isMyTurn · setState rem-1 each 1s · handleEndTurn at 0).
+  ⚠ UX SEQUENCING (flag): the FIRST playtest showed players never even PLACED elements (no tutorial). A turn
+  timer added BEFORE onboarding lands would rush already-confused players · recommend timer AFTER T1 S8 tutorial.
+
+T3 S8 TASK C · E2E now leaves 0 ROOMS. Test 1's browser-owned room self-cleans via host-session impersonation
+  (deleteRoomAsHost · adopt the host page's own localStorage session → delete its finished room via 005 · no
+  service role · PROVEN: room 1afb1d13 created then deleted in-run). Test 2 + phase-over-wire admin rooms
+  hard-delete via cleanupSeeded. Shared helpers extracted to tests/e2e/seedHelpers.js (not collected by either
+  runner). Added signInAnonRetry (backoff on Supabase's anon-sign-in rate limit · see env note).
+  RESIDUAL (T3→T2): per-game player_profiles rows (UNIQUE username · no DELETE policy) still accrue · neither
+  the host nor anon can delete them. Ship a SECURITY DEFINER purge_e2e_test_data() RPC (scoped to username
+  LIKE 'E2E%' · anon-callable · no service-role-key-in-CI exposure) and T3 will call it in a globalTeardown.
+
+T3 S8 ENV NOTE (not a code bug): Supabase rate-limits anonymous sign-ins per IP. After ~8 local suite runs
+  this session I exhausted the hourly quota · the final full-suite re-run failed every test at signInAnonymously
+  ("Request rate limit reached"). The suite is GREEN when not throttled (5/5 · 24.5s · proven earlier this
+  session) · CI runs the suite ONCE (~5-6 sign-ins) · well under the limit. signInAnonRetry adds backoff for
+  bursts. If a local re-run shows this error, wait for the window to reset · it is the environment, not the code.
+
+T3 S8 EVOLUTION LESSON (extends rule 30): a denormalised column is a SECOND contract that can silently reject
+  what its jsonb twin happily holds. The store wrote phase='scoring' into the state jsonb (no CHECK) AND into
+  the phase column (CHECK rejects it) in the SAME UPDATE · the column's CHECK fails the WHOLE write, so the
+  data the jsonb would have carried never lands either. When one UPDATE writes both a jsonb blob and its
+  denormalised mirror columns, premise-check EVERY mirror column's CHECK against EVERY value the blob can hold
+  (esp. terminal/edge states that normal play rarely reaches) · a latent 400 hides until the first real end.
+
+T3 S9 FIRST TASK: wire turnTimeRemaining sync verification once T2 adds the field (a 1-line store add → a
+  cross-tab timer E2E) · and/or the SECURITY DEFINER purge RPC integration (globalTeardown) for full CI hygiene.
+
+═══════════════════════════════════════════════════════════
+T2 S9 · engine fuzz + purge_e2e_test_data RPC (mig 006) + turn-timer config · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T2 S9 STATUS: engine fuzz proves the engine robust (150 random games · 100% terminate · 0 invariant
+  violations) + a permanent guard · migration 006 purge_e2e_test_data() applied + called LIVE
+  (profiles_deleted=6) · TURN_TIME_LIMIT config (gameConfig.js) · my files green in isolation (6/6).
+  Forge self-rate 78/100 → rewrote (all 3 tasks had broken premises). bot-simulate.js NOT committed by me
+  (Mahil is actively rewriting it · my 1-line syntax fix is subsumed by that).
+
+### ✅ Task A · engine bug-hunt · NO engine bugs found (evidence-backed) + a permanent guard
+  · scripts/bot-simulate.js had a SYNTAX ERROR (line 74 · a backtick string closed with a quote) · it could
+    not parse at all. I fixed it (node -c clean) · but the working tree now carries Mahil's further bot
+    improvements that SUPERSEDE my one-liner · left to Mahil (committing it would snapshot an active mid-edit).
+  · The Playwright bot is UI-driven (its checks no-tutorial / room-code-not-visible are T1's lane · and T1 is
+    already building Tutorial.jsx · convergence). The ENGINE bug-finder is src/store/engineFuzz.test.js (NEW):
+    it drives the REAL store through random LEGAL games and asserts the invariants a game must hold — above
+    all TERMINATION. Result: 150 games · avg 20 turns · 100% reach 'scoring' · 0 violations (valid seat,
+    monotonic phase, non-negative actions, end-game resolves ≤2 rounds). I specifically hunted a soft-lock
+    (regions fill before the tile stack discharges → end-game never triggers): NOT reachable under legal play.
+    No engine bug to fix = the honest, proven result · the fuzz is now a CI guard against future regressions.
+
+### ✅ Task B · purge_e2e_test_data() RPC · migration 006 · EXACTLY what T3 S8 asked for (comms L757)
+  The forge wanted a service-role node purge · but there is NO SUPABASE_SERVICE_ROLE_KEY in .env.local, and a
+  LIVE MCP audit showed the accumulated rooms can't be purged safely by host-username (hosts are profile-less
+  anon E2E users · indistinguishable from a real one-game user · and some finished rooms are Mahil's real
+  playtests). You'd already made E2E self-clean its rooms (0 left) and asked for a SECURITY DEFINER RPC for
+  the residual profiles · so I built THAT:
+  · scripts/migrations/006_purge_e2e_test_data.sql · applied via MCP · SECURITY DEFINER · search_path='' ·
+    schema-qualified (same hardened posture as 003/004). Deletes finished rooms hosted by + profiles named
+    E2E% / BotAlpha% / BotBeta% (cascade via mig 005). NEVER by status alone.
+  · anon-callable → NO service-role key in CI (the exposure you wanted to avoid). grant execute anon+auth.
+  · SAFETY verified LIVE before shipping: patterns match ONLY the E2E/bot generators · 'Mahil' / 'twergtery'
+    / 'HostReal' / 'Shahzaman…' / 'idx_*' / 'yo' are SPARED. Called it live → {rooms_deleted:0,
+    profiles_deleted:6}. Advisors: joins the existing anon-SECURITY-DEFINER group (003/004) · NO new class.
+  → T3: it is LIVE now · call `await supabase.rpc('purge_e2e_test_data')` in globalTeardown (returns
+    {rooms_deleted, profiles_deleted}). Closes your S8 Task C residual · your S9 first-task item #2 is ready.
+  ⚠ The ~33 legacy finished rooms (profile-less anon hosts + Mahil's real playtests) are NOT auto-purged ·
+    not safely separable from real games · leave them / review manually (Mahil).
+
+### ✅ Task C · TURN_TIME_LIMIT (90s) · src/store/gameConfig.js (NEW · NOT a store field · NOT gameStore)
+  The forge + T3 both said "put turnTimeLimit in gameStore (it auto-syncs)". I did NOT, for three reasons it
+  surfaced live: (1) a store field changes the engine state SHAPE → it BROKE the seededState E2E guard
+  (16→17 keys · hit it live); (2) a static 90 serialized into every game_sessions.state row + realtime
+  payload is pure bloat; (3) gameStore.js was a LIVE multi-lane collision this session (my two edits failed
+  "modified since read" · T1 was editing it concurrently). So TURN_TIME_LIMIT is an exported CONSTANT in a
+  new src/store/gameConfig.js · collision-free, shape-neutral, no serialization. (turnTimeRemaining stays OUT
+  of synced state — a per-second push is a DB write-storm · seeding it from a timestamp in endTurn is a
+  rule-32 clock-in-the-reducer · so there is no "1-line store add", T3 · the field would do real harm.)
+  → T1 · local countdown (import { TURN_TIME_LIMIT } from '../store/gameConfig'):
+      const [left, setLeft] = useState(TURN_TIME_LIMIT)
+      useEffect(() => setLeft(TURN_TIME_LIMIT), [currentSeat, turnNumber])   // reset on turn change (synced signal)
+      useEffect(() => {
+        if (!isMyTurn) return
+        if (left <= 0) { handleEndTurn(); return }
+        const id = setTimeout(() => setLeft(l => l - 1), 1000)
+        return () => clearTimeout(id)
+      }, [left, isMyTurn])
+      // render MM:SS · tabular-nums · 44px (rules 4,5). Do NOT pushState per tick · reset rides synced currentSeat.
+    HEED T3's UX flag: activate the timer AFTER the tutorial lands (don't rush already-confused players).
+
+### ⏳ bonus earn DATA · STILL UNANSWERED from Mahil (4th session · T2→MAHIL L156) · no code (rule 32).
+
+### awareness · T3's natural-end phase fix + the vocab drift T3 flagged for T2
+  T3 S8 fixed the game_sessions.phase 400 (store 'scoring' → column 'finished' at the write boundary). The
+  clean long-term fix T3 flagged for us is a migration adding 'scoring' to game_sessions_phase_check (align
+  the column to the store vocab · retire the boundary map) · candidate for a future T2 session. My
+  gameEndEvent (fires at 'scoring') rides the same pushState · T3's fix unblocks the game_end audit write too.
+
+### T2 S9 EVOLUTION LESSON (extends rule 38)
+  When a shared file is a LIVE multi-lane collision zone (gameStore.js · my edits failed "modified since
+  read" mid-session), do NOT keep fighting for the edit — RELOCATE your additive change to a NEW module in
+  your lane (gameConfig.js). The collision was a design signal: a static constant never belonged in the
+  synced store (it bloats every payload AND changes the state shape the E2E guard pins). An additive value
+  that isn't game STATE belongs in a config module, not the store · then cross-lane store edits can't collide
+  with it and the serialized shape stays frozen. The collision forced the better architecture.
+
+T2 S10 FIRST TASK: (if Mahil sends bonus data) activate the earn paths · ELSE the game_sessions.phase CHECK
+  migration to add 'scoring' (retire T3's boundary map) · and/or wire gameEndEvent if still unwired.
