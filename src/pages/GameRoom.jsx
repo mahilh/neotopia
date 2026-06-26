@@ -9,6 +9,7 @@ import { usePatternHighlight } from '../hooks/usePatternHighlight'
 import GameBoard from '../components/Board/GameBoard'
 import ActionBar from '../components/ActionBar'
 import FinalScore from '../components/FinalScore'
+import Tutorial, { tutorialSeen } from '../components/Tutorial'
 import ProjectCard, { ScoreFlash } from '../components/ProjectCard'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
@@ -28,6 +29,10 @@ export default function GameRoom() {
 
   const [initialized, setInitialized] = useState(false)
   const [scoreFlash, setScoreFlash] = useState(null) // { card, regionName } · the score story moment
+  // First-turn onboarding (T1 S8). Shown once ever per browser (localStorage) · the first playtest
+  // never discovered "place an element". We gate on isMyTurn + phase below, NOT on turnNumber: turns
+  // may count per-player-turn, so a turnNumber<=1 gate would skip the 2nd player's first turn entirely.
+  const [showTutorial, setShowTutorial] = useState(() => !tutorialSeen())
 
   // Subscribe to individual slices · avoids a full re-render on every state change.
   const phase         = useGameStore(s => s.phase)
@@ -99,6 +104,22 @@ export default function GameRoom() {
     [ph0, ph1, ph2, actionsLeft],
   )
 
+  // Persistent "what to do next" line (colonist.io pattern). The first playtest reached turn 17 with an
+  // empty board because nothing ever told the players what their options were · this never lets that happen.
+  const instruction = (() => {
+    if (!isMyTurn) return `Waiting for ${currentPlayer?.username ?? 'the other player'}`
+    if (actionsLeft <= 0) return 'No actions left · end your turn'
+    switch (uiPhase) {
+      case 'factorySelected': return 'Pick an element from the factory'
+      case 'elementSelected':  return 'Choose a region to place into'
+      case 'regionSelected':   return 'Click a highlighted hex to place the element'
+      case 'scorePending':     return 'Pattern complete · select a glowing card to score'
+      default:                 return 'Click a factory to take an element · or draw a card from the Offer'
+    }
+  })()
+  // Pulse the factories to invite the first action · only on your turn, with actions left, before a pick.
+  const factoriesPulse = isMyTurn && actionsLeft > 0 && selectedFactory === null
+
   // Multiplayer loading gate (AFTER all hooks · Rules of Hooks): in a real room, wait for
   // useGameSync to seed the store before rendering the board. Solo (no roomId) skips this.
   // 'scoring' is the end-game phase · let it through so the FinalScore overlay can render.
@@ -115,7 +136,12 @@ export default function GameRoom() {
 
       {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
       {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
-      {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} />}
+      {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} sync={sync} roomId={roomId} />}
+
+      {/* FIRST-TURN TUTORIAL · the onboarding the first playtest never had · once ever per browser */}
+      {showTutorial && isMyTurn && phase === 'playing' && (
+        <Tutorial onDismiss={() => setShowTutorial(false)} />
+      )}
 
       {/* SCORE FLASH · the civilization "story moment" after a card is scored */}
       {scoreFlash && (
@@ -128,6 +154,7 @@ export default function GameRoom() {
 
       {/* HEADER */}
       <header style={{
+        position: 'relative',
         height: 56, borderBottom: '1px solid rgba(255,255,255,0.06)',
         display: 'flex', alignItems: 'center', padding: '0 20px', gap: 16, flexShrink: 0,
       }}>
@@ -137,15 +164,16 @@ export default function GameRoom() {
         <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
           Turn {turnNumber}
         </span>
-        {uiPhase === 'scorePending' && (
-          <span style={{
-            marginLeft: 8, padding: '4px 12px', borderRadius: 20,
-            background: 'rgba(30,200,100,0.15)', border: '1px solid rgba(30,200,100,0.3)',
-            color: '#1DC864', fontSize: 11, fontWeight: 500,
-          }}>
-            Pattern complete · select card to score
-          </span>
-        )}
+        {/* Persistent instruction · centered · always tells the player what to do next (colonist.io). */}
+        <div style={{
+          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+          fontSize: 13, letterSpacing: 0.3, textAlign: 'center', pointerEvents: 'none',
+          maxWidth: '58%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          color: uiPhase === 'scorePending' ? '#1DC864' : 'rgba(255,255,255,0.5)',
+          fontWeight: uiPhase === 'scorePending' ? 600 : 400,
+        }}>
+          {instruction}
+        </div>
         {/* Actions counter, turn status, and End Turn now live in the bottom ActionBar. */}
       </header>
 
@@ -162,6 +190,7 @@ export default function GameRoom() {
             partialHighlight={partialHighlight}
             completionCandidates={completionCandidates}
             selectedFactory={selectedFactory}
+            factoriesPulse={factoriesPulse}
             regionScores={currentPlayer?.scores ?? []}
             onHexClick={handleHexClick}
             onFactoryClick={handleFactoryClick}

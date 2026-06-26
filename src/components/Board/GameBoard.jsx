@@ -10,6 +10,7 @@ export default function GameBoard({
   partialHighlight = [],     // [{q,r}] near-miss hexes (n-1 filled) · usePatternHighlight.partialKeys
   completionCandidates = [], // [{q,r}] empty hexes that would complete a near-miss · "place here to score"
   selectedFactory = null,   // factory id player selected for element pickup
+  factoriesPulse = false,   // pulse unselected factories to invite the first action (your turn · BUG-02)
   regionScores = [],        // current player's per-region score · index = region id · shown under each label
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
@@ -79,11 +80,23 @@ export default function GameBoard({
         })
       })}
 
+      {/* Pulse clickable factories on your turn (BUG-02 · disabled under prefers-reduced-motion). */}
+      <style>{`
+        .factory-pulse { animation: factory-pulse 2s ease-in-out infinite; }
+        @keyframes factory-pulse {
+          0%,100% { filter: brightness(1); }
+          50% { filter: brightness(1.55) drop-shadow(0 0 6px rgba(255,255,255,0.35)); }
+        }
+        @media (prefers-reduced-motion: reduce) { .factory-pulse { animation: none; } }
+      `}</style>
+
       {/* Factory hexes */}
       {FACTORIES.map(factory => {
         const factoryData = factories.find(f => f.id === factory.id)
+        const pulse = factoriesPulse && factory.id !== selectedFactory
         return (
           <g key={`factory-${factory.id}`}
+            className={pulse ? 'factory-pulse' : undefined}
             onClick={() => onFactoryClick(factory.id)}
             style={{cursor: 'pointer'}}
           >

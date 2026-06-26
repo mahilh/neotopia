@@ -31,7 +31,7 @@ export const PROJECT_CARDS = [
     description: 'The oldest technology: people coming together with intention.',
   },
   {
-    id: 'card_05', name: 'AetherFlux Node',
+    id: 'card_05', name: 'Hydrogen Arc Station',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 0, r: 1, type: 'technology' }],
     points: 2, illustration: 'node', district: 7,
     description: 'Clean energy and clean code, speaking the same language.',
@@ -93,7 +93,7 @@ export const PROJECT_CARDS = [
     description: 'Three growing things: three generations of memory in the soil.',
   },
   {
-    id: 'card_15', name: 'AetherNet Tower',
+    id: 'card_15', name: 'Resonance Grid Tower',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'technology' }, { q: 0, r: 2, type: 'energy' }],
     points: 3, illustration: 'tower', district: 7,
     description: 'Signal rises from earth to sky, carrying consciousness upward.',
@@ -203,7 +203,7 @@ export const PROJECT_CARDS = [
     description: 'A civilization ready for contact with the unknown is a civilization ready for itself.',
   },
   {
-    id: 'card_33', name: 'AetherMind Campus',
+    id: 'card_33', name: 'Quantum Research Center',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: -1, type: 'energy' }],
     points: 4, illustration: 'campus', district: 7,
     description: 'The first AI that helps instead of traps. Built with love.',
@@ -227,7 +227,7 @@ export const PROJECT_CARDS = [
     description: 'Buildings grown from the earth must return to it. Architecture as regeneration.',
   },
   {
-    id: 'card_37', name: 'KnowBrand Studio',
+    id: 'card_37', name: 'Signal Broadcast Tower',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'technology' }, { q: 2, r: 0, type: 'community' }, { q: 1, r: 1, type: 'community' }],
     points: 4, illustration: 'studio', district: 8,
     description: 'Clothing as prayer. What you wear is who you are becoming.',
@@ -322,7 +322,7 @@ export const PROJECT_CARDS = [
     description: 'Five growing things surrounding one witness. The food forest and its guardian.',
   },
   {
-    id: 'card_52', name: 'AetherFlux Array',
+    id: 'card_52', name: 'Solar Hydrogen Array',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'energy' }, { q: -1, r: 1, type: 'energy' },
               { q: 0, r: 1, type: 'technology' }, { q: 1, r: -1, type: 'energy' }],
     points: 5, illustration: 'array', district: 4,
@@ -336,11 +336,11 @@ export const PROJECT_CARDS = [
     description: 'All four elements gathered in service of the ninth district: open contact with the unknown.',
   },
   {
-    id: 'card_54', name: "Hameed's Observatory",
+    id: 'card_54', name: 'Stellar Observatory',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'energy' }, { q: 0, r: 1, type: 'technology' },
               { q: -1, r: 1, type: 'community' }, { q: 1, r: -1, type: 'energy' }],
     points: 5, illustration: 'observatory', district: 7,
-    description: 'Named for Hameed Ahmed Khan: inventor, engineer, spiritual scientist. The baton has been passed.',
+    description: 'A deep-field array reading the sky across every frequency · the civilization listening for what comes next.',
   },
   {
     id: 'card_55', name: 'Living City Core',

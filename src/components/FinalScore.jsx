@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
 import { DECK } from '../lib/projectCards'
 import { getGlobalIndex, recordCivilizationContribution } from '../lib/supabase'
+import { buildGameEndEvent } from '../lib/gameEndEvent'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
 const REGION_COLORS = ['#7F77DD', '#1D9E75', '#E24B4A']
@@ -53,11 +54,12 @@ function usePrefersReducedMotion() {
   return reduce
 }
 
-export default function FinalScore({ players = [], mySeat = null }) {
+export default function FinalScore({ players = [], mySeat = null, sync = null, roomId = null }) {
   const [revealed, setRevealed] = useState(false)
   const [liveIndex, setLiveIndex] = useState(null) // real DB aggregate · null until fetched
   const didFetchRef = useRef(false)                // getGlobalIndex fires exactly once
   const didRecordRef = useRef(false)               // our own contribution records exactly once (when valid)
+  const didGameEndRef = useRef(false)              // the game_end audit row fires exactly once
   const reduceMotion = usePrefersReducedMotion()
   const navigate = useNavigate()
 
@@ -102,15 +104,52 @@ export default function FinalScore({ players = [], mySeat = null }) {
     recordCivilizationContribution(myDistricts).catch(() => {})
   }, [mySeat, myDistricts])
 
+  // Append the game_end audit row ONCE per game · the permanent civilization record (T2 built the PURE
+  // payload · the consumer fires it · comms T2 S8). "Exactly one client" = the lowest-seat present writes
+  // it (deterministic · everyone else skips · no duplicate rows), and a per-room localStorage guard makes
+  // a reload during 'scoring' idempotent. eventType 'gameEnd' → resolveDbEventType → 'game_end' (CHECK-valid).
+  // Skipped in solo (no sync). Uses the players prop (buildGameEndEvent only reads state.players).
+  useEffect(() => {
+    if (didGameEndRef.current) return
+    if (!sync?.pushState || mySeat == null) return
+    const seats = players.map(p => p.seat).filter(s => typeof s === 'number')
+    if (seats.length === 0 || mySeat !== Math.min(...seats)) return
+    const guardKey = roomId ? `neotopia_gameend_${roomId}` : null
+    try { if (guardKey && localStorage.getItem(guardKey)) { didGameEndRef.current = true; return } } catch {}
+    didGameEndRef.current = true
+    try { if (guardKey) localStorage.setItem(guardKey, '1') } catch {}
+    const { eventType, eventData } = buildGameEndEvent({ players })
+    sync.pushState(eventType, eventData)
+  }, [sync, mySeat, players, roomId])
+
+  // Global Index target = real persisted aggregate (already includes the seed) + this whole game's
+  // contribution, shown optimistically · seed-only fallback before the fetch resolves / on error. A
+  // bounded, self-healing cosmetic race exists (a peer recording before our read resolves can show it
+  // high by ≤ the peer's district count) · the PERSISTED aggregate stays exact (T1 S7 review).
+  const indexTarget = (liveIndex ?? GLOBAL_INDEX_BASE) + totalProjectsBuilt
+  // Count it up on reveal (T1 S8) · ease from the current shown value so a late liveIndex resolve never
+  // snaps backward · prefers-reduced-motion shows the final number instantly.
+  const [shownIndex, setShownIndex] = useState(GLOBAL_INDEX_BASE)
+  const shownRef = useRef(GLOBAL_INDEX_BASE)
+  useEffect(() => { shownRef.current = shownIndex }, [shownIndex])
+  useEffect(() => {
+    if (!revealed) return
+    if (reduceMotion) { setShownIndex(indexTarget); return }
+    let current = shownRef.current
+    if (current === indexTarget) return
+    const step = Math.max(1, Math.ceil(Math.abs(indexTarget - current) / 40))
+    const dir = indexTarget > current ? 1 : -1
+    const timer = setInterval(() => {
+      current = dir > 0 ? Math.min(current + step, indexTarget) : Math.max(current - step, indexTarget)
+      setShownIndex(current)
+      if (current === indexTarget) clearInterval(timer)
+    }, 25)
+    return () => clearInterval(timer)
+  }, [revealed, indexTarget, reduceMotion])
+
   if (finalScores.length === 0) return null
 
   const winner = finalScores[0]
-  // Display = real persisted aggregate (already includes the seed) + this whole game's contribution,
-  // shown optimistically as the live delta · seed-only fallback before the fetch resolves / on error.
-  // A bounded, self-healing cosmetic race exists: a peer recording before our read resolves can make
-  // the shown number high by ≤ the peer's district count. The PERSISTED aggregate stays exact (each
-  // client records only its own seat) · acceptable for a vanity civilization counter (T1 S7 review).
-  const displayIndex = (liveIndex ?? GLOBAL_INDEX_BASE) + totalProjectsBuilt
 
   return (
     <div
@@ -124,6 +163,8 @@ export default function FinalScore({ players = [], mySeat = null }) {
         padding: '60px 24px 80px',
       }}
     >
+      <style>{`@keyframes fs-card-reveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+
       {/* CIVILIZATION HEADER */}
       <div style={{ textAlign: 'center', marginBottom: 56, flexShrink: 0 }}>
         <div style={{ fontSize: 10, letterSpacing: 8, color: 'rgba(255,255,255,0.2)', marginBottom: 16, textTransform: 'uppercase' }}>
@@ -146,6 +187,8 @@ export default function FinalScore({ players = [], mySeat = null }) {
               flex: '1 1 320px', maxWidth: 360, borderRadius: 20, overflow: 'hidden',
               border: isWinner ? '1px solid rgba(255,215,0,0.35)' : '1px solid rgba(255,255,255,0.07)',
               background: isWinner ? 'rgba(255,215,0,0.04)' : 'rgba(255,255,255,0.02)',
+              // Stagger each civilization record in (T1 S8) · reduced-motion shows them at once.
+              ...(reduceMotion ? null : { opacity: 0, animation: 'fs-card-reveal 0.45s ease forwards', animationDelay: `${rank * 0.18}s` }),
             }}>
               {/* Player header · name + final total */}
               <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -247,7 +290,7 @@ export default function FinalScore({ players = [], mySeat = null }) {
           Global NeoTopia Index
         </div>
         <div style={{ fontSize: 44, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.88)', letterSpacing: -1, marginBottom: 8 }}>
-          {displayIndex.toLocaleString()}
+          {shownIndex.toLocaleString()}
         </div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}>
           consciousness districts built across all NeoTopia games

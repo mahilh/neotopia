@@ -19,6 +19,10 @@ export default function Lobby({ onGameStart }) {
   const [codeInput, setCodeInput] = useState('')
   const [claimError, setClaimError] = useState(null)
   const [view, setView] = useState('home') // home | join
+  const [copied, setCopied] = useState(false)        // room-code copy feedback (BUG-04)
+  const [editingName, setEditingName] = useState(false) // username edit mode (BUG-05)
+  const [editName, setEditName] = useState('')
+  const [savedFlash, setSavedFlash] = useState(false)
 
   // Game start is a side effect · never call onGameStart during render (it would update a parent
   // mid-render). Fire it from an effect once the room transitions to playing. Pass roomId so the
@@ -31,6 +35,22 @@ export default function Lobby({ onGameStart }) {
     setClaimError(null)
     const { error } = await claimUsername(nameInput.trim())
     if (error) setClaimError(error)
+  }
+
+  // BUG-04 · copy the room code so players can paste it into WhatsApp in one tap.
+  function copyCode() {
+    if (!roomCode) return
+    navigator.clipboard?.writeText(roomCode)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+      .catch(() => {})
+  }
+
+  // BUG-05 · rename: claimUsername upserts the player_profiles row, so it doubles as an edit.
+  async function saveName() {
+    const next = editName.trim()
+    if (next.length < 2) return
+    const { error } = await claimUsername(next)
+    if (!error) { setEditingName(false); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1500) }
   }
 
   // ── Auth loading ────────────────────────────────────────────────
@@ -83,7 +103,9 @@ export default function Lobby({ onGameStart }) {
         <div style={codeBox}>
           <p style={label}>Room Code</p>
           <div style={codeDisplay}>{roomCode}</div>
-          <p style={muted}>Share this with friends</p>
+          <button style={copyBtn} onClick={copyCode}>
+            {copied ? '✓ Copied' : 'Copy code'}
+          </button>
         </div>
 
         <div style={playerList}>
@@ -147,7 +169,27 @@ export default function Lobby({ onGameStart }) {
   return (
     <div style={centeredScreen}>
       <h1 style={title}>NEOTOPIA</h1>
-      <p style={muted}>Welcome, {username}</p>
+
+      {/* Editable username (BUG-05) · pencil → input · Enter or Save commits via claimUsername upsert. */}
+      {editingName ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%', maxWidth: 360 }}>
+          <input
+            style={{ ...input, flex: 1 }}
+            value={editName}
+            maxLength={20}
+            onChange={e => setEditName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false) }}
+            autoFocus
+          />
+          <button style={{ ...secondaryBtn, minWidth: 64 }} disabled={editName.trim().length < 2} onClick={saveName}>Save</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <p style={muted}>Welcome, {username}</p>
+          <button style={editIcon} aria-label="Edit your name" onClick={() => { setEditName(username); setEditingName(true) }}>✎</button>
+          {savedFlash && <span style={{ ...mutedSmall, color: '#1DC864' }}>Saved</span>}
+        </div>
+      )}
 
       {view === 'home' && (
         <div style={card}>
@@ -191,8 +233,10 @@ const input = { height: 44, padding: '0 14px', borderRadius: 8, border: '1px sol
 const primaryBtn = { minHeight: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 14, cursor: 'pointer', fontWeight: 500, padding: '0 16px' }
 const secondaryBtn = { minHeight: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', padding: '0 16px' }
 const backBtn = { position: 'absolute', top: 20, left: 20, minHeight: 44, padding: '0 16px', borderRadius: 8, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 13, cursor: 'pointer' }
-const codeBox = { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }
+const codeBox = { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }
 const codeDisplay = { fontSize: 40, fontWeight: 700, letterSpacing: 12, color: 'white', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }
+const copyBtn = { minHeight: 44, padding: '0 20px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer', letterSpacing: 0.5 }
+const editIcon = { minHeight: 44, minWidth: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 14, cursor: 'pointer' }
 const playerList = { width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8 }
 const playerRow = { minHeight: 56, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }
 const avatar = { width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'white', flexShrink: 0 }
