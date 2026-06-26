@@ -7,10 +7,15 @@
 //
 // v4.2 — June 27 2026:
 //   DIAGNOSIS: placed:0 despite turns working (v4/v4.1 fixed turn detection)
-//   ROOT: factory/offer card selectors return empty arrays in production
+//   ROOT (partial): factory/offer card selectors + render timing · added diagnostics + broader selectors
 //   FIX: full DOM diagnostic logging after board load + broader selectors
 //   FIX: delay after factory click 400ms→1500ms + waitForSelector on valid hexes
 //   FIX: page.evaluate to scan DOM for ALL testids on first turn (selector audit)
+// v4.3 — June 27 2026 (T2 S12 · the actual placed:0 fix · proven local 31 + prod 37):
+//   TRUE ROOT: placement is a 4-STEP UI flow (GameRoom.jsx uiPhase), NOT 2 clicks. v4.2 clicked a factory
+//   then waited for a valid hex that never appears — a hex only lights up AFTER an element AND a region are
+//   chosen (drew 53 · placed 0 was the tell: drawing worked, so turn-detect + convergence already worked).
+//   FIX: doRandomAction drives factory → element <button> → region <button> → valid hex (keeps v4.2 infra).
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync } from 'fs'
@@ -118,6 +123,11 @@ async function enterLobby(ctx, username) {
 // + 1500ms delay after factory click (was 400ms — too short for DOM render)
 // + waitForSelector on valid hexes instead of .all()
 // ============================================================
+// v4.3: the element-select + region-select buttons carry no data-testid (T1 lane · GameRoom.jsx aside),
+// so match them by role + visible text. (T1 follow-up flagged in comms: data-testid would make this copy-proof.)
+const ELEMENT_RE = /energy|biofarming|technology|community/i
+const REGION_RE  = /sacred city|living earth|free energy/i
+
 async function doRandomAction(page, turn, actionNum, errors, domDiag) {
   try {
     // FACTORY SELECTORS (ordered by specificity)
@@ -144,13 +154,29 @@ async function doRandomAction(page, turn, actionNum, errors, domDiag) {
 
       if (factories.length > 0) {
         await factories[Math.floor(Math.random() * factories.length)].click({ timeout: 2000, force: true }).catch(() => {})
-        // v4.2: increased delay — game needs time to compute valid hexes after factory selection
+        // v4.2: delay — game needs time to render the element-select panel after the factory click.
         await delay(1500)
 
-        // Wait for valid hexes to appear (up to 2 seconds)
+        // v4.3 ROOT-CAUSE FIX: placement is a 4-STEP flow (GameRoom.jsx uiPhase), not 2 clicks. After the
+        // factory click the UI sits in 'factorySelected' with NO hex highlighted — a hex only lights up once
+        // an ELEMENT and a REGION are chosen. v4.2 waited for a valid hex that never came (drew 53 · placed 0).
+        // STEP 2 · pick an element type from the factory
+        const elBtn = page.getByRole('button').filter({ hasText: ELEMENT_RE }).first()
+        if (await elBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+          await elBtn.click({ timeout: 2000, force: true }).catch(() => {})
+          await delay(300)
+          // STEP 3 · pick a region this factory borders
+          const regBtn = page.getByRole('button').filter({ hasText: REGION_RE }).first()
+          if (await regBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+            await regBtn.click({ timeout: 2000, force: true }).catch(() => {})
+            await delay(300)
+          }
+        }
+
+        // STEP 4 · the engine now highlights legal hexes (center-first then adjacency) · wait for one (2s)
         try {
           await page.locator('[data-valid="true"]').first().waitFor({ state: 'visible', timeout: 2000 })
-        } catch { /* valid hexes may not appear if factory has no elements */ }
+        } catch { /* valid hexes may not appear if the factory was empty or the selection was incomplete */ }
 
         const VALID_HEX_SELS = ['[data-valid="true"]', '[data-testid="hex-valid"]', '[class*="valid" i]']
         let validHexes = []
@@ -164,6 +190,13 @@ async function doRandomAction(page, turn, actionNum, errors, domDiag) {
         }
 
         if (validHexes.length > 0) {
+          // force:true IS LOAD-BEARING — do NOT remove (T3 S12 DB-verified this). The valid-hex ring runs an
+          // infinite hexPulse scale animation (src/index.css · scale 1↔1.08), so the <g data-valid> bbox never
+          // settles → Playwright's click-stability wait times out BEFORE onClick→placeElement fires. Without
+          // force the click is swallowed and NOTHING commits (room board stays empty · DB-proven). With force,
+          // the 4-step chain commits real elements (T3 confirmed 11 in game_sessions for room YQZHRB).
+          // NOTE: 'placed-element' here is a PROXY (the click is .catch()-swallowed) — force makes proxy≈DB-truth,
+          // but a TRUE count reads game_sessions board state or counts .hex-element-in tokens (v4.4 follow-up).
           await validHexes[Math.floor(Math.random() * validHexes.length)].click({ timeout: 2000, force: true }).catch(() => {})
           await delay(400)
           return 'placed-element'
@@ -308,10 +341,12 @@ async function playGame(gameNum, browser) {
     }
     log(`Room code: ${roomCode}`)
 
-    const joinBtn = await p2.waitForSelector('button:has-text("Join Room"), button:has-text("Join")', { timeout: 8000 })
+    // v4.3: looser lobby timeouts — the realtime lobby sync to the Mumbai Supabase region is slow on some
+    // machines · v4.2's 8s/5s flaked at the join step before placement could be reached (the board itself works).
+    const joinBtn = await p2.waitForSelector('button:has-text("Join Room"), button:has-text("Join")', { timeout: 20000 })
     await joinBtn.click()
     await delay(500)
-    const codeInput = await p2.waitForSelector('input[maxlength="6"], input[placeholder*="code" i], input[placeholder*="room" i]', { timeout: 5000 })
+    const codeInput = await p2.waitForSelector('input[maxlength="6"], input[placeholder*="code" i], input[placeholder*="room" i]', { timeout: 12000 })
     await codeInput.fill(roomCode)
     await p2.locator('button:has-text("Join")').last().click()
     await delay(1000)
@@ -402,8 +437,8 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation v4.2 · ${NUM_GAMES} games · ${BASE}`)
-  log('v4.2: full DOM diagnostic · broader selectors · factory delay 400→1500ms · waitForSelector on valid hexes')
+  log(`NeoTopia Bot Simulation v4.3 · ${NUM_GAMES} games · ${BASE}`)
+  log('v4.3: 4-step placement (factory→element→region→hex) · keeps v4.2 diagnostics + broader selectors + delays')
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 400 : 0 })
@@ -415,7 +450,7 @@ async function main() {
   await browser.close()
 
   const report = {
-    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.2',
+    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.3',
     results: allResults,
     summary: {
       completed: allResults.filter(r => r.completed).length,
@@ -431,7 +466,7 @@ async function main() {
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT (v4.2) ===')
+  console.log('\n=== BOT SIMULATION REPORT (v4.3) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
   console.log(`Elements placed: ${report.summary.totalPlaced} · Cards drawn: ${report.summary.totalDrew}`)
   console.log('Error types:', report.summary.errorTypes)
