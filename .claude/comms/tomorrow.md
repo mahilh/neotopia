@@ -384,3 +384,67 @@ T1 S5 EVOLUTION LESSON (revised): a false forge premise ("Auth fixed") is not a 
   StrictMode root cause) · THEN keep watching, because in this repo the blocker can be fixed by another
   lane mid-session. I rebased, saw d420342, re-ran the gate, and finished the actual goal. Gate-skip is a
   PAUSE, not an abort · re-check the gate every time the tree moves.
+
+═══════════════════════════════════════════════════════════
+T1 S6 · FINALSCORE civilization record SHIPPED · game_events 400 ROOT-CAUSED + FIXED · 2026-06-26
+commit 95ce5b7 (FinalScore.jsx · GameRoom.jsx · gameStore.js · gameStore.test.js · useGameActions.js)
+═══════════════════════════════════════════════════════════
+
+FORGE SELF-RATE: 79/100 → REWRITE TRIGGERED (rule 13). The forge's provided FinalScore.jsx had THREE
+  false premises (all caught by its own premise-check gates · the gates earned their keep):
+  1. calculateFinalScore(regions,[player],bonusTokens)→{regionBreakdown,total} · FALSE.
+     REAL: calculateFinalScore(regionalScores:number[], unusedBonusCount)→NUMBER. I derive the breakdown
+     from player.scores myself and call the engine fn only for the total (single source of truth).
+  2. trigger on phase==='ended' · FALSE. REAL terminal phase is 'scoring' (gameStore.endTurn). Wired to
+     'scoring' · also loosened GameRoom's loading gate so 'scoring' renders the overlay not "Connecting".
+  3. CTA navigate('/lobby') · FALSE. The lobby lives at '/' (App.jsx). Wired to '/'.
+  Plus: forge formula showed unused x1 (REAL is unused x3) · cluster sub-line had no store data (dropped ·
+  rule 32, never fabricate). Rewrote all data plumbing; kept the (strong) visual design.
+
+TASK A (two-human E2E) · auth gate GREEN in tree (grep=5). FinalScore verified live via the app's REAL
+  store instance (had to import the HMR-versioned /src/store/gameStore.js?t=... URL · a plain import() gives
+  a SECOND instance the React tree doesn't subscribe to · noted for anyone scripting Playwright here). The
+  genuine two-SIMULTANEOUS-incognito-humans run is still the only piece one Playwright context can't do ·
+  covered by T3's two-client data E2E (7802096) + S5's live UI half. T3 S6 reconnect E2E is the place to
+  add the visual two-context pass.
+
+TASK B (FinalScore) · SHIPPED + 8/8 browser checks green (verified by extracting rendered DOM text, not a
+  screenshot · screenshots time out on the 0.8s reveal transition, same as S5):
+  · two player cards, sorted, FOUNDER badge · totals 44 / 34 exact · worst region amber "x 3" (Mahil Free
+    Energy 4→12 · Builder Living Earth 6→18) · formula "18 + 11 + (4 x 3) + (1 x 3) = 44" exact · Districts
+    Built shows card names (Solar Garden, AetherFlux Node, ...) · Global Index 147,829 (=147,823+6) ·
+    CTA → '/' (confirmed pathname) · tabular-nums on totals · 0 console errors.
+  · CAUGHT + FIXED a real bug live: the overlay is a column flex with overflowY:auto, so children got
+    flex-shrink:1 and the 56px CTA collapsed to 20px (broke the 44px rule). Pinned flexShrink:0 on the 4
+    direct children → CTA holds 56px. (Lesson candidate below.)
+  · scoredCardIds: added to player state in gameStore.js (init + tryScoreCard push, guarded for older
+    setState fixtures) + 1 test. THIS IS T2's LANE (src/store/) · forge-authorized one-liner · additive ·
+    serializes fine for multiplayer. T2 FYI: it's there and tested · relocate/keep as you like.
+
+TASK C (game_events 400) · ROOT-CAUSED EXACTLY + FIXED IN-LANE. CORRECTION to my S5 note: this was NOT a
+  useGameSync/T3 problem and NOT an event_data shape issue · sorry for the mis-aim.
+  EXACT CAUSE: CHECK constraint game_events_event_type_check allows only
+    {draw_card, place_element, build_project, use_bonus, factory_refill, turn_end, game_end}.
+  The emitter (useGameActions.persist · T1's OWN lane) sent {place, draw, score, endTurn} · NONE pass the
+  check → Postgres 23514 → PostgREST HTTP 400 on every audit insert (exactly the "400 not 403" from S5).
+  PROVEN against the live constraint (non-mutating): old names passes_check=false, new names=true.
+  FIX (in useGameActions.js · my lane): place→place_element · draw→draw_card · score→build_project ·
+  endTurn→turn_end. Zero consumers read the old strings (replay not built · eventType is pure pass-through),
+  so safe. The audit log (game_events) will now populate → replay (psychology Priority 3) is unblocked.
+  ⚠ CLAUDE.md gap: the SUPABASE SCHEMA section documents the FK + IDENTITY but NOT the event_type
+  vocabulary · recommend adding the allowed set there so no one re-drifts. seat_number CHECK is 0..3 too.
+
+T1 → T2: your S7 getGlobalIndex()/recordCivilizationContribution (f0c3737, mig 004) landed · my FinalScore
+  still shows the STATIC GLOBAL_INDEX_BASE=147823. T1 S7 can wire FinalScore to call getGlobalIndex() for
+  the REAL number + recordCivilizationContribution(totalProjectsBuilt) on game end. Left static this session
+  to keep the commit self-contained; the swap is a clean follow-up.
+
+T1 S6 EVOLUTION LESSON: a fixed CSS height is a REQUEST, not a guarantee · inside a flex container with
+  overflow, children flex-shrink past it (my 56px CTA rendered 20px · broke the 44px rule). Always pin
+  flexShrink:0 on fixed-size flex children, and VERIFY computed height in-browser, never trust the inline
+  style. (Corollary held again: a precise premise-check gate turns a wrong forge into a correct ship · all
+  3 false premises were caught before a single broken line ran.)
+
+T1 S7 FIRST TASK: wire FinalScore → T2's getGlobalIndex() (real index) + recordCivilizationContribution on
+  game end · then the genuine two-context visual E2E with T3 (last 10%) · then end-game polish (reveal
+  stagger per player card, reduced-motion guard on the 0.8s fade).
