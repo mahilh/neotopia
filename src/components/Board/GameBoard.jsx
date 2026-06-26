@@ -1,4 +1,5 @@
 import { hexesInRadius, hexToPixel, REGIONS, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
+import { getBiomeForRegion } from '../../lib/terrainBiomes'
 import HexCell from './HexCell'
 
 export default function GameBoard({
@@ -60,6 +61,7 @@ export default function GameBoard({
       {/* Region hexes */}
       {REGIONS.map(reg => {
         const regionData = regions.find(r => r.id === reg.id) || {hexes: {}}
+        const biome = getBiomeForRegion(reg.id) // T2's terrain palette · gives each region a distinct empty-hex base
         return hexesInRadius(reg.cq, reg.cr, reg.radius).map(hex => {
           const key = `${hex.q},${hex.r}`
           const element = regionData.hexes[key]?.element ?? null
@@ -74,6 +76,7 @@ export default function GameBoard({
               isPartialMatch={isPartialMatch(hex.q, hex.r)}
               isCompletionCandidate={isCompletionCandidate(hex.q, hex.r)}
               regionColor={reg.color}
+              biomeFill={biome.colors.hex}
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
           )

@@ -58,6 +58,7 @@ export default function HexCell({
   isSelected = false,       // factory the player has picked up from · brightened ring
   bonusCovered = false,     // this hex has/had a bonus token
   regionColor = '#888888',
+  biomeFill = null,         // T2 terrain biome empty-hex fill (per region) · overrides the flat region tint
   onClick = () => {},
 }) {
   const {x, y} = hexToPixel(q, r)
@@ -77,7 +78,7 @@ export default function HexCell({
     ? 'rgba(255,180,50,0.14)'         // amber · near-miss · "you're close"
     : isValidTarget
     ? `${regionColor}1A`              // subtle highlight for valid placement
-    : `${regionColor}0F`             // base: 6% region color
+    : (biomeFill ?? `${regionColor}0F`) // base: terrain biome fill per region (T2) · else 6% region tint
 
   const stroke = isFactory
     ? (isSelected ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.25)')
