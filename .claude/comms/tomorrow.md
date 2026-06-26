@@ -1054,3 +1054,55 @@ T2 S10 STATUS: turnTimeRemaining added to the store (synced) · src/lib/terrainB
 
 T2 S11 FIRST TASK: (bonus data arrives → activate the earn paths + tests) ELSE the game_sessions.phase CHECK
   migration to add 'scoring' (retire T3's sessionPhaseColumn boundary map · the vocab-drift T3 flagged for T2).
+
+═══════════════════════════════════════════════════════════
+T1 S9 · BOT SELECTORS + ELEMENT ICONS + CARDFRAME · 2026-06-26
+═══════════════════════════════════════════════════════════
+
+T1 S9 STATUS: 3 tasks · committed + pushed INDIVIDUALLY (S8 lesson applied · no autostash loss this
+  session): A=53cba84 · B=3d9123f · C=6595b33. 102 vitest green · build clean · all live-verified in /game.
+
+T1 S9 TASK A (bot selectors · data-* attributes): added the attributes the production bot ALREADY queries,
+  so the bot's IN-GAME actions work with ZERO bot-script change. Verified live in /game (all present + the
+  full place-an-element chain fires through them):
+    · factory <g>  → data-factory={id} + data-testid="factory"   (bot: [data-factory]) · 3 found
+    · valid hexes  → data-valid="true" + data-testid="hex-valid"  (bot: [data-valid="true"]) · appears on region-select
+    · offer/hand   → container data-offer / data-hand · each card has class "project-card" + data-testid
+                     "card-offer"/"card-hand"  (bot: [data-offer] [class*="card"]) · 4 offer cards matched
+    · ActionBar    → my-turn-badge (also className when isMyTurn) · end-turn-btn (both already matched via text)
+  SELECTOR CONTRACT for the bot/E2E (use these · they survive the production minified build · CSS classes do NOT):
+    [data-factory] · [data-valid="true"] · [data-offer] [class*="card"] · [data-hand] [class*="card"] ·
+    [data-testid="my-turn-badge"] · [data-testid="end-turn-btn"].
+
+⚠ T1 → T2 · BOT STILL BLOCKED at the LOBBY (your lane · scripts/ · NOT my in-game selectors):
+  bot run reaches "Created room", then player 2 fatals waiting for "Join Room" (8s timeout). The block is the
+  Landing → /lobby → username-claim → home sequence in the bot's join/claim flow, BEFORE the game starts. So
+  the bot's "32 in-game errors → 0" is unmeasurable until the lobby flow is fixed. I verified the in-game
+  selectors DIRECTLY in /game instead (drove factory→element→region→hex placement through them · all worked).
+  Likely fix: after enterLobby, player 2 must claim a username (the "Choose your name" screen) before "Join
+  Room" renders · the bot may be racing it.
+
+T1 S9 TASK B (board comes alive · bespoke element icons): HexCell renders a meaningful SVG icon per element
+  (energy=bolt · biofarming=sprout · technology=gear/atom · community=figure) replacing the plain disc +
+  unicode glyph · scales in on placement (hex-appear · transform-box:fill-box center · reduced-motion guarded ·
+  keyframe lives in GameBoard's <style>). Verified live: placed energy + biofarming · distinct icon shape
+  profiles · hex-appear animation fired. Dropped the now-unused ELEMENT_SYMBOLS import.
+
+T1 S9 TASK C (CardFrame wired · art-ready): Hand + Offer render CardFrame tiles (size="hand" · 120x168 ·
+  flex-wrap · 2-per-row in the 288px sidebar) instead of compact rows. card.element is derived per card from
+  the dominant pattern cell type (cards have no top-level element · cardPrimaryElement() in GameRoom).
+  Placeholder shows the element symbol + card id until /art/cards/<id>.png exists → Mahil drops PNGs in and
+  art appears with NO further code change. Preserved the Task A bot selector by giving CardFrame's root the
+  "project-card" class + a testid prop. ProjectCard import trimmed to ScoreFlash only (default now unused).
+  → NOTE (density tradeoff): a large hand renders many 168px tiles (more scroll than the old rows) · this is
+    the art-vs-density call the forge made · BUG-06 (hand-size cap) would mitigate it · flagged for S10.
+
+T1 S9 EVOLUTION LESSON: read the actual CONSUMER before adding integration hooks. The forge prescribed
+  data-testid names, but the bot script queries [data-factory] / [data-valid="true"] / [data-offer]
+  [class*="card"]. Adding what the consumer ALREADY queries unblocks it with zero cross-lane change · adding
+  only the forge's testids would have needed a bot edit (T2's lane) first. Verify the seam against the real
+  caller, not the spec. (Also: S8's "commit after every task" held · A/B/C each committed+pushed standalone.)
+
+T1 S10 FIRST TASK: visual polish phase 2 (region color saturation +30% · subtle hex borders per PLAYTEST_AUDIT
+  · larger element tokens now that icons exist) · hand-size signal / cap (BUG-06 · now more visible with
+  CardFrame tiles) · and re-run the bot to confirm in-game element placement once T2 fixes the lobby flow.
