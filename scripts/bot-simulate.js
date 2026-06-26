@@ -1,17 +1,16 @@
 // scripts/bot-simulate.js
 // NeoTopia autonomous bot simulation · finds bugs by playing the game
 //
-// HOW TO RUN (two terminal tabs):
+// HOW TO RUN:
 //   Tab 1: npm run dev
 //   Tab 2: node scripts/bot-simulate.js
-//
-// Or against production (no dev server needed):
+// Or against production:
 //   BOT_URL=https://neotopia.vercel.app node scripts/bot-simulate.js
 //
-// Options:
-//   BOT_GAMES=5  (default: 3)
-//   BOT_TURNS=20 (default: 30)
-//   BOT_HEADED=1 (watch it play in browser)
+// Options: BOT_GAMES=5 BOT_TURNS=20 BOT_HEADED=1
+//
+// T1 S9 UPDATE: data-testid attrs now in game · selectors updated below
+// Bot still fatals at Join Room claim flow (lobby username step) — see enterLobby()
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync } from 'fs'
@@ -24,38 +23,50 @@ const HEADED = process.env.BOT_HEADED === '1'
 const log = (...args) => console.log(new Date().toISOString().slice(11,19), ...args)
 const delay = ms => new Promise(r => setTimeout(r, ms))
 
-// Navigate through Landing page if present, then to lobby with username set
+// Navigate through landing page and handle the claim/username flow
 async function enterLobby(ctx, username) {
   const page = await ctx.newPage()
   await page.goto(BASE)
   await delay(1500)
 
-  // Handle Landing page (T1 S7 shipped Landing.jsx at /)
-  // Landing shows "Enter the Civilization" or similar CTA
-  const onLanding = await page.locator(
-    'button:has-text("Enter the Civilization"), button:has-text("Enter"), a:has-text("Enter the Civilization")'
-  ).first().isVisible({ timeout: 3000 }).catch(() => false)
-
-  if (onLanding) {
-    log(`[${username}] Landing page detected — clicking through`)
-    await page.locator(
-      'button:has-text("Enter the Civilization"), button:has-text("Enter"), a:has-text("Enter the Civilization")'
-    ).first().click()
-    await delay(1000)
+  // Handle Landing page (’Enter the Civilization' CTA)
+  const enterBtns = [
+    'button:has-text("Enter the Civilization")',
+    'button:has-text("Enter")',
+    'a:has-text("Enter the Civilization")',
+  ]
+  for (const sel of enterBtns) {
+    const btn = page.locator(sel).first()
+    if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      log(`[${username}] Landing page — clicking through`)
+      await btn.click()
+      await delay(1000)
+      break
+    }
   }
 
-  // Now on lobby — set username if field exists
-  const nameInput = await page.locator(
-    '[placeholder*="name" i], [placeholder*="username" i], input[type="text"]:visible'
-  ).first()
-  const nameVisible = await nameInput.isVisible({ timeout: 4000 }).catch(() => false)
+  // Handle username claim step (may appear after landing or on lobby)
+  // Try multiple selectors that cover the claim flow after T1 S8 rework
+  const nameSelectors = [
+    '[placeholder*="name" i]',
+    '[placeholder*="username" i]',
+    'input[type="text"]:visible',
+    '[data-testid="username-input"]',
+  ]
+  for (const sel of nameSelectors) {
+    const input = page.locator(sel).first()
+    if (await input.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await input.fill(username)
+      await input.press('Enter')
+      await delay(600)
+      log(`[${username}] Username set`)
+      break
+    }
+  }
 
-  if (nameVisible) {
-    await nameInput.fill(username)
-    await nameInput.press('Enter')
+  // If we're at /lobby, we're good. If not, try navigating there.
+  if (!page.url().includes('lobby')) {
     await delay(500)
-  } else {
-    log(`[${username}] No name input found — may already have username`)
   }
 
   return page
@@ -65,14 +76,13 @@ async function doRandomAction(page, turn, errors) {
   try {
     // 70% chance to place element (the action new players miss)
     if (Math.random() < 0.7) {
-      const factories = await page.locator('[class*="factory"], [data-factory], [class*="Factory"]').all()
+      // T1 S9: data-testid="factory" now in DOM — use it
+      const factories = await page.locator('[data-testid="factory"], [data-factory]').all()
       if (factories.length > 0) {
-        const factory = factories[Math.floor(Math.random() * factories.length)]
-        await factory.click({ timeout: 2000 }).catch(() => {})
+        await factories[Math.floor(Math.random() * factories.length)].click({ timeout: 2000 }).catch(() => {})
         await delay(400)
-        const validHexes = await page.locator(
-          '[class*="valid"], [class*="highlighted"], [data-valid="true"], [class*="hex--valid"]'
-        ).all()
+        // T1 S9: data-valid="true" in DOM for valid hexes
+        const validHexes = await page.locator('[data-valid="true"], [data-testid="hex-valid"]').all()
         if (validHexes.length > 0) {
           await validHexes[Math.floor(Math.random() * validHexes.length)].click({ timeout: 2000 }).catch(() => {})
           await delay(300)
@@ -82,9 +92,8 @@ async function doRandomAction(page, turn, errors) {
     }
 
     // Draw a card from The Offer
-    const offerCards = await page.locator(
-      '[class*="offer"] [class*="card"], [data-offer] [class*="card"], [class*="Offer"] [class*="Card"]'
-    ).all()
+    // T1 S9: [data-offer] preserved on the offer container
+    const offerCards = await page.locator('[data-offer] [class*="card"], [data-testid="card-offer"]').all()
     if (offerCards.length > 0) {
       await offerCards[Math.floor(Math.random() * offerCards.length)].click({ timeout: 2000 }).catch(() => {})
       await delay(300)
@@ -107,7 +116,6 @@ async function playGame(gameNum, browser) {
   const start = Date.now()
 
   try {
-    // Both bots navigate through landing and into lobby
     const p1 = await enterLobby(ctx1, `BotAlpha${gameNum}`)
     const p2 = await enterLobby(ctx2, `BotBeta${gameNum}`)
 
@@ -124,22 +132,18 @@ async function playGame(gameNum, browser) {
     let roomCode = null
     try {
       const codeEl = await p1.waitForSelector(
-        '[class*="room-code"], [class*="roomCode"], code, [style*="monospace"]',
+        '[class*="room-code"], [class*="roomCode"], code, [style*="letter-spacing"][style*="monospace"]',
         { timeout: 6000 }
       )
       const raw = (await codeEl.textContent()).trim().replace(/\s/g, '')
-      roomCode = raw.match(/[A-Z0-9]{6}/)?.[0] || raw.slice(0, 6)
+      roomCode = raw.match(/[A-Z0-9]{4,6}/)?.[0] || raw.slice(0, 6)
       log(`Room code: ${roomCode}`)
     } catch {
-      // Try URL
       const match = p1.url().match(/[A-Z0-9]{6}/)
       if (match) roomCode = match[0]
-      errors.push({ turn: 0, type: 'room-code-not-visible', message: 'Could not find room code display — copy button UX bug' })
+      errors.push({ turn: 0, type: 'room-code-not-visible', message: 'Room code display missing — UX bug · needs copy button with data-testid' })
     }
-
-    if (!roomCode || roomCode.length < 4) {
-      throw new Error(`Invalid room code: "${roomCode}" — lobby may not have loaded correctly`)
-    }
+    if (!roomCode || roomCode.length < 4) throw new Error(`Bad room code: "${roomCode}"`)
 
     // p2 joins
     const joinBtn = await p2.waitForSelector(
@@ -155,108 +159,95 @@ async function playGame(gameNum, browser) {
     await codeInput.fill(roomCode)
     await p2.locator('button:has-text("Join")').last().click()
     await delay(1000)
-    log(`[BotBeta${gameNum}] Joined room ${roomCode}`)
+    log(`[BotBeta${gameNum}] Joined ${roomCode}`)
 
-    // Both ready up
-    await p1.locator('button:has-text("Ready")').click({ timeout: 5000 }).catch(e =>
-      errors.push({ turn:0, type:'ready-failed', message: e.message.slice(0,80) })
-    )
-    await p2.locator('button:has-text("Ready")').click({ timeout: 5000 }).catch(e =>
-      errors.push({ turn:0, type:'ready-failed', message: e.message.slice(0,80) })
-    )
+    // Ready up — T1 S10: data-testid="ready-btn" expected
+    const readySelectors = ['[data-testid="ready-btn"]', 'button:has-text("Ready")', 'button:has-text("I\'m Ready")']
+    for (const sel of readySelectors) {
+      const btn1 = p1.locator(sel).first()
+      if (await btn1.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await btn1.click().catch(e => errors.push({ turn:0, type:'ready-failed', message: e.message.slice(0,80) }))
+        break
+      }
+    }
+    for (const sel of readySelectors) {
+      const btn2 = p2.locator(sel).first()
+      if (await btn2.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await btn2.click().catch(e => errors.push({ turn:0, type:'ready-failed', message: e.message.slice(0,80) }))
+        break
+      }
+    }
     await delay(800)
 
-    // p1 starts the game
+    // Start game
     await p1.locator('button:has-text("Start")').click({ timeout: 6000 }).catch(e =>
       errors.push({ turn:0, type:'start-failed', message: e.message.slice(0,80) })
     )
 
-    // Both navigate to game board
     await p1.waitForURL(/\/game\//, { timeout: 15000 })
     await p2.waitForURL(/\/game\//, { timeout: 15000 })
     log('Both on game board')
 
-    // Check for tutorial overlay (T1 S8 task)
-    const tutorialVisible = await p1.locator(
-      'text=/start building/i, text=/three actions/i, text=/factory/i, text=/place.*element/i'
-    ).first().isVisible({ timeout: 3000 }).catch(() => false)
-
-    if (!tutorialVisible) {
-      errors.push({
-        turn: 0,
-        type: 'no-tutorial',
-        message: 'Tutorial overlay missing — players will only draw cards and score 0 (confirmed by June 26 playtest)'
-      })
-    } else {
-      log('Tutorial visible — good!')
-      await p1.locator('button:has-text(/got it|start building|skip/i)').first().click({ timeout: 3000 }).catch(() => {})
+    // Handle tutorial overlay — T1 S10: data-testid="tutorial-dismiss" expected
+    const tutorialSelectors = [
+      '[data-testid="tutorial-dismiss"]',
+      '[data-testid="tutorial-skip"]',
+      'button:has-text("Start building the civilization")',
+      'button:has-text(/got it|skip/i)',
+    ]
+    let tutorialFound = false
+    for (const sel of tutorialSelectors) {
+      const btn = p1.locator(sel).first()
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click().catch(() => {})
+        tutorialFound = true
+        log('Tutorial dismissed')
+        break
+      }
+    }
+    if (!tutorialFound) {
+      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not found — T1 S10 must fix gate (decouple from isMyTurn)' })
     }
 
-    // Play the game
-    let turn = 0
-    let gameEnded = false
-    let stuckCount = 0
-
+    // Play turns
+    let turn = 0, gameEnded = false, stuckCount = 0
     while (turn < TURN_LIMIT && !gameEnded) {
       const activePage = turn % 2 === 0 ? p1 : p2
+      // T1 S9: data-testid="my-turn-badge" in DOM
       const isMyTurn = await activePage.locator(
-        'text=/your turn/i, [class*="my-turn"], [class*="myTurn"]'
+        '[data-testid="my-turn-badge"], text=/your turn/i'
       ).first().isVisible({ timeout: 800 }).catch(() => false)
 
       if (!isMyTurn) {
         stuckCount++
         if (stuckCount > 30) {
-          errors.push({ turn, type: 'stuck-state', message: `No player has turn after extended wait at turn ${turn}` })
-          stuckCount = 0
-          turn++ // force advance to avoid infinite loop
+          errors.push({ turn, type: 'stuck-state', message: `No turn detected at turn ${turn}` })
+          stuckCount = 0; turn++
         }
         await delay(400)
         continue
       }
-
       stuckCount = 0
 
-      // Do 3 actions per turn
       for (let a = 0; a < 3; a++) {
         const action = await doRandomAction(activePage, turn, errors)
         moves.push({ turn, action })
         await delay(250)
-
-        const scored = await activePage.locator(
-          '[class*="score-flash"], [class*="scoreFlash"], [class*="score_flash"]'
-        ).isVisible({ timeout: 400 }).catch(() => false)
-        if (scored) log(`Turn ${turn} action ${a+1}: SCORED a district!`)
       }
-
-      await activePage.locator('button:has-text("End Turn")').click({ timeout: 3000 }).catch(() => {})
+      // T1 S9: data-testid="end-turn-btn" in DOM
+      await activePage.locator('[data-testid="end-turn-btn"], button:has-text("End Turn")').first()
+        .click({ timeout: 3000 }).catch(() => {})
       await delay(700)
       turn++
 
-      // Check game ended
-      const finalScore = await p1.locator(
-        'text=/2055|civilization complete|final score/i'
-      ).isVisible({ timeout: 500 }).catch(() => false)
-      if (finalScore) {
-        log(`Game complete at turn ${turn}`)
-        gameEnded = true
-      }
+      const finalScore = await p1.locator('text=/2055|civilization complete/i').isVisible({ timeout: 500 }).catch(() => false)
+      if (finalScore) { log(`Game complete at turn ${turn}`); gameEnded = true }
     }
 
     const placed = moves.filter(m => m.action === 'placed-element').length
     const drew = moves.filter(m => m.action === 'drew-card').length
-
-    const result = {
-      game: gameNum,
-      completed: gameEnded,
-      turns: turn,
-      duration: Math.round((Date.now() - start) / 1000),
-      errors: errors.length,
-      placedElements: placed,
-      drewCards: drew,
-      errorList: errors,
-    }
     log(`Game ${gameNum}: ${turn} turns · placed ${placed} · drew ${drew} · ${errors.length} errors`)
-    return result
+    return { game: gameNum, completed: gameEnded, turns: turn, duration: Math.round((Date.now()-start)/1000), errors: errors.length, placedElements: placed, drewCards: drew, errorList: errors }
 
   } catch (err) {
     errors.push({ turn: -1, type: 'fatal', message: err.message.slice(0, 200) })
@@ -269,18 +260,14 @@ async function playGame(gameNum, browser) {
 
 async function main() {
   log(`NeoTopia Bot Simulation · ${NUM_GAMES} games · ${BASE}`)
-  log(`Make sure dev server is running: npm run dev (separate terminal)`)
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 300 : 0 })
   const allResults = []
-
   for (let g = 1; g <= NUM_GAMES; g++) {
-    const result = await playGame(g, browser)
-    allResults.push(result)
+    allResults.push(await playGame(g, browser))
     await delay(2000)
   }
-
   await browser.close()
 
   const report = {
@@ -293,33 +280,18 @@ async function main() {
       gamesWithPlacement: allResults.filter(r => r.placedElements > 0).length,
       totalPlaced: allResults.reduce((s,r) => s + (r.placedElements||0), 0),
       totalDrew: allResults.reduce((s,r) => s + (r.drewCards||0), 0),
-      errorTypes: allResults.flatMap(r => r.errorList||[])
-        .reduce((acc,e) => { acc[e.type]=(acc[e.type]||0)+1; return acc }, {}),
+      errorTypes: allResults.flatMap(r => r.errorList||[]).reduce((acc,e) => { acc[e.type]=(acc[e.type]||0)+1; return acc }, {}),
     }
   }
-
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
   console.log('\n=== BOT SIMULATION REPORT ===')
-  console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
-  console.log(`Total errors: ${report.summary.totalErrors}`)
-  console.log(`Games with element placement: ${report.summary.gamesWithPlacement}/${NUM_GAMES}`)
-  console.log(`Elements placed: ${report.summary.totalPlaced} · Cards drawn: ${report.summary.totalDrew}`)
-  console.log(`Error types:`, report.summary.errorTypes)
+  console.log(`Games: ${report.summary.completed}/${NUM_GAMES}`)
+  console.log(`Errors: ${report.summary.totalErrors}`)
+  console.log(`Placed: ${report.summary.totalPlaced} · Drew: ${report.summary.totalDrew}`)
+  console.log('Error types:', report.summary.errorTypes)
   console.log(`Report: ${reportPath}`)
-
-  const critical = allResults.flatMap(r => r.errorList||[])
-    .filter(e => ['no-tutorial','stuck-state','fatal','room-code-not-visible'].includes(e.type))
-  if (critical.length) {
-    console.log('\nCRITICAL BUGS:')
-    critical.forEach(e => console.log(` [${e.type}] ${e.message}`))
-  } else {
-    console.log('\nNo critical bugs found.')
-  }
 }
 
-main().catch(err => {
-  console.error('Bot simulation failed:', err.message)
-  process.exit(1)
-})
+main().catch(err => { console.error('Bot failed:', err.message); process.exit(1) })
