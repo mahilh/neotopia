@@ -362,6 +362,9 @@ export default function GameRoom() {
 }
 
 const sectionLabel = {
-  color: 'rgba(255,255,255,0.35)', fontSize: 10, letterSpacing: 2.5,
+  // 12px floor on the sidebar wayfinding labels (Select element · Place into region · Offer · Hand ·
+  // Score). game-ux.e2e's font check is soft/informational, but these are functional labels with room
+  // to grow · the smallest standalone text gets the bump (CardFrame card-face stays per T3 · T1 S12).
+  color: 'rgba(255,255,255,0.35)', fontSize: 12, letterSpacing: 2.5,
   textTransform: 'uppercase', marginBottom: 8, fontWeight: 500,
 }

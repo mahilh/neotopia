@@ -67,7 +67,7 @@ export default function ActionBar({
 
       {/* CENTER · action dots (filled = used) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 auto' }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase' }}>
+        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}>
           Actions
         </span>
         <div style={{ display: 'flex', gap: 6 }}>
