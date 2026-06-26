@@ -20,10 +20,23 @@ function serializableState() {
   return JSON.parse(JSON.stringify(useGameStore.getState()))
 }
 
-// game_events.event_type is constrained by a DB CHECK · the app's move loop (useGameActions) emits
-// its own shorthand · this maps each to the DB-allowed vocabulary at the persistence boundary.
-// (draw_card | place_element | build_project | use_bonus | factory_refill | turn_end | game_end)
-// Exported so a unit test guards the vocabulary against the CHECK · no future move can silently 400.
+// game_events.event_type is constrained by a DB CHECK (the set below · verified live against
+// pg_constraint). The persistence boundary must send ONLY these values.
+//
+// HISTORY · the boundary now tolerates BOTH conventions, because two lanes converged on the same fix:
+//   · T3 S6 added EVENT_TYPE_DB to translate the move loop's old shorthand (place/draw/score/endTurn).
+//   · T1 S6 independently renamed useGameActions.persist(...) to emit the DB-valid names directly.
+//   Run together, a translate-ONLY map MISSES every already-valid name (EVENT_TYPE_DB['place_element']
+//   is undefined) → every audit insert is skipped → the game_events log goes SILENTLY empty (no 400,
+//   just nothing written). So resolveDbEventType() passes an already-valid value straight through and
+//   still translates any legacy shorthand · either emitter convention yields a correct CHECK-valid
+//   row, and an unknown type is skipped (never sent). (T3 S7 · regression found during gates.)
+export const DB_ALLOWED = Object.freeze([
+  'draw_card', 'place_element', 'build_project', 'use_bonus', 'factory_refill', 'turn_end', 'game_end',
+])
+const DB_ALLOWED_SET = new Set(DB_ALLOWED)
+
+// Legacy shorthand → DB vocabulary · retained so an older/other emitter can never silently 400.
 export const EVENT_TYPE_DB = {
   place:   'place_element',
   draw:    'draw_card',
@@ -32,6 +45,13 @@ export const EVENT_TYPE_DB = {
   bonus:   'use_bonus',
   refill:  'factory_refill',
   gameEnd: 'game_end',
+}
+
+// Resolve any emitter's event name to a CHECK-valid game_events.event_type, or undefined if unknown
+// (the caller then skips the audit row rather than send a value the CHECK rejects).
+export function resolveDbEventType(eventType) {
+  if (DB_ALLOWED_SET.has(eventType)) return eventType   // already valid · current useGameActions
+  return EVENT_TYPE_DB[eventType]                        // legacy shorthand · else undefined
 }
 
 export function useGameSync(roomId, currentUserId) {
@@ -138,12 +158,11 @@ export function useGameSync(roomId, currentUserId) {
 
     if (stateErr) return { error: stateErr }
 
-    // Translate the app's event name to the DB-allowed vocabulary FIRST · the game_events
-    // event_type CHECK rejects 'place'/'draw'/'score'/'endTurn' outright, so every move's audit
-    // insert returned HTTP 400 (T1 S5 found this · it was the CHECK, NOT a missing session_id ·
-    // a 400 proves the row reached the DB, so session_id was present). Skip unmapped types rather
-    // than send a value the CHECK will reject.
-    const dbEventType = EVENT_TYPE_DB[eventType]
+    // Resolve the event name to a CHECK-valid event_type · accepts the DB-valid names useGameActions
+    // emits today AND any legacy shorthand (see resolveDbEventType). The CHECK rejects unknown values
+    // outright (HTTP 400 · T1 S5), so we never send one · we skip the audit row instead. A 400 here
+    // would prove the row reached the DB (session_id present) · this path avoids it entirely.
+    const dbEventType = resolveDbEventType(eventType)
     if (dbEventType && sessionIdRef.current) {
       // session_id MUST be game_sessions.id (uuid FK) · room_id here would FK-fail every event.
       // sequence_num is GENERATED ALWAYS AS IDENTITY · do NOT provide it · the DB owns the
