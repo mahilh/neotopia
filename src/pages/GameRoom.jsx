@@ -8,6 +8,7 @@ import { useGameActions } from '../hooks/useGameActions'
 import { usePatternHighlight } from '../hooks/usePatternHighlight'
 import GameBoard from '../components/Board/GameBoard'
 import ActionBar from '../components/ActionBar'
+import FinalScore from '../components/FinalScore'
 import ProjectCard, { ScoreFlash } from '../components/ProjectCard'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
@@ -60,6 +61,20 @@ export default function GameRoom() {
     }
   }, [initialized, roomId])
 
+  // DEV-only · force the end-game civilization record without playing all 56 cards.
+  // Cmd+Shift+E sets the real terminal phase ('scoring') · stripped from production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    const onKey = (e) => {
+      if (e.metaKey && e.shiftKey && e.code === 'KeyE') {
+        e.preventDefault()
+        useGameStore.getState().setPhase('scoring')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const {
     selectedFactory, selectedElement, selectedRegion,
     validTargets, patternHighlight, buildableMatches, uiPhase, isMyTurn,
@@ -86,7 +101,8 @@ export default function GameRoom() {
 
   // Multiplayer loading gate (AFTER all hooks · Rules of Hooks): in a real room, wait for
   // useGameSync to seed the store before rendering the board. Solo (no roomId) skips this.
-  if (roomId && phase !== 'playing') {
+  // 'scoring' is the end-game phase · let it through so the FinalScore overlay can render.
+  if (roomId && phase !== 'playing' && phase !== 'scoring') {
     return (
       <div style={{ height: '100vh', background: '#0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, letterSpacing: 1 }}>Connecting to the board…</p>
@@ -96,6 +112,9 @@ export default function GameRoom() {
 
   return (
     <div style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}>
+
+      {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
+      {phase === 'scoring' && <FinalScore players={players} />}
 
       {/* SCORE FLASH · the civilization "story moment" after a card is scored */}
       {scoreFlash && (

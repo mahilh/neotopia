@@ -120,6 +120,7 @@ export const useGameStore = create(immer((set, get) => ({
       hand: [],
       bonusTokens: [],
       scores: [0, 0, 0],
+      scoredCardIds: [], // ids of cards this player scored · drives the FinalScore "Districts Built" record (T1 S6)
     }))
     state.deck = shuffledDeck
     // Pin the end-flag tile to the bottom regardless of how the caller shuffled, so
@@ -267,6 +268,10 @@ export const useGameStore = create(immer((set, get) => ({
       p.hand.splice(idx, 1)
       const prevScore = p.scores[regionId] ?? 0
       p.scores[regionId] = prevScore + card.points
+      // Record the built district for the end-game civilization record (FinalScore · T1 S6).
+      // Guard for players seeded via setState without the field (older test fixtures).
+      if (!Array.isArray(p.scoredCardIds)) p.scoredCardIds = []
+      p.scoredCardIds.push(cardId)
       r.lastBuiltIllustration = card.illustration
 
       // Bonus earn: each score-track threshold newly crossed awards the TOP of this region's

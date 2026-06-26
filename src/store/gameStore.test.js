@@ -183,6 +183,13 @@ describe('scoreCard authoritative build validation', () => {
     expect(s.players[0].hand).toHaveLength(0) // card consumed
     expect(s.regions.find(r => r.id === 0).lastBuiltIllustration).toBe('garden')
   })
+
+  test('records the scored card id for the end-game civilization record', () => {
+    useGameStore.setState(seat0({ '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }))
+    expect(useGameStore.getState().tryScoreCard(0, 'card_01', 0, '1,0')).toBe(true)
+    // scoredCardIds drives FinalScore "Districts Built" · guard self-initializes it for fixtures.
+    expect(useGameStore.getState().players[0].scoredCardIds).toEqual(['card_01'])
+  })
 })
 
 describe('getValidPlacements', () => {
