@@ -9,8 +9,13 @@
 //
 // Options: BOT_GAMES=5 BOT_TURNS=20 BOT_HEADED=1
 //
-// T1 S9 UPDATE: data-testid attrs now in game · selectors updated below
-// Bot still fatals at Join Room claim flow (lobby username step) — see enterLobby()
+// v4 — June 26 2026:
+//   ROOT CAUSE FOUND: alternating activePage by turn number was wrong.
+//   Seat assignment is DB-driven. BotAlpha might be seat 1 (goes second),
+//   BotBeta might be seat 0 (goes first). The alternation was always
+//   checking the wrong page → stuck-state every turn despite game running.
+//   FIX: poll BOTH pages for the active turn badge · act on whichever one shows.
+//   Also: both players now dismiss tutorial (p2 was missed in prior versions).
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync } from 'fs'
@@ -23,13 +28,11 @@ const HEADED = process.env.BOT_HEADED === '1'
 const log = (...args) => console.log(new Date().toISOString().slice(11,19), ...args)
 const delay = ms => new Promise(r => setTimeout(r, ms))
 
-// Navigate through landing page and handle the claim/username flow
 async function enterLobby(ctx, username) {
   const page = await ctx.newPage()
   await page.goto(BASE)
   await delay(1500)
 
-  // Handle Landing page (’Enter the Civilization' CTA)
   const enterBtns = [
     'button:has-text("Enter the Civilization")',
     'button:has-text("Enter")',
@@ -45,8 +48,6 @@ async function enterLobby(ctx, username) {
     }
   }
 
-  // Handle username claim step (may appear after landing or on lobby)
-  // Try multiple selectors that cover the claim flow after T1 S8 rework
   const nameSelectors = [
     '[placeholder*="name" i]',
     '[placeholder*="username" i]',
@@ -64,24 +65,16 @@ async function enterLobby(ctx, username) {
     }
   }
 
-  // If we're at /lobby, we're good. If not, try navigating there.
-  if (!page.url().includes('lobby')) {
-    await delay(500)
-  }
-
   return page
 }
 
 async function doRandomAction(page, turn, errors) {
   try {
-    // 70% chance to place element (the action new players miss)
     if (Math.random() < 0.7) {
-      // T1 S9: data-testid="factory" now in DOM — use it
       const factories = await page.locator('[data-testid="factory"], [data-factory]').all()
       if (factories.length > 0) {
         await factories[Math.floor(Math.random() * factories.length)].click({ timeout: 2000 }).catch(() => {})
         await delay(400)
-        // T1 S9: data-valid="true" in DOM for valid hexes
         const validHexes = await page.locator('[data-valid="true"], [data-testid="hex-valid"]').all()
         if (validHexes.length > 0) {
           await validHexes[Math.floor(Math.random() * validHexes.length)].click({ timeout: 2000 }).catch(() => {})
@@ -91,8 +84,6 @@ async function doRandomAction(page, turn, errors) {
       }
     }
 
-    // Draw a card from The Offer
-    // T1 S9: [data-offer] preserved on the offer container
     const offerCards = await page.locator('[data-offer] [class*="card"], [data-testid="card-offer"]').all()
     if (offerCards.length > 0) {
       await offerCards[Math.floor(Math.random() * offerCards.length)].click({ timeout: 2000 }).catch(() => {})
@@ -107,6 +98,56 @@ async function doRandomAction(page, turn, errors) {
   }
 }
 
+// Dismiss tutorial for one player page — tries all known selectors
+async function dismissTutorial(page, label) {
+  const tutorialSelectors = [
+    '[data-testid="tutorial-skip"]',
+    '[data-testid="tutorial-dismiss"]',
+    'button:has-text("Start building the civilization")',
+    'button:has-text(/skip|got it/i)',
+  ]
+  for (const sel of tutorialSelectors) {
+    const btn = page.locator(sel).first()
+    if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await btn.click().catch(() => {})
+      log(`Tutorial dismissed (${label})`)
+      await delay(300)
+      return true
+    }
+  }
+  return false
+}
+
+// ============================================================
+// THE CORE FIX (v4):
+// Poll BOTH player pages to detect the active turn.
+// Do NOT assume alternation — seat assignment is DB-driven.
+// BotAlpha might be seat 1 (goes second), BotBeta seat 0 (first).
+// Previous alternating logic (turn%2===0 ? p1 : p2) checked the
+// wrong page on every turn → stuck-state:90 despite game running.
+// ============================================================
+async function detectActiveTurn(p1, p2) {
+  // Check p1 first, then p2. Both checked per turn.
+  // Selectors: .my-turn-badge class (conditionally rendered) + data-my-turn attr (T1 S11)
+  const TURN_SELECTORS = [
+    '[data-my-turn="true"]',       // T1 S11: persistent attr on game root · no timing issue
+    '.my-turn-badge',              // T1 S9: CSS class · conditionally mounted
+    'text=/your turn/i',           // Fallback text match
+  ]
+
+  for (const sel of TURN_SELECTORS) {
+    const p1Active = await p1.locator(sel).first()
+      .isVisible({ timeout: 1800 }).catch(() => false)
+    if (p1Active) return { page: p1, label: 'p1' }
+
+    const p2Active = await p2.locator(sel).first()
+      .isVisible({ timeout: 1800 }).catch(() => false)
+    if (p2Active) return { page: p2, label: 'p2' }
+  }
+
+  return null // Neither player has an active turn detected
+}
+
 async function playGame(gameNum, browser) {
   log(`=== GAME ${gameNum} START ===`)
   const ctx1 = await browser.newContext()
@@ -114,9 +155,6 @@ async function playGame(gameNum, browser) {
   const errors = []
   const moves = []
   const start = Date.now()
-  // Unique per-run names · player_profiles.username is UNIQUE (T3 S7): a fixed name claims fine on run 1
-  // then REJECTS every later run (→ no profile → create/join breaks · the fatal we hit). The BotAlpha/
-  // BotBeta prefix is preserved so purge_e2e_test_data() (migration 006) still matches + cleans them.
   const tag = Date.now().toString(36).slice(-5)
 
   try {
@@ -136,16 +174,16 @@ async function playGame(gameNum, browser) {
     let roomCode = null
     try {
       const codeEl = await p1.waitForSelector(
-        '[class*="room-code"], [class*="roomCode"], code, [style*="letter-spacing"][style*="monospace"]',
+        '[class*="room-code"], [class*="roomCode"], code',
         { timeout: 6000 }
       )
       const raw = (await codeEl.textContent()).trim().replace(/\s/g, '')
       roomCode = raw.match(/[A-Z0-9]{4,6}/)?.[0] || raw.slice(0, 6)
       log(`Room code: ${roomCode}`)
     } catch {
-      const match = p1.url().match(/[A-Z0-9]{6}/)
-      if (match) roomCode = match[0]
-      errors.push({ turn: 0, type: 'room-code-not-visible', message: 'Room code display missing — UX bug · needs copy button with data-testid' })
+      const urlMatch = p1.url().match(/[A-Z0-9]{6}/)
+      if (urlMatch) roomCode = urlMatch[0]
+      errors.push({ turn: 0, type: 'room-code-not-visible', message: 'Room code display missing' })
     }
     if (!roomCode || roomCode.length < 4) throw new Error(`Bad room code: "${roomCode}"`)
 
@@ -165,101 +203,101 @@ async function playGame(gameNum, browser) {
     await delay(1000)
     log(`[BotBeta${gameNum}] Joined ${roomCode}`)
 
-    // Ready up — T1 S10: data-testid="ready-btn" expected
+    // Ready up — T1 S10: data-testid="ready-btn" on lobby Ready button
     const readySelectors = ['[data-testid="ready-btn"]', 'button:has-text("Ready")', 'button:has-text("I\'m Ready")']
-    for (const sel of readySelectors) {
-      const btn1 = p1.locator(sel).first()
-      if (await btn1.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await btn1.click().catch(e => errors.push({ turn:0, type:'ready-failed', message: e.message.slice(0,80) }))
-        break
-      }
-    }
-    for (const sel of readySelectors) {
-      const btn2 = p2.locator(sel).first()
-      if (await btn2.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await btn2.click().catch(e => errors.push({ turn:0, type:'ready-failed', message: e.message.slice(0,80) }))
-        break
-      }
-    }
-    await delay(800)
 
-    // Start game
+    // Host (p1) may not need to click Ready in some lobby implementations.
+    // Try both; soft-fail so the game can still start.
+    for (const page of [p1, p2]) {
+      for (const sel of readySelectors) {
+        const btn = page.locator(sel).first()
+        if (await btn.isVisible({ timeout: 2500 }).catch(() => false)) {
+          await btn.click().catch(e => errors.push({
+            turn: 0, type: 'ready-failed', message: e.message.slice(0, 80)
+          }))
+          await delay(300)
+          break
+        }
+      }
+    }
+    await delay(1000)
+
+    // Start game (host action)
     await p1.locator('button:has-text("Start")').click({ timeout: 6000 }).catch(e =>
-      errors.push({ turn:0, type:'start-failed', message: e.message.slice(0,80) })
+      errors.push({ turn: 0, type: 'start-failed', message: e.message.slice(0, 80) })
     )
 
     await p1.waitForURL(/\/game\//, { timeout: 15000 })
     await p2.waitForURL(/\/game\//, { timeout: 15000 })
     log('Both on game board')
+    await delay(800) // allow DB state to sync before dismissing tutorial
 
-    // Handle the first-turn tutorial overlay. It shows for BOTH players (GameRoom gates on
-    // `showTutorial && phase === 'playing'`, NOT on isMyTurn · Tutorial.jsx), so BOTH must dismiss it —
-    // an un-dismissed overlay (position:fixed · z-index 500) blocks EVERY click on that player's turn,
-    // which is the stuck-state cause (T2 S11 · the old bot only dismissed p1 → p2 stuck on its turns).
-    // tutorial-skip dismisses from any step · tutorial-dismiss only exists on the last step.
-    const tutorialSelectors = [
-      '[data-testid="tutorial-skip"]',
-      '[data-testid="tutorial-dismiss"]',
-      'button:has-text("Start building the civilization")',
-      'button:has-text(/skip|got it/i)',
-    ]
-    const dismissTutorial = async (page, label) => {
-      for (const sel of tutorialSelectors) {
-        const btn = page.locator(sel).first()
-        if (await btn.isVisible({ timeout: 2500 }).catch(() => false)) {
-          await btn.click().catch(() => {})
-          log(`Tutorial dismissed (${label})`)
-          return true
-        }
-      }
-      return false
+    // Dismiss tutorial for BOTH players — the overlay blocks all clicks on each player's turn.
+    // Tutorial.jsx gates on phase==='playing' (T1 S10), so BOTH see it on game start.
+    const [t1ok, t2ok] = await Promise.all([
+      dismissTutorial(p1, 'host'),
+      dismissTutorial(p2, 'joiner'),
+    ])
+    if (!t1ok && !t2ok) {
+      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not dismissable · prod deploy lag or gate bug (T1 lane)' })
     }
-    const tutOk = (await dismissTutorial(p1, 'host')) | (await dismissTutorial(p2, 'joiner'))
-    if (!tutOk) {
-      errors.push({ turn: 0, type: 'no-tutorial', message: 'Tutorial not dismissable for either player — prod deploy lag OR a real gate bug (T1 lane)' })
-    }
+    await delay(500)
 
-    // Play turns
+    // Play turns — v4: detect WHICH player has the active turn by polling both pages
     let turn = 0, gameEnded = false, stuckCount = 0
-    while (turn < TURN_LIMIT && !gameEnded) {
-      const activePage = turn % 2 === 0 ? p1 : p2
-      // Detect WHOSE turn it is via the CONDITIONAL signal: the `.my-turn-badge` CLASS and the "Your turn"
-      // text render ONLY when isMyTurn (ActionBar), whereas data-testid="my-turn-badge" is ALWAYS present
-      // (it can't tell turns apart — the old detection bug · T3 S11 flagged "bot turn-detection" to T2).
-      const isMyTurn = await activePage.locator(
-        '.my-turn-badge, text=/your turn/i'
-      ).first().isVisible({ timeout: 1200 }).catch(() => false)
 
-      if (!isMyTurn) {
+    while (turn < TURN_LIMIT && !gameEnded) {
+      const active = await detectActiveTurn(p1, p2)
+
+      if (!active) {
         stuckCount++
         if (stuckCount > 30) {
-          errors.push({ turn, type: 'stuck-state', message: `No turn detected at turn ${turn}` })
-          stuckCount = 0; turn++
+          errors.push({ turn, type: 'stuck-state', message: `No player has turn after extended wait at turn ${turn}` })
+          stuckCount = 0
+          turn++
         }
         await delay(400)
         continue
       }
-      stuckCount = 0
 
+      stuckCount = 0
+      const { page: activePage, label } = active
+
+      // Perform 3 actions
       for (let a = 0; a < 3; a++) {
         const action = await doRandomAction(activePage, turn, errors)
-        moves.push({ turn, action })
+        moves.push({ turn, action, player: label })
         await delay(250)
       }
-      // T1 S9: data-testid="end-turn-btn" in DOM
+
+      // End turn
       await activePage.locator('[data-testid="end-turn-btn"], button:has-text("End Turn")').first()
         .click({ timeout: 3000 }).catch(() => {})
-      await delay(700)
-      turn++
+      await delay(800) // allow DB sync before next turn detection
 
-      const finalScore = await p1.locator('text=/2055|civilization complete/i').isVisible({ timeout: 500 }).catch(() => false)
-      if (finalScore) { log(`Game complete at turn ${turn}`); gameEnded = true }
+      turn++
+      log(`Turn ${turn} · ${label} acted · placed:${moves.filter(m=>m.action==='placed-element').length}`)
+
+      // Check if game ended
+      const finished = await p1.locator('text=/final score|civilization complete|2055/i')
+        .isVisible({ timeout: 500 }).catch(() => false)
+      if (finished) { log(`Game ${gameNum} complete at turn ${turn}`); gameEnded = true }
     }
 
     const placed = moves.filter(m => m.action === 'placed-element').length
     const drew = moves.filter(m => m.action === 'drew-card').length
     log(`Game ${gameNum}: ${turn} turns · placed ${placed} · drew ${drew} · ${errors.length} errors`)
-    return { game: gameNum, completed: gameEnded, turns: turn, duration: Math.round((Date.now()-start)/1000), errors: errors.length, placedElements: placed, drewCards: drew, errorList: errors }
+
+    return {
+      game: gameNum,
+      completed: gameEnded,
+      turns: turn,
+      duration: Math.round((Date.now() - start) / 1000),
+      errors: errors.length,
+      placedElements: placed,
+      drewCards: drew,
+      errorList: errors,
+    }
 
   } catch (err) {
     errors.push({ turn: -1, type: 'fatal', message: err.message.slice(0, 200) })
@@ -271,7 +309,8 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation · ${NUM_GAMES} games · ${BASE}`)
+  log(`NeoTopia Bot Simulation v4 · ${NUM_GAMES} games · ${BASE}`)
+  log('v4 fix: both-page turn detection · no alternation assumption · parallel tutorial dismiss')
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 300 : 0 })
@@ -285,25 +324,37 @@ async function main() {
   const report = {
     timestamp: new Date().toISOString(),
     url: BASE,
+    botVersion: 'v4',
     results: allResults,
     summary: {
       completed: allResults.filter(r => r.completed).length,
-      totalErrors: allResults.reduce((s,r) => s + r.errors, 0),
+      totalErrors: allResults.reduce((s, r) => s + r.errors, 0),
       gamesWithPlacement: allResults.filter(r => r.placedElements > 0).length,
-      totalPlaced: allResults.reduce((s,r) => s + (r.placedElements||0), 0),
-      totalDrew: allResults.reduce((s,r) => s + (r.drewCards||0), 0),
-      errorTypes: allResults.flatMap(r => r.errorList||[]).reduce((acc,e) => { acc[e.type]=(acc[e.type]||0)+1; return acc }, {}),
-    }
+      totalPlaced: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
+      totalDrew: allResults.reduce((s, r) => s + (r.drewCards || 0), 0),
+      errorTypes: allResults.flatMap(r => r.errorList || [])
+        .reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {}),
+    },
   }
+
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT ===')
-  console.log(`Games: ${report.summary.completed}/${NUM_GAMES}`)
-  console.log(`Errors: ${report.summary.totalErrors}`)
-  console.log(`Placed: ${report.summary.totalPlaced} · Drew: ${report.summary.totalDrew}`)
+  console.log('\n=== BOT SIMULATION REPORT (v4) ===')
+  console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
+  console.log(`Total errors: ${report.summary.totalErrors}`)
+  console.log(`Games with element placement: ${report.summary.gamesWithPlacement}/${NUM_GAMES}`)
+  console.log(`Elements placed: ${report.summary.totalPlaced} · Cards drawn: ${report.summary.totalDrew}`)
   console.log('Error types:', report.summary.errorTypes)
   console.log(`Report: ${reportPath}`)
+
+  if (report.summary.totalErrors > 0) {
+    console.log('\nCRITICAL BUGS:')
+    const unique = [...new Set(report.summary.errorTypes && Object.keys(report.summary.errorTypes))]
+    allResults.flatMap(r => r.errorList || []).slice(0, 20).forEach(e =>
+      console.log(` [${e.type}] ${e.message || ''}`)
+    )
+  }
 }
 
 main().catch(err => { console.error('Bot failed:', err.message); process.exit(1) })
