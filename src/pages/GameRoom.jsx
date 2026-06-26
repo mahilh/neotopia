@@ -10,11 +10,22 @@ import GameBoard from '../components/Board/GameBoard'
 import ActionBar from '../components/ActionBar'
 import FinalScore from '../components/FinalScore'
 import Tutorial, { tutorialSeen } from '../components/Tutorial'
-import ProjectCard, { ScoreFlash } from '../components/ProjectCard'
+import { ScoreFlash } from '../components/ProjectCard'
+import CardFrame from '../components/CardFrame'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
+
+// A card's primary element = the most common element type across its pattern · drives the CardFrame
+// theme colour. Cards store element types per pattern cell, not a single top-level element.
+function cardPrimaryElement(card) {
+  const counts = {}
+  for (const cell of card?.pattern ?? []) counts[cell.type] = (counts[cell.type] ?? 0) + 1
+  let best = 'community', max = 0
+  for (const [type, n] of Object.entries(counts)) if (n > max) { max = n; best = type }
+  return best
+}
 
 export default function GameRoom() {
   // Route-param multiplayer: /game/:roomId → real game · /game (no param) → solo dev.
@@ -271,27 +282,31 @@ export default function GameRoom() {
           {/* THE OFFER */}
           <div>
             <div style={sectionLabel}>The Offer</div>
-            <div data-offer style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div data-offer style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
               {theOffer.length === 0 && (
                 <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, padding: '8px 0' }}>Deck empty</div>
               )}
-              {theOffer.map((card, i) => (
-                <ProjectCard key={card.id} card={card} testid="card-offer"
-                  disabled={actionsLeft === 0 || !isMyTurn}
-                  onClick={() => handleDrawCard('offer', i)}
-                />
-              ))}
+              {theOffer.map((card, i) => {
+                const disabled = actionsLeft === 0 || !isMyTurn
+                return (
+                  <CardFrame key={card.id} size="hand" testid="card-offer"
+                    card={{ ...card, element: cardPrimaryElement(card) }}
+                    onClick={disabled ? undefined : () => handleDrawCard('offer', i)}
+                  />
+                )
+              })}
             </div>
           </div>
 
           {/* HAND */}
           <div>
             <div style={sectionLabel}>Hand · {currentPlayer?.hand?.length ?? 0}</div>
-            <div data-hand style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div data-hand style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
               {currentPlayer?.hand?.map(card => {
                 const isScoreable = uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === card.id)
                 return (
-                  <ProjectCard key={card.id} card={card} isScoreable={isScoreable} testid="card-hand"
+                  <CardFrame key={card.id} size="hand" testid="card-hand" isSelected={isScoreable}
+                    card={{ ...card, element: cardPrimaryElement(card) }}
                     onClick={isScoreable ? () => {
                       const scored = handleCardScore(card.id)
                       if (scored?.card) setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })

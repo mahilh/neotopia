@@ -27,7 +27,7 @@ const CORNER_SYMBOLS = {
 
 const POINT_VALUES = { 2: 'II', 3: 'III', 4: 'IIII', 5: 'IIIII' }
 
-export default function CardFrame({ card, size = 'hand', onClick, isSelected = false }) {
+export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -46,6 +46,8 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
 
   return (
     <div
+      className="project-card"
+      data-testid={testid}
       onClick={onClick}
       style={{
         width: s.width,
@@ -227,7 +229,7 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           fontSize={s.fontSize - 2}
           fontFamily="serif"
         >
-          \u25C6 NEOTOPIA 2055 \u25C6
+          {'\u25C6 NEOTOPIA 2055 \u25C6'}
         </text>
       </svg>
 
