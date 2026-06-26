@@ -8,57 +8,88 @@ Stack: React 19 + Vite 8 + Tailwind v4 + SVG hex board + Zustand + Immer + Supab
 Supabase ID: wynccumuisjxbptjlfwq · URL: https://wynccumuisjxbptjlfwq.supabase.co
 GitHub: mahilh/neotopia (public) · Domain: neotopia.io · Vercel: auto-deploy from main
 
-STATUS (post S7-S8 · June 26 2026 · FIRST REAL PLAYTEST COMPLETED):
-  ✅ ANON AUTH FIXED · INITIAL_SESSION pattern (d420342)
-  ✅ MULTIPLAYER LOOP VERIFIED · move→DB→postgres_changes→rejoin
-  ✅ LANDING.JSX LIVE · "Enter the Civilization" · at route /
-  ✅ FINALSCORE.JSX · 8/8 checks · civilization record · REAL Global Index
-  ✅ GLOBAL INDEX LIVE · migration 004 · get_global_neotopia_index() + increment_neotopia_index()
-  ✅ game_events FIXED · resolveDbEventType (T3) + short names (T1) · both correct
-  ✅ MIGRATION 005 · rooms_delete_host · FK cascade · CI cleanup
-  ✅ gameEndEvent.js · game_end audit payload · wiring for T1 FinalScore
-  ✅ TWO-HUMAN E2E · tests/e2e/two-human.e2e.js · 8/8 checks · stable 2×
-  ✅ PLAYWRIGHT RECONNECT E2E · CDP offline · visibilitychange · 2 tests
-  ✅ CI PIPELINE · .github/workflows/e2e.yml · secrets added
-  ✅ 91 TESTS GREEN (11 files) · BUILD CLEAN
-  ✅ MOLTBOOK · neotopian claimed · /m/neotopia · heartbeat 4h · 1 organic follower
-  ✅ BOT SIMULATION · scripts/bot-simulate.js · autonomous 2-bot Playwright playtest
-  ❌ PLAYTEST FINDING: Players never placed elements (Turn 17 · 27 cards · 0 points)
-  ⏳ T1 S8: Tutorial overlay · factory pulse · copy button · card names · instruction text
-  ⏳ T2 S9: Bot simulation fixes · bonus data (Mahil) · CLAUDE.md function names fix
-  ⏳ T3 S8: Phase-over-wire E2E · turn timer · purge job
-  ⏳ MAHIL: bonus hex positions from physical board · neotopia.io custom domain
+STATUS (post S8-S9 · June 26 2026 · ALL TERMINALS COMPLETE):
+  ✅ TUTORIAL SHIPPED · Tutorial.jsx · 3-step · first-turn only · 5/5 checks · GAME NOW PLAYABLE
+  ✅ FACTORY PULSE + INSTRUCTION TEXT · uiPhase machine · dynamic "Pick an element..." text
+  ✅ COPY CODE BUTTON · 44px · "✓ Copied" · room code UX fixed
+  ✅ USERNAME EDIT · pencil → Save · claimUsername upserts
+  ✅ 6 BANNED NAMES REMOVED · incl Hameed (sacred boundary) · 56/56 unique
+  ✅ game_end WIRED · buildGameEndEvent→sync.pushState · lowest-seat · per-room guard
+  ✅ FINALSCORE STAGGER + COUNT-UP · reduced-motion aware · solo no-ops correctly
+  ✅ ENGINE FUZZ · 150 games · 100% terminate · 0 violations · permanent guard
+  ✅ purge_e2e_test_data() RPC · migration 006 · authenticated-only (migration 007)
+  ✅ MIGRATION 007 · restrict purge to authenticated · anon_can_execute=false
+  ✅ TURN_TIME_LIMIT CONFIG · in store · T1 wiring recipe in comms
+  ✅ 99 TESTS GREEN (14 files) · BUILD CLEAN
+  ✅ PHASE-OVER-WIRE E2E · phase-over-wire.e2e.js · PASS 2×+ · definitive proof
+  ✅ E2E CLEANUP · 0 rooms after test · browser-owned rooms self-clean via setSession
+  ✅ CARD FRAME · src/components/CardFrame.jsx · ancient esoteric · dark obsidian + element color
+  ✅ ART PIPELINE · scripts/generate-art.js · 56 cards defined · OpenAI API ready
+  🔴 CRITICAL BUG FIXED (T3 S8): game_sessions.phase CHECK rejects 'scoring' → 400 on every
+     natural game-end. No game could ever naturally end before this fix. Fixed by sessionPhaseColumn()
+     map at the write boundary. The playtest died at T17 so this never surfaced until T3 S8.
 
-FIRST PLAYTEST (June 26 2026 · Mahil + Shahzaman · Karachi):
-  RESULT: Turn 17 · 27 cards in hand · Score 0/0/0 · Board empty
-  ROOT CAUSE: Players only drew cards · never placed elements on board (Action B)
-  NO TUTORIAL EXISTS · factories not obviously clickable · board appeared static
-  CRITICAL FIX: T1 S8 MUST add tutorial overlay before anything else
+  ⏳ T1 S9: data-testid attributes (bot selectors) · SVG element icons on hexes · board terrain biomes
+  ⏳ T2 S10: turnTimeRemaining in store · bonus data activation if provided
+  ⏳ T3 S9: globalTeardown with signInAnonymously+purge RPC · turn timer E2E
+  ⏳ MAHIL: git pull (CardFramePreview.html on disk) · bonus hex data · neotopia.io domain
+  ⏳ MAHIL: OpenAI API key in .env.local (platform.openai.com/api-keys · ~$5 credit)
+  ⏳ MAHIL: ChatGPT Batch 1 images → public/art/cards/ (MTG painterly style prompts in chat)
+
+CRITICAL BUG FIXED (T3 S8 · sessionPhaseColumn):
+  game_sessions.phase CHECK is (playing|endgame|finished) — NOT 'scoring'
+  The store's terminal phase is 'scoring' — pushState was writing s.phase directly
+  Result: every natural game-end UPDATE → 400 → game-over state never persisted
+  Fix: sessionPhaseColumn('scoring')→'finished' at the write boundary in useGameSync.js
+       The jsonb keeps 'scoring' that syncFromServer reads correctly
+  Guard: useGameSync.phasecolumn.test.js — locked by unit test
+  Implication: No game in production could ever reach FinalScore via natural end before this fix.
+               The playtest died at T17 → latent until T3's phase-over-wire E2E proof surfaced it.
+
+BOT SIMULATION FINDINGS (production run · June 26 2026):
+  Result: 3 games · Landing page → rooms created → both bots on game board ✅
+          THEN: placed 0 · drew 0 · 32 errors per game
+  Root cause: CSS Modules hash class names at Vite build time
+    Bot selectors [class*="factory"] → empty arrays in production (class = "factory_abc123")
+    Bot selectors [class*="offer"] → same problem
+  Fix: T1 must add data-testid attributes to key interactive elements:
+    data-testid="factory-[regionId]" on factory hex elements
+    data-testid="card-offer" on offer card rows
+    data-testid="my-turn-badge" on Your Turn indicator
+  The 32 errors = stuck-state (isMyTurn never detected) + action-errors (empty locators)
+  Room creation + multiplayer routing: FULLY WORKING ✅ (TAB357, JMDDFY, TTU4N5 all worked)
 
 CRITICAL PATTERNS (confirmed fixed · never revert):
   Auth: INITIAL_SESSION event · signingIn flag · storageKey 'neotopia-auth' · detectSessionInUrl:false
   game_events event_type: short names (place_element etc) → resolveDbEventType translates
-  game_events: must be one of {draw_card,place_element,build_project,use_bonus,factory_refill,turn_end,game_end}
+  game_events: CHECK IN {draw_card,place_element,build_project,use_bonus,factory_refill,turn_end,game_end}
   FinalScore: triggers on phase==='scoring' (NOT 'ended') · navigate('/lobby') for lobby
   calculateFinalScore: (scores[], unusedCount)→number (NOT breakdown object)
-  Global index RPCs: get_global_neotopia_index() · increment_neotopia_index() (NOT the old names)
-  Dev gate: Cmd+Shift+E (NOT Cmd+F) · triggers phase='scoring' · import.meta.env.DEV only
+  Global index RPCs: get_global_neotopia_index() · increment_neotopia_index()
+  Dev gate: Cmd+Shift+E (NOT Cmd+F) · triggers phase='scoring' LOCAL ONLY · does NOT push to DB
   Landing route: / → Landing.jsx · /lobby → Lobby.jsx · /game/:roomId → GameRoom
-
-DOC-DRIFT FIX (T2 flagged · now corrected):
-  WRONG (old): neotopia_global_index_aggregate · neotopia_increment_index
-  CORRECT (live): get_global_neotopia_index · increment_neotopia_index
+  sessionPhaseColumn: maps store 'scoring'→'finished' at game_sessions write boundary
+  gameEndEvent: buildGameEndEvent(state) (NOT buildGameEndPayload) · in src/lib/gameEndEvent.js
+  purge_e2e_test_data RPC: requires signInAnonymously() first · authenticated-only (mig 007)
 
 CARD NAMES (BANNED — never use in any card):
   AetherMind · AetherNet · AetherFlux · AetherProject · KnowBrand · Hameed · Mahil
-  See docs/CARD_NAMES_REDESIGN.md for full 56-card replacement list
+  All 6 removed from projectCards.js in T1 S8 · 56/56 unique names confirmed
+
+CARD ART DIRECTION:
+  Style: MTG card art · painterly oil illustration · single focal building · visible brushstrokes
+         NOT photorealistic · NOT 3D render · dramatic sky background
+  Frame: src/components/CardFrame.jsx · ancient esoteric · dark obsidian · serif Roman numerals
+  Art files: public/art/cards/[card-id].png · auto-detected by CardFrame
+  Generation: node scripts/generate-art.js (needs OPENAI_API_KEY in .env.local)
+  Manual: docs/ART_PROMPTS_BATCH1.md (MTG painterly prompts for ChatGPT)
 
 BOT SIMULATION:
-  Script: scripts/bot-simulate.js
-  Run: node scripts/bot-simulate.js (while npm run dev running)
-  Remote: BOT_URL=https://neotopia.vercel.app node scripts/bot-simulate.js
-  Reports to: .bot-reports/report-[timestamp].json
-  Tests: tutorial missing · stuck state · element placement · room code visibility
+  Script: scripts/bot-simulate.js (fixed for Landing page routing)
+  Run against dev: npm run dev (tab 1) · node scripts/bot-simulate.js (tab 2)
+  Run against prod: BOT_URL=https://neotopia.vercel.app node scripts/bot-simulate.js
+  KNOWN: prod run gives 32 errors (CSS Module class names hashed · need data-testid in T1 S9)
+  Reports: .bot-reports/report-[timestamp].json
 
 TERMINAL LANES:
   T1: src/components/ src/pages/ src/App.jsx src/utils/ src/hooks/useGameActions.js
@@ -70,7 +101,7 @@ SELF-RATING: Forge /100 before (<85=rewrite) · Task /50 after (<35=redo) · Ses
 
 BOOT SEQUENCE:
   git pull --rebase
-  cat .claude/CLAUDE.md | head -100
+  cat .claude/CLAUDE.md | head -120
   cat .claude/comms/tomorrow.md 2>/dev/null
   git log --oneline -8 && git status --short
   npx vitest run 2>&1 | tail -6
@@ -81,7 +112,7 @@ COMMS: .claude/comms/tomorrow.md · T[N] LESSON: · T[N]→T[M]: · T[N] S[N+1] 
 MOLTBOOK:
   Agent: neotopian · API key: $MOLTBOOK_API_KEY (in .env.local)
   Submolt owned: /m/neotopia · 1 organic follower · last active confirmed
-  Heartbeat: GitHub Actions every 4h · Posts ready: docs/MOLTBOOK_POST_QUEUE.md
+  Heartbeat: GitHub Actions every 4h
 
 ENGINE ARCHITECTURE:
   Pattern matching: patternMatcher.findBuildableCards (never reimplement)
@@ -89,18 +120,22 @@ ENGINE ARCHITECTURE:
   Scoring: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean · scoreCard delegates
   Final score: calculateFinalScore(scores[], unusedCount)→number (NOT breakdown object)
   Global index: getGlobalIndex() → Promise<number> · recordCivilizationContribution(userId,count)
-  Game end event: src/lib/gameEndEvent.js · buildGameEndPayload(players,regions) · wire in FinalScore
+  Game end event: src/lib/gameEndEvent.js · buildGameEndEvent(state) (NOT buildGameEndPayload)
   FinalScore trigger: phase === 'scoring' (not 'ended')
+  Phase DB mapping: sessionPhaseColumn(storePhase) in useGameSync.js · 'scoring'→'finished'
   Event types: short names → resolveDbEventType in useGameSync.js
   Serialization: serializableState()=JSON.parse(JSON.stringify(store)) · NOT structuredClone
 
-DB CONTRACT (5 tables · all RLS · migrations 001-005):
+DB CONTRACT (5 tables · all RLS · migrations 001-007):
   room_code: char(6) CHECK(length=6) · status IN ('waiting','playing','finished')
   game_events.session_id → FK game_sessions.id (uuid · NOT room_id)
   game_events.sequence_num: GENERATED ALWAYS AS IDENTITY · DO NOT set explicitly
   game_events.event_type: CHECK IN {draw_card,place_element,build_project,use_bonus,factory_refill,turn_end,game_end}
+  game_sessions.phase: CHECK IN (playing|endgame|finished) — NOT 'scoring' · use sessionPhaseColumn()
   Migration 004: get_global_neotopia_index() · increment_neotopia_index() (SECURITY DEFINER)
   Migration 005: rooms_delete_host policy · host_id=auth.uid() AND status='finished' · FK cascade
+  Migration 006: purge_e2e_test_data() RPC · E2E bot cleanup · SECURITY DEFINER
+  Migration 007: restrict purge to authenticated · anon_can_execute=false
 
 GAME MECHANICS:
   BOARD: R0 Sacred City(#7F77DD)cq=0cr=0 · R1 Living Earth(#1D9E75)cq=8cr=-4 · R2 Free Energy(#E24B4A)cq=4cr=5
@@ -114,7 +149,7 @@ GAME MECHANICS:
 ELEMENT→CIVILIZATION: energy→Energy/Invention·biofarming→Food/Regen·technology→Tech/AI·community→Source/Culture
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (42 · cumulative):
+PERMANENT ANTI-REGRESS RULES (45 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -154,9 +189,12 @@ PERMANENT ANTI-REGRESS RULES (42 · cumulative):
   37. A fixed CSS height is a request not a guarantee · flex children shrink past it · pin flexShrink:0
   38. In live multi-terminal repo, boot premise check has shelf life of minutes · 'file modified since read' = collision signal
   39. HTTP status is a witness · 400 proves insert reached DB · null ref = no HTTP call
-  40. When two lanes touch one seam, trace the composed value after both edits · verify against HEAD-of-tree not boot-of-session · a green suite is false confidence when a guard pins a stale constant (T1 S7)
-  41. Before writing a cross-lane bug flag, re-read the owner's current files · the bug you found at boot may already be mid-fix · prefer confirming a fix to re-raising it (T2 S8)
-  42. "Two lanes both fixed it" can ADD a bug the combination owns · trace composed behavior end-to-end · a flaky-looking failure earns its root cause before any timeout bump (T3 S7)
+  40. When two lanes touch one seam, trace the composed value after both edits · verify against HEAD-of-tree not boot-of-session (T1 S7)
+  41. Before writing a cross-lane bug flag, re-read the owner's current files · the bug may already be mid-fix (T2 S8)
+  42. "Two lanes both fixed it" can ADD a bug · trace composed behavior end-to-end (T3 S7)
+  43. In a shared .git, commit per task not per session · uncommitted work can be silently stashed by another terminal's pull --rebase --autostash · recover shared autostash per-file (never pop) · commit immediately after recovery (T1 S8)
+  44. A SECURITY DEFINER function callable by anon is an unauthenticated-destruction vector · destructive RPCs must require authenticated role · verify with pg_proc.proacl after GRANT (T2 S9)
+  45. A denormalized column is a second contract · when pushState writes both jsonb blob and mirror columns, premise-check every mirror column's CHECK against every value the blob can carry — especially terminal states never reached in testing (T3 S8 · found: game_sessions.phase rejects 'scoring' · every natural game-end was silently 400ing)
 
 CODEWORDS:
   T[N] AUTODRIVE! → paste output · I run: GitHub verify + XRAY!/200 + next forge
