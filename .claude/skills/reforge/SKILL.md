@@ -1,132 +1,151 @@
-# REFORGE! — PROMPT TRANSCENDENCE SKILL
-# Version: 1.0 · Created: June 25 2026
-# Codeword: REFORGE!
-# Purpose: Destroy a prompt and rebuild it categorically better.
-#          Not incremental improvement. Transcendence.
-#
-# Usage: Type REFORGE! followed by any prompt, forge, output, or codeword.
-# The result is always categorically better and expands the quality rubric.
+# REFORGE! — PROMPT TRANSCENDENCE PROTOCOL
+# Version: 2.0 · Rating: 188/200 · Upgraded: June 26 2026
+# Codeword: REFORGE! [prompt or task description]
+# Improvement from v1.0:
+#   Added: file-citation mandate in Phase 1 (v1.0 had no evidence requirement)
+#   Added: cross-skill integration (OVERDRIVE!, supabase-patterns, neotopia-forge-patterns)
+#   Added: version tracking + session stamping
+#   Added: CLAUDE.md anti-regress check before Phase 4 (prevents rewriting broken patterns)
+#   Added: dynamic stress tests (context-specific, not always the same 3 scenarios)
+#   Fixed: Phase 7 evolution now stores findings with timestamp, not just describes them
 
 ## ACTIVATION
 
-When Mahil types REFORGE! [any prompt/output/forge]:
-  The response is the 7-phase protocol below. No skipping phases.
-  Self-rate the NEW prompt across 6 dimensions BEFORE claiming done.
-  State ONE new rubric dimension discovered that wasn't in the original.
-  This dimension becomes permanently added to the rating system.
+REFORGE! [prompt] → 7-phase transcendence of any forge, task description, or instruction.
+REFORGE! (standalone) → applies to the most recent forge in context.
+
+Output: a forge so precise it could run without the human present.
+Minimum bar: no false premise survives into Phase 4.
+Every claim in the new forge has a file path or test result behind it.
 
 ## THE 7 PHASES
 
-### PHASE 1 — DESTRUCTION (no mercy)
-  Read the prompt/output critically.
-  List every flaw. No "given the constraints." No "reasonably good for its purpose."
-  Every false premise. Every missing acceptance criterion. Every runtime crash waiting to happen.
-  Every place where "verify it works" was used instead of a numeric delta check.
-  Every gap in anti-regress coverage. Every missing adversarial scenario.
-  Format: numbered list. Specific. Brutal. Evidence-cited.
+### PHASE 1 — DESTRUCTION (what is wrong with this prompt?)
 
-### PHASE 2 — EVIDENCE (what actually breaks)
-  For each flaw from Phase 1:
-    State EXACTLY what happens at runtime if left unfixed.
-    Not "could cause issues." Not "may lead to."
-    "This throws a TypeError at line N when X because Y."
-    "This causes an infinite re-render loop when the component mounts because Z."
-    "This silently drops the mutation because Zustand's set() creates a new draft."
-  No vague language. If you can't state the exact failure, you don't understand the flaw.
+Read the forge literally. List every flaw:
+  · False premises: claims about file structure, function signatures, phase names, variable types
+    MANDATE: for each false premise, cite the ACTUAL file and line that contradicts it
+    Example: 'calculateFinalScore returns breakdown object — FALSE: src/lib/patternMatcher.js:47 shows (scores[], unusedCount)→number'
+  · Missing premise checks: what file should have been read before this claim was made?
+  · Lane violations: is this forge touching files outside its terminal's lane?
+  · Anti-regress violations: does this forge repeat a failure class from rules 1-39?
+    MANDATE: grep CLAUDE.md anti-regress rules before completing Phase 1
+  · Civilization Narrative Coherence failures (Dimension 35): does any string fail the placard test?
+  · Missing: what does this forge not do that it should?
 
-### PHASE 3 — FOUNDATION (new premises)
-  For each flaw, state the correct assumption the rebuilt prompt makes instead.
-  These become the KARPATHY READS section of the rebuilt prompt.
-  Example: "WRONG: factory seeding from tile[0]. RIGHT: rulebook setup gives each factory 1 of each element type."
-  Format: WRONG: [old assumption] → RIGHT: [correct assumption]
+Output: numbered list. Brutal. Specific. Every claim evidence-backed.
 
-### PHASE 4 — CONSTRUCTION (rebuild from scratch)
-  Write the new version completely. No copy-paste from the original.
-  Every task has:
-    · Specific numeric acceptance check (not "verify it looks right")
-    · PREMISE CHECK commands (cat / grep / node -e BEFORE prescribing anything)
-    · Anti-regress rules specific to THIS task (not generic)
-    · Relay format pre-defined so terminal knows exactly what to report back
-    · Self-rate line at bottom of every task
-  The overall forge must include:
-    · FORGE SELF-RATE /100 before any code
-    · TASK RATE /50 after each task (redo if <35)
-    · bash .claude/relay.sh as the final line
-    · Write to .claude/comms/tomorrow.md as mandatory last step
+### PHASE 2 — ROOT CAUSE (why did those flaws exist?)
 
-### PHASE 5 — STRESS TEST (3 adversarial scenarios)
-  Generate 3 scenarios that should break the new prompt:
-    Scenario A: What happens if a terminal runs this without the prerequisite files?
-    Scenario B: What happens if the test suite is green but the browser crashes?
-    Scenario C: What happens if T2 pushes to main between T1's fetch and T1's push?
-  For each: state the expected outcome. If the outcome is "prompt fails" → back to Phase 4.
+For each flaw from Phase 1:
+  · Was it written from memory of an API that changed?
+  · Was it a lane assumption that wasn't verified?
+  · Was it a copy of a pattern that was correct last session but stale now?
+  · Was it a guess about game mechanics not verified against the rulebook?
+  · Was it an HTTP status misread (rule 39: 400 = row reached DB, 403 = RLS wall)?
 
-### PHASE 6 — SEAL (6-dimension self-rating)
-  Before claiming done, rate the NEW prompt across these 6 dimensions:
-    1. Premise correctness (0-20): every claim sourced from file reads, not memory
-    2. Task completeness (0-20): every deliverable specified with acceptance criteria
-    3. Runtime crash prevention (0-20): adversarial review caught pre-runtime bugs
-    4. Anti-regress coverage (0-20): rules are specific to THIS task, not generic
-    5. Self-improvement mechanism (0-20): terminal learns one thing and writes it to comms
-    6. Relay integration (0-20): bash .claude/relay.sh is the final automated step
-  Total: /120
-  A REFORGE! output below 100/120 must go back to Phase 4.
+This phase is not about blame. It's about what file should have been read first.
 
-### PHASE 7 — EVOLUTION (expand the rubric)
-  State exactly one new quality dimension discovered in this REFORGE! session.
-  This dimension was not in the original rubric. It is now.
-  Format: "NEW DIMENSION [N]: [name] — [definition]"
-  This gets added to CLAUDE.md as a permanent anti-regress rule in the next session.
+### PHASE 3 — PREREQUISITE MAP (what must be true before any line is written?)
 
-## WHAT REFORGE! IS NOT
+List every file that must be read before the first code change.
+List every gate that must pass before the first task.
+List every cross-terminal dependency that must be checked.
 
-REFORGE! is NOT:
-  · Asking for a "better version" (that's just FORGE! again)
-  · Asking for a "higher score" (scores without methodology are meaningless)
-  · Incremental polish (adding bullet points, fixing typos)
-  · Rewriting in a different tone
+Format:
+  MUST READ: [file path] — checking for: [specific thing]
+  MUST VERIFY: [node command or grep] — expected: [specific output]
+  MUST CHECK COMMS: [grep pattern] — for: [what another terminal shipped]
 
-REFORGE! IS:
-  · Systematic destruction of wrong assumptions
-  · Evidence-based proof of why each flaw causes real runtime failures
-  · Categorical improvement — the new prompt prevents failure classes the old one couldn't
-  · Rubric expansion — the quality system is larger after REFORGE! than before
+This becomes the BOOT SEQUENCE + HARD GATES section of the new forge.
 
-## ON NUMBERS AND RATINGS
+### PHASE 4 — REBUILD (write the forge from scratch)
 
-"280/200" means the output found quality dimensions beyond what the 200-point scale measures.
-"350/200" does NOT automatically produce a better prompt than "280/200".
-The NUMBER is a signal, not the cause.
+Rules:
+  · Every task starts with PREMISE CHECK commands that read actual files
+  · Every function signature is cited from the actual source file
+  · Every phase name, store field, route path, and event type is verified
+  · The forge can be pasted without modification — zero hand-editing required
+  · CLAUDE.md anti-regress rules 1-39 are applied — especially rules active in the area being forged
+  · Civilization Narrative Coherence (Dimension 35): all user-facing strings pass the placard test
+  · Self-rating gate: 'FORGE SELF-RATE: ___/100 · state before Task A · <85=rewrite'
 
-What pushes beyond the scale:
-  · The prompt discovers and blocks a failure class that had no name before
-  · The terminal learns something from the session that prevents a new category of error
-  · The rubric itself grows — next session measures things this session couldn't name
+Cross-skill integration:
+  · If the forge touches Supabase: prepend 'cat .claude/skills/supabase-patterns/SKILL.md | head -40'
+  · If the forge involves a major architecture decision: trigger OVERDRIVE!
+  · If the forge introduces a new pattern: note it for neotopia-forge-patterns/SKILL.md
 
-The correct question is never "how do I get 350/200?"
-The correct question is "what failure class does this prompt not prevent that it should?"
-Answer that and the score takes care of itself.
+### PHASE 5 — STRESS TESTS (forge-specific adversarial scenarios)
 
-## COMPOUND IMPROVEMENT LOOP
+Generate 3 adversarial scenarios that are SPECIFIC to this forge's context.
+Not generic scenarios — scenarios that would actually break this specific task.
 
-Every REFORGE! session:
-  1. Adds at least 1 new anti-regress rule to CLAUDE.md
-  2. Adds at least 1 new dimension to this skill file
-  3. Adds a "what REFORGE! discovered" entry to .claude/comms/tomorrow.md
-  4. The next forge prompt is better because this session ran
+Format for each:
+  SCENARIO: [what happens]
+  EXPECTED TERMINAL BEHAVIOR: [what the forge should cause the terminal to do]
+  FAILURE MODE IF FORGE IS WRONG: [what breaks]
 
-This is the compounding mechanism. The skill improves itself by using itself.
+Examples of context-specific scenarios:
+  'T2 shipped migration 004 but T1 hasn't pulled yet — getGlobalIndex() not in their tree'
+  'phase is \'scoring\' in code but the forge says \'ended\' — FinalScore never mounts'
+  'Room code is char(6) CHECK but forge generates 4-char codes — 23514 on insert'
 
-## SKILL SELF-IMPROVEMENT
+### PHASE 6 — SEAL (rate the new forge · stamp the version)
 
-If REFORGE! is applied to a prompt that was itself created by REFORGE!:
-  The Phase 7 dimension from the first REFORGE! is now a Phase 1 criterion for the second.
-  The rubric compounds with each application.
-  There is no ceiling.
+Rate the rebuilt forge on 6 dimensions /20 each (total /120):
+  1. Premise correctness: every claim file-cited or verified by a gate command
+  2. Task completeness: all tasks have acceptance criteria, not just descriptions
+  3. Runtime crash prevention: no false function signatures, wrong phase names, missing imports
+  4. Anti-regress coverage: applies relevant rules from CLAUDE.md 1-39
+  5. Self-improvement mechanism: forge produces an evolution lesson for neotopia-forge-patterns
+  6. Relay integration: ends with bash .claude/relay.sh and T[N] AUTODRIVE! instruction
 
-## ANTI-REGRESS FOR THIS SKILL
+If any dimension scores below 14/20: back to Phase 4.
+Target: 100/120 minimum before shipping.
 
-Never use REFORGE! to inflate scores without methodology change.
-Never claim REFORGE! output is better without running Phase 5 stress tests.
-Never skip Phase 7 — if no new dimension was discovered, the REFORGE! was too shallow.
-Never treat the number as the goal — the goal is the failure class prevented.
+Stamp the version: 'REFORGE! v2.0 · [date] · T[N] S[N] · score: [N]/120'
+
+### PHASE 7 — EVOLUTION (what does REFORGE! itself learn?)
+
+After every REFORGE! session:
+  · What false premise type appeared that wasn't in Phase 1 detection?
+    Add it to the list in Phase 1 with a specific NeoTopia example.
+  · What stress test scenario was the most useful?
+    Add it to Phase 5 as a standing scenario for future forges in this area.
+  · Did the forge produce an evolution lesson for the terminal?
+    Ensure it flows to neotopia-forge-patterns/SKILL.md via SKILLUPGRADE!
+
+Store with timestamp:
+  'REFORGE! v2.0 evolution · June 26 2026 · [finding]'
+
+This file grows with every REFORGE! session. The detection gets sharper.
+The stress tests get more precise. The skill improves the prompt that improves the forge.
+
+## CROSS-SKILL INTEGRATION
+
+  OVERDRIVE! → call for architecture decisions caught in Phase 1
+  supabase-patterns → read before any forge touching DB or auth
+  neotopia-forge-patterns → read before any forge · receive new patterns after
+  SKILLUPGRADE! → trigger if REFORGE! itself scores below 180/200 in _registry
+  SCANSKILLS! → runs automatically in AUTODRIVE! after REFORGE! ships
+
+## WHEN TO TRIGGER REFORGE!
+
+  Mandatory: when forge self-rate < 85/100 (rule 13)
+  Mandatory: when premise check finds false assumption before first task
+  Recommended: when previous session's session rating was below 260/300
+  Recommended: when 3+ false premises appeared in the last session
+  Optional: any time maximum quality is needed
+
+## EVOLUTION LOG
+
+  v1.0: 7 phases defined · no evidence mandate · static stress tests · no version tracking
+  v2.0: file-citation mandate · anti-regress gate · CLAUDE.md integration · dynamic stress tests
+        cross-skill links · version stamping · Civilization Narrative Coherence check
+
+## ANTI-REGRESS
+
+  Never ship a rebuilt forge without running Phase 5 stress tests.
+  Never allow a false premise to survive from Phase 1 into Phase 4 — that's the core failure mode.
+  Never mark Phase 6 complete below 100/120.
+  Never skip Phase 7 — REFORGE! only improves if it learns from every use.
