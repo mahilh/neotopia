@@ -8,6 +8,8 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: '**/*.e2e.js',
+  // After the whole suite: authenticated purge of residual E2E/bot test data (T3 S9 · global-teardown.js).
+  globalTeardown: './tests/e2e/global-teardown.js',
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

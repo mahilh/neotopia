@@ -1,63 +1,69 @@
 # NeoTopia · Launch Readiness — T3 (Realtime Multiplayer) view
 
-_Authored by T3 · Session 7 · 2026-06-26. Scope: the realtime/multiplayer layer (auth, room
-lifecycle, state sync, reconnect, audit log, presence). "Evidence" below means a test or a live
-proof T3 can point to — not a claim. Other lanes' work is listed separately and labelled as theirs._
+_Authored by T3 · Sessions 7–9 · 2026-06-26. Scope: the realtime/multiplayer layer (auth, room
+lifecycle, state sync, reconnect, audit log, presence, end-of-game propagation). "Evidence" below
+means a test or a live proof T3 can point to — not a claim. Other lanes' work is labelled as theirs._
 
 ## ✅ Fully verified — T3 owns the evidence
 
 | Capability | Proof |
 |---|---|
-| **Anon auth persists across reload** (same `user_id`) | `two-human.e2e.js` rejoin test asserts `uid` is identical before/after a hard reload (T3 S7) · Node two-client proof (d420342 · Bug 13). |
-| **Move sync** — DB → `postgres_changes` → all clients | `useGameSync` postgres_changes subscription · authoritative `game_sessions` row · verified loop (7802096). |
+| **Anon auth persists across reload** (same `user_id`) | `two-human.e2e.js` rejoin test asserts `uid` is identical before/after a hard reload (S7) · Node two-client proof (d420342 · Bug 13). |
+| **Move sync** — DB → `postgres_changes` → all clients | `useGameSync` postgres_changes subscription · authoritative `game_sessions` row. |
 | **Reconnect** — `window.online` + `visibilitychange` → `fetchAndSeed` | `reconnect.e2e.js` · 2 Playwright tests, CDP offline + WS-blocked, stable 2× (238a88d). |
-| **Two-human lobby→board handshake** (presence convergence + `game_start` broadcast) | `two-human.e2e.js` test 1 · two separate browser contexts run create→join→ready→start entirely through the UI · both land on the live board · stable 2× (T3 S7). |
-| **game_events audit log actually writes** | `resolveDbEventType` at the persistence boundary · accepts the DB-valid names `useGameActions` emits today AND legacy shorthand · guarded by `useGameSync.eventmap.test.js` · output verified against the **live** CHECK (T3 S7). **Was silently empty before this session** (see Known Issues → resolved). |
-| **CI pipeline** | `.github/workflows/e2e.yml` runs `npx playwright test` on push/PR · reconnect + two-human suites. |
-| **E2E self-cleanup** (admin-owned rooms) | `cleanup()` hard-deletes via `rooms_delete_host` (migration 005) → FK cascade clears players + session + events. |
+| **Two-human lobby→board handshake** (presence convergence + `game_start` broadcast) | `two-human.e2e.js` test 1 · two separate browser contexts run create→join→ready→start through the UI · both land on the live board · stable 2× (S7). |
+| **End-of-game propagates to BOTH tabs** (phase over the wire) | `phase-over-wire.e2e.js` (S8 · 8840885) · ONE authoritative `game_sessions` write → `postgres_changes` → FinalScore on both subscribed tabs incl. the passive one · PASS 2×. |
+| **Natural game-end actually persists** (was silently un-syncable) | `sessionPhaseColumn` maps the store terminal `scoring` → the column's CHECK-valid `finished` at the `pushState` boundary · guarded by `useGameSync.phasecolumn.test.js` (S8). See Resolved below. |
+| **game_events audit log writes** | `resolveDbEventType` at the persistence boundary · accepts DB-valid names + legacy shorthand · guarded by `useGameSync.eventmap.test.js` · verified vs the live CHECK (S7). |
+| **E2E leaves 0 test rooms** | Per-test: admin rooms hard-delete via `rooms_delete_host` (005); browser-owned rooms self-clean via host-session impersonation (`deleteRoomAsHost` · S8). Suite-level: `global-teardown.js` calls the authenticated `purge_e2e_test_data()` RPC (006/007) for residual profiles · no service-role key (S9). |
+| **CI pipeline** | `.github/workflows/e2e.yml` runs the suite on push/PR · secrets `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` added by Mahil. |
 
 ## ◻ Verified, but NOT T3's evidence (other lanes own the proof)
 
-- **FinalScore civilization record** — T1 (8/8 browser checks, S6). T3 only drives the overlay in the
-  E2E (asserts 2055 / Global Index / CTA render); the scoring math + layout are T1's.
-- **Global NeoTopia Index** — T2 migration 004 (SECURITY DEFINER aggregate). T1 is wiring
-  `getGlobalIndex()` into FinalScore (in-flight this session).
-- **Turn gate / 1-bonus-per-turn / scoring engine** — T2 unit tests.
+- **FinalScore civilization record** — T1 (8/8 browser checks). T3 drives the overlay in the E2E
+  (asserts 2055 / Global Index / CTA render); the scoring math + layout are T1's.
+- **Global NeoTopia Index** — T2 migration 004 (`get_global_neotopia_index` / `increment_neotopia_index`)
+  + T1's FinalScore wiring (live).
+- **Turn gate / scoring engine / engine fuzz** — T2 unit tests. **Turn timer** — T2 decided the countdown
+  is a LOCAL UI concern (not synced store state · `gameConfig.js`), so there is no T3 sync work for it.
+- **First-turn Tutorial + onboarding** — T1 S8 (the playtest fix · players had not placed elements).
 
 ## ⏳ Remaining for launch
 
-1. **Terminal phase over the wire.** The two-human E2E reveals the record per-tab via the real DEV
-   end-game shortcut (deterministic). The natural end (phase `scoring` propagating through
-   `game_sessions` to both clients) is proven by the same sync mechanism as every other move, but is
-   not yet asserted end-to-end in a single test (playing 56 cards in CI is infeasible). _Honest gap,
-   not a silent one._
+1. **Bot harness selectors** — `scripts/bot-simulate.js` (T2) still targets class-name selectors; needs
+   T1 to ship `data-testid` on the Board components first (NOT present yet · T3 S9 gate-skipped the
+   bot-selector task and flagged it). Tracks the playtest's "players didn't place elements" finding.
 2. **True cross-machine play** (two physical devices / networks) — not automatable in single-browser
    Playwright. Manual smoke before launch.
-3. **CI secrets** — `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` must be added as GitHub Actions
-   secrets, or the E2E job fails at the Supabase calls (not a code bug). _Mahil action._
-4. **`neotopia.io` domain** — Vercel → add domain → DNS. Not a T3 item; noted for the launch checklist.
+3. **Natural-end E2E through real play** — `phase-over-wire.e2e.js` drives the terminal phase via an
+   authoritative DB write (faithful to what `endTurn`'s `pushState` now does). A full 56-card play-to-end
+   in one test is still infeasible in CI · the boundary fix + the propagation proof together cover it.
+4. **`neotopia.io` domain** — Vercel → add domain → DNS. _Mahil action · not a T3 item._
+5. **Bonus earn data + 56 card images** — _Mahil_ (physical board positions; art generation in progress).
 
-## 🔭 Observed in-flight this session (cross-lane · uncommitted as T3 wrote this)
+## 🛠 Issues resolved across S7–S9
 
-- **T1** — Landing page (`src/pages/Landing.jsx`) + entry-flow move (`/` → Landing, `/lobby` → Lobby)
-  + `getGlobalIndex()` wiring into FinalScore. _T3's two-human E2E was made resilient to BOTH the
-  committed `/`→Lobby contract and this new flow, so it stays green through the transition._
-- **T2** — migration 005 `rooms_delete_host` (applied live · T3 wired it into E2E cleanup) +
-  `src/lib/gameEndEvent.js`.
+- **game_events was silently empty** (S7) — two lanes both "fixed" the S5 400; the combination skipped
+  every audit insert. `resolveDbEventType` pass-through + translate · guarded · replay unblocked.
+- **The natural game-end never synced** (S8 · latent shipped bug) — `game_sessions.phase` has its own
+  CHECK (`playing|endgame|finished`); the store's terminal `scoring` is not in it, so at the real end
+  `pushState`'s `phase: s.phase` write would 400 the ENTIRE state UPDATE and the game-over state would
+  never persist/propagate. Latent only because no game had reached the end (playtest died at turn 17).
+  Fixed at the write boundary (`sessionPhaseColumn`); the jsonb still carries the true `scoring`.
+- **E2E test-data accrual** (S8–S9) — browser-owned rooms now self-clean (host-session 005 delete);
+  residual `player_profiles` (UNIQUE username · no DELETE policy) cleaned by the `purge_e2e_test_data`
+  RPC (T2 · 006 + 007-hardened to authenticated) via the Playwright `globalTeardown`. Suite now leaves 0.
 
-## 🛠 Known issues resolved this session
+## ⚠️ Known environmental note (not a code issue)
 
-- **game_events was silently empty.** T1 S6 renamed `useGameActions` events to the DB-valid names
-  while T3 S6 added a translate-only map keyed on the OLD shorthand. Together, every audit insert
-  missed the map and was skipped (no 400 — just nothing written). Fixed by `resolveDbEventType`
-  (pass-through for valid names + translate legacy), locked by the eventmap guard. **This unblocks
-  replay** (game_events now has data).
+Supabase rate-limits **anonymous sign-ins per IP**. Running the E2E suite many times in one hour locally
+exhausts the hourly quota → tests fail at `signInAnonymously` ("Request rate limit reached"). `signInAnonRetry`
+backs off transient bursts; the `globalTeardown` soft-fails (never fails the suite). CI runs the suite ONCE
+(~6 sign-ins) · well under the limit. If a local re-run shows this, wait for the window to reset.
 
 ## 🌱 Post-launch (not blocking)
 
-- ELO rating (`player_profiles.elo_rating` is seeded but unused).
-- Spectator mode · game replay from the `game_events` log (now newly unblocked).
-- Bonus-token earn positions from the physical board (data pending · Mahil).
-- E2E data hygiene: Test 1 creates browser-owned rooms + `player_profiles` rows that this Node client
-  cannot delete (RLS); they are tagged `E2E…` for a periodic service-role purge. A scheduled purge or
-  a test-only TTL would close this.
+- ELO rating (`player_profiles.elo_rating` seeded but unused).
+- Spectator mode · game replay from the `game_events` log (now unblocked · the audit log writes).
+- Reserve the `E2E%`/`Bot%` username prefixes at registration (CHECK/trigger) so the purge RPC can never
+  match a real profile — the last hardening step for the test-data cleanup (T2).
