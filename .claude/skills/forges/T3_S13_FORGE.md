@@ -1,58 +1,66 @@
-# T3 S13 MASTER FORGE
-# Target: 200/200 · Tasks A/B/C rated /50 · Forge self-rated /200 before execution
-# NeoTopia T3 · Realtime/E2E · tests/e2e/ · src/hooks/useGameRoom.js · useGameSync.js
-# Date: June 27 2026 (post S12 · 36 placed confirmed · placement-commit guard shipped)
+# T3 S13 MASTER FORGE · CI + RECONNECT RESILIENCE
+# NeoTopia · June 27 2026 · post-bot-proven · 36 placed in production
+# Forge self-rate /200 BEFORE touching any file. <85 = rewrite.
+# T3 lane: src/hooks/useGameRoom.js · useGameSync.js · usePresence.js · tests/e2e/
 
-## MISSION
+## WHAT CHANGED SINCE LAST FORGE
+- Bot v4.3 placed 36 elements in 20 turns. 0/1 ready-failed (T2 fixing this session).
+- Placement-commit guard (193fa08) is live in the test suite. Now needs CI automation.
+- Game is fully playable by bots. Next: make it resilient for HUMANS.
+- Rejoin after page refresh was not verified this session. It was designed in S9 but not stress-tested.
+- useGameSync has the INITIAL_SESSION pattern for auth persistence.
 
-T3 S12 shipped the placement-commit guard (193fa08). Now make it permanent:
-T3 S13 wraps the placement guard in GitHub Actions CI so every push is protected.
-Also: verify the 36-placed bot run against the DB (not the proxy). And confirm full E2E suite.
+## SESSION GOAL
+Three tracks:
 
-Task A: GitHub Actions workflow for placement-commit guard (permanent CI)
-Task B: DB verification of bot v4.3 run (read room HF9QYE from Supabase)
-Task C: Full E2E suite audit + confirmation all 6 files pass
-
-FORGE SELF-RATING BEFORE EXECUTION: If any gate below 85/100 · REWRITE.
+Task A: GitHub Actions CI workflow · protect the placement guard forever
+Task B: Reconnect / rejoin resilience audit and hardening
+Task C: Full E2E suite run + honest audit of every test file
 
 ---
 
 ## GATES
 
-Gate 1: `cat .claude/CLAUDE.md | head -60`
-  Verify: force:true LOAD-BEARING, placement-commit guard is 193fa08, 102 tests green
-  Verify: COMMS are filesystem local, NEVER commit .claude/comms/
+Gate 1 (3 min):
+  git pull --rebase
+  cat .claude/CLAUDE.md | head -50
+  Confirm: COMMS local-only · force:true LOAD-BEARING · comms NEVER committed
 
-Gate 2: `cat .claude/comms/tomorrow.md 2>/dev/null | tail -60`
-  Verify: T1 and T2 have no pending tasks in tests/e2e/ or .github/
-  HARD STOP if: another lane is touching E2E infrastructure
+Gate 2 (2 min):
+  cat .claude/comms/tomorrow.md 2>/dev/null | tail -60
+  Confirm: T1 is on CardFrame/FinalScore. T2 is on projectCards + bot.
+  HARD STOP if T2 has claimed scripts/bot-simulate.js mid-session.
 
-Gate 3: Read tests/e2e/game-ux.e2e.js FULLY.
-  Verify: the placement-commit guard section uses force-click + data-valid + hex-element-in token count
-  Verify: the touch-target gate (HARD · 0 violations) is still passing
-  List EVERY test in game-ux.e2e.js by name.
+Gate 3 (5 min):
+  cat tests/e2e/game-ux.e2e.js
+  List every test by name. Understand the placement guard test flow.
+  cat playwright.config.js (or playwright.config.ts) — get webServer config, testDir, baseURL.
+  You MUST know the playwright config before writing the CI yaml.
 
-Gate 4: Check if .github/workflows/ exists.
-  `ls .github/workflows/ 2>/dev/null || echo "NO CI YET"`
-  If no CI: Task A is creating it from scratch.
-  If CI exists: Task A is extending it with the E2E job.
+Gate 4 (3 min):
+  ls .github/workflows/ 2>/dev/null || echo "NO CI YET"
+  If exists: read existing workflows before adding a new one.
+  cat src/hooks/useGameSync.js | head -60
+  Understand INITIAL_SESSION pattern and rejoin logic.
 
-Gate 5: `npx vitest run 2>&1 | tail -6` · 102 green required
-Gate 6: `npm run build 2>&1 | tail -4` · 0 errors required
-Gate 7: `git log --oneline -8`
-  Verify: 193fa08 (placement guard), 193fa08 is in the log.
-  Verify: Your HEAD is origin/main after git pull.
-  HARD STOP if: T2 bot changes are in your working tree (different lane).
+Gate 5: npx vitest run 2>&1 | tail -6 · 102 green required
+Gate 6: npm run build 2>&1 | tail -4 · 0 errors required
+Gate 7: git log --oneline -8
+  Confirm 193fa08 (placement guard) is in log.
+  Confirm HEAD = origin/main.
 
 ---
 
-## TASK A · GitHub Actions CI Workflow (target: 50/50)
+## TASK A · GitHub Actions CI Workflow
+# Target: 49/50 · Permanent regression protection on every push
 
-CREATE: .github/workflows/e2e.yml
+CREATE: .github/workflows/e2e-placement-guard.yml
 
-This workflow runs the placement-commit guard on every push to main and every PR.
-DO NOT run the full E2E suite in CI (it requires live Supabase + rate-limit-sensitive).
-RUN ONLY: game-ux.e2e.js (the placement guard + touch-target gate) · 8s local, isolated.
+This workflow protects the placement-commit guard (game-ux.e2e.js) on every push.
+DO NOT run the full E2E suite in CI — live Supabase + rate limits make that flaky.
+RUN ONLY game-ux.e2e.js — it's isolated, runs in 8s, and catches the most critical regression.
+
+WRITE THE YAML (adapt based on what you read in playwright.config.js):
 
   name: E2E Placement Guard
   on:
@@ -60,9 +68,13 @@ RUN ONLY: game-ux.e2e.js (the placement guard + touch-target gate) · 8s local, 
       branches: [main]
     pull_request:
       branches: [main]
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
   jobs:
     placement-guard:
       runs-on: ubuntu-latest
+      timeout-minutes: 10
       steps:
         - uses: actions/checkout@v4
         - uses: actions/setup-node@v4
@@ -71,129 +83,147 @@ RUN ONLY: game-ux.e2e.js (the placement guard + touch-target gate) · 8s local, 
             cache: 'npm'
         - run: npm ci
         - run: npx playwright install --with-deps chromium
-        - run: npx playwright test tests/e2e/game-ux.e2e.js
+        - name: Start dev server
+          run: npm run dev &
           env:
             VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            BASE_URL: http://localhost:5173
+        - name: Wait for dev server
+          run: npx wait-on http://localhost:5173 --timeout 30000
+        - name: Run placement guard
+          run: npx playwright test tests/e2e/game-ux.e2e.js --reporter=list
+          env:
+            VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+            VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         - uses: actions/upload-artifact@v4
           if: failure()
           with:
-            name: playwright-report
+            name: playwright-report-${{ github.run_id }}
             path: playwright-report/
             retention-days: 7
 
-PREMISE CHECK:
-  Before writing the yml: read playwright.config.js (or playwright.config.ts) for the
-  correct config format (testMatch, webServer, baseURL).
-  If there's a webServer config that starts the dev server · include it in the yml.
-  If the game-ux test uses a live Supabase · note that in the yml with a comment.
+PREMISE CHECKS:
+  □ Does playwright.config.js have a webServer config? If yes, the 'Start dev server' step
+    may be redundant — remove it and let playwright handle it, or set use.baseURL to localhost:5173.
+  □ Is wait-on in package.json? If not: add `npx wait-on` directly (it's an npx call, fine).
+  □ Does game-ux.e2e.js require live Supabase? If yes, the secrets MUST be in GitHub repo settings.
+    Document this in a comment in the yaml.
+  □ Replace the webServer section based on actual playwright config — never guess.
 
-Secrets needed (add to GitHub repo Settings · Secrets and variables):
-  VITE_SUPABASE_URL
-  VITE_SUPABASE_ANON_KEY
-
-COMMIT:
-  git add .github/workflows/e2e.yml
-  git commit -m 'ci: placement-commit guard in GitHub Actions · game-ux.e2e on push + PR · NeoTopia T3 S13'
+After creating the yaml:
+  git add .github/workflows/e2e-placement-guard.yml
+  git commit -m 'ci: E2E placement guard on push + PR · game-ux.e2e.js · chromium only · NeoTopia T3 S13'
+  git push
+  Navigate to: https://github.com/mahilh/neotopia/actions
+  Verify the workflow appears. If it fails, read the artifact report and fix before moving on.
 
 EVIDENCE GATE:
-  Push to main. Go to github.com/mahilh/neotopia/actions.
-  Verify: the 'E2E Placement Guard' workflow appears and passes.
-  If it fails · check the artifact report · fix before claiming done.
+  The GitHub Actions page shows green for the E2E Placement Guard workflow.
+  This is a hard requirement. Do not proceed to Task B if CI is red.
 
 ---
 
-## TASK B · DB Verification of Bot Run (target: 50/50)
+## TASK B · Reconnect + Rejoin Resilience Audit
+# Target: 48/50 · Humans refresh pages. The game must survive it.
 
-The bot v4.3 run on June 27 2026 placed 36 elements in room HF9QYE.
-Proxy says 36. Verify the DB also says 36.
+SCENARIO: Two players are mid-game. Player 2 accidentally closes their tab and reopens it.
+What happens? Does the game resume? Does their board state reappear? Can they still make moves?
 
-CREATE: scripts/verify-bot-run.js
+STEP 1: TRACE THE REJOIN PATH
+  Read src/hooks/useGameSync.js (full file)
+  Read src/hooks/useGameRoom.js (full file)
+  Answer these questions before writing code:
+  □ When the page loads with a roomId in the URL, what happens first?
+  □ Does useGameSync re-subscribe to postgres_changes after a refresh?
+  □ Does the board state re-hydrate from the DB on rejoin?
+  □ Does the player's seat re-associate with their auth ID correctly?
+  □ What is INITIAL_SESSION and how does it ensure the DB row is loaded before rendering?
 
-  #!/usr/bin/env node
-  // scripts/verify-bot-run.js
-  // Reads the last bot report and verifies the placed count against Supabase
-  // Usage: node scripts/verify-bot-run.js [roomCode]
-  //   roomCode: optional · defaults to reading from latest .bot-reports/*.json
+STEP 2: IDENTIFY THE WEAKEST LINK
+  After tracing, identify the one scenario most likely to fail:
+  - Option 1: board state doesn't re-hydrate (player sees empty board on rejoin)
+  - Option 2: seat re-association fails (player loses their "isMyTurn" status)
+  - Option 3: subscription doesn't re-attach (player doesn't receive future moves)
 
-  import { createClient } from '@supabase/supabase-js'
-  import { readFileSync, readdirSync } from 'fs'
-  import 'dotenv/config'  // loads .env.local if present
+  Write the diagnosis in .claude/comms/tomorrow.md before touching code.
 
-  const SUPABASE_URL = process.env.VITE_SUPABASE_URL
-  const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY
+STEP 3: FIX THE WEAKEST LINK
+  Whatever you identified in Step 2 — fix it.
+  Common fix patterns:
 
-  // [read report, sign in, query game_sessions, count hexes, compare]
+  For board re-hydration:
+    In useGameSync, after INITIAL_SESSION resolves, add an explicit board state read:
+    const { data } = await supabase.from('game_sessions').select('*').eq('id', sessionId).single()
+    if (data) useGameStore.getState().loadFromDB(data)  // or equivalent hydration call
 
-PREMISE CHECK FIRST:
-  Read src/lib/supabase.js AND src/store/gameStore.js to find:
-  - The exact table and column that stores placed elements per room
-  - How board_state is structured (what JSON shape)
-  NEVER guess. The column might be different from what T2 assumes.
-  If you find the board_state structure in the store · document it in the script comments.
+  For subscription re-attach:
+    Ensure the postgres_changes subscription is set up AFTER auth is confirmed, not before.
+    Add a reconnection guard: if the subscription drops, auto-resubscribe after 3s.
 
-EVIDENCE GATE:
-  node scripts/verify-bot-run.js HF9QYE
-  Output should show:
-    Room: HF9QYE
-    Proxy placed: 36
-    DB-verified placed: [N]
-    Match: [YES/NO]
-  If YES · log 'MILESTONE CONFIRMED: 36 elements DB-proven in room HF9QYE'
-  If NO · log the discrepancy and investigate before committing
+  For seat re-association:
+    Ensure mySeat computation in GameRoom.jsx uses the user.id from useAuth()
+    AND that useGameSync seeds player.userId from the DB on load, not just on join.
 
-COMMIT:
-  git add scripts/verify-bot-run.js
-  git commit -m 'feat(scripts): verify-bot-run · DB-proven placed count vs proxy · NeoTopia T3 S13'
+STEP 4: ADD AN E2E TEST FOR REJOIN
+  Add a test in tests/e2e/reconnect.e2e.js (already exists — extend it):
+
+  test('player 2 rejoins mid-game and sees correct board state', async ({ browser }) => {
+    // 1. Start a 2-player game, make a few moves
+    // 2. Close p2's context
+    // 3. Re-open p2's context and navigate to the same room URL
+    // 4. Assert: p2 sees the correct board state (elements on board from before)
+    // 5. Assert: p2 can still make moves (data-my-turn flips correctly)
+  })
+
+  If reconnect.e2e.js already has this test: verify it passes. Fix if it doesn't.
+
+COMMIT (code changes only, not the test if it was already there and passing):
+  git add src/hooks/useGameSync.js src/hooks/useGameRoom.js tests/e2e/reconnect.e2e.js
+  git commit -m 'fix(realtime): reconnect resilience · board re-hydration + subscription re-attach · NeoTopia T3 S13'
 
 ---
 
-## TASK C · Full E2E Suite Audit (target: 50/50)
+## TASK C · Full E2E Suite Audit
+# Target: 47/50 · Know exactly what is green, what is flaky, what needs fixing
 
-Run ALL 5 E2E test files and confirm all pass. Document the run.
+RUN EACH FILE INDEPENDENTLY (Rule 33: never concurrent):
+  npx playwright test tests/e2e/game-ux.e2e.js --reporter=list 2>&1 | tail -20
+  npx playwright test tests/e2e/two-human.e2e.js --reporter=list 2>&1 | tail -20
+  npx playwright test tests/e2e/reconnect.e2e.js --reporter=list 2>&1 | tail -20
+  npx playwright test tests/e2e/phase-over-wire.e2e.js --reporter=list 2>&1 | tail -20
 
-FILES TO RUN:
-  tests/e2e/game-ux.e2e.js
-  tests/e2e/two-human.e2e.js
-  tests/e2e/reconnect.e2e.js
-  tests/e2e/phase-over-wire.e2e.js
-  (skip global-teardown.js and seedHelpers.js · helpers not test files)
-
-RUN:
-  npx playwright test tests/e2e/game-ux.e2e.js tests/e2e/two-human.e2e.js 2>&1 | tail -20
-  (run sequentially, NOT in parallel · Rule 33: live E2E never concurrent)
-
-AUDIT EACH FILE:
-  For each file, record:
+FOR EACH FILE, RECORD:
   - Number of tests
-  - Pass / fail / skip
-  - If fail: root cause (rate limit? DB? code?)
-  - If rate limit: mark as 'expected environmental' and do NOT count as a code regression
+  - Pass / fail / skip count
+  - Duration
+  - If fail: root cause classification
+    [CODE] = our code is broken → fix immediately
+    [RATE] = Supabase rate limit → expected environmental, not our code
+    [TIMEOUT] = network latency → increase timeout or mark as flaky
+    [UNKNOWN] → investigate before claiming
 
-WRITE TO COMMS:
-  Record the audit result in .claude/comms/tomorrow.md · FILESYSTEM ONLY:
-  T3 S13 E2E AUDIT:
-    game-ux.e2e.js: [N tests] · [PASS/FAIL] · 8.1s
-    two-human.e2e.js: [N tests] · [PASS/FAIL] · [time]
-    reconnect.e2e.js: ...
-    phase-over-wire.e2e.js: ...
+DO NOT claim "suite is green" if any test fails with [CODE] classification.
+For [RATE] failures: document them as expected. They are not regressions.
 
-IF ANY TEST IS RED (not rate-limit):
-  Root-cause before committing anything.
-  Convert to a deterministic test if possible (Rule 31).
-  DO NOT claim 'full suite green' if any test is red from a code regression.
+WRITE THE AUDIT SUMMARY to .claude/comms/tomorrow.md:
+  === T3 S13 E2E AUDIT ===
+  game-ux.e2e.js:        [N] tests · PASS · [time]s
+  two-human.e2e.js:      [N] tests · PASS/FAIL ([classification]) · [time]s
+  reconnect.e2e.js:      [N] tests · PASS/FAIL ([classification]) · [time]s
+  phase-over-wire.e2e.js:[N] tests · PASS/FAIL ([classification]) · [time]s
+  =======================
+  Total: [N] pass · [N] fail [CODE] · [N] fail [RATE]
+  Next: [what needs fixing]
 
-COMMIT (only if you made code changes to fix failures):
-  git add tests/e2e/[file you fixed]
-  git commit -m 'test(e2e): [description of fix] · NeoTopia T3 S13'
+This audit becomes T3 S14's starting state. Accuracy matters more than optimism.
 
 ---
 
-## EVOLUTION LESSON
-  Write ONE lesson to .claude/comms/tomorrow.md · FILESYSTEM ONLY
-  Focus on what CI adds that local runs cannot: permanent, automatic, triggered by every push.
-  A CI-protected test is worth 10 manual verifications.
+## COMMIT RULES
+  NEVER git add -A · pathspec only
+  NEVER touch: src/components/ · src/pages/ · src/lib/ · src/store/ · scripts/ · migrations/
+  NEVER commit .claude/comms/
+  Evolution lesson → .claude/comms/tomorrow.md · FILESYSTEM ONLY
 
 ## SELF-RATE
-  Task A /50 · Task B /50 · Task C /50 · Session /300 · Forge /200 retroactive.
+  Task A /50 · Task B /50 · Task C /50 · Session /300 · Forge /200 retroactive
