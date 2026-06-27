@@ -4,17 +4,17 @@
 // data-testid="end-turn-btn", GameRoom root data-game-phase.
 //
 // HISTORY · S15 measured the gap (288px desktop sidebar squeezed the board to 55px → 5px factories · routed
-// to T1). S16: T1 b810a6a stacked the sidebar UNDER the board at <=600px → the board is now 343px wide at
-// 375px (verified · screenshot-confirmed). So this session UPGRADES the board-width line from a soft measure
-// to a HARD GATE (Rule 63: gate it now that it is true · it protects the responsive layout from regression).
+// to T1). S16: T1 b810a6a stacked the sidebar UNDER the board at <=600px → board 343px wide at 375px → board-width
+// became a HARD GATE; the factory tap target was still 32px so it stayed MEASURED (routed to T1). S17: T1 2086628
+// added a transparent SVG hit-circle (FACTORY_HIT_R=70 · overlap-safe) → the factory tap target now measures 58px
+// at 375px → the MEASURE promised since S15 is FLIPPED to a HARD GATE (the fix is committed + clean-tree verified +
+// screenshot-confirmed · Rule 34/55/63: a skip is a pause · gate it the moment the fix lands IN THE LOG).
 //
-// WHAT IS GATED vs MEASURED (honest · Rule 63 · re-evaluated S16):
-//   HARD GATE  — game loads + renders at 375px · BOARD WIDTH >= 200px (T1's responsive fix · was 55px) ·
-//                no horizontal scroll. These all hold today; each guards a real regression.
-//   MEASURED   — the FACTORY touch target. T1's fix lifted it 5px → ~32px, but it is still < the 44px touch
-//                minimum (Rule 4): the sidebar no longer steals width, yet the 343px board's hex cells still
-//                render ~32px. Residual is the on-board hex SIZE, not the sidebar. MEASURED + routed to T1 (not
-//                gated · the suite stays honest-green). Flip to a hard gate once a hex/board scale lifts it >=44.
+// WHAT IS GATED (honest · Rule 63 · re-evaluated S17 · all hold today, each guards a real regression):
+//   game loads + renders at 375px · BOARD WIDTH >= 200px (T1 b810a6a) · NO horizontal scroll · FACTORY touch
+//   target >= 44px (T1 2086628 · was 32px). The factory gate flipped this session once T1's fix was committed —
+//   gating it while T1's fix was still an UNCOMMITTED working-tree change would have wedged CI red (CI runs against
+//   origin · the committed tree), which is exactly why S16 correctly kept it MEASURED until the commit landed.
 
 import { test, expect } from '@playwright/test'
 
@@ -51,17 +51,18 @@ test.describe('mobile portrait (375px · solo /game)', () => {
       // No horizontal scroll at 375px — holds today (content fits the viewport); guards a future overflow.
       expect(overflow.horizontalScroll, `horizontal overflow at 375px (body ${overflow.bodyScrollW}px > viewport ${overflow.innerW}px)`).toBe(false)
 
-      // ── MEASURED · factory touch target (still < 44px after T1's sidebar fix · Rule 63: track, don't fake-gate)
+      // ── HARD GATE · factory touch target >= 44px (Rule 4). T1 2086628 (S17) added a transparent SVG hit-circle
+      // (FACTORY_HIT_R=70 · overlap-safe · 108-unit gap to the nearest region hex) → the factory tap target measures
+      // 58px at 375px (was 32px · committed + clean-tree + screenshot-verified Rule 55). The S15 promise is now a
+      // GATE: a regression that shrinks the tap target back under 44px (a removed hit-circle / viewBox change) trips
+      // here. data-testid="factory" sits on the enlarged hit area (the boundingBox IS the tap-target witness · the
+      // circle is fill:transparent so a pixel screenshot can't show it · the measured box is the honest witness).
       const fBox = await page.locator('[data-testid="factory"]').first().boundingBox()
       const factoryTouch = fBox ? Math.round(Math.max(fBox.width, fBox.height)) : 0
       console.log('[mobile-375] board:', JSON.stringify({ w: Math.round(boardBox.width), h: Math.round(boardBox.height) }),
-        '· factories:', factoryCount, '· factory-touch:', factoryTouch + 'px (need ' + TOUCH_MIN + ')',
+        '· factories:', factoryCount, '· factory-touch:', factoryTouch + 'px (gate >=' + TOUCH_MIN + ')',
         '· overflow:', JSON.stringify(overflow))
-      if (factoryTouch < TOUCH_MIN) {
-        console.log('[mobile-375] RESIDUAL (→ T1): board is now', Math.round(boardBox.width) + 'px (fixed · was 55px), but the',
-          'on-board hex/factory still renders', factoryTouch + 'px (<44). The sidebar is no longer the cause — a hex/board',
-          'scale bump on mobile would lift the touch target. MEASURED · not gated (Rule 63 · honest-green).')
-      }
+      expect(factoryTouch, `factory touch target ${factoryTouch}px < ${TOUCH_MIN}px at 375px (Rule 4 · T1's hit-circle regressed?)`).toBeGreaterThanOrEqual(TOUCH_MIN)
     } finally {
       await ctx.close()
     }
