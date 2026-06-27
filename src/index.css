@@ -90,3 +90,16 @@
 @media (prefers-reduced-motion: reduce) {
   [data-testid='milestone-overlay'] { animation: none !important; opacity: 1 !important; }
 }
+
+/* Card art skeleton · while a card_NN.png has not loaded yet (0/56 today · all 56 show the procedural sacred
+   geometry placeholder · CardFrame), a slow opacity breath signals "art pending" rather than "art broken".
+   Gentle range (0.55→0.9) keeps the placeholder + its id caption legible. Disabled under prefers-reduced-motion
+   (vestibular safety · the placeholder stays at full, still visible). T1 S17 Task D. */
+@keyframes artShimmer {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 0.9; }
+}
+.art-skeleton { animation: artShimmer 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .art-skeleton { animation: none; }
+}

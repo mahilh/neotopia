@@ -330,9 +330,10 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
       )}
 
       {/* Placeholder when no art yet · element-specific procedural sacred geometry + a small id caption.
-          The id stays so Mahil knows which card to generate next; it fades out under the real PNG. */}
+          The id stays so Mahil knows which card to generate next; it fades out under the real PNG. The
+          art-skeleton class adds a slow opacity breath (signals "art loading", not "art broken" · T1 S17 D). */}
       {(imgError || !imgLoaded) && (
-        <div style={{
+        <div className="art-skeleton" style={{
           position: 'absolute',
           left: s.borderW + 6,
           top: s.borderW + s.fontSize + 14,
