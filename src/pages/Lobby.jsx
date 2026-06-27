@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useGameRoom } from '../hooks/useGameRoom'
 import ElementIcon from '../components/Board/ElementIcon'
+import { GAME_MODES } from '../store/gameConfig'
 
 const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#7F77DD'] // blue · red · green · purple (by seat)
 
@@ -30,11 +31,53 @@ function ElementRow() {
   )
 }
 
+// Host-only game-mode selector (T1 S17 · the final piece of the Flow-mode chain · engine T2 86d0220 ·
+// createRoom(mode) + sessionId T3 ced8133 · seed seam T3 133f0b9). Reads GAME_MODES so the labels and the
+// per-mode numbers stay the single source of truth (Rule 62 · no re-hardcoded copy that can drift). The
+// chosen mode is set via setGameMode (exposed by useGameRoom) and passed as the ARGUMENT to createRoom —
+// createRoom defaults its arg to 'classic' and re-runs setGameMode, so a prior setGameMode alone would be
+// overwritten; the value only survives by riding createRoom(gameMode) (Rule 61 · traced through the body).
+function ModeToggle({ gameMode, setGameMode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <p style={label}>Game Mode</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {['classic', 'flow'].map(id => {
+          const m = GAME_MODES[id]
+          const selected = gameMode === id
+          return (
+            <button
+              key={id}
+              data-testid={`mode-${id}`}
+              aria-pressed={selected}
+              onClick={() => setGameMode(id)}
+              style={{
+                flex: 1, minHeight: 44, borderRadius: 8, cursor: 'pointer',
+                padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start',
+                border: selected ? '2px solid #C89440' : '1px solid rgba(255,255,255,0.12)',
+                background: selected ? 'rgba(200,148,64,0.10)' : 'rgba(255,255,255,0.03)',
+                color: selected ? '#C89440' : 'rgba(255,255,255,0.6)',
+                transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+              }}
+            >
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{m.label}</span>
+              <span style={{ fontSize: 10, letterSpacing: 0.3, opacity: 0.8, fontVariantNumeric: 'tabular-nums' }}>
+                {m.END_GAME_TILE} tiles · {m.TURN_TIME_LIMIT}s turns
+              </span>
+            </button>
+          )
+        })}
+      </div>
+      <p style={{ ...muted, textAlign: 'left', minHeight: 32 }}>{GAME_MODES[gameMode]?.description}</p>
+    </div>
+  )
+}
+
 export default function Lobby({ onGameStart }) {
   const { user, username, isLoading: authLoading, isClaimed, claimUsername } = useAuth()
   const {
     roomId, roomCode, isHost, isReady, lobbyPlayers, lobbyError, roomPhase,
-    createRoom, joinRoom, setReady, startGame, leaveRoom,
+    createRoom, joinRoom, setReady, startGame, leaveRoom, gameMode, setGameMode,
   } = useGameRoom(user, username)
 
   const [nameInput, setNameInput] = useState('')
@@ -220,7 +263,10 @@ export default function Lobby({ onGameStart }) {
 
       {view === 'home' && (
         <div style={card}>
-          <button style={primaryBtn} onClick={createRoom}>Create Room</button>
+          {/* Host picks the mode here · createRoom resolves + persists it (joiners inherit via the room). The
+              mode MUST be the createRoom ARGUMENT (its default would otherwise reset setGameMode · Rule 61). */}
+          <ModeToggle gameMode={gameMode} setGameMode={setGameMode} />
+          <button style={primaryBtn} onClick={() => createRoom(gameMode)}>Create Room</button>
           <button style={secondaryBtn} onClick={() => { setView('join'); setCodeInput('') }}>Join Room</button>
           {lobbyError && <p style={errorText}>{lobbyError}</p>}
         </div>
