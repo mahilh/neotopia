@@ -5,8 +5,30 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { useGameRoom } from '../hooks/useGameRoom'
+import ElementIcon from '../components/Board/ElementIcon'
 
 const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#7F77DD'] // blue · red · green · purple (by seat)
+
+// The four elements a civilization is built from · decorative row on the entry screens · reuses the
+// bespoke board ElementIcon so the lobby and the board speak one visual language (T1 S14).
+const ELEMENTS = [
+  { key: 'energy', color: '#E24B4A', label: 'Energy' },
+  { key: 'biofarming', color: '#1D9E75', label: 'BioFarming' },
+  { key: 'technology', color: '#7F77DD', label: 'Technology' },
+  { key: 'community', color: '#378ADD', label: 'Community' },
+]
+function ElementRow() {
+  return (
+    <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+      {ELEMENTS.map(e => (
+        <div key={e.key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+          <ElementIcon element={e.key} color={e.color} size={26} />
+          <span style={{ fontSize: 11, letterSpacing: 0.5, color: 'rgba(255,255,255,0.4)' }}>{e.label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export default function Lobby({ onGameStart }) {
   const { user, username, isLoading: authLoading, isClaimed, claimUsername } = useAuth()
@@ -68,7 +90,8 @@ export default function Lobby({ onGameStart }) {
     return (
       <div style={centeredScreen}>
         <h1 style={title}>NEOTOPIA</h1>
-        <p style={muted}>A consciousness civilization · 2055</p>
+        <p style={tagline}>Build a consciousness civilization · 2055 approaches</p>
+        <ElementRow />
         <div style={card}>
           <p style={label}>Choose your name</p>
           <input
@@ -85,6 +108,7 @@ export default function Lobby({ onGameStart }) {
             Enter NeoTopia
           </button>
         </div>
+        <p style={stageLine}>Stage 2 of 5 · The Awareness</p>
       </div>
     )
   }
@@ -192,6 +216,8 @@ export default function Lobby({ onGameStart }) {
         </div>
       )}
 
+      <ElementRow />
+
       {view === 'home' && (
         <div style={card}>
           <button style={primaryBtn} onClick={createRoom}>Create Room</button>
@@ -219,6 +245,8 @@ export default function Lobby({ onGameStart }) {
           <button style={secondaryBtn} onClick={() => setView('home')}>Back</button>
         </div>
       )}
+
+      <p style={stageLine}>Stage 2 of 5 · The Awareness</p>
     </div>
   )
 }
@@ -230,12 +258,14 @@ const muted = { color: 'rgba(255,255,255,0.35)', fontSize: 13, textAlign: 'cente
 const mutedSmall = { color: 'rgba(255,255,255,0.25)', fontSize: 13 }
 const card = { width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 12, padding: 24, borderRadius: 16, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.025)' }
 const label = { color: 'rgba(255,255,255,0.45)', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', margin: 0 }
+const tagline = { color: 'rgba(255,255,255,0.4)', fontSize: 13, letterSpacing: 2, textAlign: 'center', margin: 0 }
+const stageLine = { color: 'rgba(255,255,255,0.2)', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', textAlign: 'center', margin: 0 }
 const input = { height: 44, padding: '0 14px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: 'white', fontSize: 16, outline: 'none', width: '100%', boxSizing: 'border-box' }
 const primaryBtn = { minHeight: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(255,255,255,0.08)', color: 'white', fontSize: 14, cursor: 'pointer', fontWeight: 500, padding: '0 16px' }
 const secondaryBtn = { minHeight: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', padding: '0 16px' }
 const backBtn = { position: 'absolute', top: 20, left: 20, minHeight: 44, padding: '0 16px', borderRadius: 8, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.4)', fontSize: 13, cursor: 'pointer' }
 const codeBox = { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }
-const codeDisplay = { fontSize: 40, fontWeight: 700, letterSpacing: 12, color: 'white', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace' }
+const codeDisplay = { fontSize: 40, fontWeight: 700, letterSpacing: 12, color: '#C89440', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', textShadow: '0 0 16px rgba(200,148,64,0.35)' }
 const copyBtn = { minHeight: 44, padding: '0 20px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer', letterSpacing: 0.5 }
 const editIcon = { minHeight: 44, minWidth: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 14, cursor: 'pointer' }
 const playerList = { width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8 }
