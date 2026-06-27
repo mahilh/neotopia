@@ -65,27 +65,23 @@ export async function recordCivilizationContribution(districtCount) {
 }
 
 // Record THIS client's per-game civilization scores into the permanent Global NeoTopia Index LEDGER
-// (migration 009 · the detailed companion to the recordCivilizationContribution aggregate). Self-scoped:
-// the RLS insert policy only lets a caller write its OWN player_id row, so each of the N clients writes its
-// own row → one row per player per game · no cross-client over-count (same rule-32 discipline). Fire ONCE at
-// game-end from the consumer's localStorage-guarded one-shot — the SAME guard FinalScore already uses for
-// recordCivilizationContribution. The table's UNIQUE (session_id, player_id) makes an accidental re-fire
-// idempotent (the duplicate insert errors · is swallowed). Best-effort · never throws · returns { error }.
-export async function recordCivilizationDetail({ sessionId = null, username, scores = [0, 0, 0], cardsBuilt = 0 } = {}) {
-  const { data } = await supabase.auth.getUser()
-  const playerId = data?.user?.id
-  if (!playerId) return { error: 'no auth user' }
+// (migration 009 · the detailed companion to the recordCivilizationContribution aggregate). The write goes
+// through the SECURITY DEFINER record_civilization_score RPC (NOT a direct insert), so the server — not the
+// client — sets player_id = auth.uid() (self-scoped · no forging), DERIVES the username from the caller's
+// player_profiles (no impersonation in the public record), CLAMPS each score, and RE-DERIVES total_score
+// (the client cannot lie about the public ledger). Fire ONCE at game-end from the consumer's
+// localStorage-guarded one-shot — the SAME guard FinalScore uses for recordCivilizationContribution; the
+// table's UNIQUE (session_id, player_id) + ON CONFLICT DO NOTHING makes a re-fire idempotent. sessionId is
+// REQUIRED (it is the dedup key · a null would defeat the guard). Best-effort · never throws · { error }.
+export async function recordCivilizationDetail({ sessionId, scores = [0, 0, 0], cardsBuilt = 0 } = {}) {
+  if (!sessionId) return { error: 'no session' }
   const s = Array.isArray(scores) ? scores : [0, 0, 0]
-  const total = (Number(s[0]) || 0) + (Number(s[1]) || 0) + (Number(s[2]) || 0)
-  const { error } = await supabase.from('global_neotopia_index').insert({
-    session_id: sessionId,
-    player_id: playerId,
-    username: username ?? 'Anonymous',
-    sacred_city_score: Number(s[0]) || 0,
-    living_earth_score: Number(s[1]) || 0,
-    free_energy_score: Number(s[2]) || 0,
-    total_score: total,
-    cards_built: Number(cardsBuilt) || 0,
+  const { error } = await supabase.rpc('record_civilization_score', {
+    p_session_id: sessionId,
+    p_sacred: Number(s[0]) || 0,
+    p_living: Number(s[1]) || 0,
+    p_free: Number(s[2]) || 0,
+    p_cards: Number(cardsBuilt) || 0,
   })
   return { error: error?.message ?? null }
 }
