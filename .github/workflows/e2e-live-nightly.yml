@@ -1,0 +1,56 @@
+name: E2E Live (nightly)
+
+# Heavy, LIVE-Supabase E2E flows that are DELIBERATELY off the merge-blocking path. The two-context lobby
+# handshakes here each do several anonymous sign-ins and would flake on Supabase's per-IP hourly rate limit if
+# run on every push/PR — exactly why the heavy flows (two-human, phase-over-wire) were kept off the blocking CI
+# (see e2e.yml's note). A nightly cron gives them real automated coverage without ever gating a merge.
+#
+# Currently runs: flow-mode-live.e2e.js (T3 S18) — the real lobby Flow toggle (data-testid="mode-flow" · T1
+# 5d759aa) → game_sessions.mode='flow' + the persisted 9-tile/15s Flow clock, verified against live Postgres.
+# New heavy live-DB flows belong here too (this is the home for "needs Supabase, too flaky to merge-gate").
+#
+# REQUIRES repo secrets: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (the same pair e2e.yml / bot-health.yml use).
+# Playwright's webServer (playwright.config.js · reuseExistingServer: !CI) starts the dev server itself in CI —
+# no manual `npm run dev` / wait-on step (one would collide on port 5173).
+
+on:
+  schedule:
+    - cron: '0 5 * * *'    # 05:00 UTC daily (offset from bot-health's 06:00 · separate runner IP regardless)
+  workflow_dispatch: {}     # manual trigger from the Actions tab
+
+concurrency:
+  group: e2e-live-nightly   # never overlap two live-E2E runs (their anon sign-ins would share the per-IP rate budget)
+  cancel-in-progress: false
+
+jobs:
+  flow-live:
+    name: Live-DB Flow mode E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run live-DB Flow mode E2E
+        run: npx playwright test tests/e2e/flow-mode-live.e2e.js --reporter=list
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7
