@@ -214,11 +214,15 @@ export function useGameRoom(user, username) {
         .from('room_players').select('*').eq('room_id', roomId).order('seat_number')
       if (rosterErr || !roster?.length) { setLobbyError('Could not load players'); return }
 
-      // Initialise the client store, then persist the authoritative snapshot to the DB.
+      // Initialise the client store, then persist the authoritative snapshot to the DB. Pass gameMode as the
+      // 4th arg (T2 86d0220) so the SEEDED state matches the persisted mode: a flow game seeds the 9-tile clock
+      // + 15s turns + state.mode='flow', not classic's 12. Without it the column would say 'flow' while the
+      // snapshot carries classic's tile clock — the mode would be cosmetic (rule 40 · the composed mode seam).
       useGameStore.getState().initGame(
         roster.map(p => ({ userId: p.user_id, username: p.username })),
         shuffleArray([...DECK]),
         shuffleArray([...PRODUCTION_TILES]),
+        gameMode,
       )
       const snapshot = serializableState()
 

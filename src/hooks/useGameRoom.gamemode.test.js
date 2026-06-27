@@ -56,21 +56,26 @@ function sessionInsert() { return inserts.find(i => i.table === 'game_sessions')
 describe('createRoom(mode) → game_sessions.mode (T3 S16 · Flow wiring)', () => {
   beforeEach(() => { inserts.length = 0 })
 
-  test('createRoom("flow") persists mode=flow on the session at startGame', async () => {
+  test('createRoom("flow") persists mode=flow AND seeds the flow clock (9 tiles · composed value · rule 40)', async () => {
     const { result } = renderHook(() => useGameRoom(USER, 'Host'))
     await act(async () => { await result.current.createRoom('flow') })
     expect(result.current.gameMode).toBe('flow')          // stored at createRoom
     await act(async () => { await result.current.startGame() })
     expect(sessionInsert(), 'no game_sessions insert captured').toBeTruthy()
-    expect(sessionInsert().mode).toBe('flow')             // written at startGame
+    expect(sessionInsert().mode).toBe('flow')             // column written at startGame
+    // The SEEDED state must agree with the column: startGame passes gameMode to initGame, so flow trims the
+    // production-tile clock to END_GAME_TILE=9 (classic is 12). This is the rule-40 composed-value check — the
+    // mode is real (the game ends sooner), not a cosmetic column. Guards the T2 initGame(…, mode) seam.
+    expect(sessionInsert().production_tiles_remaining).toBe(9)
   })
 
-  test('createRoom() with no mode defaults to classic on the session', async () => {
+  test('createRoom() with no mode defaults to classic AND seeds the classic clock (12 tiles)', async () => {
     const { result } = renderHook(() => useGameRoom(USER, 'Host'))
     await act(async () => { await result.current.createRoom() })
     expect(result.current.gameMode).toBe('classic')
     await act(async () => { await result.current.startGame() })
     expect(sessionInsert().mode).toBe('classic')
+    expect(sessionInsert().production_tiles_remaining).toBe(12)
   })
 
   test('an unknown mode falls back to classic (getModeConfig guard · no CHECK on the column)', async () => {
