@@ -65,6 +65,11 @@ export default function GameRoom() {
     [players, user?.id],
   )
 
+  // Dual-score view (T1 S13) · the "my" column follows my seat · in solo dev mySeat is null, so fall back
+  // to the active player · opponent = the other SEATED real player (absent in solo → single column · no crash).
+  const myPlayer = players.find(p => p.seat === mySeat) ?? currentPlayer
+  const opponent = players.find(p => p.userId && p.seat != null && p.seat !== myPlayer?.seat)
+
   // Local per-second turn countdown · DISPLAY ONLY. The store holds no clock (rule 32 · the reducer only
   // RESETS turnTimeRemaining to TURN_TIME_LIMIT each turn), so we tick a local copy down for a live
   // readout and re-anchor it whenever the turn changes (currentSeat/turnNumber) or the synced value
@@ -145,6 +150,15 @@ export default function GameRoom() {
   // Pulse the factories to invite the first action · only on your turn, with actions left, before a pick.
   const factoriesPulse = isMyTurn && actionsLeft > 0 && selectedFactory === null
 
+  // Instruction-bar theming (T1 S13) · echo the SELECTED element's colour while the player chooses where
+  // to place, confirming what they just picked · scorePending stays green · only themes on your own turn.
+  const instructionColor =
+    uiPhase === 'scorePending' ? '#1DC864'
+    : isMyTurn && selectedElement && (uiPhase === 'elementSelected' || uiPhase === 'regionSelected')
+      ? (ELEMENT_COLORS[selectedElement] ?? 'rgba(255,255,255,0.5)')
+    : 'rgba(255,255,255,0.5)'
+  const instructionWeight = uiPhase === 'scorePending' ? 600 : uiPhase === 'regionSelected' ? 500 : 400
+
   // Multiplayer loading gate (AFTER all hooks · Rules of Hooks): in a real room, wait for
   // useGameSync to seed the store before rendering the board. Solo (no roomId) skips this.
   // 'scoring' is the end-game phase · let it through so the FinalScore overlay can render.
@@ -202,8 +216,9 @@ export default function GameRoom() {
           position: 'absolute', left: '50%', transform: 'translateX(-50%)',
           fontSize: 13, letterSpacing: 0.3, textAlign: 'center', pointerEvents: 'none',
           maxWidth: '58%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          color: uiPhase === 'scorePending' ? '#1DC864' : 'rgba(255,255,255,0.5)',
-          fontWeight: uiPhase === 'scorePending' ? 600 : 400,
+          color: instructionColor,
+          transition: 'color 0.25s ease',
+          fontWeight: instructionWeight,
         }}>
           {instruction}
         </div>
@@ -339,22 +354,35 @@ export default function GameRoom() {
             </div>
           </div>
 
-          {/* SCORE */}
-          {currentPlayer && (
+          {/* SCORE · my column vs opponent (single column in solo · no <table>, flexbox per touch-gate) */}
+          {myPlayer && (
             <div>
               <div style={sectionLabel}>Score</div>
+              {opponent && (
+                <div style={{ display: 'flex', alignItems: 'center', padding: '0 0 4px' }}>
+                  <span style={{ flex: 1 }} />
+                  <span style={{ width: 42, textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {(myPlayer.username ?? 'You').slice(0, 8)}
+                  </span>
+                  <span style={{ width: 42, textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {(opponent.username ?? 'Rival').slice(0, 8)}
+                  </span>
+                </div>
+              )}
               {['Sacred City', 'Living Earth', 'Free Energy'].map((name, i) => (
                 <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  display: 'flex', alignItems: 'center',
                   padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
                 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{name}</span>
-                  <span style={{
-                    color: 'white', fontWeight: 700,
-                    fontVariantNumeric: 'tabular-nums', fontSize: 16,
-                  }}>
-                    {currentPlayer.scores[i] ?? 0}
+                  <span style={{ flex: 1, color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{name}</span>
+                  <span style={{ width: 42, textAlign: 'right', color: 'white', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>
+                    {myPlayer.scores?.[i] ?? 0}
                   </span>
+                  {opponent && (
+                    <span style={{ width: 42, textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: 14 }}>
+                      {opponent.scores?.[i] ?? 0}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
