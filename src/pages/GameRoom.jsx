@@ -361,10 +361,10 @@ export default function GameRoom() {
               {opponent && (
                 <div style={{ display: 'flex', alignItems: 'center', padding: '0 0 4px' }}>
                   <span style={{ flex: 1 }} />
-                  <span style={{ width: 42, textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.55)', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ width: 44, textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,0.6)', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {(myPlayer.username ?? 'You').slice(0, 8)}
                   </span>
-                  <span style={{ width: 42, textAlign: 'right', fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ width: 44, textAlign: 'right', fontSize: 11, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {(opponent.username ?? 'Rival').slice(0, 8)}
                   </span>
                 </div>
@@ -375,11 +375,11 @@ export default function GameRoom() {
                   padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
                 }}>
                   <span style={{ flex: 1, color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>{name}</span>
-                  <span style={{ width: 42, textAlign: 'right', color: 'white', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>
+                  <span style={{ width: 44, textAlign: 'right', color: 'white', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 16 }}>
                     {myPlayer.scores?.[i] ?? 0}
                   </span>
                   {opponent && (
-                    <span style={{ width: 42, textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: 14 }}>
+                    <span style={{ width: 44, textAlign: 'right', color: 'rgba(255,255,255,0.4)', fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: 14 }}>
                       {opponent.scores?.[i] ?? 0}
                     </span>
                   )}
