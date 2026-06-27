@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase'
 import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { DECK } from '../lib/projectCards'
 import { usePresence } from './usePresence'
+import { getModeConfig, DEFAULT_GAME_MODE } from '../store/gameConfig'
 
 // Seat → colour. room_players has UNIQUE(room_id, player_color) AND UNIQUE(room_id, seat_number),
 // so deriving colour from the (unique) seat keeps colour unique too · no extra coordination.
@@ -91,6 +92,7 @@ export function useGameRoom(user, username) {
   const [isReady, setIsReady] = useState(false)
   const [lobbyError, setLobbyError] = useState(null)
   const [roomPhase, setRoomPhase] = useState('idle') // idle | lobby | playing
+  const [gameMode, setGameMode] = useState(DEFAULT_GAME_MODE) // 'classic' | 'flow' · host picks at createRoom · persisted on the session at startGame (game_sessions.mode · migration 010)
   const busyRef = useRef(false) // single-flight guard for create/join/start
 
   const {
@@ -108,11 +110,16 @@ export function useGameRoom(user, username) {
   }, [gameStarted, roomPhase])
 
   // CREATE ROOM (becomes host · seat 0)
-  const createRoom = useCallback(async () => {
+  const createRoom = useCallback(async (mode = DEFAULT_GAME_MODE) => {
     if (busyRef.current) return
     if (!user?.id || !username) { setLobbyError('Username required'); return }
     busyRef.current = true
     setLobbyError(null)
+
+    // Normalise the lobby's mode selection through the engine's accessor (unknown/missing → classic · no CHECK
+    // on the column · kept extensible · T2 gameConfig). Stored now, written to game_sessions.mode at startGame.
+    const resolvedMode = getModeConfig(mode).id ?? DEFAULT_GAME_MODE
+    setGameMode(resolvedMode)
 
     try {
       const { data: room, error, code } = await insertRoomWithRetry(user.id, generateRoomCode())
@@ -223,6 +230,7 @@ export function useGameRoom(user, username) {
         actions_remaining: snapshot.actionsRemaining,
         phase: snapshot.phase,
         production_tiles_remaining: snapshot.productionTilesRemaining,
+        mode: gameMode, // 'classic' | 'flow' (migration 010 · NOT NULL DEFAULT 'classic' · resolved at createRoom)
       })
       if (sessErr) { setLobbyError('Failed to start: ' + sessErr.message); return }
 
@@ -235,7 +243,7 @@ export function useGameRoom(user, username) {
     } finally {
       busyRef.current = false
     }
-  }, [isHost, roomId, user?.id, sendGameStart])
+  }, [isHost, roomId, user?.id, sendGameStart, gameMode])
 
   // LEAVE ROOM
   const leaveRoom = useCallback(async () => {
@@ -259,10 +267,11 @@ export function useGameRoom(user, username) {
     setIsReady(false)
     setRoomPhase('idle')
     setLobbyError(null)
+    setGameMode(DEFAULT_GAME_MODE)
   }, [roomId, isHost, user?.id, resetPresence])
 
   return {
-    roomId, roomCode, seat, isHost, isReady, lobbyPlayers, lobbyError, roomPhase,
-    createRoom, joinRoom, setReady, startGame, leaveRoom,
+    roomId, roomCode, seat, isHost, isReady, lobbyPlayers, lobbyError, roomPhase, gameMode,
+    createRoom, joinRoom, setReady, startGame, leaveRoom, setGameMode,
   }
 }
