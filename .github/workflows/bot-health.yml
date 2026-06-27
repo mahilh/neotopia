@@ -86,4 +86,5 @@ jobs:
         with:
           name: bot-report-${{ github.run_id }}
           path: .bot-reports/
+          include-hidden-files: true   # .bot-reports/ is dot-prefixed · upload-artifact@v4 skips hidden paths by default
           retention-days: 14
