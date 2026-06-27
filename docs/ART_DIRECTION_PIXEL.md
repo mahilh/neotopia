@@ -269,3 +269,24 @@ Examples:
 
   WRONG: Computer Server
   RIGHT: Metatron's Cube Processor (sacred geometry + function)
+
+## 🗂️ FILENAME MAPPING (CRITICAL · save art as card_NN.png · NOT the esoteric prompt name)
+
+CardFrame.jsx auto-loads art from `/art/cards/${card.id}.png`. The prompt names in this doc are esoteric ·
+the saved FILE must be the card ID PNG or it will NOT load behind the frame. Save every generated image
+as its card ID (verified against src/lib/projectCards.js · T1 S14).
+
+| Prompt Name (in this doc)   | Card ID  | Real Card Name                    | Save As      |
+|-----------------------------|----------|-----------------------------------|--------------|
+| Ennead Source Temple        | card_50  | Source Temple (5pt · Community)   | card_50.png  |
+| Orichalcum Arc Station      | card_05  | Orichalcum Arc Node (2pt)         | card_05.png  |
+| Fohat Resonance Spire       | card_17  | Orichalcum Energy Spire (3pt)     | card_17.png  |
+| Solar Fibonacci Array       | card_01  | Fibonacci Solar Terrace (2pt)     | card_01.png  |
+| Naacal Seed Vault           | card_06  | Naacal Seed Archive (2pt)         | card_06.png  |
+| Lemurian Resonance Garden   | card_20  | Food Forest (3pt)                 | card_20.png  |
+| Metatron's Cube Processor   | card_33  | Holographic Research Center (4pt) | card_33.png  |
+| Akashic Information Matrix   | card_28  | Akashic Living Archive (3pt)      | card_28.png  |
+| Ennead Council Chamber      | card_39  | Ennead Council Chamber (4pt)      | card_39.png  |
+
+All files go in: public/art/cards/  (example: public/art/cards/card_50.png)
+Audit which of the 56 cards have art at any time: `node scripts/check-art.js`
