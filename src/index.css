@@ -52,6 +52,21 @@
   .action-log-wrap { display: none; }
 }
 
+/* Mobile layout (T1 S16) · at <=600px the 288px sidebar squeezed the board to 55px (T3 finding). Stack the
+   board over the sidebar so the board takes the full width. !important overrides the inline flex row + the
+   288px inline sidebar width. flex stays (not height:auto) so the board keeps filling the viewport space ·
+   the sidebar is capped + scrolls. dim-the-rest is data-attribute based · orthogonal to flex-direction. */
+@media (max-width: 600px) {
+  .game-main { flex-direction: column !important; }
+  .game-sidebar {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 240px;
+    border-left: none !important;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+}
+
 /* ── Element placement burst · 6 particles fly 24px outward and shrink as a token lands (T1 S15) ──
    21px ≈ 24·cos(30°) for the flat-top hex diagonals · scale shrinks toward each particle's own centre
    (transform-box: fill-box on the circle). Disabled entirely under prefers-reduced-motion below. */

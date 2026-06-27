@@ -247,7 +247,7 @@ export default function GameRoom() {
       </header>
 
       {/* MAIN */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      <div className="game-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* BOARD */}
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0, position: 'relative' }}>
@@ -273,7 +273,7 @@ export default function GameRoom() {
         </div>
 
         {/* SIDEBAR */}
-        <aside style={{
+        <aside className="game-sidebar" style={{
           width: 288, borderLeft: '1px solid rgba(255,255,255,0.06)',
           display: 'flex', flexDirection: 'column', padding: 16, gap: 14, overflowY: 'auto', flexShrink: 0,
         }}>
