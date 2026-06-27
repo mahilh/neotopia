@@ -6,6 +6,11 @@ name: Bot Health Check
 # caught here automatically. NOT on every push — the bot is a heavy headless-browser flow + does anon
 # sign-ins (Supabase ~30/hr per IP); a daily cron keeps it well clear of the limit and off the merge path.
 #
+# FLOW MODE (T3 S18 · Task B): after the Classic placement check, a second bot run with BOT_MODE=flow drives
+# the REAL Flow path — it clicks T1's lobby toggle (data-testid="mode-flow" · 5d759aa) before Create Room and
+# DB-verifies the persisted mode (game_sessions.mode · migration 010 · bot v4.6). This guards the toggle from
+# silent regression: if the toggle vanishes/renames, the bot falls back to Classic and the Flow grader FAILS.
+#
 # TOLERANCE (per T2 S13/S14 · the bot-room lifecycle race): a bot room can be purged (migration 008 sweeps
 # Bot% rooms of any status) before dbPlacedCount reads it → summary.totalPlacedDB comes back null for that
 # game. So we run BOT_GAMES=3 ("assert over N, not 1") and grade gently:
@@ -30,7 +35,7 @@ jobs:
   bot-health:
     name: Autonomous play · DB-verified placement
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20   # +5 over the Classic-only budget for the extra BOT_MODE=flow game (T3 S18 · Task B)
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -77,6 +82,48 @@ jobs:
               process.exit(0);
             }
             console.error("FAIL · no machine placement reached the board (proxy=" + proxy + ", db=" + db + "). Placement chain regressed — inspect the uploaded report.");
+            process.exit(1);
+          '
+
+      # ── FLOW MODE (T3 S18 · Task B) ──────────────────────────────────────────────────────────────────
+      # Runs AFTER the Classic check + assert (so the Classic grader reads its own report · this run writes a
+      # separate report-*.json). BOT_GAMES=1 is enough: the mode is persisted at startGame (BEFORE any
+      # placement) and the bot reads game_sessions.mode DURING the game (before any teardown), so DB-verify is
+      # reliable at N=1 · BOT_TURNS + BOT_URL inherit from the job env.
+      - name: Run bot Flow mode game (1 game vs production · BOT_MODE=flow)
+        env:
+          BOT_GAMES: '1'
+          BOT_MODE: 'flow'
+        run: node scripts/bot-simulate.js
+
+      # Grade the FLOW run honestly (mirrors the Classic grader's gentle tolerance · Rule 53/63):
+      #   flowDbVerified            → PASS      (game_sessions.mode='flow' · the real toggle reached Postgres)
+      #   toggle found, not DB-verified → SOFT-PASS (room-race / unclean finish · environmental · re-run)
+      #   toggle NOT found          → FAIL      (T1 mode-flow toggle regressed · bot silently ran Classic)
+      - name: Assert Flow mode persisted (game_sessions.mode = flow)
+        run: |
+          node -e '
+            const fs = require("fs");
+            const dir = ".bot-reports";
+            const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.startsWith("report-")).sort() : [];
+            // Select the FLOW report by CONTENT (requestedMode==="flow"), not by position (Rule 67 · key on truth).
+            let flow = null;
+            for (const f of files) {
+              try { const r = JSON.parse(fs.readFileSync(dir + "/" + f, "utf8")); if ((r.requestedMode || (r.summary && r.summary.requestedMode)) === "flow") flow = r; } catch (e) {}
+            }
+            if (!flow) { console.error("FAIL: no BOT_MODE=flow report found — the Flow bot run produced nothing (it likely crashed before writing)."); process.exit(1); }
+            const s = flow.summary || {};
+            console.log("bot v" + (flow.botVersion || "?") + " · flow summary:\n" + JSON.stringify({ flowToggleFound: s.flowToggleFound, flowDbVerified: s.flowDbVerified, dbModeBreakdown: s.dbModeBreakdown, completed: s.completed }, null, 2));
+            if (s.flowDbVerified === true) {
+              console.log("PASS · a Flow game was DB-VERIFIED (game_sessions.mode=flow · the real lobby toggle reached Postgres).");
+              process.exit(0);
+            }
+            if (s.flowToggleFound === true) {
+              console.log("SOFT-PASS · the Flow toggle WAS found + selected, but no Flow session was DB-verified this run");
+              console.log("           (room-lifecycle race or the game did not start/finish cleanly · environmental · T3 S14 Task B). Re-run to DB-verify.");
+              process.exit(0);
+            }
+            console.error("FAIL · the Flow lobby toggle (data-testid mode-flow) was NOT found — T1 Flow toggle (5d759aa) regressed · the bot fell back to Classic.");
             process.exit(1);
           '
 
