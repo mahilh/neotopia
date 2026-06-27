@@ -64,3 +64,14 @@
 @media (prefers-reduced-motion: reduce) {
   .hex-burst { animation: none !important; opacity: 0 !important; }
 }
+
+/* Sacred milestone overlay · fade in (first 400ms of 2500) · hold · fade out (last 400ms) · T1 S16. */
+@keyframes milestoneIn {
+  0%   { opacity: 0; }
+  16%  { opacity: 1; }
+  84%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-testid='milestone-overlay'] { animation: none !important; opacity: 1 !important; }
+}

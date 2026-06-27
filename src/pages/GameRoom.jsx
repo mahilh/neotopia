@@ -13,6 +13,7 @@ import Tutorial, { tutorialSeen } from '../components/Tutorial'
 import { ScoreFlash } from '../components/ProjectCard'
 import CardFrame from '../components/CardFrame'
 import ActionLog from '../components/ActionLog'
+import MilestoneOverlay from '../components/MilestoneOverlay'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { TURN_TIME_LIMIT } from '../store/gameConfig'
@@ -119,6 +120,14 @@ export default function GameRoom() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // DEV-only · expose the live store on window for state-driven visual testing (milestones, phases).
+  // The SAME instance the app uses (not a fresh dynamic-import copy) · stripped from production builds.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    window.__neotopia_store = useGameStore
+    return () => { if (window.__neotopia_store === useGameStore) delete window.__neotopia_store }
   }, [])
 
   const {
@@ -259,6 +268,8 @@ export default function GameRoom() {
             onFactoryClick={handleFactoryClick}
           />
           <ActionLog entries={actionLog} />
+          {/* Sacred milestone celebration · covers the board for 2500ms when a total crosses 7/9/13/18/27/36 */}
+          <MilestoneOverlay />
         </div>
 
         {/* SIDEBAR */}
