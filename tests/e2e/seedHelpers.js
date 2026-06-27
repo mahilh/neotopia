@@ -119,3 +119,31 @@ export async function deleteRoomAsHost(sessionJson, roomId) {
     await host.from('game_rooms').delete().eq('id', roomId) // rooms_delete_host · cascade
   } catch { /* best-effort · documented limitation if it fails */ }
 }
+
+// Read the REAL placed-element count from game_sessions.state by ROOM ID (Rule 53 · the DB is truth, not the
+// bot's proxy counter, which counts attempts). Takes roomId, NOT room_code, on purpose — and is meant to be
+// called WHILE THE GAME IS STILL ALIVE. The bot-room race (T3 S14 Task B · diagnosed: no pg_cron purge
+// exists) is that a bot room can be deleted by a CONCURRENT E2E globalTeardown (purge_e2e_test_data sweeps
+// Bot%/E2E% rooms of ANY status · migration 008), or was never created at all (anon rate-limit at create →
+// phantom code · the S12 prod mode). Either way a POST-game `room_code → room_id → session` lookup resolves
+// to nothing and the verify silently returns null. Capture roomId from the URL during the game ("Both on
+// game board") and read here right after the last placement → the count is banked before any teardown.
+// Returns the integer count, or null if the session/state is unreadable (room gone · never created).
+export async function readPlacedCount({ url, key, roomId }) {
+  if (!url || !key || !roomId) return null
+  try {
+    const client = createClient(url, key, { auth: { persistSession: false } })
+    const { data, error } = await client
+      .from('game_sessions').select('state').eq('room_id', roomId).maybeSingle()
+    if (error || !data) return null
+    const state = typeof data.state === 'string' ? JSON.parse(data.state) : data.state
+    if (!state?.regions) return null
+    let count = 0
+    for (const region of state.regions) {
+      for (const hex of Object.values(region?.hexes ?? {})) {
+        if (hex && hex.element) count++
+      }
+    }
+    return count
+  } catch { return null }
+}
