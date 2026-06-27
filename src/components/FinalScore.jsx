@@ -176,6 +176,12 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
         <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', letterSpacing: 2 }}>
           The civilization is complete
         </div>
+        {/* Winner announcement · only when there is a contest (2+ players) · gold, the FOUNDER colour */}
+        {finalScores.length > 1 && (
+          <div style={{ fontSize: 19, color: '#C89440', letterSpacing: 1, marginTop: 18, fontWeight: 400 }}>
+            {winner.username} built the strongest civilization
+          </div>
+        )}
       </div>
 
       {/* PLAYER RECORDS */}
@@ -261,7 +267,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
               {player.scoredCards.length > 0 && (
                 <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                   <div style={{ fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', marginBottom: 10, textTransform: 'uppercase' }}>
-                    Districts Built
+                    Districts Built · {player.scoredCards.length}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                     {player.scoredCards.map((card, i) => (
@@ -306,15 +312,21 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
 
       {/* CTA · civilization language, not game language · lobby now lives at '/lobby' (Landing is '/') */}
       <button
+        data-testid="play-again-btn"
         onClick={() => navigate('/lobby')}
         style={{
-          height: 56, flexShrink: 0, padding: '0 48px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.15)',
-          background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)',
+          height: 56, flexShrink: 0, padding: '0 48px', borderRadius: 12, border: '1px solid rgba(200,148,64,0.35)',
+          background: 'rgba(200,148,64,0.06)', color: 'rgba(200,148,64,0.85)',
           fontSize: 12, letterSpacing: 4, cursor: 'pointer', textTransform: 'uppercase', transition: 'all 0.2s',
         }}
       >
         Start New Civilization
       </button>
+
+      {/* Civilization stage line · connects the end-game moment back to the real 5-stage vision */}
+      <div style={{ marginTop: 30, fontSize: 11, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', flexShrink: 0 }}>
+        Stage 2 of 5 · The Awareness
+      </div>
     </div>
   )
 }
