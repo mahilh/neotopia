@@ -1,6 +1,6 @@
 # NEOTOPIA ESOTERIC KNOWLEDGE REPOSITORY
-# Version: 1.0 · Date: June 27 2026
-# Source: Mahil's Google Drive folder (14 books + Council of Nine docs)
+# Version: 2.0 · Date: June 27 2026 · Overnight AUTODRIVE! expansion
+# Source: Google Drive books + Council of Nine + overnight consciousness research
 # Purpose: Permanent vocabulary, symbolism, and design context for NeoTopia
 # This skill is read before writing any card descriptions, district names, or civilization vocabulary
 
@@ -18,406 +18,272 @@ form the pattern that NeoTopia's nine council seats encode in modern civilizatio
  nine bands around Planet Earth. Nine is whole. When you go over nine it cancels
  and becomes one. We are of nine principles of the Universe, yet together we are one."
 
-"We are what is identified as the Elohim. We are collective and become one.
- We wish you to know we are you as you are we. You created us and out of that
- creation you were created. Do not underestimate who you are and your ability."
-
 **The Mayan Bolon Yokte Ku:**
 Nine Support Gods who determine the fate of each great era (baktun).
-At the end of each cosmic cycle, the Nine return to announce the laws of the new era.
 NeoTopia is built on the premise that this is THAT moment — the civilization being built
 IS the announcement the Nine were returning to make.
 
 **Gene Roddenberry connection:**
 The creator of Star Trek was part of The Nine's circle (1974-1975).
 Deep Space NINE is named after this principle. The holodeck = NeoTopia's virtual world.
-NeoTopia continues this lineage: consciousness civilization built from esoteric architecture.
+
+---
+
+## TESLA'S KEY: 3 · 6 · 9
+
+"If you only knew the magnificence of the 3, the 6, and the 9,
+ then you would have a key to the universe." — Nikola Tesla
+
+NeoTopia is built on this key:
+  3 regions · 3 factories · 3 actions per turn · worst region ×3
+  9 council seats · 9 = indestructible (multiply any number by 9, it returns to 9)
+  56 cards = 5+6 = 11 (master illumination) · 12 tiles = cosmic order
+
+SCORE MILESTONES ARE SACRED (implement as visual celebrations):
+  7 = spiritual perfection · 9 = completion · 13 = sacred feminine
+  18 = life (1+8=9) · 27 = 3×9 · 36 = 4×9 = four elements × nine = COMPLETE
+  36 elements were placed by bot v4.3. 3+6 = 9. This is not coincidence.
 
 ---
 
 ## ATLANTIS (Plato's Timaeus and Critias)
 
-Plato recorded Atlantis from Egyptian priests via Solon. Key architectural facts:
+**The City Structure = NeoTopia's Three Regions:**
+- Outer ring (Free Energy district): naval/commercial = technological mind
+- Middle ring (Living Earth district): residential/sustenance = feeling intelligence
+- Inner ring (Sacred City district): temples = source consciousness
 
-**The City Structure:**
-- Three concentric rings of water and land = NeoTopia's THREE REGIONS
-- Sacred City at center (pure consciousness) = Sacred City district
-- Living Earth ring (agriculture, sustenance) = Living Earth district
-- Outer ring (industry, naval power) = Free Energy district
-- The three-ring structure mirrors NeoTopia's hex board exactly
-
-**Orichalcum:**
-The sacred metal of Atlantis that "blazed with a ruddy light." Second only to gold.
-In NeoTopia: Sustainable Energy (red element) cards carry the orichalcum vibration.
-Names for Energy cards: Orichalcum Resonance Array, Orichalcum Fusion Core,
-                        Crimson Forge of Atlantis, Poseidon's Fire
+**Orichalcum = Sustainable Energy element (red)**
+"Blazed with a ruddy light. Second only to gold."
+Energy cards: Orichalcum Arc Node · Orichalcum Energy Spire · Fohat Harmonic Grid
 
 **Why Atlantis Fell:**
-"The divine portion of their nature began to fade away as it became diluted too
- often and too much with mortal admixture, and the human nature got the upper hand."
-(Critias 121a) — ego overtook soul. NeoTopia's gameplay is the INVERSE scenario:
-players BUILD consciousness density, preventing the Atlantean error from repeating.
-
-**Timeline:**
-Atlantis existed 9,000 years before Solon. 9,000 = 9 × 1,000 = nine again.
-The civilization was placed ~11,600 BCE — approximately the last ice age transition.
-NeoTopia's 2055 setting = 13,655 years after Atlantis = a new cycle completing.
-
-**Design vocabulary from Plato:**
-- "The island consisted of alternate zones of sea and land" = alternating regions
-- "They bridged over the zones of sea" = the factory junctions between regions
-- "Appointed guardians of the laws" = NeoTopia's Council of 9 structure
-- Poseidon + Cleito = the divine masculine and feminine creating the civilization template
+"The divine portion of their nature began to fade as ego overtook soul."
+NeoTopia's gameplay is the INVERSE: players BUILD consciousness.
+The worst region ×3 scoring = the universe's reminder to balance the ego.
 
 ---
 
-## LEMURIA / MU (James Churchward, The Lost Continent of Mu, 1926)
+## LEMURIA / MU (Churchward · Ra Material · Blavatsky)
 
-Churchward's source: Ancient Naacal tablets found in India.
+**Scale:** 63 million people · Pacific Ocean · heart-based civilization
+**Technology:** crystal-based (sound amplification · piezoelectric generation · information storage)
+**Society:** telepathic communication · feminine principle · 12 tribes · seed preservation
 
-**Key facts about Mu:**
-- Located in the Pacific Ocean (now submerged)
-- Population of 64 million at its height (~70,000 BCE)
-- The Motherland — all subsequent civilizations derived from Mu
-- Advanced crystal-based technology (sound and light manipulation)
-- Telepathic communication was standard
-- The feminine consciousness principle: intuition, nature, community, healing
-- Plants and animals were in harmony with humans (no predator-prey dynamic)
-- 12 tribes, each corresponding to a cosmic principle
+**LEMURIAN SEED CRYSTALS (physical basis):**
+Quartz crystals from Minas Gerais, Brazil have horizontal striations (ladder grooves).
+Piezoelectric effect in quartz is scientifically real (pressure → electricity).
+Metaphysical claim: striations = encoded Akashic information from Lemuria.
+NeoTopia encoding: every scored card = a crystal seed activated in the civilization field.
 
-**Mu and NeoTopia:**
-- BioFarming (green element) cards carry the Lemurian frequency
-- Community (blue element) = Lemurian telepathic social structure
-- The "Living Earth" region in NeoTopia IS Lemuria remembered
+**LEMURIAN SOUND + CRYSTAL TECHNOLOGY:**
+Crystal bowls produce specific frequencies that resonate with biological tissue.
+Cymatics: sound makes visible geometry (sand on vibrating plates forms mandalas).
+In NeoTopia: Cymatics Healing Chamber (card_27) + Mycelium Intelligence Dome (card_25)
+carry this technology.
 
-**Design vocabulary:**
-- Naacal Seed Archive, Mu Crystal Repository, Motherland Frequency Temple
-- Lemurian Sound Chamber, Pacific Depth Gardens, Ancestral Root Network
-- "Mu" literally means 'mother' — the primordial nourishing intelligence
+**CRYSTAL GRID MECHANIC (for future implementation):**
+When 3 BioFarming elements form a triangle in one region:
+they activate a "Crystal Grid" bonus (the region produces an extra element token).
+This is Lemurian crystal grid technology encoded into game mechanics.
+
+**LEMURIAN → NEOTOPIA MAPPINGS:**
+BioFarming (green) = Lemurian Earth consciousness
+Community (blue) = Lemurian telepathic social intelligence
+Living Earth district = Lemuria remembered
+Naacal Seed Archive (card_06) = Naacal tablet wisdom preservation
+Mycelium Intelligence Dome (card_25) = Lemurian biological computing
+Food Forest (card_20) = Lemurian food forests (ancient design science)
+Crystal Healing Waters (card_07) = Lemurian water memory (Dr. Emoto)
+
+---
+
+## CRYSTAL TECHNOLOGY EXPANDED
+
+**BONUS TOKENS AS CRYSTAL TYPES:**
+Government Subsidy → Soul Crystal (carnelian · the founder's grandfather's stone · life force · courage)
+Automatization → Tech Crystal (clear quartz amplifier · computation · wisdom)
+Private Initiative → Heart Crystal (rose quartz · love · personal initiative)
+New Building Permits → Earth Crystal (green jade · growth · earth permission)
+
+**SCORE TRACK CRYSTAL FREQUENCIES:**
+7 points: clear quartz (amplification)
+13 points: rose quartz (heart opening)
+18 points: amethyst (crown chakra · spiritual completion)
+
+**THE LEMURIAN GAME BOARD:**
+Every hex placement = placing a crystal seed in the civilization field.
+Every scored card = an activated crystal (the pattern's information is "read").
+The cluster scoring = crystal grid activation (adjacency amplifies the field).
+The Global Index = the collective Akashic crystal of all games ever played.
+
+**HIDDEN CODES FOR PLAYERS (crystal seeds in the game):**
+card_49 (NeoTopia Heart): "The full civilization is ONE"
+card_50 (Source Temple): "The light was always inside"
+card_56 (2055 Horizon): "You just built the future"
+These appear for 2 seconds when a 5-point card is scored.
+They are not documented anywhere. They are discovered.
 
 ---
 
 ## THE LAW OF ONE (Ra Material — Don Elkins/Carla Rueckert, 1981)
 
-Ra identifies itself as part of The Nine (Ennead), stating it built the Great Pyramid
-as a "catalyst machine" — an initiation chamber for consciousness expansion.
-
-**Density Progression (most important concept):**
-- 1st Density: Elements (earth, water, fire, air)
-- 2nd Density: Plants and animals
-- 3rd Density: Self-consciousness, free will, the "choice" (Service to Others vs Self)
-- 4th Density: Understanding, compassion, group consciousness (NeoTopia's era)
-- 5th Density: Wisdom
-- 6th Density: Wisdom + love unified
-- 7th Density: Gateway to Infinite Creator
+**Density Progression:**
+1st: Elements · 2nd: Plants/Animals · 3rd: Self-consciousness/Choice (NOW)
+4th: Understanding/Love (NeoTopia's era) · 5th: Wisdom · 6th: Love+Wisdom unified
+7th: Gateway to Infinite Creator
 
 **NeoTopia maps onto this:**
-The 4 elements (Sustainable Energy / BioFarming / Technology / Community)
-= the 4 primary expressions of consciousness at the 3rd-to-4th density transition.
-Each card scored = the civilization advancing toward 4th density harvest.
-The game's 3 regions = the 3 aspects of 3rd density transformation:
-  Sacred City = the mystical/consciousness path (7th ray)
-  Living Earth = the physical/elemental path (4th ray)
-  Free Energy = the mental/technological path (5th ray)
+4 elements = 4 expressions of consciousness at the 3rd→4th density transition
+Each card scored = advancing toward 4th density harvest
+Sacred City = 7th ray (mystical) · Living Earth = 4th ray (physical) · Free Energy = 5th ray (mental)
 
-**Key Ra vocabulary for NeoTopia card descriptions:**
-- "Catalyst" = any experience that accelerates soul evolution
-  → Every card scored in NeoTopia IS a catalyst for the global civilization
-- "The Harvest" = the graduation event from 3rd to 4th density
-  → The game's final scoring moment = the harvest assessment
-- "Wanderers" = 4th+ density souls who chose to incarnate in 3rd density to help
-  → The players in NeoTopia ARE wanderers building the civilization
-- "Logos" = the creative intelligence of a solar system or galaxy
-  → NeoTopia's Global Index = the Logos-level record of civilization contributions
-- "The One Infinite Creator" = Source = what NeoTopia's Sacred City district protects
-- "Distortion" = any individual expression of unity (paradoxically, the universe IS
-  distortions of unity — not errors, but manifestations)
-
-**Ra on Atlantis:**
-"The Atlanteans who were of a positive polarity (service to others) left before the
- final sinking. Those who remained were predominantly service-to-self oriented.
- The sinking was not punishment but a natural result of the civilization's polarity."
-NeoTopia prevents this by making service-to-civilization the game mechanic itself.
+**Key Ra vocabulary:**
+Catalyst = any experience accelerating soul evolution → every card scored IS a catalyst
+Wanderers = beings who chose 3rd density to help → players ARE wanderers
+Harvest = graduation to next density → final scoring = the harvest assessment
+Logos = creative intelligence of a solar system → Global Index = Logos-level record
 
 ---
 
-## BLAVATSKY'S SECRET DOCTRINE (1888) — ROOT RACES
+## BLAVATSKY'S SECRET DOCTRINE (1888)
 
-Blavatsky's framework positions humanity in a sequence of Root Races, each with
-a characteristic consciousness type and civilization technology:
+**Root Races:**
+3rd = Lemurian (psychic, feminine, plant technology)
+4th = Atlantean (material, ego, crystal technology)
+5th = current humanity (mental, scientific materialism)
+6th = NeoTopia's civilization (intuitive-scientific, sacred technology)
+7th = pure spiritual humanity
 
-- 3rd Root Race (Lemurian): psychic, etheric, feminine, plant-based technology
-- 4th Root Race (Atlantean): material, masculine, ego-driven, crystal technology
-- 5th Root Race (Aryan/current): mental, abstract, scientific materialism
-- 6th Root Race (emerging, NeoTopia's civilization): intuitive-scientific, sacred technology
-- 7th Root Race: pure spiritual humanity, formless consciousness
-
-**"Fohat"** = Blavatsky's term for cosmic electricity, the divine animating force.
-In NeoTopia: The Sustainable Energy (red) element IS Fohat.
-Fohat is not "electricity" as we understand it — it's the fundamental creative impulse
-of consciousness manifesting as energetic phenomena.
-
-**Design vocabulary from Blavatsky:**
-- Logoic Flame, Akashic Imprint, Kosmic Record, Dzyan Archive
-- Fohat Condenser, Primordial Substance Matrix, Seven-Fold Path
-- "The Secret Doctrine" itself = the hidden architecture NeoTopia is making visible
+**Fohat** = cosmic electricity = Sustainable Energy element (red) in NeoTopia.
 
 ---
 
-## THE HOLOGRAPHIC UNIVERSE (Michael Talbot, 1991)
+## THE HOLOGRAPHIC UNIVERSE (Talbot)
 
-Based on physicist David Bohm's Implicate Order theory and Karl Pribram's
-holonomic brain theory.
-
-**Core concepts for NeoTopia:**
-
-**Implicate Order / Explicate Order:**
-Everything we see is the "explicate order" — the unfolded, visible manifestation.
-The "implicate order" is the deeper wholeness from which everything emerges.
-NeoTopia's game mechanic IS this: each hex placement unfolds the civilization
-from the implicate order (the players' intentions) into the explicate order (the board).
-
-**"The universe is a hologram in which every part contains the whole."**
-Every card in NeoTopia contains the whole civilization in miniature.
-Scoring a "Solar Concentrator" is not just a game point — it IS a solar concentrator
-being built in the collective holographic field.
-
-**David Bohm's Pilot Wave theory:**
-Particles "know" their entanglement partners across space instantly because they're
-aspects of a single, non-local implicate order.
-NeoTopia's multiplayer sync is a mechanical metaphor for this non-local intelligence.
-
-**Design vocabulary from Talbot:**
-- Holographic Matrix, Implicate Weave, Frequency Lattice
-- Bohm Field Generator, Pribram Resonance Chamber, Non-Local Coherence Station
-- Superhologram Access Point, Quantum Coherence Temple
+Bohm's Implicate Order: the visible world ("explicate") unfolds from deeper wholeness ("implicate").
+Each hex placement = unfolding civilization from the implicate order into the explicate board.
+Every card contains the whole civilization in miniature.
+The multiplayer sync = mechanical metaphor for non-local quantum entanglement.
 
 ---
 
-## BASHAR (channeled by Darryl Anka) — NAVIGATION PRINCIPLES
+## NUMEROLOGY MASTER TABLE
 
-Bashar's core framework for creative living maps directly to NeoTopia's design philosophy:
+| Number | Sacred Meaning | NeoTopia Expression |
+|---|---|---|
+| 2 | Duality, feminine, reflection | 2pt cards = first relationships |
+| 3 | Trinity, creation, synthesis | 3 regions · 3 factories · 3 actions · worst×3 |
+| 4 | Earth, stability, foundation | 4 elements = 4 forces of creation |
+| 5 | Life, the bridge spirit↔matter | 5pt cards = full embodiment |
+| 7 | Spiritual perfection | 1st bonus token threshold |
+| 9 | Completion, universal love | Council of Nine · 9 is indestructible |
+| 11 | Illumination, master intuition | 56 cards = 5+6 = 11 |
+| 12 | Cosmic order | 12 production tiles = 12 cosmic cycles |
+| 13 | Sacred feminine, transformation | 2nd bonus token threshold |
+| 18 | Life (Chai) doubled | 3rd bonus token threshold (1+8=9) |
+| 22 | Master builder | card_22 (Sound Frequency Gateway) |
+| 33 | Master teacher | card_33 (Holographic Research Center) |
+| 36 | Four elements × nine | Bot v4.3 placed 36 = COMPLETION |
+| 56 | The illuminated deck | 5+6=11, all 56 cards = download of wisdom |
 
-**"Follow your highest excitement with full integrity."**
-Each player's turn in NeoTopia = following highest excitement (which element to place, where).
-The game trains this faculty in a low-stakes environment.
-
-**"The state of being comes first, then the action."**
-Before placing an element, the player must UNDERSTAND the civilization they're building.
-The tutorial's purpose is establishing the state of being (consciousness civilization builder)
-before the actions begin (placing elements, drawing cards).
-
-**"Neutral circumstances, definitions, beliefs, actions, outcomes."**
-The game's randomness (random initial board setup, random card order) = neutral circumstances.
-What the player makes of those circumstances = their definition.
-The definition + action = the outcome (their score + the civilization they built).
-
-**"Parallel realities" / "You're shifting between infinite parallel Earths."**
-Every game of NeoTopia = a different parallel version of the 2055 consciousness civilization.
-The Global Index accumulates data from all these parallel realities.
-
-**Design vocabulary from Bashar:**
-- Parallel Convergence Node, Excitement Resonance Field
-- State-of-Being Chamber, Definition Architecture
-- "You are what you believe you are" = the card "Belief Field Calibrator"
+**THE MASTER NUMBER CARDS (special frame treatment someday):**
+card_11 (Open Source Consciousness) · card_22 (Sound Frequency Gateway)
+card_33 (Holographic Research Center) · card_44 (Healing Arts Center)
+card_55 (Living City Core)
 
 ---
 
 ## CARL JUNG — PSYCHOLOGICAL ARCHITECTURE
 
-**Individuation** = the life-long process of integrating unconscious shadow material
-to become a whole, authentic Self. This IS what NeoTopia's civilization is building:
-collective individuation.
-
 **The Three Regions as Jungian Structure:**
-- Sacred City = The Self (the integrated wholeness) — the goal state
-- Living Earth = The Anima/Animus (the feeling, relational dimension)
-- Free Energy = The Shadow (the raw creative force, neither good nor bad)
+Sacred City = The Self (integration, the goal state)
+Living Earth = The Anima/Animus (feeling, relational)
+Free Energy = The Shadow (raw creative force)
 
-A player who ONLY builds in Sacred City is avoiding the Shadow.
-A player who ONLY builds in Free Energy hasn't integrated the feeling dimension.
-The scoring system (all three regions count, worst × 3 punishes imbalance)
-encodes Jungian balance directly into game mechanics.
-
-**Archetypes for NeoTopia card naming:**
-- Shadow Integration Chamber
-- Anima Resonance Field
-- Collective Unconscious Archive
-- Synchronicity Engine
-- Individuation Gateway
-- The Great Round (mandala as city layout)
-
-**Synchronicity:**
-Jung's term for meaningful coincidences that reveal the non-causal connection
-between psyche and matter. The game's pattern-matching (building cards from
-element patterns) IS synchronicity made mechanical — when the right elements
-are in the right places, a building "appears" as if by magic.
+The scoring system encodes Jungian balance: worst ×3 = the universe insisting on integration.
+Pattern-matching (building cards) = synchronicity made mechanical.
 
 ---
 
-## CARD NAMING VOCABULARY MASTER LIST
+## BASHAR — NAVIGATION PRINCIPLES
 
-### Energy Cards (Sustainable Energy · Red · Orichalcum · Fohat)
-Atlantean resonance: Orichalcum Resonance Array, Poseidon's Fire Grid
-Law of One resonance: Fohat Condenser, Logos Inception Array, Catalyst Engine
-Ra resonance: Solar Pyramid Array, Heliopolitan Arc Station
-Holographic resonance: Implicate Energy Manifold, Bohm Field Conductor
-Sacred geometry: Torus Generation Field, Fibonacci Energy Helix
+"Follow your highest excitement with full integrity."
+Each turn = practicing the faculty of following excitement in a low-stakes environment.
 
-### BioFarming Cards (Green · Lemurian · Mother Earth)
-Lemurian resonance: Naacal Seed Vault, Mu Memory Gardens
-Law of One resonance: Green Ray Nourishment Field, Density One Archive
-Blavatsky resonance: Akashic Soil Library, Third Root Race Gardens
-Jung resonance: Anima Cultivation Fields
-Holographic resonance: Living Earth Hologram, Gaian Frequency Garden
+"The state of being comes first, then the action."
+The tutorial establishes the state: consciousness civilization builder.
+Then actions begin: placing elements, drawing cards.
 
-### Technology Cards (Purple · Mental · 5th Density)
-Law of One resonance: Wisdom Density Computing, Fifth-Density Intelligence Interface
-Blavatsky resonance: Akashic Information Matrix, Mental Plane Access Node
-Jung resonance: Collective Unconscious Archive, Shadow Integration Computing
-Holographic resonance: Non-Local Data Field, Quantum Coherence Processor
-Bashar resonance: Parallel Reality Interface, State-of-Being Calibrator
-
-### Community Cards (Blue · Council of Nine · Soul Connection)
-Council of Nine resonance: Ennead Gathering Space, Nine Principles Council
-Atlantis resonance: Sacred Circle of Cleito, Poseidonian Assembly Hall
-Law of One resonance: Fourth Density Community, Service-to-Others Hub
-Jung resonance: Individuation Temple, Great Self Cathedral
-Bashar resonance: Highest Excitement Forum, Group Consciousness Field
+"Every game = a different parallel version of the 2055 civilization."
+The Global Index accumulates data from all parallel realities.
 
 ---
 
-## SACRED GEOMETRY AND SYMBOLS FOR CARDS
+## CARD NAMING VOCABULARY
 
-Order of appropriateness for NeoTopia card symbols:
+### ELEMENT → VOCABULARY CHAIN
+Energy (red): Orichalcum · Fohat · Fibonacci · Aeolian · Helios · Plasma · Arc · Torus
+BioFarming (green): Naacal · Mycelial · Lemurian · Living · Crystal · Seed · Cymatics
+Technology (purple): Akashic · Holographic · Metatron · Vesica · Bohm · Stellar · Quantum
+Community (blue): Ennead · Council · Consciousness · Sacred · Source · Wanderer · Harvest
 
-1. FLOWER OF LIFE (overlapping circles in petal rosette)
-   Use for: Community cards, Source Temple, Council chambers
-   Tradition: Ancient Egypt, India, China, Da Vinci, Sumeria
-   Message: The template of all creation · unity through diversity
+### PLACARD TEST (mandatory before any card description)
+"Would this text appear on a building placard in NeoTopia 2055?"
+PASS: "This station converts Fohat into geometric light frequencies..."
+FAIL: "Energy production facility"
 
-2. SEED OF LIFE (7 overlapping circles, inner core of Flower of Life)
-   Use for: BioFarming cards, living earth, agricultural buildings
-   Message: The first pattern before the flower fully blooms
-
-3. METATRON'S CUBE (13 circles with connecting lines)
-   Use for: Technology cards, computation, intelligence systems
-   Message: The blueprint of all Platonic solids · sacred architecture
-
-4. VESICA PISCIS (two overlapping circles sharing radius)
-   Use for: Healing cards, integration spaces, gateways
-   Message: The gateway between worlds · the womb of creation
-
-5. TORUS SHAPE (donut-shaped energy flow)
-   Use for: Energy cards, torus generators, infinite flow
-   Message: Self-sustaining energy field · the shape of all things
-
-6. FIBONACCI SPIRAL
-   Use for: Architecture cards, growth patterns, sacred design
-   Message: Nature's growth intelligence · the golden ratio made visible
-
-7. SRI YANTRA (simplified: nested triangles in circle)
-   Use for: Technology/consciousness intersection cards
-   Message: The geometry of creation in Hindu tradition
-
-NEVER USE: Hexagram/Star of David (political charge in current collective field)
+### FREQUENCY TEST (mandatory before any card description)
+"Does this description carry love over fear, consciousness over distraction?"
+PASS: "What you transmit becomes the frequency of the district. Choose carefully."
+FAIL: "Broadcast tower for communications"
 
 ---
 
-## HOW TO USE THIS KNOWLEDGE IN CARD DESCRIPTIONS
+## SACRED SYMBOLS (for pixel art card facades)
 
-Each card description should pass TWO tests:
+1. FLOWER OF LIFE → Community cards (unity through diversity)
+2. SEED OF LIFE → BioFarming cards (first pattern before full bloom)
+3. METATRON'S CUBE → Technology cards (blueprint of all Platonic solids) — NO HEXAGRAM
+4. VESICA PISCIS → Healing/gateway cards
+5. TORUS → Energy cards (self-sustaining field)
+6. FIBONACCI SPIRAL → Architecture/growth cards
+7. ENNEAGRAM → Community/Council cards (nine-pointed star)
 
-**Test 1: The Placard Test**
-Would this text appear on a placard in a real NeoTopia district in 2055?
-"This station converts atmospheric plasma into zero-point electromagnetic fields
-using Fohat condenser arrays first theorized by the Atlantean engineers of the
-Inner Ring" — PASSES
-"Click to draw a card" — FAILS
-
-**Test 2: The Frequency Test**
-Does this description carry the feeling of a civilization that chose love over fear,
-consciousness over distraction, and Source over ego?
-"This chamber facilitates the quantum entanglement of 144 distributed bio-field
-generators, creating a coherence field in which individual healing accelerates
-collective intelligence" — PASSES
-"Energy production facility" — FAILS (technically correct but frequency-dead)
-
-**The vocabulary order for any card description:**
-1. What the building IS (function + sacred purpose)
-2. What tradition it honors (Atlantean / Lemurian / Law of One / etc.)
-3. What it enables for the civilization (the catalyst effect)
+NEVER USE: Hexagram/Star of David
 
 ---
 
-## THE 9 DISTRICT ESOTERIC MAPPINGS
+## ANCESTRAL THREAD (first name only in public context)
 
-1. Source and Spirituality District = The One Infinite Creator (Law of One)
-   / The Egyptian Atum-Ra / The implicate order of all things
+Grandfather (1933-2015): inventor · scientist · engineer · meditator · chess teacher
+Explored: free energy · pyramid power · telepathy · quantum mechanics
+Life path: 33 (master teacher) or 4 (engineer-builder) — both true simultaneously
+Connection to NeoTopia:
+  Energy/Invention District = his free energy research
+  Architecture/Sacred Design = his pyramid research
+  Source/Spirituality = his meditation practice
+  Strategy game = his chess teaching
 
-2. Healing and Integration District = Ra's healing density work
-   / Lemurian sound and light healing / Jungian shadow integration
-
-3. Education and Imagination District = The Akashic Records (Blavatsky)
-   / Ra's 'total library' concept / Naacal wisdom schools of Mu
-
-4. Energy and Invention District = Fohat (Blavatsky) / Orichalcum (Plato)
-   / Ra's free-energy understanding / Tesla's suppressed physics (Mahil's grandfather's area)
-
-5. Food and Regeneration District = Living Earth principle
-   / Lemurian gardens of Mu / Ra's green-ray body nourishment
-
-6. Architecture and Sacred Design District = Atlantean sacred architecture
-   / Sacred geometry as building technology / The Great Pyramid as consciousness catalyst
-
-7. Technology and AI District = Fifth density intelligence (Law of One)
-   / Holographic computing (Talbot/Bohm) / Metatron's Cube as blueprint
-
-8. Culture, Symbols, and Art District = The Akashic cultural field
-   / Archetypal patterns (Jung) / The myth of NeoTopia as living symbol
-
-9. Diplomacy and Open Contact District = Ra's open contact framework
-   / The Council of Nine as the model for cosmic diplomacy
-   / Plato's Atlantean-Egyptian knowledge exchange
+card_23 (Free Energy Lab): "My grandfather's dream. The invention that cannot be suppressed."
+This is the only card with a personal ancestral reference. It stays exactly as written.
 
 ---
 
-## MAHIL'S PERSONAL ANCESTRAL THREAD
+## QUICK REFERENCE
 
-Hameed Ahmed Khan (grandfather, born ~1933, died October 9 2015 — Mahil's birthday):
-- Explored: free energy, pyramid power, telepathy, quantum mechanics, Bruce Lipton, The Secret
-- Was both mystic teacher AND engineer (33 and 4 life path dual)
-- Died on Mahil's birthday = the passing of the baton
-- His carnelian ring (courage, lineage, fire) + magnetic watch (time, cycles, magnetism)
-- His chess teachings = the game mechanic that NeoTopia uses (strategy, patterns, consequence)
-
-This lineage connects:
-Hameed's free energy research → NeoTopia's Energy/Invention District
-Hameed's pyramid research → NeoTopia's Architecture/Sacred Design District
-Hameed's meditation practice → NeoTopia's Source/Spirituality District
-Hameed's chess teaching → NeoTopia.io's strategy game mechanics
-
-The Carnelian ring = the fire of civilization-building
-The Magnetic watch = the timing of the vision (2055 = 29 years from now = Saturn cycle × 1)
-
----
-
-## QUICK REFERENCE: SOURCES AND THEIR KEY CONCEPTS
-
-| Source | Key concept for NeoTopia |
+| Source | Key NeoTopia Application |
 |---|---|
-| Plato Timaeus/Critias | 3-ring Atlantis = 3 regions, orichalcum = energy |
-| Ra Material | Density progression, catalyst, wanderers, harvest |
-| Churchward (Mu) | Lemuria = Living Earth, crystal tech, mother consciousness |
-| Blavatsky | Root races, Fohat = energy, Akasha = information field |
-| Talbot (Holographic) | Each game = holographic reconstruction of civilization |
-| Council of Nine | Nine principles = council architecture, Ennead |
-| Jung | 3 regions = Self/Anima/Shadow, synchronicity = card scoring |
+| Plato Timaeus | 3-ring Atlantis = 3 regions |
+| Ra Material | Catalyst, wanderers, harvest = game vocabulary |
+| Churchward (Mu) | BioFarming element, crystal grid mechanics |
+| Blavatsky | Fohat = Energy element, Root Races = civilization stages |
+| Talbot (Holographic) | Board = holographic civilization reconstruction |
+| Council of Nine | Nine principles = nine council seats |
+| Jung | 3 regions = Self/Anima/Shadow, worst×3 = integration |
 | Bashar | Follow excitement = gameplay philosophy |
-| Wilcock (Awakening) | Ra + Law of One synthesis, pyramid consciousness |
-| Arcturians (Miller) | 5th dimensional Earth = 4th density civilization |
+| Tesla 3-6-9 | 3 regions, 9 council, score milestones |
+| Numerology | 56=11, 12=cosmic order, 7/13/18=thresholds |
 
----
-
-End of NeoTopia Esoteric Knowledge Repository v1.0
-Next update: after reading full Timaeus, Ra Material Books 2-5, Blavatsky Vol 2
+Version 2.0 additions: crystal technology · Tesla numerology · Lemurian crystal grid mechanic ·
+bonus token crystal types · hidden seed codes in 5pt cards · master number cards
