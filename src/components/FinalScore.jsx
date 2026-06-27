@@ -266,7 +266,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
               {/* Districts built · the irreplaceable Skyrim reward (hidden until scoredCardIds lands) */}
               {player.scoredCards.length > 0 && (
                 <div style={{ padding: '14px 24px 20px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                  <div style={{ fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', marginBottom: 10, textTransform: 'uppercase' }}>
+                  <div style={{ fontSize: 9, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', marginBottom: 10, textTransform: 'uppercase', fontVariantNumeric: 'tabular-nums' }}>
                     Districts Built · {player.scoredCards.length}
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
