@@ -2,6 +2,12 @@ name: NeoTopia E2E
 
 # Realtime reconnect proofs (Playwright · headless chromium). Separate from canary.yml's unit gate
 # so a heavier browser run never blocks the fast quality gate · and so its logs/artifacts stand alone.
+#
+# SCOPED to reconnect.e2e.js (T3 S13). It previously ran `npx playwright test` (the WHOLE suite) — an
+# unintended scope-creep as game-ux / two-human / phase-over-wire were added. The full suite does many
+# anonymous sign-ins and flakes on Supabase's per-IP hourly rate limit in CI. So now: the placement guard
+# runs in e2e-placement-guard.yml (game-ux · the merge-gating check); reconnect runs here; the heavy
+# two-human + phase-over-wire flows are run locally / on demand, not on the blocking CI path.
 on:
   push:
     branches: [main]
@@ -30,7 +36,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run reconnect E2E
-        run: npx playwright test
+        run: npx playwright test tests/e2e/reconnect.e2e.js
 
       - name: Upload report on failure
         if: failure()

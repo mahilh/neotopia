@@ -1,0 +1,60 @@
+name: E2E Placement Guard
+
+# Protects the placement-commit guard (tests/e2e/game-ux.e2e.js · T3 S12) on every push + PR.
+# This is the ONE E2E we gate merges on: it is fast (~8s of test time), isolated, and catches the
+# single most critical regression — the factory→element→region→hex chain failing to COMMIT an element
+# to the board (the class behind the bot's totalPlaced=0 · force:true on the pulsing valid-hex is
+# load-bearing · see src/index.css hexPulse + game-ux.e2e.js placeOneElement).
+#
+# Deliberately runs ONLY game-ux — NOT the full suite. The heavier flows (two-human, phase-over-wire)
+# do many anonymous sign-ins and flake on Supabase's per-IP hourly rate limit in CI. The realtime
+# reconnect proofs run in their own workflow (e2e.yml). Playwright's webServer
+# (playwright.config.js · reuseExistingServer: !CI) starts the dev server itself in CI, so there is NO
+# manual `npm run dev` / wait-on step here — adding one would collide on port 5173.
+#
+# REQUIRES repo secrets: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (the same pair e2e.yml already uses).
+# game-ux drives the live app against Supabase (2 anon sign-ins + a globalTeardown purge) — without the
+# secrets the app cannot auth and the run fails at the lobby.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  placement-guard:
+    name: Placement commit guard (game-ux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run placement guard (game-ux.e2e.js)
+        run: npx playwright test tests/e2e/game-ux.e2e.js --reporter=list
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7
