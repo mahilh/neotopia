@@ -23,6 +23,11 @@
 // v4.5 — June 27 2026 (T2 S14): close the proxy gap AT SOURCE · the `placed` counter now increments ONLY when
 //   the board's .hex-element-in token count actually grows (the committed-placement signal) · a swallowed click
 //   that placed nothing no longer counts (S13 caught proxy 21 vs DB 19 · now the proxy is honest by construction).
+// v4.6 — June 27 2026 (T2 S17): BOT_MODE env ('classic'|'flow') · the bot selects the mode in the lobby BEFORE
+//   Create Room (host picks at createRoom → game_sessions.mode · migration 010) and then DB-VERIFIES the persisted
+//   mode (dbSessionMode · Rule 53 · the column is truth). The Flow toggle is T1's lobby UI and is NOT shipped yet,
+//   so flow selection is GUARDED: if the toggle is absent the bot falls back to Classic and SAYS SO (Rule 63 · no
+//   fake Flow game). The moment T1 ships the toggle, BOT_MODE=flow drives a real 9-tile Flow game · no further change.
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync, readFileSync } from 'fs'
@@ -43,6 +48,7 @@ const BASE = process.env.BOT_URL || 'http://localhost:5173'
 const NUM_GAMES = parseInt(process.env.BOT_GAMES || '3')
 const TURN_LIMIT = parseInt(process.env.BOT_TURNS || '30')
 const HEADED = process.env.BOT_HEADED === '1'
+const MODE = (process.env.BOT_MODE || 'classic').toLowerCase() // 'classic' | 'flow' (T2 S17 · selected in lobby pre-Create)
 
 const log = (...args) => console.log(new Date().toISOString().slice(11,19), ...args)
 const delay = ms => new Promise(r => setTimeout(r, ms))
@@ -77,6 +83,50 @@ async function dbPlacedCount(roomCode) {
     }
     return count
   } catch { return null }
+}
+
+// v4.6 · DB-VERIFIED GAME MODE (Rule 53 · T2 S17): read the PERSISTED mode (game_sessions.mode · migration 010)
+// for a room · same pure anon-key read as dbPlacedCount (no signin · sessions_read RLS is public). Proves whether
+// Flow was actually selected end-to-end (column === 'flow') vs the bot silently running Classic. Returns the mode
+// string ('classic'|'flow') or null when unreadable (room purged / no session / no creds).
+async function dbSessionMode(roomCode) {
+  try {
+    const url = process.env.VITE_SUPABASE_URL, key = process.env.VITE_SUPABASE_ANON_KEY
+    if (!url || !key || !roomCode) return null
+    if (!_sbClient) {
+      const { createClient } = await import('@supabase/supabase-js')
+      _sbClient = createClient(url, key)
+    }
+    const { data: room } = await _sbClient.from('game_rooms').select('id').eq('room_code', roomCode).maybeSingle()
+    if (!room) return null
+    const { data: sess } = await _sbClient.from('game_sessions').select('mode').eq('room_id', room.id).maybeSingle()
+    return sess?.mode ?? null
+  } catch { return null }
+}
+
+// v4.6 · SELECT GAME MODE IN THE LOBBY (T2 S17): the host picks the mode BEFORE Create Room (createRoom(mode) →
+// game_sessions.mode). classic is the default · nothing to click. flow needs T1's lobby toggle, which is NOT
+// shipped yet — so this is GUARDED: it tries the likely selectors and reports whether the control was actually
+// found. Absent today → fall back to Classic and SAY SO (Rule 63 · never fake a Flow game). Returns the mode the
+// bot actually managed to select, so the caller can DB-verify the truth rather than the request.
+async function selectGameMode(page, mode, label) {
+  if (mode !== 'flow') return { selected: 'classic', found: true }
+  const flowSelectors = [
+    '[data-testid="mode-flow"]', '[data-testid="game-mode-flow"]',
+    'button:has-text("Flow")', 'label:has-text("Flow")',
+    '[role="radio"]:has-text("Flow")', '[role="tab"]:has-text("Flow")', '[aria-label*="flow" i]',
+  ]
+  for (const sel of flowSelectors) {
+    const el = page.locator(sel).first()
+    if (await el.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await el.click({ force: true }).catch(() => {})
+      await delay(300)
+      log(`[${label}] Flow mode selected in lobby (selector '${sel}')`)
+      return { selected: 'flow', found: true }
+    }
+  }
+  log(`[${label}] BOT_MODE=flow requested but NO Flow toggle found (T1 lobby toggle not shipped yet) · falling back to Classic · session mode will be 'classic' (honest · Rule 63 · blocked until T1 S17 ships the toggle)`)
+  return { selected: 'classic', found: false }
 }
 
 // ============================================================
@@ -409,6 +459,10 @@ async function playGame(gameNum, browser) {
     const p1 = await enterLobbyWithRetry(ctx1, `BotAlpha${gameNum}_${tag}`)
     const p2 = await enterLobbyWithRetry(ctx2, `BotBeta${gameNum}_${tag}`)
 
+    // v4.6 (T2 S17): the host picks the game mode in the lobby BEFORE Create Room (createRoom(mode) persists it
+    // to game_sessions.mode). Guarded · falls back to Classic when the Flow toggle is absent (T1 lobby UI pending).
+    const modeSel = await selectGameMode(p1, MODE, `BotAlpha${gameNum}`)
+
     const createBtn = await p1.waitForSelector('button:has-text("Create Room"), button:has-text("Create")', { timeout: 10000 })
     await createBtn.click()
     await delay(1800)
@@ -506,11 +560,16 @@ async function playGame(gameNum, browser) {
     const dbPlaced = await dbPlacedCount(roomCode)
     if (dbPlaced === null) log(`DB-verified placed: unavailable · proxy: ${placed}`)
     else log(`DB-verified placed: ${dbPlaced} · proxy: ${placed}${dbPlaced === placed ? ' ✓ match' : ' ⚠ MISMATCH (DB wins)'}`)
+    // v4.6 (Rule 53): DB-verify the persisted MODE · proves whether Flow was actually achieved end-to-end.
+    const dbMode = await dbSessionMode(roomCode)
+    const modeOk = dbMode != null && dbMode === modeSel.selected
+    log(`Mode · requested:${MODE} · selected:${modeSel.selected}${modeSel.found ? '' : ' (Flow toggle ABSENT · fell back)'} · DB:${dbMode ?? 'unavailable'}${dbMode != null ? (modeOk ? ' ✓' : ' ⚠ MISMATCH') : ''}`)
     log(`Game ${gameNum}: ${turn} turns · placed ${placed} (proxy) · drew ${drew} · ${errors.length} errors`)
 
     return { game: gameNum, completed: gameEnded, turns: turn,
       duration: Math.round((Date.now() - start) / 1000),
-      errors: errors.length, placedElements: placed, dbPlacedCount: dbPlaced, drewCards: drew, errorList: errors }
+      errors: errors.length, placedElements: placed, dbPlacedCount: dbPlaced, drewCards: drew,
+      requestedMode: MODE, selectedMode: modeSel.selected, flowToggleFound: modeSel.found, dbMode, errorList: errors }
 
   } catch (err) {
     errors.push({ turn: -1, type: 'fatal', message: err.message.slice(0, 200) })
@@ -522,8 +581,8 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation v4.5 · ${NUM_GAMES} games · ${BASE}`)
-  log('v4.5: proxy counts only DB-committed placements (.hex-element-in grew) · ready-failed fix · rate-limit retry · DB-verified count')
+  log(`NeoTopia Bot Simulation v4.6 · ${NUM_GAMES} games · ${BASE} · BOT_MODE=${MODE}`)
+  log('v4.6: BOT_MODE flow/classic · lobby mode-select (guarded · T1 toggle pending) · DB-verified persisted mode (Rule 53)')
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 400 : 0 })
@@ -535,13 +594,19 @@ async function main() {
   await browser.close()
 
   const report = {
-    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.5',
+    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.6',
+    requestedMode: MODE,
     results: allResults,
     summary: {
       completed: allResults.filter(r => r.completed).length,
       totalErrors: allResults.reduce((s, r) => s + r.errors, 0),
       gamesWithPlacement: allResults.filter(r => r.placedElements > 0).length,
       totalPlaced: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
+      // v4.6 (Rule 53): mode truth · was Flow actually persisted, and did the lobby toggle exist this run?
+      requestedMode: MODE,
+      flowToggleFound: allResults.some(r => r.flowToggleFound === true),
+      flowDbVerified: allResults.some(r => r.dbMode === 'flow'),
+      dbModeBreakdown: allResults.reduce((acc, r) => { const m = r.dbMode || 'unknown'; acc[m] = (acc[m] || 0) + 1; return acc }, {}),
       // Rule 53: the proxy (totalPlaced) vs the DB truth. dbVerified=true means they agree.
       totalPlacedProxy: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
       totalPlacedDB: allResults.some(r => r.dbPlacedCount != null)
@@ -558,9 +623,13 @@ async function main() {
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT (v4.5) ===')
+  console.log('\n=== BOT SIMULATION REPORT (v4.6) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
   console.log(`Elements placed: ${report.summary.totalPlaced} (proxy) · ${report.summary.totalPlacedDB ?? 'N/A'} (DB-verified) · Cards drawn: ${report.summary.totalDrew}`)
+  console.log(`Mode: requested=${MODE} · DB persisted=${JSON.stringify(report.summary.dbModeBreakdown)} · flow toggle present=${report.summary.flowToggleFound} · flow DB-verified=${report.summary.flowDbVerified}`)
+  if (MODE === 'flow' && !report.summary.flowDbVerified) {
+    console.warn('NOTE: BOT_MODE=flow requested but NO Flow game was persisted · BLOCKED on T1 lobby Flow toggle (not shipped) · ran Classic · this is HONEST, not a placement failure (Rule 63)')
+  }
   if (report.summary.dbVerified === false) {
     console.warn('WARNING: proxy and DB placed counts DISAGREE · the proxy over-counts swallowed clicks · the DB wins (Rule 53)')
   }
