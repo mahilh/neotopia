@@ -86,4 +86,18 @@ export async function recordCivilizationDetail({ sessionId, scores = [0, 0, 0], 
   return { error: error?.message ?? null }
 }
 
+// Grand total of the Global NeoTopia Index LEDGER (sum of every recorded game's total_score) · for the
+// FinalScore civilization display ("Civilization Index: N"). The ledger is public-readable (migration 009).
+// Best-effort · returns 0 on any failure. NOTE: sums client-side over the public rows · fine while the ledger
+// is small · if it grows large, move to a SECURITY DEFINER aggregate (the get_global_neotopia_index pattern).
+export async function getGlobalCivilizationTotal() {
+  try {
+    const { data, error } = await supabase.from('global_neotopia_index').select('total_score')
+    if (error || !data) return 0
+    return data.reduce((sum, row) => sum + (Number(row.total_score) || 0), 0)
+  } catch {
+    return 0
+  }
+}
+
 export default supabase
