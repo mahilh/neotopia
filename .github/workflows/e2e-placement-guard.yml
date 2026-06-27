@@ -48,10 +48,11 @@ jobs:
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run fast E2E guards (placement-commit + mobile-render)
-        # game-ux: the placement-commit guard (needs Supabase). mobile: solo /game render at 375px (NO
-        # Supabase · added T3 S15). Both fast + deterministic — the merge-gating fast E2E. One invocation = one webServer.
-        run: npx playwright test tests/e2e/game-ux.e2e.js tests/e2e/mobile.e2e.js --reporter=list
+      - name: Run fast E2E guards (placement-commit + mobile-render + flow-mode)
+        # game-ux: the placement-commit guard (needs Supabase). mobile: solo /game render at 375px (NO Supabase ·
+        # T3 S15). flow-mode: solo Flow lifecycle — 9-tile/15s clock + end-game → FinalScore render (NO Supabase
+        # WRITE · read-only · T3 S17). All fast + deterministic — the merge-gating fast E2E. One invocation = one webServer.
+        run: npx playwright test tests/e2e/game-ux.e2e.js tests/e2e/mobile.e2e.js tests/e2e/flow-mode.e2e.js --reporter=list
 
       - name: Upload Playwright report on failure
         if: failure()
