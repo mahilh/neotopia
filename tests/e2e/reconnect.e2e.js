@@ -26,6 +26,7 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
+import { deleteRoomAsHost } from './seedHelpers'
 
 // ---- env (process.env in CI · .env.local locally) -------------------------------------------------
 function loadEnv() {
@@ -112,6 +113,69 @@ async function softCleanup(game) {
 
 const BOARD = 'svg[aria-label*="NeoTopia"]'
 
+// ── Two-human lobby + placement helpers (rejoin test · T3 S13) ──────────────────────────────────────
+// The existing tests are single-context + admin-seeded (read-only reconnect path). The rejoin test below
+// needs a GENUINELY seated browser user (seat re-association is derived from the synced roster by auth id),
+// so it drives the real lobby. Same inline-helper style as game-ux.e2e.js / two-human.e2e.js.
+const NAME_INPUT = 'Builder name (max 20)'
+const ELEMENT_RE = /energy|biofarming|technology|community/i
+const REGION_RE  = /sacred city|living earth|free energy/i
+
+function uniqueName(prefix) {
+  const t = Date.now().toString(36).slice(-5)
+  const r = Math.random().toString(36).slice(2, 5)
+  return (prefix + t + r).toUpperCase().slice(0, 20)
+}
+
+async function claimName(page, name) {
+  await page.goto('/')
+  const input = page.getByPlaceholder(NAME_INPUT)
+  const enterCiv = page.getByRole('button', { name: /enter the civilization/i })
+  await expect(input.or(enterCiv).first()).toBeVisible({ timeout: 15_000 })
+  if (await enterCiv.isVisible()) {
+    await enterCiv.click()
+    await expect(input).toBeVisible({ timeout: 15_000 })
+  }
+  await input.fill(name)
+  await page.getByRole('button', { name: /enter neotopia/i }).click()
+}
+
+async function readRoomCode(page) {
+  const el = page.locator('[style*="monospace"]').first()
+  await expect(el).toBeVisible({ timeout: 15_000 })
+  const code = (await el.textContent())?.trim() ?? ''
+  expect(code, `room code "${code}" is not 6 chars`).toMatch(/^[A-Z0-9]{6}$/)
+  return code
+}
+
+async function dismissTutorial(page) {
+  const t = page.getByTestId('tutorial-skip').or(page.getByTestId('tutorial-dismiss')).first()
+  if (await t.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await t.click()
+    await expect(page.getByTestId('tutorial-skip')).toBeHidden({ timeout: 4000 }).catch(() => {})
+  }
+}
+
+// Drive factory→element→region→hex as the active player. force:true on the hex is load-bearing: the
+// valid-hex ring's infinite hexPulse scale animation keeps the <g> bbox moving so a normal click times
+// out before placeElement commits (DB-proven · T3 S12). Returns true once a valid hex is force-clicked.
+async function placeOneElement(page) {
+  for (const factory of await page.locator('[data-testid="factory"]').all()) {
+    await factory.click({ timeout: 3000 }).catch(() => {})
+    const elBtn = page.getByRole('button').filter({ hasText: ELEMENT_RE }).first()
+    if (!(await elBtn.isVisible({ timeout: 1500 }).catch(() => false))) continue // empty factory · next
+    await elBtn.click()
+    const regBtn = page.getByRole('button').filter({ hasText: REGION_RE }).first()
+    await expect(regBtn).toBeVisible({ timeout: 3000 })
+    await regBtn.click()
+    const validHex = page.locator('[data-valid="true"], [data-testid="hex-valid"]').first()
+    await expect(validHex).toBeVisible({ timeout: 3000 })
+    await validHex.click({ force: true })
+    return true
+  }
+  return false
+}
+
 test.describe('Reconnect hardening (useGameSync · T3 S4)', () => {
 
   test("window 'online': recovers a state update missed while the tab was offline", async ({ page, context }) => {
@@ -183,6 +247,71 @@ test.describe('Reconnect hardening (useGameSync · T3 S4)', () => {
       await expect(page.locator(BOARD)).toBeVisible()
     } finally {
       await softCleanup(game)
+    }
+  })
+
+  // Free rejoin (T3 S9 design · stress-tested T3 S13). GameRoom reads roomId from useParams (survives a
+  // refresh) and derives mySeat from the synced roster by auth id — so closing the tab and reopening in
+  // the SAME browser must restore the board state AND the seat. The HOST rejoins: as seat 0 they are
+  // active first, so data-my-turn='true' after rejoin is an UNAMBIGUOUS proof the seat re-associated (a
+  // lost seat → mySeat=null → isMyTurn=false → data-my-turn would read 'false'). Two real users go
+  // through the lobby so the rejoiner is genuinely seated. Reopening in the same context preserves the
+  // anon session (localStorage 'neotopia-auth'); a fresh context would be a different, correctly-unseated user.
+  test('free rejoin: closing the tab and reopening restores the board state AND the active seat', async ({ browser }) => {
+    const ctxHost = await browser.newContext()
+    const ctxJoiner = await browser.newContext()
+    let p1 = await ctxHost.newPage()      // host · seat 0 · active first · the rejoiner
+    const p2 = await ctxJoiner.newPage()  // joiner · only needed so the game can start
+    let roomId, hostSession
+    try {
+      await claimName(p1, uniqueName('E2EH'))
+      await p1.getByRole('button', { name: 'Create Room' }).click({ timeout: 15_000 })
+      const code = await readRoomCode(p1)
+
+      await claimName(p2, uniqueName('E2EG'))
+      await p2.getByRole('button', { name: 'Join Room' }).click({ timeout: 15_000 })
+      await p2.getByPlaceholder('ABC234').fill(code)
+      await p2.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15_000 })
+      await p2.getByRole('button', { name: /click when ready/i }).click({ timeout: 15_000 })
+
+      const startBtn = p1.getByRole('button', { name: /^start game$/i })
+      await expect(startBtn).toBeVisible({ timeout: 30_000 })
+      await startBtn.click()
+
+      await p1.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 20_000 })
+      await expect(p1.locator(BOARD)).toBeVisible({ timeout: 20_000 })
+      roomId = p1.url().match(/\/game\/([0-9a-f-]+)/i)?.[1]
+      await p1.waitForTimeout(800)
+
+      // The host places ONE element so there is real board STATE (not an empty board) to re-hydrate.
+      await dismissTutorial(p1)
+      const placed = await placeOneElement(p1)
+      expect(placed, 'host could not place an element to seed board state').toBe(true)
+      await expect.poll(() => p1.locator('.hex-element-in').count(), { timeout: 8000 }).toBeGreaterThan(0)
+
+      // PERSISTENCE WITNESS · the placement is optimistic locally; persist()→pushState is async. The
+      // joiner only renders the element if it reached game_sessions (postgres_changes fires on a DB
+      // write, never on local state). Waiting for p2 to show it proves the element is in the DB BEFORE
+      // we close p1 — so the rejoin truly tests re-hydration, not a race against the un-flushed write.
+      await expect.poll(() => p2.locator('.hex-element-in').count(), { timeout: 15_000 }).toBeGreaterThan(0)
+
+      // Capture the host's anon session (for cleanup) BEFORE closing the tab.
+      hostSession = await p1.evaluate(() => localStorage.getItem('neotopia-auth'))
+
+      // ── CLOSE THE TAB · REOPEN IN THE SAME BROWSER (anon session persists in localStorage) ──────────
+      await p1.close()
+      p1 = await ctxHost.newPage()
+      await p1.goto(`/game/${roomId}`)
+      await dismissTutorial(p1) // the first-turn tutorial may re-show on the fresh page
+
+      // ── REJOIN PROOF · all three resilience guarantees in one rejoin ────────────────────────────────
+      await expect(p1.locator(BOARD)).toBeVisible({ timeout: 20_000 })                                  // subscription re-attached + seeded
+      await expect.poll(() => p1.locator('.hex-element-in').count(), { timeout: 20_000 }).toBeGreaterThan(0) // board STATE re-hydrated
+      await expect(p1.locator('[data-my-turn="true"]')).toBeVisible({ timeout: 20_000 })               // SEAT re-associated (host=seat0=active)
+    } finally {
+      try { await deleteRoomAsHost(hostSession, roomId) } catch { /* best-effort */ }
+      await ctxHost.close()
+      await ctxJoiner.close()
     }
   })
 })
