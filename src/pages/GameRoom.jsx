@@ -202,7 +202,7 @@ export default function GameRoom() {
 
       {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
       {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
-      {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} sync={sync} roomId={roomId} />}
+      {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} sync={sync} roomId={roomId} regions={regions} />}
 
       {/* FIRST-GAME TUTORIAL · once ever per browser · shows for BOTH players the moment the game starts
           (NOT gated on isMyTurn · S8's isMyTurn gate meant the joining player never saw it until their

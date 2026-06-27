@@ -12,6 +12,12 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
+// Namespace import (NOT a named import) for getClusterDetail · it is shipped by T2 (S17) and may land on
+// origin AFTER this file. A static `import { getClusterDetail }` would make Rollup fail the build wherever
+// the export is not yet present; a namespace read is `undefined` instead, so the cluster section simply
+// hides until T2's export lands (Rule 65 · the consumer degrades gracefully across an unsynced seam).
+import * as patternMatcher from '../lib/patternMatcher'
+import { ELEMENT_COLORS } from '../utils/hexUtils'
 import { DECK } from '../lib/projectCards'
 import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal, recordCivilizationDetail } from '../lib/supabase'
 import { buildGameEndEvent } from '../lib/gameEndEvent'
@@ -19,6 +25,9 @@ import { buildGameEndEvent } from '../lib/gameEndEvent'
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
 const REGION_COLORS = ['#7F77DD', '#1D9E75', '#E24B4A']
 const GLOBAL_INDEX_BASE = 147823 // canonical seed · fallback only · getGlobalIndex already folds this in.
+// Display names for the lowercase element keys getClusterDetail returns (energy/biofarming/…) · the colour
+// comes straight from ELEMENT_COLORS keyed off the same lowercase key (the board's single colour source).
+const ELEMENT_LABELS = { energy: 'Energy', biofarming: 'BioFarming', technology: 'Technology', community: 'Community' }
 
 // One player's final record · derived purely from store-true fields, no fabricated data (rule 32).
 function recordFor(player) {
@@ -54,7 +63,7 @@ function usePrefersReducedMotion() {
   return reduce
 }
 
-export default function FinalScore({ players = [], mySeat = null, sync = null, roomId = null }) {
+export default function FinalScore({ players = [], mySeat = null, sync = null, roomId = null, regions = [] }) {
   const [revealed, setRevealed] = useState(false)
   const [liveIndex, setLiveIndex] = useState(null) // real DB aggregate · null until fetched
   const didFetchRef = useRef(false)                // getGlobalIndex fires exactly once
@@ -77,6 +86,14 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   const totalProjectsBuilt = useMemo(
     () => finalScores.reduce((s, p) => s + p.scoredCards.length, 0),
     [finalScores],
+  )
+  // Board-global element clusters (T2 S17 getClusterDetail · BFS · rule 10). The board is SHARED (no per-hex
+  // placer), so a cluster belongs to the CIVILIZATION, not a player · shown once, not per record. DESCRIPTIVE
+  // size only · no points (T2's data has none · inventing a cluster→points number would render a fabricated
+  // scoring rule as truth · rule 32). Empty until T2's export lands on origin → the section just hides.
+  const clusterDetail = useMemo(
+    () => (typeof patternMatcher.getClusterDetail === 'function' ? patternMatcher.getClusterDetail(regions) : []),
+    [regions],
   )
   // THIS client's own districts · the only amount we may record (own auth.uid() profile · own seat).
   const myDistricts = useMemo(
@@ -319,6 +336,36 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
           )
         })}
       </div>
+
+      {/* ELEMENT CLUSTERS · the connected patterns the civilization formed (board-global · the most
+          educational end-screen moment · descriptive sizes from getClusterDetail · NO points · T1 S17 Task C). */}
+      {clusterDetail.length > 0 && (
+        <div style={{
+          maxWidth: 420, width: '100%', padding: '22px 28px', borderRadius: 20,
+          border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)', marginBottom: 40, flexShrink: 0,
+        }}>
+          <div style={{ fontSize: 9, letterSpacing: 4, color: 'rgba(255,255,255,0.25)', marginBottom: 4, textTransform: 'uppercase', textAlign: 'center' }}>
+            Element Clusters
+          </div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
+            the connected patterns this civilization formed
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {clusterDetail.map((c, i) => (
+              <div key={`${c.regionId}-${c.element}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: ELEMENT_COLORS[c.element] ?? '#888', flexShrink: 0 }} />
+                <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 13, fontWeight: 500 }}>
+                  {ELEMENT_LABELS[c.element] ?? c.element}
+                </span>
+                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>· {c.regionName}</span>
+                <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  {c.count} connected
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* GLOBAL NEOTOPIA INDEX · this game's contribution to a real civilization */}
       <div style={{
