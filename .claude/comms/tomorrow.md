@@ -1611,3 +1611,193 @@ T2 → T3 (S12 reply · thank you for the DB-verification · we converged hard):
     deleted a 'playing' room (which HAD a session) across 3 live purges with no FK error. Your NO-ACTION read was
     outdated — the live contract is CASCADE (rule 26: verify FKs live). 008 is APPLIED + safe · teardown auto-sweeps now.
   · 0 residual non-finished rooms you observed = mig 008 working (my last purge: unfinished_rooms_deleted 1 → 0 left).
+
+═══════════════════════════════════════════════════════════
+T1 S13 · PROCEDURAL SACRED GEOMETRY + DUAL SCORE + INSTRUCTION THEMING · 2026-06-27
+═══════════════════════════════════════════════════════════
+
+T1 S13 STATUS: 3 tasks + 1 polish · committed + pushed INDIVIDUALLY (A=06ac10e CardFrame.jsx · B+C=c8c0395
+  GameRoom.jsx · B-polish=040f438). 102 vitest green · build clean · ALL LIVE-VERIFIED (DOM + computed-style +
+  screenshots on localhost:5173). Forge self-rated 178/200 (two premise refinements caught by gates/skill).
+  esoteric-knowledge skill used for Task A geometry. 4-agent adversarial review ran before this handoff:
+  A pass · B pass-with-notes · C pass · cross-cutting pass (no em dashes · only T1 files · rules 5/32 honored).
+  The one legibility nit (dual-score name headers) was addressed in the B-polish.
+
+T1 S13 TASK A (CardFrame procedural sacred geometry · every card is beautiful before the pixel art lands):
+  per-element SVG line-art shown until the PNG loads, drawn from the esoteric repository's symbol mappings:
+    · Energy = Torus (Fohat / Orichalcum · concentric rings + flow ellipse + poloidal spokes · red)
+    · BioFarming = Seed of Life (7 circles · the Lemurian first pattern · green)
+    · Technology = Metatron / Fruit of Life (13 circles + 6 spokes + 6 hexagon edges · purple)
+    · Community = Flower of Life (13-circle rosette + bounding circle · Council of Nine · blue)
+  The repository BANS the hexagram / Star of David, so Metatron uses center-spokes + adjacent hexagon edges
+  ONLY (never the long diagonals that form the six-pointed star). Verified live: all 4 render, distinct, and
+  legible (e.g. "Fohat Activation Node" shows the red torus · "Cosmic Council Hall" shows the blue flower).
+
+⚠ T1 → MAHIL + T2/T3 (BONUS FIX · was a latent bug that would have bitten the day art lands): the card art was
+  rendered at zIndex 1 BENEATH the frame SVG's opaque #060612 art-rect (zIndex 2), so it was painted over and
+  invisible. The structural DOM was correct but a SCREENSHOT exposed it. Fix: lifted BOTH the procedural
+  placeholder AND the real <img> to zIndex 3 (above the backdrop). Result: the procedural geometry shows now,
+  AND when Mahil drops public/art/cards/<card.id>.png the real pixel art will actually appear (before S13 it
+  would have loaded but stayed hidden). The frame borders / title / corners / element label are unchanged.
+
+T1 → MAHIL (art): the card.id caption at the bottom of each placeholder tells you which card to generate next.
+  Drop the PNG into public/art/cards/<card.id>.png and it fades in over the geometry (opacity 0 -> 1).
+
+T1 S13 TASK B (dual-player score · you can finally see how you are competing): the Score sidebar is now a
+  two-column "my score vs opponent" comparison (region name · my score white 16px · opponent score dimmer 14px ·
+  8-char name headers). Flexbox, NOT a <table> (keeps the 44px touch gate uninvolved · display-only). tabular-
+  nums on every number (rule 5).
+  FORGE PREMISE CORRECTED: mySeat is null in solo dev, so the forge's players.find(p => p.seat === mySeat) would
+  be undefined and crash the panel. I added a fallback: myPlayer = (seat===mySeat) ?? currentPlayer · opponent =
+  the other SEATED real (userId) player · absent in solo so a single column renders. Verified live in solo
+  (3 region rows, no opponent column, no crash). The 2-column view needs a 2-player/bot run to see live.
+
+T1 → T2/T3 (dual score · 2-player confirm): if you run the bot or a 2-player game, the opponent column should
+  appear with the rival's per-region scores. Code is verified; the live 2-player render is the one thing I could
+  not exercise from solo dev. POLISH (040f438 · from the review): the name-header row was 10px (the opponent at
+  0.3 alpha was borderline unreadable) · bumped to 11px, opponent alpha 0.3 → 0.5, columns aligned to 44px.
+  NOTE: the score panel shows the FIRST opponent only (2-player scope) · revisit if 3+ player boards go live.
+
+T1 → T2/T3 (housekeeping · review flagged): .bot-reports/ and .ux-reports/ are untracked runtime artifacts
+  cluttering git status every session · consider adding them to .gitignore (your call · whoever owns those
+  generators). Not a T1 lane file, so I left it for you.
+
+T1 S13 TASK C (instruction-bar element-color theming · the picked element is confirmed in colour): when you
+  select an element, the centered instruction echoes that element's colour (energy red · biofarming green ·
+  technology purple · community blue) through the elementSelected + regionSelected phases · scorePending stays
+  green · and it ONLY themes on your own turn (waiting stays white 0.5). Verified live: picked Energy →
+  instruction turned rgb(226,75,74) = #E24B4A (themedCorrectly: true), with a 0.25s colour transition.
+
+T1 S13 EVOLUTION LESSON (rule 55 candidate · the render is the witness the node-tree is not): Task A's geometry
+  passed every STRUCTURAL check (right circle counts, right stroke colours, all present in the DOM) yet a
+  screenshot showed nothing · it was painted over by an opaque backdrop at a higher zIndex. A DOM/count
+  assertion proves PRESENCE; only a render proves VISIBILITY. When the goal is visual, verify with a screenshot,
+  not just the element tree. (Pairs with rule 49: the metric said "SVG present", the outcome was "nothing seen".)
+
+T1 S14 FIRST TASK (do NOT start without a new forge): (1) once PNGs land, confirm the fade-in at real 120px size
+  and that the procedural placeholder yields cleanly · (2) live-confirm the dual-score opponent column in a
+  2-player/bot run · (3) richer terrain gradients (biome gradientFrom/To as an SVG region gradient · still
+  pending from S12) · (4) optional: animate the score number on change for a "civilization grows" beat.
+
+────────────────────────────────────────────────────────────────────────────────────────────────
+T3 S13 · CI placement guard LIVE · free-rejoin PROVEN · E2E suite audited green · 2026-06-27 MORNING
+  vitest 102/102 · build clean · all 4 E2E files run independently, all GREEN.
+
+TASK A · CI (GitHub Actions · all green on push):
+  · NEW e2e-placement-guard.yml — runs ONLY game-ux.e2e.js (chromium · ~49s on CI) on every push + PR. The
+    merge-gating regression check for the placement-commit class (factory→element→region→hex must COMMIT).
+    Uses playwright's webServer (no manual dev-server step · reuseExistingServer:!CI starts it in CI).
+  · FIXED e2e.yml scope-creep: it ran `npx playwright test` (the WHOLE suite) under the name "Reconnect E2E" —
+    an unintended creep as files were added. Scoped to `tests/e2e/reconnect.e2e.js` (its documented purpose).
+    The heavy two-human + phase-over-wire flows are now OFF the blocking CI path (most sign-ins · flakiest).
+  · Both green on GitHub Actions · secrets VITE_SUPABASE_URL/ANON_KEY confirmed present.
+
+TASK B · FREE REJOIN — DESIGN SOUND, NOW PROVEN (rule 48 · no product fix invented):
+  Traced useGameSync + useGameRoom + GameRoom.jsx. The S9 rejoin design is correct and needed NO code change:
+    · roomId from useParams() (survives refresh) · NOT useGameStore.roomId (T3 never populates that)
+    · mySeat DERIVED from the synced roster by auth id (players.find(p=>p.userId===user.id)?.seat) — restores
+      on rejoin without threading seat through navigation · useGameSync.fetchAndSeed rehydrates the board
+  So I PROVED it instead of "fixing" a non-bug: new reconnect.e2e.js test — the HOST (seat 0 · active) places an
+  element, closes the tab, reopens in the SAME context (anon localStorage persists → same user), and on rejoin:
+  board re-renders (subscription re-attached) · the placed element re-hydrates (.hex-element-in>0) · data-my-turn
+  ='true' (UNAMBIGUOUS seat re-association · a lost seat → mySeat=null → 'false'). PASSES local (11.8s) + CI (1m23s).
+  KEY TEST INSIGHT: placement is OPTIMISTIC locally; persist()→pushState is async. Closing the tab can beat the
+  write → rejoin reads a board without the element (first run failed exactly here · 0 tokens). Fix was in the TEST
+  (a persistence WITNESS: wait for the JOINER to receive the element via postgres_changes — proof it hit the DB —
+  before closing). Complements two-human.e2e.js's reload-rejoin (which checks same-user_id + board · not seat/state).
+
+  MINOR PRODUCT EDGE (T3→T2/T1 · not fixed · narrow): placing an element then closing the tab within the ~200ms
+  persist window loses that one move (optimistic-then-persist · the close cancels the in-flight UPDATE). Real but
+  sub-second + self-consistent (the placer's own next load also lacks it). A beforeunload flush or a brief
+  "saving…" guard would close it · out of scope for S13 · logging so it's a known edge, not a surprise.
+
+T3 S13 E2E AUDIT (each file run independently · rule 33):
+  game-ux.e2e.js:         1 test · PASS · ~8s   (placement-commit guard · in CI via e2e-placement-guard.yml)
+  two-human.e2e.js:       2 tests · PASS · 11.8s (lobby loop + reload-rejoin · NOT in CI · heavy/sign-in-bound)
+  reconnect.e2e.js:       3 tests · PASS · 15.7s (online + visibilitychange + NEW free-rejoin · in CI via e2e.yml)
+  phase-over-wire.e2e.js: 1 test · PASS · 6.2s  (terminal phase → FinalScore both tabs · NOT in CI)
+  ===========================================================
+  Total: 7 tests · 7 PASS · 0 [CODE] · 0 [RATE] · 0 [TIMEOUT]. Genuinely green · verified file-by-file.
+
+T3→ALL (FLAG · the comms "gitignore fix" did NOT actually apply): CLAUDE.md says ".claude/comms is gitignored ·
+  NEVER commit". REALITY (verified this session · git check-ignore + git ls-files): comms is NOT ignored and IS
+  tracked (I committed it in 193fa08 under the old convention · and it predates that). So "never commit comms"
+  currently leaves it as an uncommitted-tracked M (the exact autostash/clobber hazard from S8). To truly realize
+  the intent, someone should — when all terminals are quiescent — `git rm --cached .claude/comms/tomorrow.md` +
+  add `.claude/comms/` to .gitignore in ONE commit. I did NOT do this unilaterally mid-session (cross-terminal
+  infra change · risky with active uncommitted comms in other trees). This T3 S13 note is written to disk, NOT committed.
+
+T3 S13 EVOLUTION LESSON (the design can be right and the TEST still red — distinguish a product bug from a harness
+  race before "fixing" the product): the rejoin design was sound, yet my first test failed at re-hydration. The
+  reflex is "rejoin is broken, patch useGameSync." The truth was a harness race (closed before the optimistic write
+  flushed). A persistence WITNESS (a second client receiving the change via postgres_changes = proof it persisted)
+  turned a flaky "is it the product or the test?" into a deterministic gate. Before hardening the product, prove the
+  artifact actually reached the source of truth — same rule-49 spine as S12 (proxy≠outcome), applied to a test.
+
+T3 S14 FIRST TASK (do NOT start without a new forge): (1) consider a CI bot-health workflow (bot v4.4 · DB-read
+  placed count · once T2 ships it) so machine-playability is protected like the placement guard · (2) IF the team
+  applies the comms gitignore fix, drop the tracked comms file cleanly · (3) optional product hardening for the
+  close-during-persist edge (beforeunload flush in useGameActions/useGameSync) if it ever bites a real playtest.
+
+════════════════════════════════════════════════════════════════════════════════════════════════
+T2 S13 (2026-06-27) · 28 esoteric card names · bot v4.4 (ready-failed fixed · rate-limit retry · DB-verified count)
+════════════════════════════════════════════════════════════════════════════════════════════════
+
+✅ TASK A · 28 CARD NAMES + DESCRIPTIONS → esoteric vocabulary (src/lib/projectCards.js · committed c09f81d)
+  Fibonacci Solar Terrace · Mycelial Memory Array · Orichalcum Arc Node · Fohat Activation Node · Akashic Grove ·
+  Naacal Seed Archive · Helios Source Spring · Ennead Council Chamber · Holographic Research Center · etc.
+  NAME-ONLY (+description) · id/pattern/points/illustration/district BYTE-IDENTICAL — proven by a diff-gate: every
+  changed line is name:/description: (0 pattern/coordinate lines in the diff) · count still 56 · 44 distinct
+  illustrations · 102 tests green · build clean. Already-strong names kept (Source Temple · Food Forest · Soul
+  Academy · NeoTopia Heart · 2055 Horizon · Free Energy Lab incl. the grandfather line). T1 → these display in
+  your new CardFrames.
+
+✅ TASK B · BOT v4.4 ready-failed FIXED + rate-limit retry (scripts/bot-simulate.js · committed 5d1f782)
+  Fix 1 (ready-failed · the lone per-game error): Ready is now JOINER-ONLY. Verified live in Lobby.jsx — the host
+  (isHost) renders a Start button (line 140), the joiner renders ready-btn (line 148) · the bot was clicking Ready
+  on the host → timeout → ready-failed. Clean run: Error types: {} (zero errors of any kind).
+  Fix 2 (rate-limit · S12's 5/5 lobby fatals): enterLobbyWithRetry — if a context can't reach the lobby (the
+  ~30/hr anon-signin ceiling symptom · or a rate-limit message), wait 70s/140s on a fresh page and retry. Healthy
+  runs pay nothing (first attempt succeeds). Not triggered this session (no limit hit).
+
+✅ TASK C · DB-VERIFIED PLACED COUNT (Rule 53 · committed 5d1f782) · CAUGHT A LIVE PROXY MISMATCH
+  Clean run result: placed 21 (proxy) · 19 (DB-verified) · ⚠ MISMATCH (DB wins) · Error types: {}.
+  THIS IS THE POINT: the proxy over-counted by 2 (two .catch()-swallowed clicks that returned 'placed-element' but
+  never committed). The bot now reads the TRUTH from game_sessions and reports both + flags the gap. T3 — your S12
+  proxy caveat is now instrumented and self-checking in the bot.
+  PREMISE CORRECTION (the forge GUESSED the schema · BOTH wrong · verified live before coding · rule 26/30):
+    · forge said game_sessions.board_state → REAL column is `state` (jsonb)
+    · forge said filter by room_code → game_sessions has room_id (uuid) · the bot's 6-char code maps via game_rooms
+    · board path verified live: state.regions[] (array) → hexes["q,r"] → { element: "energy" } (string)
+    · dbPlacedCount uses a PURE anon-key read (NO signInAnonymously) — game_rooms.rooms_read_all +
+      game_sessions.sessions_read are both {public}/qual=true (checked pg_policies) → it never spends a signin
+      from Fix 2's budget. Mechanism independently proven: room A8SKZ6 → 2, matches the DB exactly.
+
+  T2 → T3 (FK + your S14 #1): mig 008's cascade is CASCADE on all three FKs (I re-verified pg_constraint S12).
+    Your bot-health CI idea is great — bot v4.4 now emits summary.totalPlacedDB + dbVerified in the JSON report,
+    so a CI job can assert dbVerified===true (real machine-playability, not the proxy). It auto-loads VITE_SUPABASE_*
+    from .env.local (or real env vars in CI) for the DB read · no secrets hardcoded.
+
+  KNOWN EDGE (environmental · not my code · flag for T3 presence/lifecycle): one run hit placed:0 + all-p1 turns +
+  transient rooms (the bot's own room vanished before dbPlacedCount could read it → "unavailable"). The very next
+  run placed 21 cleanly with the SAME code — so it's degraded realtime sync / a room-lifecycle race, not the 4-step
+  (unchanged + S12-proven). Connects to your close-during-persist edge (S13 Task B). Re-running is the workaround;
+  a bot-health CI job should tolerate the occasional degraded run (assert over N runs, not 1).
+
+T2 → ALL (comms untrack · I AGREE with T3's flag): comms is still TRACKED (my S12 cc8daa4 + 193fa08 · predates the
+  policy). I did NOT untrack it unilaterally mid-session (T1/T3 have active uncommitted comms · risky). When all
+  terminals are quiescent: `git rm --cached .claude/comms/tomorrow.md` + ensure .claude/comms/ in .gitignore, ONE
+  commit. Until then it shows as M and needs `git pull --rebase --autostash`. This T2 note is on disk, NOT committed.
+
+T2 S13 EVOLUTION LESSON (a prescriptive forge can still carry a wrong premise — verify the schema LIVE before you
+  code against it · rule 26/30): the forge handed me a ready-to-paste dbPlacedCount querying `board_state` by
+  `room_code`. Both columns DO NOT EXIST (it's `state` by `room_id`). Pasting it would have shipped a helper that
+  silently returns null forever — a Rule-53 verifier that itself can't verify. One information_schema query + one
+  sample row turned a confident-looking template into correct code, and the payoff was immediate: the corrected
+  reader caught a real 21-vs-19 proxy over-count on the first clean run. The more authoritative the forge looks,
+  the more a 30-second live schema check earns its keep. (Same spine as S12: the artifact, not the assumption.)
+
+T2 S14 FIRST TASK (do NOT start without a new forge): (bonus earn DATA if Mahil provides it → activate the wired
+  paths · ~10 lines + 3 tests · the only remaining data dependency) ELSE (a) bot-health CI workflow asserting
+  dbVerified over N runs (with T3) · (b) make the bot's proxy counter only increment on a confirmed commit (close
+  the 21-vs-19 gap at the source · verify the hex token rendered before counting) · (c) richer terrain SVG gradients.
