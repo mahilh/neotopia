@@ -110,7 +110,7 @@ async function dbSessionMode(roomCode) {
 // found. Absent today → fall back to Classic and SAY SO (Rule 63 · never fake a Flow game). Returns the mode the
 // bot actually managed to select, so the caller can DB-verify the truth rather than the request.
 async function selectGameMode(page, mode, label) {
-  if (mode !== 'flow') return { selected: 'classic', found: true }
+  if (mode !== 'flow') return { selected: 'classic', found: null } // classic · a flow toggle is N/A (not 'found')
   const flowSelectors = [
     '[data-testid="mode-flow"]', '[data-testid="game-mode-flow"]',
     'button:has-text("Flow")', 'label:has-text("Flow")',
@@ -454,6 +454,9 @@ async function playGame(gameNum, browser) {
   const moves = []
   const start = Date.now()
   const tag = Date.now().toString(36).slice(-5)
+  // Hoisted so the catch (fatal) path can still report the mode truth · a crash AFTER the toggle was clicked must
+  // NOT make the summary claim 'toggle not found' (Rule 63 · the v4.6-first-run honesty bug this fixes).
+  let modeSel = { selected: 'classic', found: null }
 
   try {
     const p1 = await enterLobbyWithRetry(ctx1, `BotAlpha${gameNum}_${tag}`)
@@ -461,7 +464,7 @@ async function playGame(gameNum, browser) {
 
     // v4.6 (T2 S17): the host picks the game mode in the lobby BEFORE Create Room (createRoom(mode) persists it
     // to game_sessions.mode). Guarded · falls back to Classic when the Flow toggle is absent (T1 lobby UI pending).
-    const modeSel = await selectGameMode(p1, MODE, `BotAlpha${gameNum}`)
+    modeSel = await selectGameMode(p1, MODE, `BotAlpha${gameNum}`)
 
     const createBtn = await p1.waitForSelector('button:has-text("Create Room"), button:has-text("Create")', { timeout: 10000 })
     await createBtn.click()
@@ -573,7 +576,10 @@ async function playGame(gameNum, browser) {
 
   } catch (err) {
     errors.push({ turn: -1, type: 'fatal', message: err.message.slice(0, 200) })
-    return { game: gameNum, completed: false, errors: errors.length + 1, errorList: errors, fatal: err.message.slice(0, 100) }
+    // Carry the mode truth even on a fatal crash (Rule 63) · a game that selected Flow then crashed at Start is
+    // NOT a 'toggle missing' case · the summary must distinguish them.
+    return { game: gameNum, completed: false, errors: errors.length + 1, errorList: errors, fatal: err.message.slice(0, 100),
+      requestedMode: MODE, selectedMode: modeSel.selected, flowToggleFound: modeSel.found, dbMode: null }
   } finally {
     await ctx1.close().catch(() => {})
     await ctx2.close().catch(() => {})
@@ -626,9 +632,13 @@ async function main() {
   console.log('\n=== BOT SIMULATION REPORT (v4.6) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
   console.log(`Elements placed: ${report.summary.totalPlaced} (proxy) · ${report.summary.totalPlacedDB ?? 'N/A'} (DB-verified) · Cards drawn: ${report.summary.totalDrew}`)
-  console.log(`Mode: requested=${MODE} · DB persisted=${JSON.stringify(report.summary.dbModeBreakdown)} · flow toggle present=${report.summary.flowToggleFound} · flow DB-verified=${report.summary.flowDbVerified}`)
+  console.log(`Mode: requested=${MODE} · DB persisted=${JSON.stringify(report.summary.dbModeBreakdown)} · flow toggle found=${report.summary.flowToggleFound} · flow DB-verified=${report.summary.flowDbVerified}`)
   if (MODE === 'flow' && !report.summary.flowDbVerified) {
-    console.warn('NOTE: BOT_MODE=flow requested but NO Flow game was persisted · BLOCKED on T1 lobby Flow toggle (not shipped) · ran Classic · this is HONEST, not a placement failure (Rule 63)')
+    if (report.summary.flowToggleFound) {
+      console.warn('NOTE: the Flow toggle WAS selected, but no Flow session was DB-verified this run (the game did not start/finish cleanly · see errors). This is NOT a toggle-availability block · re-run for a clean Flow verification (Rule 63).')
+    } else {
+      console.warn('NOTE: BOT_MODE=flow requested but the Flow toggle was not found this run · ran Classic (honest · Rule 63 · check the lobby toggle data-testid="mode-flow").')
+    }
   }
   if (report.summary.dbVerified === false) {
     console.warn('WARNING: proxy and DB placed counts DISAGREE · the proxy over-counts swallowed clicks · the DB wins (Rule 53)')
