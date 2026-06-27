@@ -7,76 +7,76 @@
 export const PROJECT_CARDS = [
   // 2-ELEMENT CARDS (12 cards, 2pts)
   {
-    id: 'card_01', name: 'Solar Garden',
+    id: 'card_01', name: 'Fibonacci Solar Terrace',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'energy' }],
     points: 2, illustration: 'garden', district: 4,
-    description: 'Where sunlight becomes sustenance and the soil remembers.',
+    description: 'Sunlight arranged in living spirals, feeding the district from above.',
   },
   {
-    id: 'card_02', name: 'Root Network',
+    id: 'card_02', name: 'Mycelial Memory Array',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 0, r: 1, type: 'biofarming' }],
     points: 2, illustration: 'network', district: 5,
-    description: 'Mycelium intelligence connecting the living earth beneath our feet.',
+    description: 'Underground intelligence threading the living earth beneath every building.',
   },
   {
-    id: 'card_03', name: 'Signal Bridge',
+    id: 'card_03', name: 'Resonance Crossing',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: -1, type: 'technology' }],
     points: 2, illustration: 'bridge', district: 7,
-    description: 'Data flows as freely as water in a conscious civilization.',
+    description: 'Two frequencies meet and become coherent: the first step in any civilization.',
   },
   {
-    id: 'card_04', name: 'Gathering Circle',
+    id: 'card_04', name: 'Council Ring',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 0, r: 1, type: 'community' }],
     points: 2, illustration: 'circle', district: 1,
-    description: 'The oldest technology: people coming together with intention.',
+    description: 'The oldest governance technology: nine people in a circle, listening.',
   },
   {
-    id: 'card_05', name: 'Hydrogen Arc Station',
+    id: 'card_05', name: 'Orichalcum Arc Node',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 0, r: 1, type: 'technology' }],
     points: 2, illustration: 'node', district: 7,
-    description: 'Clean energy and clean code, speaking the same language.',
+    description: 'Atlantean energy principles, reborn in clean plasma and conscious design.',
   },
   {
-    id: 'card_06', name: 'Seed Vault',
+    id: 'card_06', name: 'Naacal Seed Archive',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 1, r: -1, type: 'community' }],
     points: 2, illustration: 'vault', district: 5,
-    description: 'Every seed holds a civilization inside it.',
+    description: 'Before cities: seeds. The Naacal stored what Mu knew. We continue.',
   },
   {
-    id: 'card_07', name: 'Healing Pool',
+    id: 'card_07', name: 'Crystal Healing Waters',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'biofarming' }],
     points: 2, illustration: 'pool', district: 2,
-    description: 'Clean water and human presence: the first medicine.',
+    description: 'Water charged with intention is the oldest medicine still working.',
   },
   {
-    id: 'card_08', name: 'Spark Terminal',
+    id: 'card_08', name: 'Fohat Activation Node',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 0, r: 1, type: 'community' }],
     points: 2, illustration: 'terminal', district: 4,
-    description: 'Power that flows toward the people, not away from them.',
+    description: 'The cosmic electricity Blavatsky named: now flowing through conscious circuitry.',
   },
   {
-    id: 'card_09', name: 'Data Grove',
+    id: 'card_09', name: 'Akashic Grove',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'biofarming' }],
     points: 2, illustration: 'grove', district: 7,
-    description: 'Living computation · the forest is the first AI.',
+    description: 'A living computer: the forest stores what the Akashic field remembers.',
   },
   {
-    id: 'card_10', name: 'Solar Spring',
+    id: 'card_10', name: 'Helios Source Spring',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: -1, type: 'biofarming' }],
     points: 2, illustration: 'spring', district: 5,
-    description: 'Sun feeds water feeds earth in an unbroken sacred loop.',
+    description: 'Sun feeds water feeds earth: an unbroken sacred loop, three elements as one.',
   },
   {
-    id: 'card_11', name: 'Code Commons',
+    id: 'card_11', name: 'Open Source Consciousness',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'community' }],
     points: 2, illustration: 'commons', district: 8,
-    description: 'Open source as a spiritual practice: share the code, share the light.',
+    description: 'Share the code. Share the light. No knowledge is private in NeoTopia.',
   },
   {
-    id: 'card_12', name: 'Wind Weave',
+    id: 'card_12', name: 'Aeolian Frequency Array',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: -1, r: 1, type: 'energy' }],
     points: 2, illustration: 'weave', district: 4,
-    description: 'Invisible force made visible through elegant design.',
+    description: 'Invisible force made audible. The wind has always been transmitting.',
   },
 
   // 3-ELEMENT CARDS (18 cards, 3pts)
@@ -87,16 +87,16 @@ export const PROJECT_CARDS = [
     description: 'Space itself can be a teacher when designed with sacred mathematics.',
   },
   {
-    id: 'card_14', name: 'BioFarm Collective',
+    id: 'card_14', name: 'Living Earth Collective',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 1, r: 0, type: 'biofarming' }, { q: 1, r: -1, type: 'biofarming' }],
     points: 3, illustration: 'farm', district: 5,
-    description: 'Three growing things: three generations of memory in the soil.',
+    description: 'Three growing things: three generations of memory in regenerated soil.',
   },
   {
-    id: 'card_15', name: 'Resonance Grid Tower',
+    id: 'card_15', name: 'Fohat Transmission Tower',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'technology' }, { q: 0, r: 2, type: 'energy' }],
     points: 3, illustration: 'tower', district: 7,
-    description: 'Signal rises from earth to sky, carrying consciousness upward.',
+    description: 'Consciousness rises from earth to sky, carried on frequencies we are learning to read.',
   },
   {
     id: 'card_16', name: 'Healing Sanctuary',
@@ -105,10 +105,10 @@ export const PROJECT_CARDS = [
     description: 'The body heals fastest in spaces designed for healing.',
   },
   {
-    id: 'card_17', name: 'Energy Spire',
+    id: 'card_17', name: 'Orichalcum Energy Spire',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'energy' }, { q: 2, r: 0, type: 'energy' }],
     points: 3, illustration: 'spire', district: 4,
-    description: 'Three aligned sources: a harmonic that amplifies.',
+    description: 'Three aligned sources create a harmonic that neither one could produce alone.',
   },
   {
     id: 'card_18', name: 'Meditation Hall',
@@ -117,10 +117,10 @@ export const PROJECT_CARDS = [
     description: 'Still minds change everything. One room changes a district.',
   },
   {
-    id: 'card_19', name: 'Quantum Observatory',
+    id: 'card_19', name: 'Stellar Coherence Station',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: -1, type: 'technology' }, { q: 0, r: 1, type: 'energy' }],
     points: 3, illustration: 'observatory', district: 7,
-    description: 'We built telescopes to see the stars. Now we build tools to see ourselves.',
+    description: 'We built telescopes to see the stars. Now we build instruments to see ourselves.',
   },
   {
     id: 'card_20', name: 'Food Forest',
@@ -135,10 +135,10 @@ export const PROJECT_CARDS = [
     description: 'Glass, light, plants, people: the four elements of a living building.',
   },
   {
-    id: 'card_22', name: 'Frequency Gate',
+    id: 'card_22', name: 'Sound Frequency Gateway',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'community' }, { q: 0, r: 1, type: 'community' }],
     points: 3, illustration: 'gate', district: 1,
-    description: 'Some doors are made of sound. You pass through by resonating.',
+    description: 'Some thresholds are made of vibration. You pass through by becoming coherent.',
   },
   {
     id: 'card_23', name: 'Free Energy Lab',
@@ -153,28 +153,28 @@ export const PROJECT_CARDS = [
     description: 'Knowledge organized around the soul, not the exam.',
   },
   {
-    id: 'card_25', name: 'Mushroom Dome',
+    id: 'card_25', name: 'Mycelium Intelligence Dome',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 1, r: -1, type: 'biofarming' }, { q: 0, r: 1, type: 'technology' }],
     points: 3, illustration: 'dome', district: 5,
-    description: 'Mycelium computing. The first conscious building material.',
+    description: 'The first conscious building material. Grown, not manufactured. Alive, not inert.',
   },
   {
-    id: 'card_26', name: 'Star Map Center',
+    id: 'card_26', name: 'Cosmic Cartography Nexus',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'energy' }, { q: -1, r: 1, type: 'community' }],
     points: 3, illustration: 'starmap', district: 9,
-    description: 'To know where we are in the cosmos is to know who we are.',
+    description: 'To know where we are in the galaxy is to know what we are responsible for.',
   },
   {
-    id: 'card_27', name: 'Sound Chamber',
+    id: 'card_27', name: 'Cymatics Healing Chamber',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 0, r: 1, type: 'energy' }, { q: 1, r: -1, type: 'community' }],
     points: 3, illustration: 'chamber', district: 2,
-    description: 'Frequency is the original medicine. The body remembers.',
+    description: 'Frequency made visible becomes sacred geometry. The body recognizes its origin.',
   },
   {
-    id: 'card_28', name: 'Living Archive',
+    id: 'card_28', name: 'Akashic Living Archive',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'technology' }, { q: 2, r: 0, type: 'biofarming' }],
     points: 3, illustration: 'archive', district: 8,
-    description: 'A civilization is remembered through what it chose to preserve.',
+    description: 'A civilization chooses what to remember. These walls hold what matters.',
   },
   {
     id: 'card_29', name: 'Consciousness Hub',
@@ -183,10 +183,10 @@ export const PROJECT_CARDS = [
     description: 'Connection is not a product. It is the civilization.',
   },
   {
-    id: 'card_30', name: 'Seed Library',
+    id: 'card_30', name: 'Naacal Seed Library',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: -1, r: 1, type: 'biofarming' }, { q: 1, r: 0, type: 'community' }],
     points: 3, illustration: 'library', district: 5,
-    description: 'A seed is a whole universe compressed. We keep universes here.',
+    description: 'A seed is a compressed universe. We keep universes here, organized by memory.',
   },
 
   // 4-ELEMENT CARDS (18 cards, 4pts)
@@ -203,10 +203,10 @@ export const PROJECT_CARDS = [
     description: 'A civilization ready for contact with the unknown is a civilization ready for itself.',
   },
   {
-    id: 'card_33', name: 'Quantum Research Center',
+    id: 'card_33', name: 'Holographic Research Center',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: -1, type: 'energy' }],
     points: 4, illustration: 'campus', district: 7,
-    description: 'The first AI that helps instead of traps. Built with love.',
+    description: "Bohm's implicate order made visible: the universe unfolds from this room.",
   },
   {
     id: 'card_34', name: 'Regeneration Field',
@@ -227,10 +227,10 @@ export const PROJECT_CARDS = [
     description: 'Buildings grown from the earth must return to it. Architecture as regeneration.',
   },
   {
-    id: 'card_37', name: 'Signal Broadcast Tower',
+    id: 'card_37', name: 'Consciousness Broadcast Tower',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'technology' }, { q: 2, r: 0, type: 'community' }, { q: 1, r: 1, type: 'community' }],
     points: 4, illustration: 'studio', district: 8,
-    description: 'Clothing as prayer. What you wear is who you are becoming.',
+    description: 'What you transmit becomes the frequency of the district. Choose carefully.',
   },
   {
     id: 'card_38', name: 'Pyramid Research Center',
@@ -239,10 +239,10 @@ export const PROJECT_CARDS = [
     description: 'Ancient structure. Modern understanding. My grandfather stood here first.',
   },
   {
-    id: 'card_39', name: 'Council Chamber',
+    id: 'card_39', name: 'Ennead Council Chamber',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'community' }, { q: 0, r: 1, type: 'technology' }, { q: -1, r: 1, type: 'community' }],
     points: 4, illustration: 'chamber', district: 1,
-    description: 'Nine seats. Nine fields of life. One civilization in balance.',
+    description: 'Nine seats. Nine principles. The Egyptian Ennead remembered in modern form.',
   },
   {
     id: 'card_40', name: 'Bio-Energy Nexus',
@@ -263,10 +263,10 @@ export const PROJECT_CARDS = [
     description: 'Education that awakens instead of programs. The rarest school.',
   },
   {
-    id: 'card_43', name: 'Harmonic Grid',
+    id: 'card_43', name: 'Fohat Harmonic Grid',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: -1, type: 'energy' }, { q: 0, r: 1, type: 'community' }, { q: -1, r: 1, type: 'community' }],
     points: 4, illustration: 'grid', district: 4,
-    description: 'Power distributed equally is power that cannot be corrupted.',
+    description: 'Power distributed with love cannot be corrupted. The grid is the covenant.',
   },
   {
     id: 'card_44', name: 'Healing Arts Center',
@@ -275,16 +275,16 @@ export const PROJECT_CARDS = [
     description: 'The body knows how to heal. We build the conditions and step aside.',
   },
   {
-    id: 'card_45', name: 'Memory Garden',
+    id: 'card_45', name: 'Ancestral Memory Garden',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: 0, type: 'biofarming' }, { q: -1, r: 1, type: 'community' }],
     points: 4, illustration: 'garden', district: 8,
     description: 'We plant what our grandparents dreamed. We harvest what our children will know.',
   },
   {
-    id: 'card_46', name: 'Frequency Research Hub',
+    id: 'card_46', name: 'Biofield Frequency Laboratory',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'energy' }, { q: 1, r: 1, type: 'technology' }, { q: 0, r: 1, type: 'energy' }],
     points: 4, illustration: 'hub', district: 2,
-    description: 'Everything vibrates. The only question is: what frequency are you building?',
+    description: 'Everything vibrates. The question is always: at what frequency are we building?',
   },
   {
     id: 'card_47', name: 'Earth Embassy',
