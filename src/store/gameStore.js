@@ -7,7 +7,7 @@ import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
 import { findBuildableCards, findLargestCluster, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
-import { TURN_TIME_LIMIT } from './gameConfig'
+import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig } from './gameConfig'
 
 // Immer does not draft Map/Set unless this is enabled. pendingMoves is a Set that
 // the optimistic-update flow mutates, so without this the first mutation throws.
@@ -131,7 +131,20 @@ export const useGameStore = create(immer((set, get) => ({
   lastError: null,
 
   // Actions
-  initGame: (playerConfigs, shuffledDeck, shuffledTiles) => set(state => {
+  // mode (T2 S16): 'classic' (default · 12 tiles · 90s) or 'flow' (9 tiles · 15s). Reads getModeConfig — the
+  // engine never hardcodes the numbers. mode is set on the state ONLY for a non-default mode (a LAZY field, like
+  // sacredMilestone): a Classic game's serialized shape is byte-identical to before, so the E2E seededState
+  // guard stays green WITHOUT a fixture edit, while a Flow game carries mode='flow' that syncs to both clients
+  // (syncFromServer Object.assign). T3's createRoom passes the 4th arg + writes game_sessions.mode; a hydrating
+  // client gets mode from the synced state. Reducers read getModeConfig(state.mode) (undefined → classic).
+  initGame: (playerConfigs, shuffledDeck, shuffledTiles, mode = DEFAULT_GAME_MODE) => set(state => {
+    const modeCfg = getModeConfig(mode)
+    // Lazy + RESET: persist mode only for a non-default mode · and CLEAR any leftover mode on a default game
+    // (initGame is a full reset · re-initializing Classic after a Flow game must not inherit mode='flow').
+    // The default game therefore has no `mode` key at all → shape unchanged → seededState guard stays green.
+    // undefined (not delete) for the default: JSON.stringify DROPS an undefined-valued key, so the serialized
+    // shape the seededState guard pins has no `mode` key · and getModeConfig(undefined) falls back to Classic.
+    state.mode = (mode && mode !== DEFAULT_GAME_MODE) ? mode : undefined
     state.phase = 'playing'
     state.players = playerConfigs.map((p, i) => ({
       seat: i,
@@ -146,17 +159,20 @@ export const useGameStore = create(immer((set, get) => ({
     state.deck = shuffledDeck
     // Pin the end-flag tile to the bottom regardless of how the caller shuffled, so
     // end-game triggers only when the stack is nearly exhausted (spec: the flag is last).
+    // Then size the stack to the mode's END_GAME_TILE: Classic keeps all 12 (slice is a no-op on a 12-tile
+    // deck), Flow keeps 9 → the game's clock (the existing remaining===0 trigger in refillFactoryDraft) ends
+    // the game proportionally sooner. The end-game LOGIC is unchanged · only the stack length (the clock) is.
     const orderedTiles = [
       ...shuffledTiles.filter(t => !t.isEndFlag),
       ...shuffledTiles.filter(t => t.isEndFlag),
-    ]
+    ].slice(0, modeCfg.END_GAME_TILE)
     state.productionTiles = orderedTiles
     state.productionTilesRemaining = orderedTiles.length
     state.currentSeat = 0
     state.actionsRemaining = 3
     state.bonusUsedThisTurn = false
     state.turnNumber = 1
-    state.turnTimeRemaining = TURN_TIME_LIMIT
+    state.turnTimeRemaining = modeCfg.TURN_TIME_LIMIT // mode-derived (Classic 90s · Flow 15s) · not hardcoded
     state.regions = createInitialRegions()
     state.factories = createInitialFactories()
     state.theOffer = []
@@ -351,7 +367,10 @@ export const useGameStore = create(immer((set, get) => ({
     state.currentSeat = nextSeat
     state.actionsRemaining = 3
     state.bonusUsedThisTurn = false // fresh turn · the next player may use a bonus
-    state.turnTimeRemaining = TURN_TIME_LIMIT // fresh turn budget · synced to every client via pushState
+    // Fresh turn budget · mode-derived (Flow resets to 15s, Classic to 90s) · synced to every client via
+    // pushState. state.mode is the lazy field (undefined → classic). Still a CONSTANT from config, never a
+    // clock read — rule 32 holds (no Date/random in the replayable reducer).
+    state.turnTimeRemaining = getModeConfig(state.mode).TURN_TIME_LIMIT
     state.turnNumber++
   }),
 
