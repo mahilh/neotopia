@@ -9,7 +9,7 @@
 // The DB is the source of truth (CLAUDE.md rule 16). Optimistic moves apply locally first, then
 // persist · a failed persist rolls back to the pre-move snapshot.
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useGameStore } from '../store/gameStore'
 
@@ -72,6 +72,13 @@ export function useGameSync(roomId, currentUserId) {
   const channelRef = useRef(null)
   const sessionIdRef = useRef(null)   // game_sessions.id · required for game_events FK (NOT room_id)
   const connectRef = useRef(null)     // latest connect fn · lets the reconnect handler avoid a stale closure
+  // sessionId is ALSO held as reactive state so it can be RETURNED to consumers (T1's FinalScore wires the
+  // Global Index off it · T3 S16). The ref alone is not enough: a ref read in the return value is frozen at
+  // render time and a ref mutation does not re-render, so `sessionId: sessionIdRef.current` could stay null
+  // until some unrelated re-render (Rule 61 · expose the live value, not a stale snapshot). The ref stays for
+  // the synchronous read inside pushState's async callback; setSession() keeps both in lockstep.
+  const [sessionId, setSessionId] = useState(null)
+  const setSession = useCallback((id) => { sessionIdRef.current = id; setSessionId(id) }, [])
   const syncFromServer = useGameStore(s => s.syncFromServer)
 
   // Pull the current authoritative row: caches the session id AND seeds local state. Run on first
@@ -84,10 +91,10 @@ export function useGameSync(roomId, currentUserId) {
       .eq('room_id', targetRoomId)
       .maybeSingle()
     if (error || !data) return false
-    sessionIdRef.current = data.id
+    setSession(data.id)
     if (data.state) syncFromServer(data.state)
     return true
-  }, [syncFromServer])
+  }, [syncFromServer, setSession])
 
   const connect = useCallback((targetRoomId) => {
     if (channelRef.current) {
@@ -102,7 +109,7 @@ export function useGameSync(roomId, currentUserId) {
         { event: '*', schema: 'public', table: 'game_sessions', filter: `room_id=eq.${targetRoomId}` },
         (payload) => {
           const next = payload.new
-          if (next?.id) sessionIdRef.current = next.id
+          if (next?.id) setSession(next.id)
           if (next?.state) syncFromServer(next.state)
         }
       )
@@ -121,7 +128,7 @@ export function useGameSync(roomId, currentUserId) {
       })
 
     channelRef.current = channel
-  }, [syncFromServer, fetchAndSeed])
+  }, [syncFromServer, fetchAndSeed, setSession])
 
   connectRef.current = connect
 
@@ -147,9 +154,9 @@ export function useGameSync(roomId, currentUserId) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
-      sessionIdRef.current = null
+      setSession(null) // clear ref + reactive state on room change/unmount
     }
-  }, [roomId, connect, fetchAndSeed])
+  }, [roomId, connect, fetchAndSeed, setSession])
 
   // Low-level persist: write current store state to game_sessions (→ every client syncs) plus a
   // best-effort append to the game_events audit log. Returns { error } from the state write only ·
@@ -223,5 +230,8 @@ export function useGameSync(roomId, currentUserId) {
     await channelRef.current.send({ type: 'broadcast', event, payload: body })
   }, [currentUserId])
 
-  return { sendMove, pushState, broadcast }
+  // sessionId (game_sessions.id · string UUID) is exposed reactively for consumers that persist against the
+  // session — T1's FinalScore passes it to recordCivilizationDetail for the Global Index (T3 S16 · unblocks the
+  // wire T1 S15 refused to ship as a silent no-op · Rule 61). null until the first fetchAndSeed resolves.
+  return { sendMove, pushState, broadcast, sessionId }
 }
