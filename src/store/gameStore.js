@@ -56,6 +56,20 @@ const NEIGHBOR_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
 // Score-track positions that award a bonus token when the marker crosses them (CLAUDE.md).
 const SCORE_THRESHOLDS = [7, 13, 18]
 
+// Numerological milestones (T2 S15): when a player's TOTAL score (sum of all regions) crosses one of these
+// sacred numbers, the store surfaces a one-shot `sacredMilestone` signal that T1 celebrates with a brief
+// overlay. The game teaches numerology through play · never by announcing it. The symbol for 9 deliberately
+// avoids the hexagram/Star-of-David (CLAUDE.md banned · Flower-of-Life lineage) · T1 may restyle the glyphs.
+const SACRED_MILESTONE_NUMBERS = [7, 9, 13, 18, 27, 36]
+const SACRED_MILESTONES = {
+  7:  { message: 'Sacred Seven · Spiritual Perfection Awakens',      symbol: '✴' },
+  9:  { message: 'Nine · Completion · The Ennead Speaks',            symbol: '✷' },
+  13: { message: 'Thirteen · Sacred Feminine · Transformation',      symbol: '☽' },
+  18: { message: 'Eighteen · Life Doubled · The District Breathes',  symbol: '⬡' },
+  27: { message: 'Twenty-Seven · Three Nines · Mastery',             symbol: '△' },
+  36: { message: 'Thirty-Six · The Four Elements Complete',          symbol: '◆' },
+}
+
 const createInitialFactories = () => [
   { id: 0, betweenRegions: [0, 1], q: 4, r: -2, elements: [] },
   { id: 1, betweenRegions: [1, 2], q: 6, r: 1, elements: [] },
@@ -290,6 +304,20 @@ export const useGameStore = create(immer((set, get) => ({
           p.bonusTokens.push(r.bonusPile.shift())
         }
       }
+
+      // Numerological milestone (T2 S15): fire when the player's TOTAL crosses a sacred number. Checked on the
+      // TOTAL (sum of all regions · not per-region, which would fire too often) · the highest threshold crossed
+      // by this score wins. Deterministic · rule-32 safe (no clock / random). Set LAZILY (never in initGame) so
+      // the synced-state SHAPE the seededState guard pins stays unchanged · T1 reads s.sacredMilestone + clears it.
+      const newTotal = Object.values(p.scores).reduce((sum, v) => sum + (v || 0), 0)
+      const prevTotal = newTotal - card.points
+      let crossed = null
+      for (const t of SACRED_MILESTONE_NUMBERS) {
+        if (prevTotal < t && newTotal >= t) crossed = t
+      }
+      if (crossed != null) {
+        s.sacredMilestone = { player: seat, milestone: crossed, ...SACRED_MILESTONES[crossed] }
+      }
     })
     return true
   },
@@ -402,6 +430,10 @@ export const useGameStore = create(immer((set, get) => ({
   }),
 
   setPhase: (phase) => set(state => { state.phase = phase }),
+
+  // Dismiss the active numerological milestone (T2 S15). T1's GameRoom overlay calls this on auto-dismiss
+  // (~2.5s) so the one-shot signal does not re-trigger. Lazy field · null when none is showing.
+  clearMilestone: () => set(state => { state.sacredMilestone = null }),
 
   // Computed: buildable cards for the current player in a region.
   // Pass lastPlacedKey ('q,r') after a placement to honor the completing-element rule.
