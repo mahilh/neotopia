@@ -16,9 +16,25 @@
 //   then waited for a valid hex that never appears — a hex only lights up AFTER an element AND a region are
 //   chosen (drew 53 · placed 0 was the tell: drawing worked, so turn-detect + convergence already worked).
 //   FIX: doRandomAction drives factory → element <button> → region <button> → valid hex (keeps v4.2 infra).
+// v4.4 — June 27 2026 (T2 S13):
+//   FIX ready-failed: Ready is joiner-only (host sees Start, not Ready) · the lone per-game error, gone.
+//   FIX rate limit: enterLobbyWithRetry · the ~30/hr anon-signin ceiling fataled 5/5 S12 re-runs · retry+backoff.
+//   ADD Rule 53: dbPlacedCount reads the REAL placed count from game_sessions.state · proxy ≠ DB truth.
 
 import { chromium } from '@playwright/test'
-import { writeFileSync, mkdirSync } from 'fs'
+import { writeFileSync, mkdirSync, readFileSync } from 'fs'
+
+// Load VITE_SUPABASE_* from .env.local if not already set, so dbPlacedCount (Rule 53) works when the bot is
+// run plainly as `node scripts/bot-simulate.js`. Same vars the app uses · NO secrets hardcoded. CI can pass
+// them as real env vars instead (the loader only fills what is missing · a missing file is non-fatal).
+try {
+  if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
+    for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
+      const m = line.match(/^\s*(VITE_SUPABASE_[A-Z_]+)\s*=\s*(.+?)\s*$/)
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
+    }
+  }
+} catch { /* .env.local absent · dbPlacedCount returns null gracefully */ }
 
 const BASE = process.env.BOT_URL || 'http://localhost:5173'
 const NUM_GAMES = parseInt(process.env.BOT_GAMES || '3')
@@ -27,6 +43,38 @@ const HEADED = process.env.BOT_HEADED === '1'
 
 const log = (...args) => console.log(new Date().toISOString().slice(11,19), ...args)
 const delay = ms => new Promise(r => setTimeout(r, ms))
+
+// v4.4 · DB-VERIFIED PLACED COUNT (Rule 53 · the proxy is not the outcome · the server is).
+// The in-game `placed` counter increments on the .catch()-swallowed click, NOT on a DB commit — T3 S12
+// caught it lying (proxy said 8/11, the DB said 0/11). This reads the TRUTH from the persisted board.
+// Schema verified LIVE (do not trust the forge's guess of board_state/room_code · both are wrong):
+//   game_sessions.state (jsonb) · filtered by room_id (uuid) · board at state.regions[].hexes["q,r"].element
+//   game_rooms maps room_code (the 6-char the bot holds) → id (room_id).
+// RLS: game_rooms.rooms_read_all + game_sessions.sessions_read are both {public}/qual=true → a PURE anon-key
+// read works with NO signInAnonymously (so this never adds to the ~30/hr signin budget Fix 2 guards).
+let _sbClient = null
+async function dbPlacedCount(roomCode) {
+  try {
+    const url = process.env.VITE_SUPABASE_URL, key = process.env.VITE_SUPABASE_ANON_KEY
+    if (!url || !key || !roomCode) return null
+    if (!_sbClient) {
+      const { createClient } = await import('@supabase/supabase-js')
+      _sbClient = createClient(url, key)
+    }
+    const { data: room } = await _sbClient.from('game_rooms').select('id').eq('room_code', roomCode).maybeSingle()
+    if (!room) return null
+    const { data: sess } = await _sbClient.from('game_sessions').select('state').eq('room_id', room.id).maybeSingle()
+    const state = typeof sess?.state === 'string' ? JSON.parse(sess.state) : sess?.state
+    if (!state?.regions) return null
+    let count = 0
+    for (const region of state.regions) {
+      for (const hex of Object.values(region?.hexes ?? {})) {
+        if (hex && hex.element) count++
+      }
+    }
+    return count
+  } catch { return null }
+}
 
 // ============================================================
 // DOM DIAGNOSTIC (run once after board loads)
@@ -116,6 +164,28 @@ async function enterLobby(ctx, username) {
     }
   }
   return page
+}
+
+// v4.4 · RATE-LIMIT RESILIENCE (Rule 51/52 · S12 root cause): the app signs in anonymously on load, and
+// Supabase caps anon sign-ins at ~30/hr. Multi-game runs blow past it → the signin fails → the page never
+// reaches the lobby (no Create/Join button), which fataled 5/5 of S12's re-runs. We detect that symptom (or
+// an explicit rate-limit message) and retry with backoff on a fresh page. On a healthy run the first attempt
+// succeeds instantly (no behavior change); only a throttled run pays the wait.
+async function enterLobbyWithRetry(ctx, username, maxRetries = 3) {
+  const lobbyReadySel =
+    'button:has-text("Create Room"), button:has-text("Join Room"), button:has-text("Create"), button:has-text("Join"), [data-testid="ready-btn"]'
+  for (let i = 0; i < maxRetries; i++) {
+    const page = await enterLobby(ctx, username)
+    const ready = await page.locator(lobbyReadySel).first().isVisible({ timeout: 5000 }).catch(() => false)
+    if (ready) return page
+    const rateLimited = await page.locator('text=/rate limit|too many|try again/i').first()
+      .isVisible({ timeout: 500 }).catch(() => false)
+    if (i === maxRetries - 1) return page // last try · hand back so existing error handling reports it
+    const waitMs = (i + 1) * 70000 // 70s · 140s — clears the rolling anon-signin window
+    log(`[AUTH] ${username} · lobby unreachable${rateLimited ? ' · RATE LIMITED' : ''} · retry ${i + 1}/${maxRetries - 1} in ${Math.round(waitMs / 1000)}s`)
+    await page.close().catch(() => {})
+    await delay(waitMs)
+  }
 }
 
 // ============================================================
@@ -326,8 +396,8 @@ async function playGame(gameNum, browser) {
   const tag = Date.now().toString(36).slice(-5)
 
   try {
-    const p1 = await enterLobby(ctx1, `BotAlpha${gameNum}_${tag}`)
-    const p2 = await enterLobby(ctx2, `BotBeta${gameNum}_${tag}`)
+    const p1 = await enterLobbyWithRetry(ctx1, `BotAlpha${gameNum}_${tag}`)
+    const p2 = await enterLobbyWithRetry(ctx2, `BotBeta${gameNum}_${tag}`)
 
     const createBtn = await p1.waitForSelector('button:has-text("Create Room"), button:has-text("Create")', { timeout: 10000 })
     await createBtn.click()
@@ -352,15 +422,16 @@ async function playGame(gameNum, browser) {
     await delay(1000)
     log(`[BotBeta${gameNum}] Joined ${roomCode}`)
 
+    // v4.4: Ready is JOINER-ONLY. The host (p1) sees a Start button (Lobby.jsx:140 · isHost), NOT a Ready
+    // button (Lobby.jsx:148 · ready-btn renders only for the joiner) — clicking Ready on the host was the
+    // lone 'ready-failed' error every game. The host waits for Start (handled just below).
     const readySelectors = ['[data-testid="ready-btn"]', 'button:has-text("Ready")', 'button:has-text("I\'m Ready")']
-    for (const page of [p1, p2]) {
-      for (const sel of readySelectors) {
-        const btn = page.locator(sel).first()
-        if (await btn.isVisible({ timeout: 2500 }).catch(() => false)) {
-          await btn.click().catch(e => errors.push({ turn: 0, type: 'ready-failed', message: e.message.slice(0, 80) }))
-          await delay(300)
-          break
-        }
+    for (const sel of readySelectors) {
+      const btn = p2.locator(sel).first()
+      if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await btn.click().catch(e => errors.push({ turn: 0, type: 'ready-failed', message: e.message.slice(0, 80) }))
+        await delay(500)
+        break
       }
     }
     await delay(1000)
@@ -421,11 +492,15 @@ async function playGame(gameNum, browser) {
 
     const placed = moves.filter(m => m.action === 'placed-element').length
     const drew = moves.filter(m => m.action === 'drew-card').length
-    log(`Game ${gameNum}: ${turn} turns · placed ${placed} · drew ${drew} · ${errors.length} errors`)
+    // Rule 53: verify the persisted artifact, not the proxy. Read the real placed count from game_sessions.
+    const dbPlaced = await dbPlacedCount(roomCode)
+    if (dbPlaced === null) log(`DB-verified placed: unavailable · proxy: ${placed}`)
+    else log(`DB-verified placed: ${dbPlaced} · proxy: ${placed}${dbPlaced === placed ? ' ✓ match' : ' ⚠ MISMATCH (DB wins)'}`)
+    log(`Game ${gameNum}: ${turn} turns · placed ${placed} (proxy) · drew ${drew} · ${errors.length} errors`)
 
     return { game: gameNum, completed: gameEnded, turns: turn,
       duration: Math.round((Date.now() - start) / 1000),
-      errors: errors.length, placedElements: placed, drewCards: drew, errorList: errors }
+      errors: errors.length, placedElements: placed, dbPlacedCount: dbPlaced, drewCards: drew, errorList: errors }
 
   } catch (err) {
     errors.push({ turn: -1, type: 'fatal', message: err.message.slice(0, 200) })
@@ -437,8 +512,8 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation v4.3 · ${NUM_GAMES} games · ${BASE}`)
-  log('v4.3: 4-step placement (factory→element→region→hex) · keeps v4.2 diagnostics + broader selectors + delays')
+  log(`NeoTopia Bot Simulation v4.4 · ${NUM_GAMES} games · ${BASE}`)
+  log('v4.4: ready-failed fixed (joiner-only) · rate-limit retry · DB-verified placed count (Rule 53) · 4-step placement')
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 400 : 0 })
@@ -450,13 +525,20 @@ async function main() {
   await browser.close()
 
   const report = {
-    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.3',
+    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.4',
     results: allResults,
     summary: {
       completed: allResults.filter(r => r.completed).length,
       totalErrors: allResults.reduce((s, r) => s + r.errors, 0),
       gamesWithPlacement: allResults.filter(r => r.placedElements > 0).length,
       totalPlaced: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
+      // Rule 53: the proxy (totalPlaced) vs the DB truth. dbVerified=true means they agree.
+      totalPlacedProxy: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
+      totalPlacedDB: allResults.some(r => r.dbPlacedCount != null)
+        ? allResults.reduce((s, r) => s + (r.dbPlacedCount || 0), 0) : null,
+      dbVerified: allResults.some(r => r.dbPlacedCount != null)
+        ? allResults.reduce((s, r) => s + (r.placedElements || 0), 0) === allResults.reduce((s, r) => s + (r.dbPlacedCount || 0), 0)
+        : null,
       totalDrew: allResults.reduce((s, r) => s + (r.drewCards || 0), 0),
       errorTypes: allResults.flatMap(r => r.errorList || [])
         .reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {}),
@@ -466,9 +548,12 @@ async function main() {
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT (v4.3) ===')
+  console.log('\n=== BOT SIMULATION REPORT (v4.4) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
-  console.log(`Elements placed: ${report.summary.totalPlaced} · Cards drawn: ${report.summary.totalDrew}`)
+  console.log(`Elements placed: ${report.summary.totalPlaced} (proxy) · ${report.summary.totalPlacedDB ?? 'N/A'} (DB-verified) · Cards drawn: ${report.summary.totalDrew}`)
+  if (report.summary.dbVerified === false) {
+    console.warn('WARNING: proxy and DB placed counts DISAGREE · the proxy over-counts swallowed clicks · the DB wins (Rule 53)')
+  }
   console.log('Error types:', report.summary.errorTypes)
   console.log(`Report: ${reportPath}`)
   console.log('\nKEY: look for [DOM-DIAG] and [ACTION DIAG] lines above — they show why placed:0')
