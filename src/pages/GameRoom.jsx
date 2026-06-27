@@ -344,7 +344,7 @@ export default function GameRoom() {
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-offer"
                     card={{ ...card, element: cardPrimaryElement(card) }}
-                    onClick={disabled ? undefined : () => { const c = theOffer[i]; handleDrawCard('offer', i); addLogEntry(`drew ${c.name}`) }}
+                    onClick={disabled ? undefined : () => { const c = theOffer[i]; if (handleDrawCard('offer', i)) addLogEntry(`drew ${c.name}`) }}
                   />
                 )
               })}

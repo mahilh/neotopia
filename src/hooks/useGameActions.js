@@ -160,7 +160,9 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
     if (store.actionsRemaining <= 0) return
     const beforeActions = store.actionsRemaining
     store.drawCard(currentSeat, source, cardIndex)
-    if (useGameStore.getState().actionsRemaining !== beforeActions) persist('draw') // committed · sync (→ draw_card)
+    const committed = useGameStore.getState().actionsRemaining !== beforeActions
+    if (committed) persist('draw') // committed · sync (→ draw_card)
+    return committed // gate the action log on a real commit, not the disabled-prop (T1 S15 review)
   }, [isMyTurn, currentSeat, persist])
 
   // Scoring: player clicks a glowing card in their hand.
