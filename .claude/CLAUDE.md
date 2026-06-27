@@ -8,114 +8,92 @@ Stack: React 19 + Vite 8 + Tailwind v4 + SVG hex board + Zustand + Immer + Supab
 Supabase ID: wynccumuisjxbptjlfwq · URL: https://wynccumuisjxbptjlfwq.supabase.co
 GitHub: mahilh/neotopia (public) · Domain: neotopia.io · Vercel: auto-deploy from main
 
-STATUS (post S12 · June 27 2026 · MORNING):
-  ✅ 11 ELEMENTS PLACED IN PRODUCTION (DB-PROVEN · T3 S12 · room YQZHRB)
-  ✅ BOT v4.3 (T2 S12) · 4-step placement: factory→element→region→hex · force:true LOAD-BEARING
-  ✅ force:true ROOT CAUSE (T3 S12): hexPulse animation keeps bbox moving → Playwright times out
-  ✅ MIGRATION 008 (T2 S12) · purge any-status rooms for bot profiles · FK CASCADE verified
-  ✅ PLACEMENT-COMMIT GUARD (T3 S12 · 193fa08) · permanent CI test · hex-element token 0→1
-  ✅ data-testid="room-code" (T1 S12) · bot strategy 2 now primary
-  ✅ 12px FONT FLOOR (T1 S12) · The Offer/Hand/Score/Actions labels + region names
-  ✅ LIVE TURN TIMER (T1 S12 · 77bbd60) · local tick countdown · never writes store (Rule 32)
-  ✅ 4-AGENT ADVERSARIAL REVIEW (T1 S12) · A/B/C/cross-cutting clean
-  ✅ ESOTERIC KNOWLEDGE SKILL (.claude/skills/esoteric-knowledge/SKILL.md) · Council of 9 · Atlantis · Ra Material
-  ✅ 3 SKILLS UPGRADED · neotopia-forge-patterns v3 · supabase-patterns v3 · reforge v3
-  ✅ relay.sh v2.0 · comms never committed · bot health in relay · Rule 53 reminder
-  🔴 COMMS ARE FILESYSTEM-LOCAL · .claude/comms is gitignored · NEVER git add/commit comms
-  🟡 CARD ART: master template established (image 6 · 200/200) · need energy/biofarming/tech cards
-  🟡 BONUS EARN DATA: still pending from Mahil (6th request incoming)
-  🟡 Bot v4.4 needed: proxy count → DB-read for true placed count + rate-limit retry
+STATUS (post S13 · June 27 2026):
+  ✅ 36 ELEMENTS PLACED IN PRODUCTION (bot v4.3 · room HF9QYE · June 27 2026)
+  ✅ BOT v4.4 (T2 S13) · zero ready-failed errors · rate-limit retry · DB-verified count
+  ✅ DB MISMATCH CAUGHT (T2 S13) · proxy 21 vs DB 19 · Rule 53 now self-enforcing
+  ✅ 28 ESOTERIC CARD NAMES (T2 S13 · c09f81d) · Fibonacci Solar Terrace · Fohat Activation Node · etc.
+  ✅ SACRED GEOMETRY PLACEHOLDERS (T1 S13 · 06ac10e) · 4 element-specific SVG patterns · zIndex fixed
+  ✅ DUAL-PLAYER SCORE (T1 S13 · c8c0395) · side-by-side · solo fallback works
+  ✅ ELEMENT-COLOR INSTRUCTION BAR (T1 S13 · c8c0395) · energy=red · biofarming=green etc.
+  ✅ CI PLACEMENT GUARD LIVE (T3 S13 · 6df6e32) · e2e-placement-guard.yml · green 49s
+  ✅ REJOIN PROVEN (T3 S13 · df6df83) · persistence witness test · board re-hydrates on refresh
+  ✅ 7/7 E2E TESTS GREEN (T3 S13) · game-ux+two-human+reconnect+phase-over-wire all pass
+  ✅ FORCE:TRUE LOAD-BEARING (T3 S12) · hexPulse animation · never remove
+  ✅ ESOTERIC KNOWLEDGE SKILL · .claude/skills/esoteric-knowledge/SKILL.md
+  🔴 COMMS TRACKED-BUT-GITIGNORED · M state is expected · T3 S14 fixes it (git rm --cached)
+  🟡 FINAL SCORE SCREEN · not upgraded yet · T1 S14 Task A
+  🟡 BONUS EARN DATA · 7th request · still pending from Mahil · T2 S14 Task A
+  🟡 GLOBAL NEOTOPIA INDEX · T2 S14 Task B · migration 009 pending
+  🟡 CARD ART · 9 prompts defined · art must be saved as card_NN.png NOT esoteric name
 
-  ⏳ T1 S13: terrain biome integration with CardFrame · pixel art card loading · UX from game-ux gates
-  ⏳ T2 S13: v4.4 (DB-read placed count + rate-limit retry) · bonus data integration
-  ⏳ T3 S13: CI workflow for placement-commit guard · re-run bot with DB verification
-  ⏳ MAHIL: git pull + run bot v4.3 · generate pixel art cards (prompts in docs/ART_DIRECTION_PIXEL.md)
+  ART FILENAME MAPPING (card.id → file):
+    ennead-source-temple → card_50.png (Source Temple · 5pt Community)
+    orichalcum-arc-station prompt → card_05.png (Orichalcum Arc Node · 2pt)
+    fohat-resonance-spire prompt → card_17.png (Orichalcum Energy Spire · 3pt)
+    solar-fibonacci-array prompt → card_01.png (Fibonacci Solar Terrace · 2pt)
+    naacal-seed-vault prompt → card_06.png (Naacal Seed Archive · 2pt)
+    lemurian-resonance-garden → card_20.png (Food Forest · 3pt)
+    metatrons-cube-processor → card_33.png (Holographic Research Center · 4pt)
+    akashic-information-matrix → card_28.png (Akashic Living Archive · 3pt)
+    ennead-council-chamber → card_39.png (Ennead Council Chamber · 4pt)
+    Drop all in: ~/NeoTopia/public/art/cards/ · CardFrame auto-loads by card.id
 
-COMMS SYSTEM (PERMANENT FIX · T1 S12):
-  .claude/comms/tomorrow.md is FILESYSTEM-SHARED between terminals
-  It is GITIGNORED (intentional "Session comms · local only" configuration)
-  Terminals: write to tomorrow.md on disk ONLY
-  NEVER: git add .claude/comms/ (this produces the "Error: Exit code 1" that T1 S12 saw)
-  relay.sh v2.0: explicitly handles this · cat comms in relay output without committing
-  The error from T1 S12 will never appear again
+COMMS SYSTEM (permanent):
+  .claude/comms/tomorrow.md · filesystem-shared between terminals · GITIGNORED (policy)
+  T3 S14 fixes the tracked-but-gitignored M state: git rm --cached .claude/comms/tomorrow.md
+  NEVER: git add .claude/comms/ · NEVER: git commit comms
+  relay.sh v2.0: cats comms to relay output without committing
 
 FORCE:TRUE IS LOAD-BEARING (T3 S12 · permanent):
-  The valid-hex ring runs infinite hexPulse scale animation (scale 1↔1.08 in src/index.css)
-  The <g data-valid> bbox never settles → Playwright click-stability check times out
-  Without force:true: click swallowed · nothing commits · placed counter shows 8 · DB shows 0
-  With force:true: 4-step chain commits real elements · T3 verified 11 in game_sessions
-  NEVER remove force:true from valid-hex clicks in bot-simulate.js
+  hexPulse animation (scale 1↔1.08) keeps <g data-valid> bbox moving
+  Playwright click-stability times out without force:true · NEVER remove
 
-CIVILIZATION MILESTONE (June 27 2026 · room YQZHRB):
-  11 elements placed in production: 8 Sacred City + 3 Living Earth
-  First machine-played game session verified against Supabase DB
-  Milestone proved: NeoTopia is mechanically playable by autonomous agents
+CIVILIZATION MILESTONES:
+  June 27 2026: 11 elements placed (DB-proven · room YQZHRB · T3 S12)
+  June 27 2026: 36 elements in 20 turns (bot v4.3 · room HF9QYE)
+  June 27 2026: CI placement guard live · 7/7 E2E green · rejoin proven
+  June 27 2026: 28 card names upgraded to esoteric vocabulary
 
-BOT SIMULATION TRUTH:
-  Proxy counter (placedElements in report) ≠ DB truth
-  T3 S12: proxy said 8 · DB said 0 (before force:true) · proxy said 11 · DB said 11 (after force:true)
-  Success metric = SELECT COUNT FROM game_sessions WHERE room_id=X AND board_state IS NOT NULL
-  Bot v4.4 (T2 S13): implement DB-read placed count instead of proxy
+BOT TRUTH:
+  Proxy counter ≠ DB truth (T3 S12 taught this · T2 S13 self-enforced via dbVerified)
+  DB mismatch caught: proxy 21 vs DB 19 (T2 S13 run)
+  Bot v4.4 emits: summary.totalPlacedProxy + summary.totalPlacedDB + summary.dbVerified
+  Success metric: dbVerified === true over N runs
 
-CARD ART DIRECTION (FINAL MASTER TEMPLATE):
-  Image 6 (latest · June 27 2026 · 200/200): ONE octagonal temple · dark navy background
-  Amber-gold brick + teal crystal dome + Flower of Life on facade + teal crystal door
-  This is the master template — ALL 56 cards match this style
-  Element-specific variations: only the building function and sacred symbol changes
-  Prompts: docs/ART_DIRECTION_PIXEL.md (updated with exact per-card names + element symbols)
-  Card art skill: .claude/skills/esoteric-knowledge/SKILL.md has vocabulary for all card names
+CARD ART DIRECTION:
+  Master template: ONE octagonal amber-gold tower · dark navy background · teal dome · sacred symbol
+  Image 6 confirmed 200/200 (June 27 2026) · Flower of Life · Community element
+  Prompts in: docs/ART_DIRECTION_PIXEL.md
+  Vocabulary in: .claude/skills/esoteric-knowledge/SKILL.md
+  Files MUST be named card_NN.png (not esoteric name) · see ART FILENAME MAPPING above
 
 CRITICAL PATTERNS (never revert):
-  sessionPhaseColumn: maps store 'scoring'→'finished' at game_sessions write boundary
+  sessionPhaseColumn: maps store 'scoring'→'finished'
   Tutorial gate: {showTutorial && phase==='playing'} — NOT isMyTurn
   data-my-turn: on GameRoom root div · 'true'/'false' · flips per turn (Rule 50)
-  Bot turn detection: detectActiveTurn(p1, p2) polls BOTH pages
-  Bot placement: factory→element-btn→region-btn→valid-hex · ALL with force:true (Rule 53)
-  force:true on valid-hex clicks: LOAD-BEARING forever (hexPulse animation)
-  purge_e2e_test_data: requires signInAnonymously() · authenticated-only (mig 007+008)
-  game_sessions.phase CHECK: (playing|endgame|finished) — NEVER write 'scoring' directly
+  Bot placement: factory→element-btn→region-btn→valid-hex · ALL force:true (Rule 53)
+  purge_e2e_test_data: requires signInAnonymously() · mig 007+008
+  game_sessions.phase CHECK: (playing|endgame|finished) — NEVER write 'scoring'
   COMMS: filesystem-local · NEVER git commit · relay.sh reads from disk
 
 TERMINAL LANES:
   T1: src/components/ src/pages/ src/App.jsx src/utils/ src/hooks/useGameActions.js
   T2: src/lib/ src/store/ src/hooks/ api/ scripts/ migrations/
   T3: src/hooks/useGameRoom.js · useGameSync.js · usePresence.js · tests/e2e/
-  COLLISION: git status --short [lane] before every edit. M from other terminal = STOP.
+  COLLISION: git status --short before every edit. M from other terminal = STOP.
 
 AUTODRIVE! SYSTEM (v2.0 · self-evolving):
+  Protocol: 1.Rating table · 2.Milestone check · 3.Rule audit · 4.Skill upgrade ·
+            5.Comms error · 6.Bot health · 7.Card vocabulary · 8.FORGE · 9.Cross-terminal matrix
+  FORGES ARE MANDATORY: AUTODRIVE! always ends with all 3 session forges written.
+  Self-evolution: every session lesson → permanent rule → next forge smarter.
 
-  WHAT AUTODRIVE! IS:
-  T[N] AUTODRIVE! → Mahil pastes terminal relay output → I run the full analysis protocol below
-  Every session, AUTODRIVE! gets smarter because every evolution lesson becomes a rule/pattern
-
-  AUTODRIVE! PROTOCOL (what I do with every output):
-  1. RATING TABLE: T1/T2/T3 ratings + key wins + new rules
-  2. MILESTONE CHECK: totalPlaced from DB (not proxy) · any new civilization milestones?
-  3. RULE AUDIT: did any rule get violated? Add new rule if yes.
-  4. SKILL UPGRADE CHECK: should any skill be upgraded from this session's lessons?
-  5. COMMS ERROR CHECK: were there any "Exit code 1" from comms? (should be 0 now)
-  6. BOT HEALTH: what did the last bot report say? (now auto-included in relay v2.0)
-  7. CARD VOCABULARY CHECK: do any new elements/buildings need esoteric naming?
-  8. FORGE: write the next session's forge at max quality (/200 self-rated)
-  9. CROSS-TERMINAL MATRIX: what does each terminal need from the others?
-
-  AUTODRIVE! WHAT'S BEEN MISSING (permanently fixed in v2.0):
-  - Bot health was not in relay output → NOW: relay.sh v2.0 includes bot report summary
-  - Comms commit error appeared in T1 output → NOW: relay.sh never commits comms
-  - No civilization vocabulary check → NOW: esoteric-knowledge skill auto-referenced
-  - No milestone verification protocol → NOW: Rule 53 mandates DB verification
-  - No AUTODRIVE! self-evolution mechanism → NOW: every evolution lesson = permanent rule
-
-  AUTODRIVE! SELF-EVOLUTION:
-  After every T[N] AUTODRIVE! response, I ask: "Did this session teach something that
-  would make the next forge better if it were a rule?" If yes → new rule added to CLAUDE.md.
-  The system learns from every session. Each AUTODRIVE! is smarter than the last.
-
-SELF-RATING: Forge /200 target · <85 internal /100 = REWRITE · Task /50 · Session /300
+SELF-RATING: Forge /200 · <85 internal = REWRITE · Task /50 · Session /300
 
 BOOT SEQUENCE:
   git pull --rebase
-  cat .claude/CLAUDE.md | head -180
+  cat .claude/CLAUDE.md | head -120
   cat .claude/comms/tomorrow.md 2>/dev/null | tail -60
   git log --oneline -8 && git status --short
   npx vitest run 2>&1 | tail -6
@@ -128,31 +106,23 @@ ENGINE ARCHITECTURE:
   Scoring: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean
   Final score: calculateFinalScore(scores[], unusedCount)→number
   Phase DB mapping: sessionPhaseColumn(storePhase) · 'scoring'→'finished'
-  turnTimeRemaining: local countdown tick (display-only · NEVER decrements store · Rule 32)
-  Terrain biomes: getBiomeForRegion(regionId) → {colors:{hex}} · biome.colors.hex
+  turnTimeRemaining: local countdown tick · NEVER decrements store (Rule 32)
+  Terrain biomes: getBiomeForRegion(regionId) → {colors:{hex}}
 
 DB CONTRACT (5 tables · all RLS · migrations 001-008):
   game_sessions.phase: CHECK IN (playing|endgame|finished) — NOT 'scoring'
   game_events: CHECK IN {draw_card,place_element,build_project,use_bonus,factory_refill,turn_end,game_end}
   Migration 006: purge_e2e_test_data() · SECURITY DEFINER · authenticated-only
-  Migration 007: restrict purge to authenticated
-  Migration 008 (T2 S12): purge any-status rooms for bot profiles · FK CASCADE verified
+  Migration 008: purge any-status rooms for bot profiles · FK CASCADE verified
+  Migration 009 (T2 S14): global_neotopia_index · civilization records across all games
 
-GAME MECHANICS (4-STEP PLACEMENT · T2 S12 DISCOVERY):
-  Click factory → element-type button appears → region button appears → valid hexes appear
-  Bot must complete ALL 4 steps: factory click → element-btn click → region-btn click → hex click
-  force:true on valid-hex clicks is LOAD-BEARING (hexPulse animation, Rule 53)
+GAME MECHANICS:
+  4-STEP PLACEMENT: factory click → element-btn → region-btn → valid-hex (ALL force:true)
   FINAL SCORE: best+second+(worst×3)+(unused×3)+cluster
-
-CARD ART (for reference):
-  src/components/CardFrame.jsx: dark obsidian frame · unchanged · all 56 cards use it
-  public/art/cards/[card-id].png: pixel art images auto-load when dropped in
-  56 card IDs in src/lib/projectCards.js
-  Card naming vocabulary: .claude/skills/esoteric-knowledge/SKILL.md
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (54 · cumulative):
+PERMANENT ANTI-REGRESS RULES (57 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -211,11 +181,23 @@ PERMANENT ANTI-REGRESS RULES (54 · cumulative):
   54. A stale forge premise is not a stop — it is exactly what evidence gates exist to catch.
       Honor the evidence over the task text: change only what is genuinely yours and
       genuinely smallest, preserve another lane's documented design. (T1 S12)
+  55. The render is the witness; the node-tree is not. A DOM assertion proves presence;
+      only a screenshot proves visibility. When the goal is visual, screenshot-verify —
+      structural-only checks pass right over an invisible element.
+      (The zIndex bug: SVG counted correct in DOM, showed empty boxes in render. T1 S13)
+  56. A prescriptive forge can carry a wrong schema. Verify column names live before
+      coding any DB query. The more authoritative the forge looks, the more a 30-second
+      information_schema check earns its keep.
+      (Forge guessed board_state/room_code. Reality: state/room_id. T2 S13)
+  57. Distinguish a product bug from a harness race before patching the product.
+      A persistence witness (second client receiving via postgres_changes) converts
+      "product or test?" into a deterministic gate. Prove before patching.
+      Do not fabricate a fix for a sound design. (T3 S13)
 
 CODEWORDS:
-  T[N] AUTODRIVE! → paste output · I run the full v2.0 AUTODRIVE! protocol above
-  Forge target: 200/200 → rate /300 · <85 internal = REWRITE
+  T[N] AUTODRIVE! → paste output · full v2.0 protocol · always ends with 3 forges
   SKILLUPGRADE! · SCANSKILLS! · DEEPDIVE! · OVERDRIVE! · NIGHTSAVE!
 
 HEX MATH: redblobgames.com/grids/hexagons · flat-top · axial (q,r)
-SKILLS v3: .claude/skills/ · reforge (190/200) · supabase-patterns (192/200) · neotopia-forge-patterns (196/200) · esoteric-knowledge v1.0
+SKILLS: .claude/skills/ · reforge · supabase-patterns · neotopia-forge-patterns · esoteric-knowledge v1.0
+FORGES: .claude/skills/forges/ · T1_S14 · T2_S14 · T3_S14 (latest)
