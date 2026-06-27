@@ -128,6 +128,7 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
     // placeElement validates and rejects silently · confirm it actually committed.
     if (useGameStore.getState().actionsRemaining === beforeActions) { reset(); return }
     persist('place') // committed · sync to other clients (→ place_element via EVENT_TYPE_DB)
+    const placed = { element: selectedElement, regionId, q, r } // committed placement · returned for the action log (T1 S15)
 
     // Completing-element rule: pass the just-placed hex so only completions that include it surface.
     const placedKey = `${q},${r}`
@@ -149,6 +150,7 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
     } else {
       reset()
     }
+    return placed
   }, [isMyTurn, uiPhase, selectedFactory, selectedElement, selectedRegion, validTargets, currentSeat, reset, persist])
 
   // Draw a card (The Offer at cardIndex, or the deck top) · one action. Turn-gated + synced.

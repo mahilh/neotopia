@@ -46,3 +46,8 @@
 [data-my-turn='true'][data-ui-phase='scorePending'] [data-offer] {
   opacity: 0.3;
 }
+
+/* Action log hidden on narrow mobile · the board needs the full width there (T1 S15). */
+@media (max-width: 479px) {
+  .action-log-wrap { display: none; }
+}

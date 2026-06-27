@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
 import { ELEMENT_COLORS } from '../utils/hexUtils'
@@ -12,11 +12,13 @@ import FinalScore from '../components/FinalScore'
 import Tutorial, { tutorialSeen } from '../components/Tutorial'
 import { ScoreFlash } from '../components/ProjectCard'
 import CardFrame from '../components/CardFrame'
+import ActionLog from '../components/ActionLog'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { TURN_TIME_LIMIT } from '../store/gameConfig'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
 // A card's primary element = the most common element type across its pattern · drives the CardFrame
 // theme colour. Cards store element types per pattern cell, not a single top-level element.
@@ -45,6 +47,15 @@ export default function GameRoom() {
   // never discovered "place an element". We gate on isMyTurn + phase below, NOT on turnNumber: turns
   // may count per-player-turn, so a turnNumber<=1 gate would skip the 2nd player's first turn entirely.
   const [showTutorial, setShowTutorial] = useState(() => !tutorialSeen())
+
+  // Action log · the shared game memory rendered left of the board (T1 S15). A monotonic id keeps React
+  // keys stable as entries scroll; the turn is captured per entry so the log fades older lines by age.
+  const [actionLog, setActionLog] = useState([])
+  const logIdRef = useRef(0)
+  const addLogEntry = (text, color = 'rgba(255,255,255,0.6)') => {
+    const turn = useGameStore.getState().turnNumber
+    setActionLog(prev => [...prev, { id: logIdRef.current++, text, color, turn }].slice(-30))
+  }
 
   // Subscribe to individual slices · avoids a full re-render on every state change.
   const phase         = useGameStore(s => s.phase)
@@ -230,7 +241,7 @@ export default function GameRoom() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* BOARD */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0, position: 'relative' }}>
           <GameBoard
             regions={regions}
             factories={factories}
@@ -241,9 +252,13 @@ export default function GameRoom() {
             selectedFactory={selectedFactory}
             factoriesPulse={factoriesPulse}
             regionScores={currentPlayer?.scores ?? []}
-            onHexClick={handleHexClick}
+            onHexClick={(q, r, rid) => {
+              const placed = handleHexClick(q, r, rid)
+              if (placed) addLogEntry(`placed ${cap(placed.element)} in ${REGION_NAMES[placed.regionId]}`, ELEMENT_COLORS[placed.element])
+            }}
             onFactoryClick={handleFactoryClick}
           />
+          <ActionLog entries={actionLog} />
         </div>
 
         {/* SIDEBAR */}
@@ -329,7 +344,7 @@ export default function GameRoom() {
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-offer"
                     card={{ ...card, element: cardPrimaryElement(card) }}
-                    onClick={disabled ? undefined : () => handleDrawCard('offer', i)}
+                    onClick={disabled ? undefined : () => { const c = theOffer[i]; handleDrawCard('offer', i); addLogEntry(`drew ${c.name}`) }}
                   />
                 )
               })}
@@ -347,7 +362,10 @@ export default function GameRoom() {
                     card={{ ...card, element: cardPrimaryElement(card) }}
                     onClick={isScoreable ? () => {
                       const scored = handleCardScore(card.id)
-                      if (scored?.card) setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })
+                      if (scored?.card) {
+                        setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })
+                        addLogEntry(`scored ${scored.card.name}: +${scored.card.points}`, '#C89440')
+                      }
                     } : undefined}
                   />
                 )
@@ -400,7 +418,11 @@ export default function GameRoom() {
         bonusTokens={currentPlayer?.bonusTokens ?? []}
         turnTimeRemaining={turnSecondsLeft}
         turnTimeLimit={TURN_TIME_LIMIT}
-        onEndTurn={handleEndTurn}
+        onEndTurn={() => {
+          handleEndTurn()
+          const st = useGameStore.getState()
+          addLogEntry(`Turn ${st.turnNumber} · ${st.players.find(p => p.seat === st.currentSeat)?.username ?? ''}`, 'rgba(255,255,255,0.4)')
+        }}
       />
     </div>
   )
