@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import { hexToPixel, hexCorners, ELEMENT_COLORS, HEX_SIZE } from '../../utils/hexUtils'
 import { elementIconShapes, hasElementIcon } from './ElementIcon'
 
@@ -46,6 +47,20 @@ export default function HexCell({
     : `${regionColor}44`
 
   const strokeWidth = isFactory ? (isSelected ? 2.5 : 1.5) : element ? 1 : 0.5
+
+  // Placement burst · when this hex goes empty → occupied, fire 6 particles outward for ~400ms (T1 S15).
+  // prevElement starts at the current value so an already-occupied hex on mount does NOT burst.
+  const prevElement = useRef(element)
+  const [bursting, setBursting] = useState(false)
+  useEffect(() => {
+    const wasEmpty = !prevElement.current
+    prevElement.current = element
+    if (wasEmpty && element) {
+      setBursting(true)
+      const id = setTimeout(() => setBursting(false), 450)
+      return () => clearTimeout(id)
+    }
+  }, [element])
 
   return (
     <g
@@ -119,6 +134,20 @@ export default function HexCell({
           </g>
         </g>
       )}
+
+      {/* Placement burst · 6 particles fly out + shrink as the token lands · pointer-events safe so the
+          force:true valid-hex click is never intercepted · disabled under prefers-reduced-motion (CSS). */}
+      {bursting && element && [0, 1, 2, 3, 4, 5].map(i => (
+        <circle key={`burst-${i}`} className="hex-burst"
+          cx={x} cy={y} r={3}
+          fill={ELEMENT_COLORS[element] ?? '#ffffff'}
+          style={{
+            transformBox: 'fill-box', transformOrigin: 'center', pointerEvents: 'none',
+            animationName: `burst${i}`, animationDuration: '400ms',
+            animationTimingFunction: 'ease-out', animationFillMode: 'forwards',
+          }}
+        />
+      ))}
 
       {/* Bonus token indicator (small dot) */}
       {bonusCovered && !element && (
