@@ -2,6 +2,11 @@ import { hexesInRadius, hexToPixel, REGIONS, FACTORIES, HEX_SIZE, ELEMENT_COLORS
 import { getBiomeForRegion } from '../../lib/terrainBiomes'
 import HexCell from './HexCell'
 
+// Invisible factory tap-target radius (SVG user-units · Rule 4). The visible hex is HEX_SIZE (36);
+// 70 nearly doubles the TAP radius to clear 44px at the mobile scale while staying < the 72-unit gap
+// to the nearest region hex (108 centre-distance − 36 hex radius), so it never overlaps a real hex.
+const FACTORY_HIT_R = 70
+
 export default function GameBoard({
   // All props have safe defaults so board renders without T2 store
   regions = REGIONS.map(r => ({...r, hexes: {}})),
@@ -102,6 +107,7 @@ export default function GameBoard({
       {FACTORIES.map(factory => {
         const factoryData = factories.find(f => f.id === factory.id)
         const pulse = factoriesPulse && factory.id !== selectedFactory
+        const {x: fx, y: fy} = hexToPixel(factory.q, factory.r)
         return (
           <g key={`factory-${factory.id}`}
             className={pulse ? 'factory-pulse' : undefined}
@@ -110,6 +116,16 @@ export default function GameBoard({
             onClick={() => onFactoryClick(factory.id)}
             style={{cursor: 'pointer'}}
           >
+            {/* Touch target (Rule 4 · 44px) · the visible factory hex renders ~23px at a 375px
+                viewport (board height-constrains the SVG to ~0.32 scale). A transparent hit circle
+                widens the TAP area without moving the factory or touching the viewBox/layout. r=70
+                SVG-units → ~44px at that scale, and is overlap-safe at EVERY scale: each factory sits
+                ~108 units from its nearest region hex centre (hexToPixel), so 70 + 36 (region hex
+                radius) = 106 < 108 · the circle never reaches a region hex's tap area, so region
+                placement clicks are never stolen. pointerEvents:'all' guarantees capture on the
+                transparent fill · the click bubbles to the <g>'s onFactoryClick (force:true-safe · the
+                bot clicks the same node). FIRST child → painted behind the hex · zero visual change. */}
+            <circle cx={fx} cy={fy} r={FACTORY_HIT_R} fill="transparent" style={{pointerEvents: 'all'}} />
             <HexCell
               q={factory.q} r={factory.r}
               isFactory
