@@ -20,6 +20,9 @@
 //   FIX ready-failed: Ready is joiner-only (host sees Start, not Ready) · the lone per-game error, gone.
 //   FIX rate limit: enterLobbyWithRetry · the ~30/hr anon-signin ceiling fataled 5/5 S12 re-runs · retry+backoff.
 //   ADD Rule 53: dbPlacedCount reads the REAL placed count from game_sessions.state · proxy ≠ DB truth.
+// v4.5 — June 27 2026 (T2 S14): close the proxy gap AT SOURCE · the `placed` counter now increments ONLY when
+//   the board's .hex-element-in token count actually grows (the committed-placement signal) · a swallowed click
+//   that placed nothing no longer counts (S13 caught proxy 21 vs DB 19 · now the proxy is honest by construction).
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync, readFileSync } from 'fs'
@@ -223,6 +226,11 @@ async function doRandomAction(page, turn, actionNum, errors, domDiag) {
       }
 
       if (factories.length > 0) {
+        // v4.5 (Rule 53 · close the proxy gap AT SOURCE · T2 S14): snapshot the board's committed-element
+        // count BEFORE the attempt. .hex-element-in is the persistent placed-element token (HexCell.jsx · the
+        // same 0→1 signal T3's placement guard asserts). We count a placement ONLY if this number grows —
+        // a .catch()-swallowed click that placed nothing no longer inflates the proxy (S13 caught proxy 21 vs DB 19).
+        const beforeCount = await page.locator('.hex-element-in').count().catch(() => 0)
         await factories[Math.floor(Math.random() * factories.length)].click({ timeout: 2000, force: true }).catch(() => {})
         // v4.2: delay — game needs time to render the element-select panel after the factory click.
         await delay(1500)
@@ -265,11 +273,13 @@ async function doRandomAction(page, turn, actionNum, errors, domDiag) {
           // settles → Playwright's click-stability wait times out BEFORE onClick→placeElement fires. Without
           // force the click is swallowed and NOTHING commits (room board stays empty · DB-proven). With force,
           // the 4-step chain commits real elements (T3 confirmed 11 in game_sessions for room YQZHRB).
-          // NOTE: 'placed-element' here is a PROXY (the click is .catch()-swallowed) — force makes proxy≈DB-truth,
-          // but a TRUE count reads game_sessions board state or counts .hex-element-in tokens (v4.4 follow-up).
           await validHexes[Math.floor(Math.random() * validHexes.length)].click({ timeout: 2000, force: true }).catch(() => {})
-          await delay(400)
-          return 'placed-element'
+          await delay(800) // DB commit + optimistic re-render round-trip · let the placed token settle before counting
+          // v4.5: count ONLY a placement that actually grew the board (the honest proxy · matches DB in the normal case).
+          const afterCount = await page.locator('.hex-element-in').count().catch(() => 0)
+          if (afterCount > beforeCount) return 'placed-element'
+          log(`[WARN turn${turn}] placement UI completed but board token count did not grow (${beforeCount}→${afterCount}) · NOT counted (Rule 53)`)
+          return 'place-uncommitted'
         }
       }
     }
@@ -512,8 +522,8 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation v4.4 · ${NUM_GAMES} games · ${BASE}`)
-  log('v4.4: ready-failed fixed (joiner-only) · rate-limit retry · DB-verified placed count (Rule 53) · 4-step placement')
+  log(`NeoTopia Bot Simulation v4.5 · ${NUM_GAMES} games · ${BASE}`)
+  log('v4.5: proxy counts only DB-committed placements (.hex-element-in grew) · ready-failed fix · rate-limit retry · DB-verified count')
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 400 : 0 })
@@ -525,7 +535,7 @@ async function main() {
   await browser.close()
 
   const report = {
-    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.4',
+    timestamp: new Date().toISOString(), url: BASE, botVersion: 'v4.5',
     results: allResults,
     summary: {
       completed: allResults.filter(r => r.completed).length,
@@ -548,7 +558,7 @@ async function main() {
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT (v4.4) ===')
+  console.log('\n=== BOT SIMULATION REPORT (v4.5) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
   console.log(`Elements placed: ${report.summary.totalPlaced} (proxy) · ${report.summary.totalPlacedDB ?? 'N/A'} (DB-verified) · Cards drawn: ${report.summary.totalDrew}`)
   if (report.summary.dbVerified === false) {
