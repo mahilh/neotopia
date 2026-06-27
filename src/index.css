@@ -18,3 +18,31 @@
   .hex-cell polygon { animation: none !important; }
   .score-flash { animation: none !important; opacity: 1 !important; }
 }
+
+/* ── DIM-THE-REST attention focus (colonist UX · T1 S15) ──────────────────
+   On your turn, fade the sidebar panels that are NOT the current decision so the eye lands on the
+   choice. Opacity only (compositor-thread · never display/visibility) · skipped entirely when waiting
+   (every rule requires data-my-turn='true', so the opponent's turn stays neutral at full opacity).
+   The element-type / region buttons are not targeted, so they stay full when they are the live choice. */
+[data-offer], [data-hand], .score-panel { transition: opacity 0.2s ease; }
+
+[data-my-turn='true'][data-ui-phase='idle'] .score-panel,
+[data-my-turn='true'][data-ui-phase='idle'] [data-hand] {
+  opacity: 0.4;
+}
+[data-my-turn='true'][data-ui-phase='factorySelected'] [data-offer],
+[data-my-turn='true'][data-ui-phase='factorySelected'] .score-panel,
+[data-my-turn='true'][data-ui-phase='factorySelected'] [data-hand] {
+  opacity: 0.35;
+}
+[data-my-turn='true'][data-ui-phase='elementSelected'] [data-offer],
+[data-my-turn='true'][data-ui-phase='elementSelected'] .score-panel,
+[data-my-turn='true'][data-ui-phase='elementSelected'] [data-hand],
+[data-my-turn='true'][data-ui-phase='regionSelected'] [data-offer],
+[data-my-turn='true'][data-ui-phase='regionSelected'] .score-panel,
+[data-my-turn='true'][data-ui-phase='regionSelected'] [data-hand] {
+  opacity: 0.35;
+}
+[data-my-turn='true'][data-ui-phase='scorePending'] [data-offer] {
+  opacity: 0.3;
+}

@@ -176,6 +176,7 @@ export default function GameRoom() {
       // race against the DB-sync render · T1 S11). data-my-turn flips as soon as currentSeat syncs.
       data-game-phase={phase}
       data-my-turn={isMyTurn ? 'true' : 'false'}
+      data-ui-phase={uiPhase}
       style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}
     >
 
@@ -356,7 +357,7 @@ export default function GameRoom() {
 
           {/* SCORE · my column vs opponent (single column in solo · no <table>, flexbox per touch-gate) */}
           {myPlayer && (
-            <div>
+            <div className="score-panel">
               <div style={sectionLabel}>Score</div>
               {opponent && (
                 <div style={{ display: 'flex', alignItems: 'center', padding: '0 0 4px' }}>
