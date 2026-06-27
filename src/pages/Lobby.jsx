@@ -34,7 +34,7 @@ function ElementRow() {
 // Host-only game-mode selector (T1 S17 · the final piece of the Flow-mode chain · engine T2 86d0220 ·
 // createRoom(mode) + sessionId T3 ced8133 · seed seam T3 133f0b9). Reads GAME_MODES so the labels and the
 // per-mode numbers stay the single source of truth (Rule 62 · no re-hardcoded copy that can drift). The
-// chosen mode is set via setGameMode (exposed by useGameRoom) and passed as the ARGUMENT to createRoom —
+// chosen mode is set via setGameMode (exposed by useGameRoom) and passed as the ARGUMENT to createRoom ·
 // createRoom defaults its arg to 'classic' and re-runs setGameMode, so a prior setGameMode alone would be
 // overwritten; the value only survives by riding createRoom(gameMode) (Rule 61 · traced through the body).
 function ModeToggle({ gameMode, setGameMode }) {
