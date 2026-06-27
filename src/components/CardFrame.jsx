@@ -307,11 +307,14 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
         </text>
       </svg>
 
-      {/* Art image inside the frame */}
+      {/* Art image inside the frame · fades in over the shimmering placeholder when the PNG loads (art-reveal).
+          The opacity flip is stateful (stays inline); the 0.4s transition + its prefers-reduced-motion guard live
+          in index.css so the reveal honors reduced-motion like every other animation (T1 S18 Task D). */}
       {!imgError && (
         <img
           src={artUrl}
           alt={card.name}
+          className="art-reveal"
           onLoad={() => setImgLoaded(true)}
           onError={() => setImgError(true)}
           style={{
@@ -324,7 +327,6 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
             borderRadius: 2,
             zIndex: 3, // above the frame SVG's #060612 art backdrop (zIndex 2) so the art is actually visible
             opacity: imgLoaded ? 1 : 0,
-            transition: 'opacity 0.3s',
           }}
         />
       )}

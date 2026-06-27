@@ -103,3 +103,12 @@
 @media (prefers-reduced-motion: reduce) {
   .art-skeleton { animation: none !important; } /* !important to match the other reduced-motion guards above */
 }
+
+/* Card art reveal · the companion to the skeleton above. When a card_NN.png finally loads, CardFrame flips
+   the img opacity 0→1; this fades it in over the shimmering placeholder (a soft crossfade, not a hard cut).
+   The transition lives here (not inline) so it carries the same prefers-reduced-motion guard as every other
+   motion in this file · under reduced-motion the art appears instantly at full opacity. T1 S18 Task D. */
+.art-reveal { transition: opacity 0.4s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .art-reveal { transition: none !important; } /* !important to match the other reduced-motion guards above */
+}
