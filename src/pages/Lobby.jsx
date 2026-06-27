@@ -42,7 +42,7 @@ function ModeToggle({ gameMode, setGameMode }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <p style={label}>Game Mode</p>
       <div style={{ display: 'flex', gap: 8 }}>
-        {['classic', 'flow'].map(id => {
+        {Object.keys(GAME_MODES).map(id => {
           const m = GAME_MODES[id]
           const selected = gameMode === id
           return (

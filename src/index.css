@@ -101,5 +101,5 @@
 }
 .art-skeleton { animation: artShimmer 2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .art-skeleton { animation: none; }
+  .art-skeleton { animation: none !important; } /* !important to match the other reduced-motion guards above */
 }

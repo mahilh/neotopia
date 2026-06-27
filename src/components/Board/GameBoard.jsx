@@ -5,6 +5,9 @@ import HexCell from './HexCell'
 // Invisible factory tap-target radius (SVG user-units · Rule 4). The visible hex is HEX_SIZE (36);
 // 70 nearly doubles the TAP radius to clear 44px at the mobile scale while staying < the 72-unit gap
 // to the nearest region hex (108 centre-distance − 36 hex radius), so it never overlaps a real hex.
+// Factory-to-factory is also safe: the three centres are 216u/272u/272u apart (min 216u) > 2·70=140u,
+// so two hit circles never overlap either. Both bounds cap a future radius bump (region steal at r>72,
+// factory overlap at r>108) · keep r < 72.
 const FACTORY_HIT_R = 70
 
 export default function GameBoard({
