@@ -13,7 +13,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
 import { DECK } from '../lib/projectCards'
-import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal } from '../lib/supabase'
+import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal, recordCivilizationDetail } from '../lib/supabase'
 import { buildGameEndEvent } from '../lib/gameEndEvent'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
@@ -60,6 +60,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   const didFetchRef = useRef(false)                // getGlobalIndex fires exactly once
   const didRecordRef = useRef(false)               // our own contribution records exactly once (when valid)
   const didGameEndRef = useRef(false)              // the game_end audit row fires exactly once
+  const didDetailRef = useRef(false)               // the per-game civilization-score ledger row fires exactly once
   const reduceMotion = usePrefersReducedMotion()
   const navigate = useNavigate()
 
@@ -94,8 +95,9 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   }, [])
 
   // The civilization SCORE ledger (record_civilization_score sum · distinct from the district COUNT above).
-  // Reads once · null until resolved (the section hides on failure · 0 is a valid empty-ledger value, shown
-  // optimistically with this game's contribution so it is never a bare 0 · grows once T1/T3 wire the writer).
+  // getGlobalCivilizationTotal never rejects · it returns a number (0 on failure or an empty ledger), so the
+  // section shows once the effect resolves and renders this game's localScore optimistically (never a bare 0 ·
+  // grows as the ledger fills · the writer is wired below now that sessionId is exposed · T1 S16 Task D).
   const [globalCivTotal, setGlobalCivTotal] = useState(null)
   const didCivFetchRef = useRef(false)
   useEffect(() => {
@@ -114,6 +116,24 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     didRecordRef.current = true
     recordCivilizationContribution(myDistricts).catch(() => {})
   }, [mySeat, myDistricts])
+
+  // Record THIS client's per-game detailed civilization scores into the Global Index LEDGER (migration 009 ·
+  // record_civilization_score · server sets player_id=auth.uid() · UNIQUE(session_id,player_id) ON CONFLICT DO
+  // NOTHING so it is idempotent · own seat only). REQUIRES a live sessionId · solo has none → naturally skipped.
+  // Rule 61: the console.log PROVES the value is live before the write. T1 S15 flagged sync.sessionId undefined;
+  // T3 S16 (1e9e249) exposed it reactively from useGameSync · re-verified the value here before wiring (S16 D).
+  // The latch is NOT burned while sessionId is still null, so the effect re-runs once it resolves.
+  useEffect(() => {
+    if (didDetailRef.current) return
+    const sessionId = sync?.sessionId
+    // Rule 61 evidence gate · log the LIVE value before any write (do not remove · it proves the wire).
+    console.log('[NeoTopia] recordCivilizationDetail: sessionId =', sessionId, '· mySeat =', mySeat)
+    if (!sessionId || mySeat == null) return // solo / no live session → nothing to record (latch NOT burned)
+    const me = finalScores.find(p => p.seat === mySeat)
+    if (!me) return
+    didDetailRef.current = true
+    recordCivilizationDetail({ sessionId, scores: me.scores, cardsBuilt: me.scoredCards.length }).catch(() => {})
+  }, [sync, mySeat, finalScores])
 
   // Append the game_end audit row ONCE per game · the permanent civilization record (T2 built the PURE
   // payload · the consumer fires it · comms T2 S8). "Exactly one client" = the lowest-seat present writes
