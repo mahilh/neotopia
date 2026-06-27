@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
-import { findBuildableCards, findLargestCluster, calculateFinalScore } from '../lib/patternMatcher'
+import { findBuildableCards, findLargestCluster, getClusterDetail as computeClusterDetail, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
 import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig } from './gameConfig'
 
@@ -251,12 +251,27 @@ export const useGameStore = create(immer((set, get) => ({
     // T1 reads getBuildableCards(regionId, hexKey) to highlight completions.
   }),
 
+  // Draw a card · Flow mode makes the DRAW GATE turn-agnostic (T2 S17 Task A · simultaneous draw).
   drawCard: (seat, source, cardIndex) => set(state => {
-    if (state.currentSeat !== seat) return
-    if (state.actionsRemaining <= 0) return
-
     const player = state.players.find(p => p.seat === seat)
     if (!player) return
+
+    const isCurrentSeat = state.currentSeat === seat
+    // SIMULTANEOUS_DRAW (getModeConfig · classic=false · flow=true): in Flow, drawing is NOT gated by whose
+    // turn it is — each player draws into their OWN hand within their own 15s window (Flow's defining mechanic).
+    // Classic stays strictly turn-locked. The draw is deterministic (offer index / deck.shift on a deck shuffled
+    // ONCE at init · host-authoritative + persisted · NO Math.random in this reducer · rule 32), so T3 can
+    // serialize concurrent draw_card events server-side without divergence (the channel is the remaining seam).
+    const simultaneous = getModeConfig(state.mode).SIMULTANEOUS_DRAW
+    if (!isCurrentSeat && !simultaneous) return // classic / non-current → reject (classic behavior unchanged)
+
+    // Action budget: actionsRemaining is the CURRENT turn-holder's single shared place/draw/score counter (the
+    // engine is still turn-based). The current seat spends from it exactly as before. A non-current simultaneous
+    // draw must NOT touch it — decrementing the active player's budget would corrupt their turn (rule 65 · the
+    // composed seam). It is instead bounded by the shared deck/offer emptying; a true per-player action budget +
+    // per-player 15s timer is the cross-lane Flow follow-up (engine + T3 channel · see comms · NOT this slice).
+    // Only the DRAW GATE is turn-agnostic here · Flow is not yet fully simultaneous and the comment does not claim it.
+    if (isCurrentSeat && state.actionsRemaining <= 0) return
 
     if (source === 'offer') {
       const card = state.theOffer[cardIndex]
@@ -269,7 +284,7 @@ export const useGameStore = create(immer((set, get) => ({
       if (card) player.hand.push(card)
     }
 
-    state.actionsRemaining--
+    if (isCurrentSeat) state.actionsRemaining-- // only the active turn-holder spends an action (rule 65)
   }),
 
   // Score a card · returns true on a real award, false if rejected (wrong seat, card not in
@@ -510,6 +525,17 @@ export const useGameStore = create(immer((set, get) => ({
     if (!region) return 0
     return findLargestCluster(region.hexes, elementType)
   },
+
+  // Computed: per-region per-element cluster breakdown for the FinalScore visualization (T2 S17 · Task B).
+  // Reads the SHARED board (regions · element-only, no per-hex placer → clusters are board-global) and
+  // delegates to the pure computeClusterDetail (patternMatcher · reuses the existing BFS · rule 10). Returns
+  // [{ regionId, regionName, element, count }] · count >= 2 · element is the lowercase ELEMENT_COLORS key.
+  // INTENDED for FinalScore at phase==='scoring' (the board still holds the final layout) · NOT yet wired:
+  // FinalScore imports neither the store nor regions today. PREFERRED delivery (review C5): T1 passes
+  // regions={regions} (GameRoom already reads them reactively) + useMemo(()=>computeClusterDetail(regions),
+  // [regions]) — the pure fn avoids the fresh-array-every-call Object.is churn a selector subscription causes.
+  // This selector stays for non-React/imperative readers. DESCRIPTIVE sizes only · no cluster->points rule (rule 32).
+  getClusterDetail: () => computeClusterDetail(get().regions),
 
   // Computed: final score for a player (best + 2nd + worst*3 + unusedBonus*3).
   getFinalScore: (seat) => {

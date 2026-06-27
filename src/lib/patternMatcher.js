@@ -108,7 +108,9 @@ const HEX_NEIGHBORS = [
 
 /**
  * Size of the largest connected cluster of one element type (BFS).
- * Used in final scoring (cluster bonus).
+ * DESCRIPTIVE today: consumed only by getClusterDetail + getLargestCluster (the FinalScore
+ * cluster visualization · T2 S17). NOT yet a score input — calculateFinalScore folds in no
+ * cluster term · a cluster->points rule is pending rulebook data (rule 32).
  *
  * @param {Object} regionHexes - {[key:'q,r']: {element: string|null}}
  * @param {string} elementType
@@ -144,10 +146,54 @@ export function findLargestCluster(regionHexes, elementType) {
   return largest
 }
 
+// The four element types · the LOWERCASE engine keys, identical to ELEMENT_COLORS (hexUtils/ProjectCard/
+// HexCell) so the UI keys a colour straight off `element` (rule 62 · the forge's 'Energy'/'BioFarming'
+// were wrong · verified live against ELEMENT_COLORS). Shared by the cluster-detail walk below.
+const ELEMENT_TYPES = ['energy', 'biofarming', 'technology', 'community']
+
+/**
+ * Per-region, per-element cluster breakdown for the FinalScore visualization (T2 S17 · Task B).
+ *
+ * For each region and each element type, reports the LARGEST connected cluster (BFS · the SAME
+ * findLargestCluster the engine already uses · rule 10 · never reimplement) when it is >= 2 — a lone
+ * element is not a cluster, so a board with no adjacencies returns []. `element` is the lowercase
+ * ELEMENT_COLORS key so T1 colours it directly. `count` is the FACTUAL cluster size.
+ *
+ * The board is SHARED: region.hexes stores `element` only, with NO per-hex placer (placeElement never
+ * records who placed a hex), so clusters are GLOBAL to the board, not attributable per player. T1 shows
+ * "the civilization formed an Energy cluster of 3 in Sacred City", not "player X's cluster".
+ *
+ * DELIBERATELY NO `bonus`/points field (rule 32/7 · the honest gap): there is no cluster->points rule in
+ * the engine (calculateFinalScore folds in NOTHING for clusters today · the three "folded upstream"
+ * comments are aspirational, NOT implemented) and no rulebook number exists yet (pending from Mahil, like
+ * the bonus-hex pile). Reporting count-as-points would fabricate a scoring rule the UI would render as
+ * truth. This returns DESCRIPTIVE sizes only; when the points rule lands, add a `bonus` field here AND
+ * fold it into scoring in the same change · do not invent one now.
+ *
+ * @param {Array} regions - [{ id, name, hexes: {[key:'q,r']: {element}} }]
+ * @returns {Array} [{ regionId, regionName, element, count }] · count >= 2 · deterministic order
+ *          (region order, then ELEMENT_TYPES order)
+ */
+export function getClusterDetail(regions = []) {
+  const detail = []
+  for (const region of regions) {
+    if (!region?.hexes) continue
+    for (const element of ELEMENT_TYPES) {
+      const count = findLargestCluster(region.hexes, element)
+      if (count >= 2) {
+        detail.push({ regionId: region.id, regionName: region.name, element, count })
+      }
+    }
+  }
+  return detail
+}
+
 /**
  * Final score for one player across all 3 regions.
  * Formula: best + 2nd + (worst x 3) + (unusedBonus x 3).
- * Cluster bonus is folded into the per-region scores before this is called.
+ * NO cluster term today · clusters are reported DESCRIPTIVELY by getClusterDetail until a rulebook
+ * cluster->points rule lands (rule 32 · do not fabricate one). When it lands, fold it into the
+ * per-region scores BEFORE this is called (per-region scores stay this function's only input).
  */
 export function calculateFinalScore(regionalScores, unusedBonusCount = 0) {
   const sorted = [...regionalScores].sort((a, b) => b - a) // descending
