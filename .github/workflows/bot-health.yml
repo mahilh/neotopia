@@ -1,0 +1,89 @@
+name: Bot Health Check
+
+# Daily proof that NeoTopia is still mechanically playable by an autonomous agent: the bot drives a real
+# game against production and we assert it PLACED elements that reached the database (Rule 53 · the DB is
+# truth, not the proxy counter). A regression in the placement chain (force:true, the 4-step UI, sync) is
+# caught here automatically. NOT on every push — the bot is a heavy headless-browser flow + does anon
+# sign-ins (Supabase ~30/hr per IP); a daily cron keeps it well clear of the limit and off the merge path.
+#
+# TOLERANCE (per T2 S13/S14 · the bot-room lifecycle race): a bot room can be purged (migration 008 sweeps
+# Bot% rooms of any status) before dbPlacedCount reads it → summary.totalPlacedDB comes back null for that
+# game. So we run BOT_GAMES=3 ("assert over N, not 1") and grade gently:
+#   · totalPlacedDB  > 0            → PASS  (DB-confirmed machine placement · the real health signal)
+#   · totalPlacedDB == null & proxy > 0 → SOFT-PASS (bot placed, but every room was raced-out before the DB
+#                                          read · environmental · re-run to DB-verify · see T3 S14 Task B)
+#   · proxy == 0  (nothing placed) → FAIL  (genuine placement regression)
+#   · totalPlacedDB == 0 (rooms readable, 0 placed) → FAIL (genuine regression)
+#
+# REQUIRES repo secrets VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (the bot loads them for its DB read).
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC daily
+  workflow_dispatch: {}    # manual trigger from the Actions tab
+
+concurrency:
+  group: bot-health        # never overlap two bot-health runs (each other's rooms would purge-collide)
+  cancel-in-progress: false
+
+jobs:
+  bot-health:
+    name: Autonomous play · DB-verified placement
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      BOT_GAMES: '3'
+      BOT_TURNS: '20'
+      BOT_URL: https://neotopia.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run bot simulation (3 games vs production)
+        run: node scripts/bot-simulate.js
+
+      - name: Assert DB-verified machine placement
+        run: |
+          node -e '
+            const fs = require("fs");
+            const dir = ".bot-reports";
+            const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.startsWith("report-")).sort() : [];
+            if (!files.length) { console.error("FAIL: the bot produced no report — it likely crashed before finishing."); process.exit(1); }
+            const r = JSON.parse(fs.readFileSync(dir + "/" + files.at(-1), "utf8"));
+            const s = r.summary || {};
+            console.log("bot v" + (r.botVersion || "?") + " · summary:\n" + JSON.stringify(s, null, 2));
+            const db = s.totalPlacedDB;          // null if every game room was raced-out before the DB read
+            const proxy = s.totalPlaced ?? 0;    // proxy counter (counts attempts · Rule 53 caveat)
+            if (typeof db === "number" && db > 0) {
+              console.log("PASS · " + db + " elements DB-VERIFIED across the run (proxy " + proxy + " · dbVerified=" + s.dbVerified + ").");
+              if (s.dbVerified === false) console.log("NOTE · proxy != DB (over-count · informational · not a placement failure).");
+              process.exit(0);
+            }
+            if (db == null && proxy > 0) {
+              console.log("SOFT-PASS · bot placed " + proxy + " (proxy) but every room was purged before the DB read");
+              console.log("           (room-lifecycle race · T3 S14 Task B · environmental). Re-run to DB-verify.");
+              process.exit(0);
+            }
+            console.error("FAIL · no machine placement reached the board (proxy=" + proxy + ", db=" + db + "). Placement chain regressed — inspect the uploaded report.");
+            process.exit(1);
+          '
+
+      - name: Upload bot report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-report-${{ github.run_id }}
+          path: .bot-reports/
+          retention-days: 14
