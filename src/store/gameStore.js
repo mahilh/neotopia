@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
-import { findBuildableCards, findLargestCluster, getClusterDetail as computeClusterDetail, calculateFinalScore } from '../lib/patternMatcher'
+import { findBuildableCards, findLargestCluster, getClusterDetail as computeClusterDetail, getClusterTotal as computeClusterTotal, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
 import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig } from './gameConfig'
 
@@ -537,10 +537,15 @@ export const useGameStore = create(immer((set, get) => ({
   // This selector stays for non-React/imperative readers. DESCRIPTIVE sizes only · no cluster->points rule (rule 32).
   getClusterDetail: () => computeClusterDetail(get().regions),
 
-  // Computed: final score for a player (best + 2nd + worst*3 + unusedBonus*3).
+  // Computed: the board's total cluster bonus (board game rule p9 · sum of getClusterDetail's per-cluster
+  // bonus · the SAME flat number folded into every player's final score). Civilization-level: the board is
+  // SHARED (no per-hex placer) so the bonus is not attributable per player (T2 S18 · see calculateFinalScore).
+  getClusterTotal: () => computeClusterTotal(get().regions),
+
+  // Computed: final score for a player (best + 2nd + worst*3 + unusedBonus*3 + clusterBonus).
   getFinalScore: (seat) => {
     const player = get().players.find(p => p.seat === seat)
     if (!player) return 0
-    return calculateFinalScore(player.scores, player.bonusTokens.length)
+    return calculateFinalScore(player.scores, player.bonusTokens.length, computeClusterTotal(get().regions))
   },
 })))

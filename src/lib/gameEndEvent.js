@@ -12,11 +12,17 @@
 //   · decide WHEN to fire — that is the consumer's job.
 //
 // The final `total` is computed with the SAME engine fn the store (getFinalScore) and FinalScore.jsx
-// use — calculateFinalScore = best + 2nd + worst*3 + unusedBonus*3 — so the audit record can never
-// disagree with the number the player saw on screen. (The forge's payload referenced a non-existent
-// `p.total`; the real total only exists via this engine call.)
+// use · calculateFinalScore = best + 2nd + worst*3 + unusedBonus*3 + clusterBonus · so the audit record
+// can never disagree with the number the player saw on screen. (The forge's payload referenced a
+// non-existent `p.total`; the real total only exists via this engine call.)
+//
+// CLUSTER BONUS (T2 S18 · board game rule p9): a board-global term, computed once and added to every
+// player's total. It is regions-GUARDED below: the live FinalScore caller passes only { players } (no
+// regions), so the bonus is 0 there and the audit still matches the screen · until T1 threads regions
+// into both the display total AND this payload in the SAME change (comms T2 S18). A snapshot that DOES
+// carry regions (getState(), tests) gets the bonus folded in.
 
-import { calculateFinalScore } from './patternMatcher'
+import { calculateFinalScore, getClusterTotal } from './patternMatcher'
 
 // The event key the persistence layer expects. useGameSync.EVENT_TYPE_DB maps 'gameEnd' → the
 // DB-allowed 'game_end' (game_events_event_type_check). We export the SHORTHAND, never the raw
@@ -30,6 +36,11 @@ export const GAME_END_EVENT_TYPE = 'gameEnd'
 export function buildGameEndEvent(state) {
   const players = Array.isArray(state?.players) ? state.players : []
 
+  // Board-global cluster bonus (board game rule p9) · computed ONCE from the shared board, added to every
+  // player's total (the SAME number · no per-hex placer to attribute it per player · T2 S18). regions-guarded:
+  // absent (the live { players } path) → 0 → totals still match the screen (see header note).
+  const clusterBonus = getClusterTotal(Array.isArray(state?.regions) ? state.regions : [])
+
   const finalScores = players.map(p => {
     const scores = Array.isArray(p?.scores) ? p.scores : []
     const unusedBonus = Array.isArray(p?.bonusTokens) ? p.bonusTokens.length : 0
@@ -38,10 +49,10 @@ export function buildGameEndEvent(state) {
       seat: p?.seat ?? null,
       user_id: p?.userId ?? null,
       username: p?.username ?? null,
-      scores,                                            // per-region totals [r0, r1, r2]
-      unused_bonus: unusedBonus,                         // each unused token = 3 pts at game end
-      districts: scoredCardIds.length,                   // cards this player scored (districts built)
-      total: calculateFinalScore(scores, unusedBonus),   // engine = single source of truth
+      scores,                                                          // per-region totals [r0, r1, r2]
+      unused_bonus: unusedBonus,                                       // each unused token = 3 pts at game end
+      districts: scoredCardIds.length,                                 // cards this player scored (districts built)
+      total: calculateFinalScore(scores, unusedBonus, clusterBonus),   // engine = single source of truth
     }
   })
 

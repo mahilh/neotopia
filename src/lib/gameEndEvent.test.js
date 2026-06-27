@@ -29,6 +29,35 @@ describe('buildGameEndEvent', () => {
     expect(bySeat[2].total).toBe(21)
   })
 
+  test('cluster bonus (board game rule p9) folds into every total when the snapshot carries regions · T2 S18', () => {
+    // A shared board with one energy cluster of 3 in Sacred City → getClusterTotal = 3, added to EVERY player
+    // (civilization-level · the same number for all · no per-hex placer to attribute it per player).
+    const state = {
+      ...threePlayerScoringState(),
+      regions: [
+        { id: 0, name: 'Sacred City', hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' }, '2,0': { element: 'energy' } } },
+        { id: 1, name: 'Living Earth', hexes: {} },
+        { id: 2, name: 'Free Energy', hexes: {} },
+      ],
+    }
+    const { eventData } = buildGameEndEvent(state)
+    const bySeat = Object.fromEntries(eventData.final_scores.map(p => [p.seat, p]))
+    // Each player's total is its no-cluster total + 3 (23→26, 12→15, 21→24).
+    expect(bySeat[0].total).toBe(calculateFinalScore([10, 4, 2], 1, 3))
+    expect(bySeat[0].total).toBe(26)
+    expect(bySeat[1].total).toBe(15)
+    expect(bySeat[2].total).toBe(24)
+  })
+
+  test('NO regions in the snapshot → cluster bonus 0 → totals match the screen (the live { players } path)', () => {
+    // The real-game caller (FinalScore) passes only { players }; absent regions must leave totals unchanged.
+    const { eventData } = buildGameEndEvent(threePlayerScoringState())
+    const bySeat = Object.fromEntries(eventData.final_scores.map(p => [p.seat, p]))
+    expect(bySeat[0].total).toBe(23)
+    expect(bySeat[1].total).toBe(12)
+    expect(bySeat[2].total).toBe(21)
+  })
+
   test('districts come from scoredCardIds · districts_built is their sum (the global-index contribution)', () => {
     const { eventData } = buildGameEndEvent(threePlayerScoringState())
     const bySeat = Object.fromEntries(eventData.final_scores.map(p => [p.seat, p]))

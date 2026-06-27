@@ -112,6 +112,18 @@ describe('calculateFinalScore', () => {
   test('defaults bonus to 0 and tolerates fewer than 3 regions', () => {
     expect(calculateFinalScore([10, 5])).toBe(15) // 10 + 5 + 0*3 + 0
   })
+
+  test('folds the cluster bonus in as a flat term (board game rule p9 · T2 S18)', () => {
+    // 18 + 15 + (6*3) + (2*3) = 57 · then + 4 cluster bonus = 61.
+    expect(calculateFinalScore([18, 15, 6], 2, 4)).toBe(61)
+  })
+
+  test('cluster bonus is flat, NOT weighted by the worst-region x3', () => {
+    // Same regions/unused, cluster bonus 5: the bonus adds exactly 5, never 15 (it is not tripled).
+    expect(calculateFinalScore([10, 8, 4], 0, 5)).toBe(10 + 8 + (4 * 3) + 5) // 35
+    // And it defaults to 0 when omitted, so the legacy 2-arg total is unchanged.
+    expect(calculateFinalScore([10, 8, 4], 0)).toBe(30)
+  })
 })
 
 test('_runTests smoke test passes', () => {
