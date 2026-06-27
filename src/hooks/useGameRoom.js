@@ -95,13 +95,21 @@ export function useGameRoom(user, username) {
   const [gameMode, setGameMode] = useState(DEFAULT_GAME_MODE) // 'classic' | 'flow' · host picks at createRoom · persisted on the session at startGame (game_sessions.mode · migration 010)
   const busyRef = useRef(false) // single-flight guard for create/join/start
 
+  // Mode-aware presence status (T3 S17): WHERE this player is, derived from the room lifecycle + chosen mode.
+  // Passed into usePresence so the lobby roster shows "in a flow game" vs "in a game" vs "in lobby" live. The
+  // room owner derives it (usePresence stays a dumb transport · it does not know roomPhase/gameMode otherwise).
+  const presenceStatus =
+    roomPhase === 'playing' ? (gameMode === 'flow' ? 'in_flow_game' : 'in_game')
+    : roomPhase === 'lobby' ? 'in_lobby'
+    : 'idle'
+
   const {
     players: lobbyPlayers,
     updatePresence,
     sendGameStart,
     gameStarted,
     resetPresence,
-  } = usePresence(roomId, user, username, seat, isHost)
+  } = usePresence(roomId, user, username, seat, isHost, presenceStatus, gameMode)
 
   // Joiner transition: a 'game_start' broadcast flips us to playing · the host sets it locally
   // in startGame (broadcast does not echo to the sender by default).
