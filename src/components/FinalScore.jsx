@@ -13,7 +13,7 @@ import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
 import { DECK } from '../lib/projectCards'
-import { getGlobalIndex, recordCivilizationContribution } from '../lib/supabase'
+import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal } from '../lib/supabase'
 import { buildGameEndEvent } from '../lib/gameEndEvent'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
@@ -93,6 +93,17 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     getGlobalIndex().then(n => { if (typeof n === 'number') setLiveIndex(n) }).catch(() => {})
   }, [])
 
+  // The civilization SCORE ledger (record_civilization_score sum · distinct from the district COUNT above).
+  // Reads once · null until resolved (the section hides on failure · 0 is a valid empty-ledger value, shown
+  // optimistically with this game's contribution so it is never a bare 0 · grows once T1/T3 wire the writer).
+  const [globalCivTotal, setGlobalCivTotal] = useState(null)
+  const didCivFetchRef = useRef(false)
+  useEffect(() => {
+    if (didCivFetchRef.current) return
+    didCivFetchRef.current = true
+    getGlobalCivilizationTotal().then(t => { if (typeof t === 'number') setGlobalCivTotal(t) }).catch(() => {})
+  }, [])
+
   // Record THIS client's own districts exactly once · own auth.uid() profile · own seat ONLY, so the
   // global sum is exact across players (never N× over-counted · rule 32 · T2's increment is auth.uid()-
   // scoped + clamped [0,56] · both RPCs verified SECURITY DEFINER + granted anon · T1 S7). Separate
@@ -150,6 +161,8 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   if (finalScores.length === 0) return null
 
   const winner = finalScores[0]
+  // This client's final score (solo: mySeat null → the lone player, i.e. the winner) · the contribution.
+  const localScore = (finalScores.find(p => p.seat === mySeat) ?? winner).total
 
   return (
     <div
@@ -308,6 +321,21 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
           this game added {totalProjectsBuilt} toward the physical civilization by 2055
         </div>
+
+        {/* Civilization SCORE ledger (points) · getGlobalCivilizationTotal · shown optimistically with this
+            game's contribution · hidden until the query resolves (T1 S16 Task B). */}
+        {globalCivTotal !== null && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>
+              Civilization Index ·{' '}
+              <span style={{ color: 'rgba(255,215,0,0.85)' }}>{(globalCivTotal + localScore).toLocaleString()}</span>{' '}
+              points
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              Your civilization contributed {localScore} to Stage 2 of 5
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CTA · civilization language, not game language · lobby now lives at '/lobby' (Landing is '/') */}
