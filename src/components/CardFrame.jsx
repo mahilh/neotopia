@@ -28,6 +28,79 @@ const CORNER_SYMBOLS = {
 
 const POINT_VALUES = { 2: 'II', 3: 'III', 4: 'IIII', 5: 'IIIII' }
 
+// ── Procedural sacred geometry · the placeholder shown until a pixel-art PNG loads ──
+// Per the NeoTopia esoteric repository: Energy = Torus (Fohat · Orichalcum · self-sustaining flow) ·
+// BioFarming = Seed of Life (7 circles · the Lemurian first pattern) · Technology = Metatron / Fruit of
+// Life (13 circles + connecting structure · the blueprint of the Platonic solids) · Community = Flower of
+// Life (the rosette template of all creation · Council of Nine). The repository BANS the hexagram /
+// Star of David, so Metatron is drawn with spokes + hexagon edges only · never the long diagonals that
+// form the six-pointed star. All subtle (low opacity · it is a placeholder, not the art).
+const PROCEDURAL = new Set(['energy', 'biofarming', 'technology', 'community'])
+const hasProceduralArt = (el) => PROCEDURAL.has(el)
+
+function ringCenters(cx, cy, r, n, offset = 0) {
+  return Array.from({ length: n }, (_, i) => {
+    const a = offset + (i * 2 * Math.PI) / n
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)]
+  })
+}
+
+function ProceduralArt({ element, color, w, h }) {
+  const cx = w / 2, cy = h / 2
+  const u = Math.min(w, h)
+  // Opacities tuned for visibility on the near-black #060612 art ground · delicate line-art, not invisible.
+  const C = { fill: 'none', stroke: color, strokeWidth: Math.max(0.6, u * 0.014), strokeLinecap: 'round' }
+  let shapes = null
+
+  if (element === 'biofarming') {
+    // Seed of Life · 7 circles · central + 6 around at distance R (radius R · the authentic overlap)
+    const R = u * 0.15
+    shapes = [[cx, cy], ...ringCenters(cx, cy, R, 6)].map(([x, y], i) => (
+      <circle key={i} cx={x} cy={y} r={R} {...C} strokeOpacity={0.62} />
+    ))
+  } else if (element === 'community') {
+    // Flower of Life · 13-circle rosette (seed 7 + outer 6) inside a containing circle
+    const R = u * 0.13
+    const petals = [[cx, cy], ...ringCenters(cx, cy, R, 6), ...ringCenters(cx, cy, 2 * R, 6)]
+    shapes = [
+      <circle key="bound" cx={cx} cy={cy} r={3 * R} {...C} strokeOpacity={0.45} />,
+      ...petals.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={R} {...C} strokeOpacity={i < 7 ? 0.6 : 0.4} />),
+    ]
+  } else if (element === 'technology') {
+    // Metatron / Fruit of Life · 13 circles + center spokes + inner hexagon edges (NO hexagram)
+    const R = u * 0.085, d = u * 0.17
+    const inner = ringCenters(cx, cy, d, 6)
+    const all = [[cx, cy], ...inner, ...ringCenters(cx, cy, 2 * d, 6, Math.PI / 6)]
+    const spokes = inner.map(([x, y], i) => <line key={`s${i}`} x1={cx} y1={cy} x2={x} y2={y} {...C} strokeOpacity={0.4} />)
+    const edges = inner.map(([x, y], i) => {
+      const [nx, ny] = inner[(i + 1) % 6]
+      return <line key={`e${i}`} x1={x} y1={y} x2={nx} y2={ny} {...C} strokeOpacity={0.4} />
+    })
+    shapes = [...spokes, ...edges, ...all.map(([x, y], i) => <circle key={`c${i}`} cx={x} cy={y} r={R} {...C} strokeOpacity={0.6} />)]
+  } else {
+    // Energy · Torus · concentric rings + a flow ellipse + radiating poloidal spokes
+    const R = u * 0.2
+    shapes = [
+      <circle key="o" cx={cx} cy={cy} r={R} {...C} strokeOpacity={0.62} />,
+      <circle key="m" cx={cx} cy={cy} r={R * 0.62} {...C} strokeOpacity={0.5} />,
+      <circle key="i" cx={cx} cy={cy} r={R * 0.24} {...C} strokeOpacity={0.7} />,
+      <ellipse key="e" cx={cx} cy={cy} rx={R} ry={R * 0.42} {...C} strokeOpacity={0.4} />,
+      ...Array.from({ length: 6 }, (_, i) => {
+        const a = (i * Math.PI) / 3
+        return <line key={`r${i}`}
+          x1={cx + R * 0.24 * Math.cos(a)} y1={cy + R * 0.24 * Math.sin(a)}
+          x2={cx + R * Math.cos(a)} y2={cy + R * Math.sin(a)} {...C} strokeOpacity={0.4} />
+      }),
+    ]
+  }
+
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${w} ${h}`} style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
+      {shapes}
+    </svg>
+  )
+}
+
 export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -249,14 +322,15 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
             height: s.artSize,
             objectFit: 'cover',
             borderRadius: 2,
-            zIndex: 1,
+            zIndex: 3, // above the frame SVG's #060612 art backdrop (zIndex 2) so the art is actually visible
             opacity: imgLoaded ? 1 : 0,
             transition: 'opacity 0.3s',
           }}
         />
       )}
 
-      {/* Placeholder when no art yet */}
+      {/* Placeholder when no art yet · element-specific procedural sacred geometry + a small id caption.
+          The id stays so Mahil knows which card to generate next; it fades out under the real PNG. */}
       {(imgError || !imgLoaded) && (
         <div style={{
           position: 'absolute',
@@ -264,15 +338,20 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           top: s.borderW + s.fontSize + 14,
           width: s.width - (s.borderW + 6) * 2,
           height: s.artSize,
-          zIndex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-          gap: 4,
+          zIndex: 3, // above the frame SVG's #060612 art backdrop (zIndex 2) so the geometry is visible
+          overflow: 'hidden',
         }}>
-          <div style={{ opacity: 0.4, lineHeight: 0 }}><ElementIcon element={el} color={colors.primary} size={s.fontSize + 24} /></div>
-          <div style={{ fontSize: s.fontSize - 2, color: colors.secondary, opacity: 0.4, fontFamily: 'serif', textAlign: 'center', padding: '0 4px' }}>
+          {hasProceduralArt(el)
+            ? <ProceduralArt element={el} color={colors.primary} w={s.width - (s.borderW + 6) * 2} h={s.artSize} />
+            : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, lineHeight: 0 }}>
+                <ElementIcon element={el} color={colors.primary} size={s.fontSize + 24} />
+              </div>}
+          <div style={{
+            position: 'absolute', bottom: 3, left: 0, right: 0,
+            fontSize: 8, color: colors.secondary, opacity: 0.45, fontFamily: 'serif',
+            textAlign: 'center', letterSpacing: 0.3, padding: '0 4px',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
             {card.id}
           </div>
         </div>
