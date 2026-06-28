@@ -16,7 +16,7 @@ import { supabase } from '../lib/supabase'
 // Build the canonical self-presence payload. Every track() sends the FULL object · a
 // partial track() would drop fields Supabase doesn't merge (it replaces the keyed entry),
 // which is the bug that made ready-toggles wipe seat/host. One source of truth fixes it.
-function buildSelf(user, username, seat, isHost, isReady, status, mode) {
+function buildSelf(user, username, seat, isHost, isReady, status, mode, clusterBonus) {
   return {
     userId: user?.id ?? null,
     username: username ?? 'Builder',
@@ -28,16 +28,24 @@ function buildSelf(user, username, seat, isHost, isReady, status, mode) {
     // feels populated. The room lifecycle owner (useGameRoom) derives status from roomPhase + the chosen mode.
     status: status ?? 'in_lobby',
     mode: mode ?? null,
+    // Live cluster bonus (board game rule p9 · getClusterTotal · T2 S18) surfaced into presence so the roster
+    // can show a game's current civilization-level cluster points. BOARD-GLOBAL · the SAME number for every
+    // player (no per-hex placer to attribute it · documented divergence in patternMatcher), so every seat
+    // reports the same value and a consumer reads it from any entry. 0 in the lobby (no board · the caller
+    // gates it to roomPhase==='playing'). The caller computes it · this transport stays dumb (status/mode pattern).
+    clusterBonus: clusterBonus ?? 0,
   }
 }
 
 /**
- * usePresence(roomId, user, username, seat, isHost, status, mode)
+ * usePresence(roomId, user, username, seat, isHost, status, mode, clusterBonus)
  * Returns { players, updatePresence, sendGameStart, gameStarted, presenceReady, resetPresence }.
- * Subscribes only when roomId is non-null. Re-subscribes on roomId change · seat/host/username/status/mode
- * changes only re-track (no re-subscribe), so toggling ready or starting the game never churns the channel.
+ * Subscribes only when roomId is non-null. Re-subscribes on roomId change · seat/host/username/status/mode/
+ * clusterBonus changes only re-track (no re-subscribe), so toggling ready or starting the game never churns
+ * the channel. clusterBonus is a board-GLOBAL value the caller computes (getClusterTotal · board game rule p9)
+ * · default 0 keeps every existing caller's payload identical until it passes the term.
  */
-export function usePresence(roomId, user, username, seat, isHost, status = 'in_lobby', mode = null) {
+export function usePresence(roomId, user, username, seat, isHost, status = 'in_lobby', mode = null, clusterBonus = 0) {
   const [players, setPlayers] = useState([])
   const [gameStarted, setGameStarted] = useState(false)
   const [presenceReady, setPresenceReady] = useState(false)
@@ -45,8 +53,8 @@ export function usePresence(roomId, user, username, seat, isHost, status = 'in_l
   const channelRef = useRef(null)
   // Latest self payload · refs so the subscribe effect (keyed on roomId only) always tracks
   // current values without re-subscribing when they change.
-  const selfRef = useRef(buildSelf(user, username, seat, isHost, false, status, mode))
-  selfRef.current = buildSelf(user, username, seat, isHost, selfRef.current?.isReady ?? false, status, mode)
+  const selfRef = useRef(buildSelf(user, username, seat, isHost, false, status, mode, clusterBonus))
+  selfRef.current = buildSelf(user, username, seat, isHost, selfRef.current?.isReady ?? false, status, mode, clusterBonus)
 
   const cleanup = useCallback(() => {
     if (channelRef.current) {
@@ -91,13 +99,15 @@ export function usePresence(roomId, user, username, seat, isHost, status = 'in_l
     return cleanup
   }, [roomId, user?.id, cleanup])
 
-  // Re-publish presence when this player's status or mode changes (lobby → in_game/in_flow_game on start, or
-  // back to in_lobby). track() otherwise fires ONLY on subscribe + ready-toggle, so without this the roster
-  // would freeze everyone at 'in_lobby'. Re-track only after SUBSCRIBED (presenceReady) · idempotent · no
-  // re-subscribe (the channel is untouched · seat/host churn-avoidance pattern extended to status/mode).
+  // Re-publish presence when this player's status, mode, or live clusterBonus changes (lobby → in_game/
+  // in_flow_game on start or back to in_lobby · the board's cluster total moving during play). track()
+  // otherwise fires ONLY on subscribe + ready-toggle, so without this the roster would freeze at the first
+  // payload. Re-track only after SUBSCRIBED (presenceReady) · idempotent · no re-subscribe (the channel is
+  // untouched · the seat/host churn-avoidance pattern extended to status/mode/clusterBonus). clusterBonus is a
+  // primitive, so this fires only when the NUMBER changes — not on every regions re-render in the caller.
   useEffect(() => {
     if (channelRef.current && presenceReady) channelRef.current.track(selfRef.current)
-  }, [status, mode, presenceReady])
+  }, [status, mode, clusterBonus, presenceReady])
 
   // Merge a partial update into the canonical payload and re-track the WHOLE thing.
   const updatePresence = useCallback(async (partial) => {

@@ -8,12 +8,13 @@
 //
 // Auth is a PRECONDITION · `user`/`username` come from useAuth, never created here.
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { DECK } from '../lib/projectCards'
 import { usePresence } from './usePresence'
 import { getModeConfig, DEFAULT_GAME_MODE } from '../store/gameConfig'
+import { getClusterTotal } from '../lib/patternMatcher'
 
 // Seat → colour. room_players has UNIQUE(room_id, player_color) AND UNIQUE(room_id, seat_number),
 // so deriving colour from the (unique) seat keeps colour unique too · no extra coordination.
@@ -103,13 +104,25 @@ export function useGameRoom(user, username) {
     : roomPhase === 'lobby' ? 'in_lobby'
     : 'idle'
 
+  // Live cluster bonus (board game rule p9 · getClusterTotal · T2 S18) threaded into presence so the roster can
+  // surface a game's current civilization-level cluster points. Reactive: subscribe to the store's regions so the
+  // value tracks the live board · memoised so unrelated re-renders (lobbyError, ready-toggle) don't re-run the BFS.
+  // ONLY during play · in lobby/idle there is no board of ours (a prior game's regions could linger in the store),
+  // so report 0. getClusterTotal is board-GLOBAL (the SAME number for every player · no per-hex placer to attribute
+  // it · patternMatcher) and reuses the one cluster BFS (rule 10). usePresence re-tracks only when this NUMBER moves.
+  const liveRegions = useGameStore(s => s.regions)
+  const clusterBonus = useMemo(
+    () => (roomPhase === 'playing' ? getClusterTotal(liveRegions) : 0),
+    [roomPhase, liveRegions],
+  )
+
   const {
     players: lobbyPlayers,
     updatePresence,
     sendGameStart,
     gameStarted,
     resetPresence,
-  } = usePresence(roomId, user, username, seat, isHost, presenceStatus, gameMode)
+  } = usePresence(roomId, user, username, seat, isHost, presenceStatus, gameMode, clusterBonus)
 
   // Joiner transition: a 'game_start' broadcast flips us to playing · the host sets it locally
   // in startGame (broadcast does not echo to the sender by default).
