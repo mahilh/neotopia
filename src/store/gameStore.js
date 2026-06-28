@@ -102,6 +102,30 @@ function refillFactoryDraft(state, factoryId) {
   if (state.productionTiles.length > 0) {
     factory.elements = tileToFactoryElements(state.productionTiles[0])
   }
+
+  // The clock may have reached its final tile WHILE the Flow deck was already empty (this is one of the two
+  // orderings that complete the soft-lock · see maybeForceFlowEndgame). Re-check after every refill.
+  maybeForceFlowEndgame(state)
+}
+
+// Flow soft-lock guard (T2 S19). Flow mode's simultaneous draw (getModeConfig.SIMULTANEOUS_DRAW) lets every
+// seat draw every window, so the whole deck+offer can drain into players' hands BEFORE the production-tile
+// clock runs out. The clock — the ONLY thing that sets endGameTriggered (refillFactoryDraft above) — advances
+// only when a factory empties on a placement. If placements stall (S18 bot: 56 cards in hands · 36 placed ·
+// productionTilesRemaining=1 · endGameTriggered=false), the last end-flag tile is never consumed and the game
+// freezes on phase 'playing' forever. This safety net forces the SAME endGameTriggered flag the natural clock
+// sets (rule 62 · extend, never replace) once drawing is PERMANENTLY impossible (deck AND offer both empty)
+// AND only the final tile remains (productionTilesRemaining<=1) — leaving endTurn's existing 2-round → 'scoring'
+// path to end the game. Mode-gated to Flow: Classic is turn-locked, so its slow deck never out-drains the
+// clock and this never fires there (Classic's serialized behavior is byte-identical). The <=1 guard keeps it
+// conservative — it only ever fires at the very last tile, where forcing the endgame equals the natural
+// trigger, so a healthy game is never cut short. Deterministic · no Date/random in the reducer (rule 32).
+function maybeForceFlowEndgame(state) {
+  if (state.endGameTriggered) return // already in the endgame · nothing to force
+  if (!getModeConfig(state.mode).SIMULTANEOUS_DRAW) return // Flow only · Classic is unaffected
+  if (state.deck.length === 0 && state.theOffer.length === 0 && state.productionTilesRemaining <= 1) {
+    state.endGameTriggered = true
+  }
 }
 
 export const useGameStore = create(immer((set, get) => ({
@@ -285,6 +309,10 @@ export const useGameStore = create(immer((set, get) => ({
     }
 
     if (isCurrentSeat) state.actionsRemaining-- // only the active turn-holder spends an action (rule 65)
+
+    // The draw that empties the card supply is one of the two seams that can complete the Flow soft-lock
+    // (the other is a tile-consuming refill · see refillFactoryDraft). Re-check after every draw.
+    maybeForceFlowEndgame(state)
   }),
 
   // Score a card · returns true on a real award, false if rejected (wrong seat, card not in
