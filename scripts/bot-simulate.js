@@ -293,11 +293,19 @@ async function doRandomAction(page, turn, actionNum, errors, domDiag) {
         if (await elBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
           await elBtn.click({ timeout: 2000, force: true }).catch(() => {})
           await delay(300)
-          // STEP 3 · pick a region this factory borders
-          const regBtn = page.getByRole('button').filter({ hasText: REGION_RE }).first()
-          if (await regBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
-            await regBtn.click({ timeout: 2000, force: true }).catch(() => {})
-            await delay(300)
+          // STEP 3 · pick a region this factory borders — RANDOM, not .first(). v4.7 (T2 S20): .first() made the
+          // bot FIXATE on the first-bordered region; when that one is full but the OTHER bordered region is empty
+          // (placeable on its center), the bot got no valid hex and spun (Flow S20 · DB-witnessed: stuck placed:36
+          // · region 2 EMPTY · regions 0/1 full at 18 · engine healthy · guard correctly dormant · deck never
+          // drained · the bot simply never tried the empty region). Randomizing (like the factory pick on line 284)
+          // lets it reach the empty region's center and keep the tile clock advancing to a natural endgame.
+          const regBtns = await page.getByRole('button').filter({ hasText: REGION_RE }).all()
+          if (regBtns.length > 0) {
+            const regBtn = regBtns[Math.floor(Math.random() * regBtns.length)]
+            if (await regBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+              await regBtn.click({ timeout: 2000, force: true }).catch(() => {})
+              await delay(300)
+            }
           }
         }
 
