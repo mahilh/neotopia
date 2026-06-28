@@ -6,16 +6,24 @@
 // on placing an element. It shows once ever (localStorage), only on the first turn, only on your turn.
 
 import { useState } from 'react'
+import { useGameStore } from '../store/gameStore'
+import { getModeConfig } from '../store/gameConfig'
 
 const KEY = 'neotopia_tutorial_v1'
 // Fail SAFE: if localStorage is unavailable (private mode / blocked), treat as already seen so we never
 // trap the player behind an overlay we also can't dismiss-persist.
 export const tutorialSeen = () => { try { return !!localStorage.getItem(KEY) } catch { return true } }
 
-const STEPS = [
+// Steps are built per-mode (T1 S20) so the first (turn-structure) step states the live clock + draw rules:
+// Flow is a short simultaneous-draw sprint, Classic a longer turn-locked game. The numbers come from
+// getModeConfig — the single source for the per-mode params (gameConfig.js) — never hardcoded here, so a
+// config change can't silently drift the onboarding copy (rule 32 · constants, not magic numbers).
+const buildSteps = (cfg, isFlow) => [
   {
     heading: 'Three actions per turn',
-    body: 'Each turn you choose three times. You can draw a project card from the Offer, or move an element from a factory onto the board.',
+    body: isFlow
+      ? `Each turn you choose three times: draw a project card from the Offer, or move an element from a factory onto the board. In Flow mode the clock is just ${cfg.TURN_TIME_LIMIT} seconds per turn and every player draws at the same time.`
+      : `Each turn you choose three times. You can draw a project card from the Offer, or move an element from a factory onto the board. You have ${cfg.TURN_TIME_LIMIT} seconds per turn.`,
     visual: null,
   },
   {
@@ -32,8 +40,15 @@ const STEPS = [
 
 export default function Tutorial({ onDismiss }) {
   const [step, setStep] = useState(0)
-  const s = STEPS[step]
-  const isLast = step === STEPS.length - 1
+  // Mode-aware (T1 S20): read the live mode from the store (undefined → Classic via getModeConfig's fallback).
+  // Tutorial only mounts during phase 'playing' (GameRoom gate), so the mode is already seeded by then. Reading
+  // a slice + a pure config accessor is consumer-only — no store mutation, no lane crossing.
+  const mode = useGameStore(st => st.mode)
+  const cfg = getModeConfig(mode)
+  const isFlow = cfg.SIMULTANEOUS_DRAW
+  const steps = buildSteps(cfg, isFlow)
+  const s = steps[step]
+  const isLast = step === steps.length - 1
 
   const dismiss = () => {
     try { localStorage.setItem(KEY, '1') } catch {}
@@ -59,7 +74,7 @@ export default function Tutorial({ onDismiss }) {
 
         {/* Step progress bars */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
-          {STEPS.map((_, i) => (
+          {steps.map((_, i) => (
             <div key={i} style={{
               height: 3, flex: 1, borderRadius: 2,
               background: i <= step ? 'rgba(127,119,221,0.8)' : 'rgba(255,255,255,0.1)',
@@ -68,8 +83,32 @@ export default function Tutorial({ onDismiss }) {
           ))}
         </div>
 
+        {/* Mode pacing chip (T1 S20) · always visible · Flow = gold (matches the lobby Flow toggle + FinalScore
+            winner gold rgba(255,215,0)), Classic = the tutorial's purple. Numbers from getModeConfig · the draw
+            line only shows when the mode actually draws simultaneously. tabular-nums on the numbers (rule 5). */}
+        <div
+          data-testid="tutorial-mode"
+          data-mode={isFlow ? 'flow' : 'classic'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 20,
+            padding: '7px 12px', borderRadius: 8,
+            background: isFlow ? 'rgba(255,215,0,0.07)' : 'rgba(127,119,221,0.08)',
+            border: `1px solid ${isFlow ? 'rgba(255,215,0,0.32)' : 'rgba(127,119,221,0.3)'}`,
+          }}
+        >
+          <span style={{
+            fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', fontWeight: 600,
+            color: isFlow ? 'rgba(255,215,0,0.92)' : 'rgba(127,119,221,0.95)',
+          }}>
+            {cfg.label} mode
+          </span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>
+            {cfg.TURN_TIME_LIMIT}s per turn · {cfg.END_GAME_TILE} tiles{isFlow ? ' · draw simultaneously' : ''}
+          </span>
+        </div>
+
         <div style={{ fontSize: 10, letterSpacing: 3, color: 'rgba(255,255,255,0.4)', marginBottom: 10, textTransform: 'uppercase' }}>
-          Step {step + 1} of {STEPS.length}
+          Step {step + 1} of {steps.length}
         </div>
 
         <h2 style={{ fontSize: 21, fontWeight: 500, color: 'rgba(255,255,255,0.9)', marginBottom: 13, lineHeight: 1.3 }}>
