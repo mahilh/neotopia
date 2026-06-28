@@ -42,3 +42,4 @@ dist-ssr
 /test-results/
 /playwright-report/
 /playwright/.cache/
+.claude/service-account-key.json
