@@ -21,7 +21,7 @@ const FILE_IDS = {
   t1reviews:     '1YUch0UR-YpPNQ48fTxRW7gRJoL9lSzyxZYGVuAaeYdk',
   t2reviews:     '10FkUvJF0Bt0stSmuIMvpdEtiQ4Ccc9x74cskeRzs58c',
   t3reviews:     '11R8fXkcqUitdmvwVEA8sGj2lUDJVjRgKgUcskWAhhw0',
-  platobooksskill: '1Qb8VkBdRprU2loJdu4oA9dI2ZmxHxT-AHMJ5dCgU9sQ',
+  platobooks: '1Qb8VkBdRprU2loJdu4oA9dI2ZmxHxT-AHMJ5dCgU9sQ',
 };
 
 const CARD_ART_FOLDER = '1mAMAeriwZSlrTJTFczFX56HCasvUQfyo';
