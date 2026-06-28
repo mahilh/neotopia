@@ -2,8 +2,9 @@
 // T1 owns this file. This is NOT a scoreboard · it is a record of a civilization that was built.
 //
 // PREMISE-CHECKED contracts (rule 7/28 · the forge draft assumed all three wrong):
-//   · calculateFinalScore(regionalScores:number[], unusedBonusCount) -> NUMBER
-//       formula: best + 2nd + (worst x 3) + (unusedBonus x 3) · cluster is folded into scores upstream.
+//   · calculateFinalScore(regionalScores:number[], unusedBonusCount, clusterBonus) -> NUMBER
+//       formula: best + 2nd + (worst x 3) + (unusedBonus x 3) + clusterBonus · the cluster bonus is a FLAT
+//       peer term (board game rule p9 · getClusterTotal · T2 S18), NOT folded into a region score upstream.
 //   · player state: { username, scores:[r0,r1,r2], bonusTokens:[type], scoredCardIds?:[id] }
 //       scoredCardIds is optional · "Districts Built" degrades gracefully when it is absent.
 //   · terminal phase is 'scoring' (gameStore endTurn) · NOT 'ended' · the lobby lives at '/lobby'
@@ -30,10 +31,15 @@ const GLOBAL_INDEX_BASE = 147823 // canonical seed · fallback only · getGlobal
 const ELEMENT_LABELS = { energy: 'Energy', biofarming: 'BioFarming', technology: 'Technology', community: 'Community' }
 
 // One player's final record · derived purely from store-true fields, no fabricated data (rule 32).
-function recordFor(player) {
+// `clusterBonus` is the board-global cluster term (board game rule p9 · getClusterTotal · T2 S18) — a FLAT
+// peer of the unused-token bonus that the engine folds into every player's total (calculateFinalScore's 3rd
+// arg). The SAME number for every player (the board is shared · no per-hex placer to attribute it · T2 S18),
+// so it lifts all totals equally and never changes the ranking. Passing it here makes the on-screen total
+// match the game_end audit record, which computes the identical total (gameEndEvent.js · rule 40/65/63).
+function recordFor(player, clusterBonus = 0) {
   const scores = [0, 1, 2].map(id => player.scores?.[id] ?? 0)
   const unusedBonus = player.bonusTokens?.length ?? 0
-  const total = calculateFinalScore(scores, unusedBonus) // single source of truth · the engine fn.
+  const total = calculateFinalScore(scores, unusedBonus, clusterBonus) // single source of truth · the engine fn.
 
   const sorted = [...scores].sort((a, b) => b - a)
   const [best, second, worst] = [sorted[0] ?? 0, sorted[1] ?? 0, sorted[2] ?? 0]
@@ -45,7 +51,7 @@ function recordFor(player) {
     .map(id => DECK.find(c => c.id === id))
     .filter(Boolean)
 
-  return { ...player, scores, unusedBonus, total, best, second, worst, worstRegionId, scoredCards }
+  return { ...player, scores, unusedBonus, clusterBonus, total, best, second, worst, worstRegionId, scoredCards }
 }
 
 // Reactively honors prefers-reduced-motion · true when the user asked for less motion.
@@ -79,21 +85,31 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     return () => clearTimeout(t)
   }, [reduceMotion])
 
+  // Board-global element clusters (T2 S17/S18 getClusterDetail · BFS · rule 10). The board is SHARED (no
+  // per-hex placer), so a cluster · and its bonus · belongs to the CIVILIZATION, not a player · shown once,
+  // not per record. Each cluster of >= 2 like elements is worth 1 point per token on it (board game rule p9 ·
+  // `bonus` === `count` · T2 S18). Empty until T2's export is on origin → the section just hides (Rule 65 ·
+  // the consumer degrades gracefully across an unsynced seam · namespace read is `undefined`, not a build fail).
+  const clusterDetail = useMemo(
+    () => (typeof patternMatcher.getClusterDetail === 'function' ? patternMatcher.getClusterDetail(regions) : []),
+    [regions],
+  )
+  // The board-global cluster bonus · the SAME flat term the engine folds into every player's final total
+  // (calculateFinalScore's 3rd arg · T2 S18). Derived from the SAME clusterDetail rendered below, so the
+  // "+N total" line can never disagree with the per-cluster rows (Rule 63) · this equals, by construction,
+  // patternMatcher.getClusterTotal(regions) (which is itself sum(getClusterDetail.bonus) · one BFS · rule 10).
+  const clusterBonus = useMemo(
+    () => clusterDetail.reduce((sum, c) => sum + (c.bonus || 0), 0),
+    [clusterDetail],
+  )
+
   const finalScores = useMemo(
-    () => players.map(recordFor).sort((a, b) => b.total - a.total),
-    [players],
+    () => players.map(p => recordFor(p, clusterBonus)).sort((a, b) => b.total - a.total),
+    [players, clusterBonus],
   )
   const totalProjectsBuilt = useMemo(
     () => finalScores.reduce((s, p) => s + p.scoredCards.length, 0),
     [finalScores],
-  )
-  // Board-global element clusters (T2 S17 getClusterDetail · BFS · rule 10). The board is SHARED (no per-hex
-  // placer), so a cluster belongs to the CIVILIZATION, not a player · shown once, not per record. DESCRIPTIVE
-  // size only · no points (T2's data has none · inventing a cluster→points number would render a fabricated
-  // scoring rule as truth · rule 32). Empty until T2's export lands on origin → the section just hides.
-  const clusterDetail = useMemo(
-    () => (typeof patternMatcher.getClusterDetail === 'function' ? patternMatcher.getClusterDetail(regions) : []),
-    [regions],
   )
   // THIS client's own districts · the only amount we may record (own auth.uid() profile · own seat).
   const myDistricts = useMemo(
@@ -156,7 +172,11 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   // payload · the consumer fires it · comms T2 S8). "Exactly one client" = the lowest-seat present writes
   // it (deterministic · everyone else skips · no duplicate rows), and a per-room localStorage guard makes
   // a reload during 'scoring' idempotent. eventType 'gameEnd' → resolveDbEventType → 'game_end' (CHECK-valid).
-  // Skipped in solo (no sync). Uses the players prop (buildGameEndEvent only reads state.players).
+  // Skipped in solo (no sync). Passes BOTH players and regions: buildGameEndEvent folds the board-global
+  // cluster bonus (getClusterTotal · board game rule p9) into each player's audit total, so the permanent
+  // game_end record matches the totals shown on this screen. T2's handoff was explicit — thread regions into
+  // the display total AND this payload in the SAME change, else the audit (0 cluster) diverges from the screen
+  // (+N cluster) · gameEndEvent.js header · Rule 40/65. regions defaults to [] → 0 bonus when unavailable.
   useEffect(() => {
     if (didGameEndRef.current) return
     if (!sync?.pushState || mySeat == null) return
@@ -166,9 +186,9 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     try { if (guardKey && localStorage.getItem(guardKey)) { didGameEndRef.current = true; return } } catch {}
     didGameEndRef.current = true
     try { if (guardKey) localStorage.setItem(guardKey, '1') } catch {}
-    const { eventType, eventData } = buildGameEndEvent({ players })
+    const { eventType, eventData } = buildGameEndEvent({ players, regions })
     sync.pushState(eventType, eventData)
-  }, [sync, mySeat, players, roomId])
+  }, [sync, mySeat, players, roomId, regions])
 
   // Global Index target = real persisted aggregate (already includes the seed) + this whole game's
   // contribution, shown optimistically · seed-only fallback before the fetch resolves / on error. A
@@ -309,7 +329,8 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
                 {/* Score formula · the real engine formula, exactly */}
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)', letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums' }}>
                   {player.best} + {player.second} + ({player.worst} × 3)
-                  {player.unusedBonus > 0 ? ` + (${player.unusedBonus} × 3)` : ''} = {player.total}
+                  {player.unusedBonus > 0 ? ` + (${player.unusedBonus} × 3)` : ''}
+                  {player.clusterBonus > 0 ? ` + ${player.clusterBonus} cluster` : ''} = {player.total}
                 </div>
               </div>
 
@@ -338,7 +359,9 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
       </div>
 
       {/* ELEMENT CLUSTERS · the connected patterns the civilization formed (board-global · the most
-          educational end-screen moment · descriptive sizes from getClusterDetail · NO points · T1 S17 Task C). */}
+          educational end-screen moment). Each cluster is worth 1 point per token on it (board game rule p9 ·
+          getClusterDetail.bonus · T2 S18) · this is the same flat clusterBonus folded into every total above
+          (Rule 63 · the per-row points + the total line sum to that number). T1 S19 (was count-only · S17 Task C). */}
       {clusterDetail.length > 0 && (
         <div style={{
           maxWidth: 420, width: '100%', padding: '22px 28px', borderRadius: 20,
@@ -348,7 +371,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
             Element Clusters
           </div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
-            the connected patterns this civilization formed
+            the connected patterns this civilization formed · 1 point per token (board game rule)
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {clusterDetail.map((c, i) => (
@@ -358,12 +381,32 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
                   {ELEMENT_LABELS[c.element] ?? c.element}
                 </span>
                 <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>· {c.regionName}</span>
-                <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                  {c.count} connected
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                    {c.count} connected
+                  </span>
+                  {/* bonus === count by the rule · the guard renders 0 pts if T2's `bonus` field is ever absent (Rule 65) */}
+                  <span style={{ color: 'rgba(200,148,64,0.9)', fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 46, textAlign: 'right' }}>
+                    +{c.bonus ?? 0} pts
+                  </span>
                 </span>
               </div>
             ))}
           </div>
+          {/* Board-global total · equals the clusterBonus added to every player's final score above */}
+          {clusterBonus > 0 && (
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)',
+            }}>
+              <span style={{ fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+                Cluster bonus
+              </span>
+              <span style={{ color: 'rgba(200,148,64,0.95)', fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                +{clusterBonus} pts total
+              </span>
+            </div>
+          )}
         </div>
       )}
 
