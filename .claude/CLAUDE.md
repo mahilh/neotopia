@@ -211,3 +211,12 @@ PERMANENT ANTI-REGRESS RULES (69 · cumulative):
 CODEWORDS: T[N] AUTODRIVE! · SKILLUPGRADE! · DEEPDIVE! · XRAY! · NIGHTSAVE!
 FORGES: .claude/skills/forges/ · T1_S18 + T2_S18 + T3_S18 (latest)
 DOCS: docs/ · CIVILIZATION_SOUL_DOCUMENT · NEOTOPIA_STAGE_3_VISION · NEOTOPIA_PITCHDECK_EXPANDED
+
+DRIVE SKILLS SYSTEM (permanent · June 29 2026):
+  Folder: https://drive.google.com/drive/folders/16VcjTyJA95ELauwukSEGXFt3FCgHu1R2
+  11 skill files · service account sync · never expires
+  Boot: node scripts/sync-drive-skills.cjs --test
+  Sync: node scripts/sync-drive-skills.cjs --all (NIGHTSAVE mandatory)
+  Flaw log: node scripts/sync-drive-skills.cjs --log-flaw <CAT> "<flaw>" <score>
+  Session log: node scripts/sync-drive-skills.cjs --log-session <name> <shipped> <score>
+  EVERY SESSION CLOSE RUNS --all AND --log-session. NO EXCEPTIONS.
