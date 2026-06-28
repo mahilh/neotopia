@@ -11,6 +11,14 @@ import { getGlobalIndex } from '../lib/supabase'
 
 const GLOBAL_INDEX_BASE = 147823 // fallback only · getGlobalIndex already folds the seed in.
 
+// Card-art design progress (T1 S20) · counted at BUILD time, NO server call. import.meta.glob resolves the
+// existing /public/art/cards/card_NN.png files into the bundle (verified empirically against the real Vite 8
+// build · public globs DO match · Object.keys reads only the matched PATHS, so the non-eager glob never
+// imports or bundles the PNGs themselves). The deck is 56 cards (projectCards.js · the fixed denominator);
+// the numerator climbs on its own as real illustrations land in public/art/cards/ — no code change needed.
+const DESIGNED_DISTRICTS = Object.keys(import.meta.glob('/public/art/cards/card_*.png')).length
+const TOTAL_DISTRICTS = 56
+
 const BG = '#0a0a0f'
 const sectionLabel = {
   fontSize: 12, letterSpacing: 4, color: 'rgba(255,255,255,0.5)', // WCAG AA (~5.3:1 on #0a0a0f) · 12px min (UX scan)
@@ -233,6 +241,21 @@ export default function Landing() {
 
       {/* ───────────── FOOTER ───────────── */}
       <footer style={{ padding: '32px 24px 48px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        {/* Civilization design progress (T1 S20) · how many of the 56 district illustrations actually exist,
+            counted at build time from public/art/cards (DESIGNED_DISTRICTS · no server call). Quiet by design
+            and honest at 0 — the card art is the civilization's face, and this tracks it toward 56. The gold
+            fill matches the landing's accent (blockquote / final-CTA gold rgba(255,215,0)). */}
+        <div style={{ maxWidth: 300, margin: '0 auto 22px' }}>
+          <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: 11 }}>
+            <div style={{
+              height: '100%', width: `${(DESIGNED_DISTRICTS / TOTAL_DISTRICTS) * 100}%`,
+              background: 'rgba(255,215,0,0.5)', borderRadius: 2, transition: 'width 0.8s ease',
+            }} />
+          </div>
+          <div style={{ fontSize: 12, letterSpacing: 1, color: 'rgba(255,255,255,0.45)', fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ color: 'rgba(255,255,255,0.7)' }}>{DESIGNED_DISTRICTS}</span> of {TOTAL_DISTRICTS} civilization districts have been designed
+          </div>
+        </div>
         <div style={{ fontSize: 12, letterSpacing: 3, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
           NeoTopia · Building the civilization · 2055
         </div>
