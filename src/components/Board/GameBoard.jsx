@@ -10,6 +10,19 @@ import HexCell from './HexCell'
 // factory overlap at r>108) · keep r < 72.
 const FACTORY_HIT_R = 70
 
+// T1 S21 · vivid per-region biome fill for empty hexes — the product-owner palette that makes the 3 regions
+// read as distinct living biomes ("feel like a real world"). RECONCILES with T2's terrainBiomes (src/lib · its
+// lane · Rule 62): that data ships intentionally DARK atmospheric bases (#1a1528 / #0d1f14 / #1f0d0d) that on
+// the near-black canvas read as muted-grey; this overrides ONLY the empty-hex FILL at the presentation layer
+// (my lane) with the chosen saturated colors, and falls back to T2's biome.colors.hex for any unexpected id
+// (Rule 65). Keyed by region id (hexUtils REGIONS: 0 Sacred City · 1 Living Earth · 2 Free Energy). Alpha is
+// tuned so the biome reads clearly while element tokens + the white region-score text keep contrast (Rule 55).
+const BIOME_HEX_FILL = {
+  0: 'rgba(34,68,170,0.35)',   // Sacred City  · deep indigo   #2244AA
+  1: 'rgba(29,122,58,0.35)',   // Living Earth · forest green  #1D7A3A
+  2: 'rgba(204,85,34,0.35)',   // Free Energy  · warm amber-red #CC5522
+}
+
 export default function GameBoard({
   // All props have safe defaults so board renders without T2 store
   regions = REGIONS.map(r => ({...r, hexes: {}})),
@@ -84,7 +97,7 @@ export default function GameBoard({
               isPartialMatch={isPartialMatch(hex.q, hex.r)}
               isCompletionCandidate={isCompletionCandidate(hex.q, hex.r)}
               regionColor={reg.color}
-              biomeFill={biome.colors.hex}
+              biomeFill={BIOME_HEX_FILL[reg.id] ?? biome.colors.hex}
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
           )
