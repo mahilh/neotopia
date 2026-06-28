@@ -1,92 +1,95 @@
-# CLAUDE SELF-IMPROVE LOG
-# Rating System: /1000 · Brutal · No bias · No mercy · Timestamped forever
-# Every flaw logged. Every improvement verified. Claude reads this before every session.
+# CLAUDE SELF-IMPROVE LOG · /1000 · Brutal · No bias · Timestamped forever
 # Drive ID: 1rIX1P_gx35UftbUe5gPqXisVAOxOs4RB56O3S5RU9Pg
-
-## WHAT THIS FILE IS
-The permanent memory of every mistake Claude has made across all NeoTopia sessions.
-Claude Code (Opus 4.8) flaws. Claude Desktop (Sonnet 4.6) flaws. Both rated /1000.
-Read at boot. Internalized before any task. Never repeated.
+# Read FIRST at every session. Internalize before any task. Never repeat.
 
 ## RATING SCALE /1000
-900-1000: Perfect execution. Exists in theory only.
-800-899:  Elite. Rare. What we aim for.
-700-799:  Strong. Most sessions should hit this.
-600-699:  Acceptable. Noticeable gaps.
-500-599:  Below standard. Real harm to the project.
+900-1000: Perfect. Theoretical ceiling only.
+800-899:  Elite. Rare. Target level.
+700-799:  Strong. Solid sessions hit this.
+600-699:  Acceptable. Noticeable gaps present.
+500-599:  Below standard. Real harm to project.
 400-499:  Significant failure. Wasted time.
-300-399:  Critical failure. Broke something.
-0-299:    Catastrophic. Token waste. Caused regression.
+300-399:  Critical failure. Broke something real.
+0-299:    Catastrophic. Regression caused. Token waste.
 
-## FLAW CATEGORIES
-CODE: Wrong logic, broken tests, bad architecture, wasted commits
-FETCH: Bad API calls, wrong data interpretation, stale premises
-OUTPUT: Vague answers, wrong format, em dashes, hallucinations
+## CATEGORIES
+CODE: Wrong logic · broken tests · bad architecture · wasted commits
+FETCH: Bad API calls · wrong data interpretation · stale premises used as truth
+OUTPUT: Vague answers · wrong format · em dashes · hallucinations · overclaiming
 RULES: Any of the 69 anti-regress rules violated
-DRIVE: Sync failures, wrong file IDs, permission errors
-MEMORY: Forgetting context that was explicitly given
-ESTIMATION: Wrong complexity estimates, wrong time predictions
+DRIVE: Sync failures · wrong file IDs · permission errors · storage errors
+MEMORY: Forgetting explicit context · repeating resolved questions
+ESTIMATION: Wrong complexity or time estimates
 CROSS-LANE: Touching files owned by another terminal
 
-## HOW TO LOG A FLAW (automatic via NIGHTSAVE!)
-node scripts/sync-drive-skills.cjs --log-flaw <CATEGORY> "<flaw description>" <score>
+## HOW CLAUDE USES THIS FILE
+1. Search Drive for CLAUDE_SELF_IMPROVE at session start
+2. Read all past flaws — which category repeats?
+3. State explicitly: "I will not repeat flaws [N], [N], [N] this session"
+4. Predict session score /1000 before starting
+5. At NIGHTSAVE: compare predicted vs actual
+6. Log any new flaws discovered
 
-Example:
-node scripts/sync-drive-skills.cjs --log-flaw CODE "Used wrong file ID for DEEPDIVE causing permission error" 420
-node scripts/sync-drive-skills.cjs --log-flaw OUTPUT "Gave Drive write instructions that silently failed for 6 attempts" 380
+## RULES BORN FROM FLAWS (permanent)
+DRIVE-1: Before using any MCP write tool, test it once on a throwaway file first.
+DRIVE-2: Never reuse Drive file IDs from old projects. Always create fresh via copy_file.
+DRIVE-3: Service accounts have no Drive storage quota. Files must live in human's Drive.
+CODE-1: Before writing any Node.js script, check package.json "type" field.
+OUTPUT-1: Claude Desktop claude_desktop_config.json only works for stdio MCP servers.
+MEMORY-1: Always check if a tool exists (which X) before recommending installation.
+FETCH-1: Validate HEAD and test count from live source at boot — not from skill file.
 
-## HOW CLAUDE USES THIS AT SESSION START
-1. Search Drive for CLAUDE_SELF_IMPROVE
-2. Read all logged flaws from previous sessions
-3. Identify patterns (what category keeps failing)
-4. Explicitly state: "I will not repeat these N flaws this session"
-5. Rate my predicted session score before starting
-6. Compare predicted vs actual at NIGHTSAVE
+## FLAW LOG (newest first)
+────────────────────────────────────────────────────────────
+[2026-06-29 T3 S21] FETCH · SCORE: 600/1000
+FLAW: Self-improving skill docs carry stale facts at S21 boot.
+MANIFEST claimed HEAD 45114fe / 155 tests. Reality: 641f7be / 158.
+AUTODRIVE_SKILL claimed HEAD 51eec1c / 69 rules — even more stale.
+The --all sync mirrors files to Drive but never updates the facts inside them.
+Caused forge to re-issue an already-completed task (board biomes) twice.
+FIX: Boot premise-checks must validate HEAD (git rev-parse) and test count
+(vitest) at the moment of use — not from the skill file's last-written content.
+RULE BORN (Rule 71): A self-improving system that syncs files but never refreshes
+facts inside them faithfully mirrors rot. Sync ≠ current.
+────────────────────────────────────────────────────────────
+[2026-06-29 DRIVE] DRIVE · SCORE: 350/1000
+FLAW: Attempted to create files in service account Drive storage.
+Service accounts have no Drive storage quota. Always fails.
+Wasted 3 attempts before diagnosing root cause.
+FIX: Files must live in Mahil's Drive. Service account gets Editor access via sharing.
+RULE BORN (DRIVE-3): Service accounts have no Drive storage. Files live in human's Drive.
+────────────────────────────────────────────────────────────
+[2026-06-29 DRIVE] DRIVE · SCORE: 380/1000
+FLAW: create_file Drive MCP silently failing 6 consecutive attempts.
+Did not diagnose root cause (read-only OAuth) until 6 failures.
+FIX: Test write capability with one file before bulk operations.
+RULE BORN (DRIVE-1): Test MCP write tools before relying on them.
+────────────────────────────────────────────────────────────
+[2026-06-29 CODE] CODE · SCORE: 420/1000
+FLAW: require() in ES module project. package.json has "type":"module".
+Did not check package.json before writing script.
+FIX: .cjs extension. Permanent.
+RULE BORN (CODE-1): Check package.json type before writing Node.js scripts.
+────────────────────────────────────────────────────────────
+[2026-06-29 DRIVE] DRIVE · SCORE: 400/1000
+FLAW: Used old ACT AI Drive file ID without checking service account access.
+Permission error mid-sync after 6 files succeeded.
+FIX: Always create fresh Drive files via copy_file.
+RULE BORN (DRIVE-2): Never reuse Drive IDs from old projects.
+────────────────────────────────────────────────────────────
+[2026-06-29 OUTPUT] OUTPUT · SCORE: 500/1000
+FLAW: Vercel MCP SSE config failed silently. OAuth flip-switch workaround.
+Should have known Claude Desktop only supports stdio MCPs.
+RULE BORN (OUTPUT-1): Claude Desktop config.json = stdio only. HTTP/SSE = OAuth or SA.
+────────────────────────────────────────────────────────────
+[2026-06-29 MEMORY] MEMORY · SCORE: 460/1000
+FLAW: Recommended installing tmux when already installed (3.6b).
+Did not check `which tmux` first.
+RULE BORN (MEMORY-1): Check if tool exists before recommending installation.
+────────────────────────────────────────────────────────────
 
-## PERMANENT IMPROVEMENT RULES (born from past flaws)
-[Rules accumulate here after each session]
-
-## FLAW LOG (most recent first)
-────────────────────────────────────────────────────────────
-[2026-06-29] DRIVE · SCORE: 380/1000
-FLAW: create_file Drive MCP tool was silently failing for 6 consecutive attempts.
-Did not diagnose root cause (read-only OAuth scope) until 6 failures.
-Wasted significant tokens before pivoting to copy_file workaround.
-FIX APPLIED: Always test write capability with a single file before bulk operations.
-Never assume MCP tools work — verify each one before relying on it.
-RULE BORN: Before using any MCP write tool, test it once on a throwaway file first.
-────────────────────────────────────────────────────────────
-[2026-06-29] CODE · SCORE: 420/1000
-FLAW: Provided sync script with require() in an ES module project.
-The error message said exactly why (package.json has "type":"module") but
-the script was written without checking package.json first. Rule 7 violation.
-FIX APPLIED: Renamed to .cjs extension. Works permanently.
-RULE BORN: Before writing any Node.js script for this project, check package.json "type" field.
-────────────────────────────────────────────────────────────
-[2026-06-29] DRIVE · SCORE: 400/1000
-FLAW: Used an old ACT AI Drive file ID (1o34GE1e0qmIo3wwGONHxCa0ig4HHmQL9oskyblLsf2Y)
-for DEEPDIVE without checking if service account had access to it.
-Caused "caller does not have permission" error mid-sync after 6 files succeeded.
-FIX APPLIED: Created fresh Drive file via copy_file (service account always has access to files it creates).
-RULE BORN: Never reuse Drive file IDs from old projects. Always create fresh via copy_file.
-────────────────────────────────────────────────────────────
-[2026-06-29] OUTPUT · SCORE: 500/1000
-FLAW: Gave Vercel MCP setup instructions that failed silently (SSE config not supported
-in Claude Desktop config file). Spent multiple sessions on OAuth flip-switch workaround
-before diagnosing root cause. Should have known Claude Desktop only supports stdio MCPs.
-FIX APPLIED: Service account approach bypasses OAuth entirely.
-RULE BORN: Claude Desktop claude_desktop_config.json only works for stdio MCP servers.
-HTTP/SSE servers must use OAuth connectors or service account approaches.
-────────────────────────────────────────────────────────────
-[2026-06-29] MEMORY · SCORE: 460/1000
-FLAW: Forgot that tmux was already installed (3.6b) and recommended installing it,
-causing brew to run a full upgrade + cleanup sequence unnecessarily.
-Did not check `which tmux` before recommending installation.
-RULE BORN: Always check if a tool exists before recommending installation.
-────────────────────────────────────────────────────────────
-
-## NEXT SESSION PREDICTION
-Before starting: predict session score. After: compare honestly.
-Predicted: ___ /1000
-Actual: ___ /1000
-Delta: ___ (positive = improving, negative = degrading)
+## SESSION SCORES (track trajectory)
+S21 setup:  620/1000 (Drive auth errors · ESM error · storage quota error)
+S21 T1:     Logged as 255/300 (terminal scale)
+S21 T2:     Logged as 220/300
+S21 T3:     Logged as 235/300
