@@ -1,6 +1,6 @@
 # NEOTOPIA CLAUDE SKILLS MANIFEST
-# Version: 2.0 · Auto-syncs after every NIGHTSAVE! · 2026-06-28
-# Production HEAD: 45114fe · Tests: 155 green · Rules: 69
+# Version: 2.0 · Auto-syncs after every NIGHTSAVE! · 2026-06-29
+# Production HEAD: 641f7be · Tests: 158 green · Rules: 69
 
 ## SKILL RATINGS
 AUTODRIVE!     195/200  Full session launch · T1/T2/T3 · forge gate · 5-lens review
@@ -33,8 +33,9 @@ Sync: node scripts/sync-drive-skills.cjs --all
 
 ## NEOTOPIA PRODUCTION STATE
 Game: neotopia.vercel.app · GitHub: mahilh/neotopia
-HEAD: 45114fe · Branch: main
-Flow soft-lock: FIXED (d7365bd) · Cluster scoring: LIVE (2348daa + 442b694)
+HEAD: 641f7be · Branch: main
+Flow soft-lock: FIXED (d7365bd) · termination fuzz-proven (7d9ec1c · teeth-checked)
+Cluster scoring: LIVE (2348daa + 442b694)
 Card art: 12/56 in Drive (Neotopia Card Art folder)
 Board biomes: PENDING T1 next session
-Global Index: awaiting first clean Flow game row
+Global Index: FIRST ROW ACHIEVED · S20 (65b49ea bot v4.7) · 2 rows · first Flow game 2026-06-28 · bot 0-0 · real human scores pending
