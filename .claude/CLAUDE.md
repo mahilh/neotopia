@@ -25,13 +25,15 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
     presence: mode-aware (in_lobby / in_game / in_flow_game)
 
   🔴 CARD ART: 0/56 · shimmer is graceful fallback · real PNGs are the civilization's face
-  🔴 CLUSTER POINTS: missing from scoring · BOARD GAME RULE: 1pt per element in biggest cluster per region
-     T2 S18 Task A is the highest-value unimplemented feature in the game
+  ✅ CLUSTER POINTS: SHIPPED · engine 2348daa (T2 S18 · getClusterDetail.bonus/getClusterTotal/calculateFinalScore
+     3rd arg · 1pt per element in biggest cluster per region) · display 442b694 (T1 S19 · per-cluster +N pts +
+     "+N total" line · folded into every player total + threaded regions→buildGameEndEvent so audit===screen)
   🔴 SIMULTANEOUS DRAW: engine gate correct · channel is snapshot-based (not event-reducer)
      T2 must design atomic seat-scoped draw RPC · T3 wires it after
-  🟡 LANDING PAGE COUNTER: 147,823 is HARDCODED · needs real getGlobalCivilizationTotal · T1 S18
+  ✅ LANDING PAGE COUNTER: REAL · Landing.jsx reads getGlobalIndex() (sum of districts · seed 147823 fallback
+     ONLY) · label "consciousness districts built" matches what the fn returns (T1 S19 Task C verified · Rule 63)
   🟡 BONUS HEX DATA: 10th request · bonus hex (q,r) per region still pending from Mahil
-  🟡 CLUSTER VIZ: shows count-only (no points) · T1 S18 updates once T2 S18 implements the rule
+  ✅ CLUSTER VIZ: shows POINTS · per-cluster +N pts + "+N total" line · folded into player totals (T1 S19 · 442b694)
   🟡 CLEAN FLOW BOT GAME: pending (tree was dirty during S17 run) · T2 S18
   🟡 LIVE-DB UI FLOW E2E: pending · T3 S18
 
@@ -73,7 +75,7 @@ CRITICAL PATTERNS:
   COMMS: NEVER commit
   sacredMilestone symbol: NEVER ✡ hexagram
   getClusterDetail: element keys are LOWERCASE ('energy' not 'Energy')
-  Cluster viz: count-only until T2 S18 ships the points rule
+  Cluster viz: shows points (T1 S19 · 1pt per element token on the biggest cluster · board game rule p9)
 
 TERMINAL LANES:
   T1: src/components/ src/pages/ src/App.jsx src/utils/ src/index.css
@@ -108,7 +110,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (67 · cumulative):
+PERMANENT ANTI-REGRESS RULES (69 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -187,6 +189,24 @@ PERMANENT ANTI-REGRESS RULES (67 · cumulative):
       Sharpens Rule 63 with the CI-boundary dimension. (T3 S17 · factory was
       58px locally but T1's fix was uncommitted · gate-skip held until 2086628
       appeared in the log)
+  68. A migration committed to git is NOT a deployed schema. The file in
+      migrations/ proves INTENT, not STATE — the RPC/table exists in prod only
+      after it is applied to the live DB. Verify against the system of record
+      before depending on it; a PostgREST PGRST202 ("function not found") at
+      runtime means the migration is committed but NOT yet deployed. Pairs with
+      Rule 30 (information_schema != full contract) + Rule 56 (verify columns
+      live). (S18 · migration 011 atomic-draw RPC committed 9ff577e · presence
+      in git does not make supabase.rpc() resolve until it is pushed to the DB.)
+  69. A forge task list is a HYPOTHESIS, not a fact. Premise-check each task
+      against HEAD before executing it, and reconcile when reality has moved —
+      ship the forge's INTENT, not its literal stale steps. Sharpens Rule
+      28/54/64 (a premise has a shelf life) with the task-list dimension.
+      (T1 S19 · the forge said "push 1252bb4 to unblock T2's 2348daa" but at
+      boot local was already 6 ahead with 2348daa committed, and mid-session
+      another terminal pushed the whole S18 set to origin · the literal first
+      action was already done · executing it blindly would chase a vanished
+      premise. Also caught the FinalScore/audit total divergence by re-reading
+      the seam both lanes had touched, not the forge's description of it.)
 
 CODEWORDS: T[N] AUTODRIVE! · SKILLUPGRADE! · DEEPDIVE! · XRAY! · NIGHTSAVE!
 FORGES: .claude/skills/forges/ · T1_S18 + T2_S18 + T3_S18 (latest)
