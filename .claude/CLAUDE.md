@@ -220,3 +220,14 @@ DRIVE SKILLS SYSTEM (permanent · June 29 2026):
   Flaw log: node scripts/sync-drive-skills.cjs --log-flaw <CAT> "<flaw>" <score>
   Session log: node scripts/sync-drive-skills.cjs --log-session <name> <shipped> <score>
   EVERY SESSION CLOSE RUNS --all AND --log-session. NO EXCEPTIONS.
+
+RULE 70 (T1 S21 · June 29 2026):
+A forge can report a feature as missing when it exists but is too subtle to perceive.
+Always verify rendered output (screenshot + DOM measurement), not just code presence.
+Enhance in your own lane rather than rebuild or cross into the owner's data file.
+
+RULE 71 (T3 S21 · June 29 2026):
+A self-improving system that syncs files but never refreshes the facts inside them
+faithfully mirrors rot. Sync ≠ current. Boot premise-checks must validate HEAD
+(git rev-parse --short HEAD) and test count (vitest) from live source at the moment
+of use — never from the skill file's last-written content.
