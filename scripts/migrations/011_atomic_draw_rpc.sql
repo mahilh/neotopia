@@ -181,11 +181,14 @@ grant execute on function public.draw_card_for_seat(uuid, integer, text, integer
 --       jsonb_set 3-level hand append 3→4 with appended==drawn deck-top, WITH ORDINALITY seat→idx
 --       lookup, action decrement 3 to 2. (Caught: v_player_idx MUST be integer not bigint · the RPC
 --       declares it integer, so jsonb->v_player_idx is valid; an ad-hoc bigint cast errors 42883.)
---   [~] FOR UPDATE serialization: guaranteed by Postgres row-lock semantics · the function is one
+--   [x] FOR UPDATE serialization: guaranteed by Postgres row-lock semantics · the function is one
 --       implicit txn holding an exclusive lock on the game_sessions row from SELECT…FOR UPDATE
 --       through UPDATE, so a concurrent caller blocks until the first commits then reads the updated
---       state (the canonical fix for the client-side clobber 17f5931 characterizes). Not separately
---       demonstrated with two live connections (single MCP channel); semantics are standard.
+--       state (the canonical fix for the client-side clobber 17f5931 characterizes). PROVEN EMPIRICALLY
+--       T3 S23 (5c53e12 · tests/e2e/draw-rpc-concurrency.mjs): two live Supabase connections on the SAME
+--       seat fire N concurrent draws · result is N DISTINCT cards, deck shrinks by exactly N, hand grows
+--       by exactly N · zero duplicate, zero loss ("FOR UPDATE serialized: YES"). The S22 single-channel
+--       gap is now CLOSED · the lock serializes under real network contention (Rule 61/63).
 --   [x] RLS interaction: SECURITY DEFINER + search_path="" runs as owner, bypassing RLS; the
 --       room_players seat-ownership EXISTS check IS the authorization, and auth.uid() null-check
 --       rejects true-anon. GRANT is authenticated-only (anon NOT granted · tighter than 009 · Rule 44).
