@@ -1,0 +1,42 @@
+-- NeoTopia · migration 012 · DROP the global UNIQUE(username) on player_profiles (T2 S24 · 2026-06-30)
+-- ============================================================================================
+-- STATUS: ✅ APPLIED TO PRODUCTION · T2 S24 · 2026-06-30 · supabase apply_migration
+--   "drop_username_unique_player_profiles". VERIFIED post-apply against pg_constraint: only PK(id),
+--   FK(user_id), CHECK(elo>=0) and UNIQUE(user_id) remain · player_profiles_username_key is GONE · the
+--   upsert's onConflict:user_id now targets the ONLY unique constraint = structurally 409-proof. A
+--   non-unique lookup index idx_profiles_username remains (harmless · CREATE INDEX, not UNIQUE).
+-- ============================================================================================
+-- THE BUG (T1 S23 trace · root cause confirmed LIVE by T2 S24 against pg_constraint):
+--   player_profiles carries TWO unique constraints · UNIQUE(user_id) AND UNIQUE(username). Every profile
+--   write is an upsert `{ user_id, username }` with onConflict:'user_id' (useAuth.claimUsername +
+--   useGameRoom.createRoom + useGameRoom.joinRoom). A PostgREST upsert can target ONLY ONE conflict
+--   column. So when a NEW / other user_id writes a username already held by a DIFFERENT user_id, the
+--   username unique fires and ON CONFLICT(user_id) cannot resolve it → 23505 unique_violation → HTTP 409.
+--   In the wild: a returning visitor whose anon token was lost (a fresh user_id is minted) but whose
+--   localStorage username persists writes the old name under the new id → every create/join 409s → the
+--   real-room flow is permanently unreachable for them (T1: game_rooms 201, room_players 201, profile 409,
+--   no game_sessions row starts).
+--
+-- WHY DROP IT (not patch the call sites):
+--   1. Two of the three upserts that 409 live in useGameRoom.js (T3 lane) · the SCHEMA is the only
+--      lane-correct fix that resolves ALL THREE sites at once with no cross-lane edit.
+--   2. IDENTITY is user_id, NOT username. PK is id; UNIQUE(user_id) is the real identity key; username is
+--      a cosmetic DISPLAY label. PROVEN: no query reads player_profiles by username · the only
+--      `from('player_profiles')` calls are the three user_id-keyed upserts · zero `.eq('username')` (grep).
+--   3. Anti-impersonation of the PUBLIC record is already enforced server-side by migration 009
+--      (record_civilization_score DERIVES username from auth.uid() · a chosen display name cannot forge
+--      the record). Global display-name uniqueness protects nothing the record relies on.
+--   4. Cost of KEEPING it: a hard block on the core flow with no graceful "name taken" UX. Cost of
+--      DROPPING it: two players MAY share a display name (cosmetic · identity stays user_id).
+--
+-- AFTER THIS: the only unique left is UNIQUE(user_id) · which IS the upsert's onConflict target · so the
+--   profile upsert becomes STRUCTURALLY 409-proof. REVERSIBLE: re-add UNIQUE(username) after a de-dup pass
+--   if globally-unique display names are wanted (PRODUCT decision · flagged to Mahil in comms).
+--
+-- PATTERN: idempotent · DROP CONSTRAINT IF EXISTS · safe to re-run. No data migration needed (this only
+--   removes a future-write block · existing rows are untouched). The backing unique index is dropped with
+--   the constraint; nothing references it (no FK targets username).
+-- ============================================================================================
+
+alter table public.player_profiles
+  drop constraint if exists player_profiles_username_key;
