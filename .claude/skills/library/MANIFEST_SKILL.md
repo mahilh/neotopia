@@ -1,6 +1,10 @@
 # NEOTOPIA CLAUDE SKILLS MANIFEST
-# Version: 3.0 · NIGHTSAVE S21 · 2026-06-28 22:05 UTC
-# HEAD: 5c30980 · Tests: 158 green · Rules: 69 + Rule 70/71 candidates
+# Version: 3.2 · T2 S22 · 2026-06-30
+# HEAD: 32f734f · Tests: 158 green · Rules: 71 (70+71 now official in CLAUDE.md)
+# SNAPSHOT WARNING (Rule 71): the HEAD/Tests above are a WRITE-TIME snapshot. They go stale the
+#   moment the next commit lands (including this file's own commit), so NEVER trust them as current.
+#   Re-verify live at boot: `git rev-parse --short HEAD` + `npx vitest run`. This header has now gone
+#   stale and been reconciled twice (S21 64264f8, S22) · static fact-lines are the root cause.
 
 ## SKILL RATINGS (updated S21)
 AUTODRIVE!     196/200  v3.1 shipped · cross-lane seam verification added · boot premise-check live
@@ -9,7 +13,9 @@ XRAY!          190/200  Brutal audit /200 · evidence mandate · path to 200/200
 DEEPDIVE!      185/200  10-step max analysis · LLM Council · flaw inventory · auto-fix
 NIGHTSAVE!     182/200  Session close · terminal reviews added · Drive sync · evolution lesson
 LLM Council    183/200  5-advisor adversarial gate · final decision authority
-SELFIMPROVE    /1000    7 flaws logged · T3 added flaw #7 (stale facts in skill docs)
+SELFIMPROVE    /1000    flaw #7 (stale facts in skill docs) RECURRED at S22 · this header was stale
+                        again (HEAD 5c30980 vs live 32f734f) · root cause = static HEAD/test lines ·
+                        mitigated by the SNAPSHOT WARNING above (Rule 71), not just another re-sync
 
 ## ALL DRIVE FILE IDs (folder: 16VcjTyJA95ELauwukSEGXFt3FCgHu1R2)
 readme:       1i6U4AU8F9NJLFjiiz23Hepx2WW4q8eNnIHtd1wqde0I
@@ -40,23 +46,25 @@ Key: .claude/service-account-key.json (gitignored · never commit)
 Sync: node scripts/sync-drive-skills.cjs --all
 Terminal reviews: node scripts/sync-drive-skills.cjs --log-terminal-review T[N] ...
 
-## PRODUCTION STATE (S21 NIGHTSAVE · 2026-06-28)
-HEAD: 5c30980 · Branch: main · Vercel: neotopia.vercel.app
-Tests: 158 green · Build: clean · Rules: 69
+## PRODUCTION STATE (T2 S22 · 2026-06-30 · SNAPSHOT · re-verify live · Rule 71)
+HEAD: 32f734f · Branch: main · Vercel: neotopia.vercel.app
+Tests: 158 green · Build: clean · Rules: 71
 Board biomes: SHIPPED 5c30980 · Sacred City indigo · Living Earth green · Free Energy amber
 Flow soft-lock: FIXED d7365bd · Cluster scoring: LIVE 2348daa+442b694
 Global Index: 3 rows (2 bot S20 · 1 prod bot S21)
-Card art: 20/56 in Drive · 0/20 copied to game yet (pending first boot after sleep)
-Draw RPC migration 011: NOT deployed (still blocked · T2 priority next session)
+Card art: 20/56 in Drive · 20/20 copied to game (03292b6 · cards 01-20 in game)
+Draw RPC migration 011: DEPLOYED + VERIFIED (S22 · supabase 20260630104754 · pgproc=1 ·
+  authenticated-only · search_path="" · INERT until T3 wires supabase.rpc · was blocked 4 sessions)
 Board biomes: shipped · Biome data owned by T2 terrainBiomes.js
 
-## RULE CANDIDATES (born S21 · add to CLAUDE.md next session)
+## RULES 70 + 71 (now OFFICIAL in CLAUDE.md · committed 03292b6)
 Rule 70 (T1): A forge can report a feature as missing when it exists but is too subtle
-  to perceive — verify rendered output, not just code presence. Enhance in own lane
+  to perceive · verify rendered output, not just code presence. Enhance in own lane
   rather than rebuild or cross into owner's data file.
 Rule 71 (T3): A self-improving system that syncs files but never refreshes the facts
   inside them faithfully mirrors rot. Boot premise-checks must validate HEAD and test
   count from live source (git rev-parse, vitest) not from skill file at moment of use.
+  (S22: this very MANIFEST proved Rule 71 again · stale header reconciled · see SNAPSHOT WARNING.)
 
 ## S21 SUMMARY
 T1: Board biomes shipped (5c30980) · 255/300 · Rule 70 discovered
