@@ -114,6 +114,62 @@ async function listCardArt() {
   return files;
 }
 
+// ── --validate-manifest (T3 S22) ────────────────────────────────────────────────────────────────
+// Born from SELFIMPROVE flaw #7 + Rule 71: "Sync ≠ current." The manifest is SYNCED to Drive every
+// NIGHTSAVE, but the FACTS inside it (HEAD hash · test count) are last-WRITTEN snapshots that rot the
+// moment a commit lands or a test is added. Two sessions in a row booted on a manifest whose HEAD/Tests
+// line lied. This command makes the rot machine-detectable: it reads the live truth (git HEAD + a real
+// `vitest run`) and compares it to what MANIFEST_SKILL.md claims · prints MATCH or DRIFT with exact
+// values · exits 1 on drift so it is usable as a pre-NIGHTSAVE / CI gate. It NEVER edits the manifest
+// (detector, not fixer · reconciliation is a deliberate human/NIGHTSAVE step). The HEAD it compares is
+// the working-tree HEAD where the gate RUNS (Rule 67: gate what's true where the gate runs).
+async function validateManifest() {
+  const { execSync } = require('child_process');
+  const repoRoot = path.join(__dirname, '..');
+  const manifestPath = path.join(SKILLS_DIR, 'MANIFEST_SKILL.md');
+  if (!fs.existsSync(manifestPath)) { console.error(`❌ MANIFEST not found: ${manifestPath}`); process.exit(1); }
+  const manifest = fs.readFileSync(manifestPath, 'utf8');
+
+  // ── Live truth ──────────────────────────────────────────────────────────────────────────────
+  let liveHead = null;
+  try { liveHead = execSync('git rev-parse --short HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim(); }
+  catch (e) { console.error(`❌ git rev-parse failed: ${e.message}`); process.exit(1); }
+
+  console.log('🔍 MANIFEST VALIDATION · running vitest (live test count) ...');
+  let liveTests = null, liveFailed = 0;
+  try {
+    const out = execSync('npx vitest run', { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 });
+    const pm = out.match(/Tests\s+.*?(\d+)\s+passed/s); if (pm) liveTests = parseInt(pm[1], 10);
+  } catch (e) {
+    // vitest exits non-zero when a test fails · still parse the counts (a failing suite is itself drift).
+    const out = (e.stdout || '') + (e.stderr || '');
+    const pm = out.match(/(\d+)\s+passed/); if (pm) liveTests = parseInt(pm[1], 10);
+    const fm = out.match(/(\d+)\s+failed/); if (fm) liveFailed = parseInt(fm[1], 10);
+  }
+
+  // ── Manifest claims ─────────────────────────────────────────────────────────────────────────
+  const headM  = manifest.match(/HEAD:\s*([0-9a-f]{7,40})/i);
+  const testsM = manifest.match(/Tests:\s*(\d+)/i);
+  const manHead  = headM  ? headM[1]  : '(unparseable)';
+  const manTests = testsM ? parseInt(testsM[1], 10) : null;
+
+  // ── Compare ─────────────────────────────────────────────────────────────────────────────────
+  const headOk  = liveHead != null && manHead === liveHead;
+  const testsOk = liveTests != null && manTests != null && manTests === liveTests && liveFailed === 0;
+  const fmt = (ok) => ok ? '✅ MATCH' : '❌ DRIFT';
+
+  console.log('🔍 MANIFEST VALIDATION');
+  console.log(`  HEAD   · live ${liveHead} · manifest ${manHead} · ${fmt(headOk)}`);
+  console.log(`  Tests  · live ${liveTests == null ? '(unknown · vitest unparsed)' : liveTests}${liveFailed ? ` (${liveFailed} FAILED)` : ''} · manifest ${manTests == null ? '(unparseable)' : manTests} · ${fmt(testsOk)}`);
+  console.log('────────────────────────────────────────────────────────────');
+  if (headOk && testsOk) {
+    console.log('✅ MANIFEST CURRENT · HEAD + test count match live source.');
+    return;
+  }
+  console.error('❌ DRIFT DETECTED · MANIFEST_SKILL.md is stale · reconcile its HEAD/Tests line to live truth before NIGHTSAVE --all (else you sync rot · Rule 71).');
+  process.exit(1);
+}
+
 async function main() {
   if (!fs.existsSync(KEY_FILE)) { console.error('❌ Key file missing'); process.exit(1); }
   const [cmd, ...rest] = process.argv.slice(2);
@@ -131,9 +187,10 @@ async function main() {
   else if (cmd === '--log-session') await logSession(rest[0]||'SESSION', rest[1]||'unspecified', rest[2]||'0');
   else if (cmd === '--log-terminal-review') await logTerminalReview(...rest);
   else if (cmd === '--list-card-art') await listCardArt();
+  else if (cmd === '--validate-manifest') await validateManifest();
   else {
     console.log('NeoTopia Drive Sync · 15 files · Service Account · Never expires');
-    console.log('--test · --all · --skill <name> · --log-flaw · --log-session · --log-terminal-review · --list-card-art');
+    console.log('--test · --all · --skill <name> · --log-flaw · --log-session · --log-terminal-review · --list-card-art · --validate-manifest');
     console.log('Files:', Object.keys(FILE_IDS).join(', '));
   }
 }

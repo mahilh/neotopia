@@ -38,3 +38,14 @@ deepdive:     1fr8pPojdjhA-7CsmGk4SYG9SybT2Gf09z4FEhOmsl50
 selfimprove:  1rIX1P_gx35UftbUe5gPqXisVAOxOs4RB56O3S5RU9Pg
 card_art:     1mAMAeriwZSlrTJTFczFX56HCasvUQfyo
 folder:       16VcjTyJA95ELauwukSEGXFt3FCgHu1R2
+
+## ADDITIONAL FILES (added S21-S22)
+T1 Reviews    → T1_REVIEWS_SKILL.md    → /1000 board·UI·CSS session log
+T2 Reviews    → T2_REVIEWS_SKILL.md    → /1000 engine·DB·scripts session log
+T3 Reviews    → T3_REVIEWS_SKILL.md    → /1000 hooks·E2E·realtime session log
+Plato Books   → PLATO_BOOKS_SKILL.md   → 5 pillars · Atlantis · Avalon lineage
+
+t1reviews:    1YUch0UR-YpPNQ48fTxRW7gRJoL9lSzyxZYGVuAaeYdk
+t2reviews:    10FkUvJF0Bt0stSmuIMvpdEtiQ4Ccc9x74cskeRzs58c
+t3reviews:    11R8fXkcqUitdmvwVEA8sGj2lUDJVjRgKgUcskWAhhw0
+platobooks:   1Qb8VkBdRprU2loJdu4oA9dI2ZmxHxT-AHMJ5dCgU9sQ

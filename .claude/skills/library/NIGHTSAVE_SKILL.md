@@ -35,7 +35,7 @@ If relay shows FAIL or CRIT: fix before proceeding.
 
 STEP 6 — DRIVE SYNC (all 11 skill files)
 node scripts/sync-drive-skills.cjs --all
-Verify output: 11 synced · 0 skipped
+Verify output: 15 synced · 0 skipped
 
 STEP 7 — SESSION LOG
 node scripts/sync-drive-skills.cjs --log-session "T[N] S[N]" "[what shipped]" "[N]/300"
