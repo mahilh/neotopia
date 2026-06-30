@@ -37,6 +37,25 @@ function buildSelf(user, username, seat, isHost, isReady, status, mode, clusterB
   }
 }
 
+// Render-time display disambiguation (S25): display names are NON-unique (migration 012), so two seats in one
+// room can legitimately share a name. This appends " (2)", " (3)" … to the 2nd+ occurrence of an identical
+// (trimmed, case-insensitive) name so a player is never confused by two identical labels in the roster. It is
+// PURELY a view transform on the locally-assembled roster · the wire payload (selfRef / what we track()) is
+// untouched, identity stays on userId/seat, and nothing persisted or synced changes. Exported so a render-time
+// consumer in another lane (the in-game HUD / FinalScore, which build names from game state) can reuse the exact
+// same rule WITHOUT baking the suffix into authoritative state. Pure · order-preserving · does not mutate input.
+export function disambiguateRoster(roster) {
+  const seen = new Map()
+  return (roster ?? []).map(p => {
+    const name = p?.username?.trim()
+    if (!name) return p // nothing to disambiguate (placeholder · "Joining…" · missing name)
+    const key = name.toLowerCase()
+    const n = (seen.get(key) ?? 0) + 1
+    seen.set(key, n)
+    return n > 1 ? { ...p, username: `${p.username} (${n})` } : p
+  })
+}
+
 /**
  * usePresence(roomId, user, username, seat, isHost, status, mode, clusterBonus)
  * Returns { players, updatePresence, sendGameStart, gameStarted, presenceReady, resetPresence }.
@@ -83,7 +102,9 @@ export function usePresence(roomId, user, username, seat, isHost, status = 'in_l
         const roster = Object.values(state)
           .map(entries => entries[entries.length - 1]) // last write per key wins
           .sort((a, b) => (a?.seat ?? 99) - (b?.seat ?? 99))
-        setPlayers(roster)
+        // Display-only: distinguish duplicate names (non-unique since migration 012) before the lobby renders
+        // them · the tracked payload is untouched so this never leaves this client (S25 · rendering nicety).
+        setPlayers(disambiguateRoster(roster))
       })
       .on('broadcast', { event: 'game_start' }, ({ payload }) => {
         if (payload?.roomId === roomId) setGameStarted(true)

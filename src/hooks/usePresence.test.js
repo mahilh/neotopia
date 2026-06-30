@@ -21,7 +21,7 @@ vi.mock('../lib/supabase', () => {
   return { supabase: stub, default: stub }
 })
 
-import { usePresence } from './usePresence'
+import { usePresence, disambiguateRoster } from './usePresence'
 
 const USER = { id: 'u1' }
 
@@ -57,5 +57,49 @@ describe('usePresence · mode-aware status (T3 S17 · Task D)', () => {
     // The re-track effect (deps [status, mode, presenceReady]) must fire a NEW track with the changed status —
     // without it the roster would show the player stuck in the lobby forever after the game starts.
     await waitFor(() => expect(tracked.some(t => t.status === 'in_game')).toBe(true))
+  })
+})
+
+describe('disambiguateRoster · render-time duplicate-name nicety (S25)', () => {
+  test('appends (2),(3)… to repeated names · first occurrence stays clean · order preserved', () => {
+    const out = disambiguateRoster([
+      { userId: 'a', seat: 0, username: 'Mahil' },
+      { userId: 'b', seat: 1, username: 'Ava' },
+      { userId: 'c', seat: 2, username: 'Mahil' },
+      { userId: 'd', seat: 3, username: 'mahil' }, // case-insensitive match → counts as a repeat
+    ])
+    expect(out.map(p => p.username)).toEqual(['Mahil', 'Ava', 'Mahil (2)', 'mahil (3)'])
+    // identity fields ride through untouched
+    expect(out.map(p => p.userId)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  test('unique names are returned untouched · no needless clone', () => {
+    const input = [{ userId: 'a', seat: 0, username: 'Solo' }]
+    const out = disambiguateRoster(input)
+    expect(out[0].username).toBe('Solo')
+    expect(out[0]).toBe(input[0]) // a non-duplicate entry is the SAME object reference
+  })
+
+  test('pure · never mutates the source roster (the tracked payload stays the real name)', () => {
+    const input = [
+      { userId: 'a', seat: 0, username: 'Dup' },
+      { userId: 'b', seat: 1, username: 'Dup' },
+    ]
+    disambiguateRoster(input)
+    expect(input[1].username).toBe('Dup') // original element untouched · only the returned copy is suffixed
+  })
+
+  test('blank / missing names are left alone · no " (2)" on an empty label', () => {
+    const out = disambiguateRoster([
+      { userId: 'a', seat: 0, username: '' },
+      { userId: 'b', seat: 1, username: '   ' },
+      { userId: 'c', seat: 2 }, // no username key at all
+    ])
+    expect(out.map(p => p.username)).toEqual(['', '   ', undefined])
+  })
+
+  test('null/empty input does not throw', () => {
+    expect(disambiguateRoster(null)).toEqual([])
+    expect(disambiguateRoster([])).toEqual([])
   })
 })
