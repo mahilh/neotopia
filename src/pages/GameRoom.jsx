@@ -14,6 +14,7 @@ import { ScoreFlash } from '../components/ProjectCard'
 import CardFrame from '../components/CardFrame'
 import ActionLog from '../components/ActionLog'
 import MilestoneOverlay from '../components/MilestoneOverlay'
+import { ELEMENT_SOUL_METAL, elementSoulMetalLabel } from '../components/Board/ElementIcon'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { TURN_TIME_LIMIT } from '../store/gameConfig'
@@ -281,21 +282,41 @@ export default function GameRoom() {
           {/* STEP 2: element type buttons (factory selected) */}
           {uiPhase === 'factorySelected' && factory && (
             <div>
+              {/* Soul-metal lore reveals under each element on hover/focus (PLATO_BOOKS · Pillar 1) ·
+                  grows within the flow so the sidebar's overflow never clips it (Rule 4: minHeight 44px). */}
+              <style>{`
+                .neo-soul-tip { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.2s ease, opacity 0.2s ease; }
+                .neo-soul-btn:hover .neo-soul-tip, .neo-soul-btn:focus-visible .neo-soul-tip { max-height: 20px; opacity: 1; }
+                @media (prefers-reduced-motion: reduce) { .neo-soul-tip { transition: none; } }
+              `}</style>
               <div style={sectionLabel}>Select element</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {factory.elements.filter(el => el.count > 0).map(el => (
+                {factory.elements.filter(el => el.count > 0).map(el => {
+                  const soul = ELEMENT_SOUL_METAL[el.type]
+                  return (
                   <button key={el.type}
+                    className="neo-soul-btn"
+                    title={elementSoulMetalLabel(el.type) ?? undefined}
                     onClick={() => handleElementSelect(el.type)}
                     style={{
-                      height: 44, padding: '0 14px', borderRadius: 8,
+                      minHeight: 44, padding: '6px 14px', borderRadius: 8,
                       border: '1px solid rgba(255,255,255,0.15)',
                       background: selectedElement === el.type ? 'rgba(255,255,255,0.1)' : 'transparent',
                       display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
                     }}
                   >
                     <span style={{ width: 12, height: 12, borderRadius: '50%', background: ELEMENT_COLORS[el.type], flexShrink: 0 }} />
-                    <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, textTransform: 'capitalize' }}>
-                      {el.type}
+                    <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+                      <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, textTransform: 'capitalize' }}>
+                        {el.type}
+                      </span>
+                      {soul && (
+                        <span className="neo-soul-tip" style={{
+                          fontSize: 10, color: 'rgba(200,148,64,0.85)', letterSpacing: 0.3, whiteSpace: 'nowrap',
+                        }}>
+                          {soul.metal} · {soul.virtue} · {soul.district}
+                        </span>
+                      )}
                     </span>
                     <span style={{
                       marginLeft: 'auto', color: 'rgba(255,255,255,0.5)',
@@ -304,7 +325,8 @@ export default function GameRoom() {
                       ×{el.count}
                     </span>
                   </button>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

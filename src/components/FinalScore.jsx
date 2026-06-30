@@ -358,6 +358,15 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
         })}
       </div>
 
+      {/* Plato's civilizational decay law made visible · the worst region is tripled because a city
+          dominated by one soul-part collapses under its own imbalance (PLATO_BOOKS · Pillar 2). */}
+      <div style={{
+        maxWidth: 640, textAlign: 'center', marginBottom: 48, flexShrink: 0,
+        fontSize: 12, letterSpacing: 1.5, lineHeight: 1.6, color: 'rgba(255,160,40,0.8)',
+      }}>
+        The weakest district carries the heaviest weight.
+      </div>
+
       {/* ELEMENT CLUSTERS · the connected patterns the civilization formed (board-global · the most
           educational end-screen moment). Each cluster is worth 1 point per token on it (board game rule p9 ·
           getClusterDetail.bonus · T2 S18) · this is the same flat clusterBonus folded into every total above

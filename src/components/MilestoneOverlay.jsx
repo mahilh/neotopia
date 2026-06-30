@@ -1,6 +1,11 @@
 import { useEffect } from 'react'
 import { useGameStore } from '../store/gameStore'
 
+// Plato's Cave Allegory · the ascent out of the cave, one phrase per sacred threshold (PLATO_BOOKS ·
+// Pillar 3). NEW lore layered over the store's symbol/message · never a re-hardcode of either (Rule 62) ·
+// keyed off the live milestone number the store already hands us.
+const CAVE_ASCENT = { 7: 'First light', 9: 'Turning', 13: 'Eyes open', 18: 'Clear sight', 27: 'The Good', 36: 'Return' }
+
 // The mystery school reveals itself · a brief centered overlay when a player's total crosses a sacred
 // number (7/9/13/18/27/36 · fired by the store's tryScoreCard · T2 S15). Auto-dismisses after 2500ms
 // (2+5=7 · spiritual perfection). The symbol + message come STRAIGHT from the live signal (the store
@@ -38,6 +43,12 @@ export default function MilestoneOverlay() {
       <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: 12, letterSpacing: 1.5, maxWidth: 280, lineHeight: 1.5 }}>
         {message}
       </div>
+      {/* Cave-ascent phrase · Plato's allegory made scoreable (PLATO_BOOKS · Pillar 3) */}
+      {CAVE_ASCENT[milestone] && (
+        <div data-testid="cave-ascent" style={{ fontSize: 11, color: 'rgba(200,148,64,0.7)', marginTop: 14, letterSpacing: 4, textTransform: 'uppercase' }}>
+          The Cave · {CAVE_ASCENT[milestone]}
+        </div>
+      )}
     </div>
   )
 }

@@ -44,6 +44,24 @@ const ICON_SHAPES = {
   ),
 }
 
+// Plato's Myth of Metals · each element token IS a soul-metal made playable (PLATO_BOOKS · Pillar 1).
+// Co-located with the marks themselves so the board, card frames and element picker all read ONE table
+// (Rule 62 · never re-hardcode lore that can drift across surfaces). Keys match ICON_SHAPES (lowercase).
+export const ELEMENT_SOUL_METAL = {
+  technology: { metal: 'Gold',   virtue: 'Wisdom',      district: 'AetherNet' },
+  energy:     { metal: 'Silver', virtue: 'Courage',     district: 'Free Energy' },
+  biofarming: { metal: 'Bronze', virtue: 'Nourishment', district: 'Living Earth' },
+  community:  { metal: 'Iron',   virtue: 'Community',    district: 'Source Temple' },
+}
+
+// "Technology · Gold · Wisdom · AetherNet" · the one hover label every element surface shares.
+export function elementSoulMetalLabel(element) {
+  const s = ELEMENT_SOUL_METAL[element]
+  if (!s) return null
+  const name = element.charAt(0).toUpperCase() + element.slice(1)
+  return `${name} · ${s.metal} · ${s.virtue} · ${s.district}`
+}
+
 export const hasElementIcon = (element) => !!ICON_SHAPES[element]
 
 // For an existing SVG context (HexCell): returns the raw shapes to drop inside a positioned <g>.
@@ -54,8 +72,11 @@ export function elementIconShapes(element, color, size) {
 // Standalone <svg> for non-SVG contexts (CardFrame placeholder, legends). viewBox is centered on 0,0.
 export default function ElementIcon({ element, color, size = 40 }) {
   if (!ICON_SHAPES[element]) return null
+  const soulLabel = elementSoulMetalLabel(element)
   return (
     <svg width={size} height={size} viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} aria-hidden="true">
+      {/* Soul-metal hover tooltip · native SVG <title> (PLATO_BOOKS · Pillar 1) */}
+      {soulLabel && <title>{soulLabel}</title>}
       {ICON_SHAPES[element](color, size)}
     </svg>
   )

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { hexToPixel, hexCorners, ELEMENT_COLORS, HEX_SIZE } from '../../utils/hexUtils'
-import { elementIconShapes, hasElementIcon } from './ElementIcon'
+import { elementIconShapes, hasElementIcon, elementSoulMetalLabel } from './ElementIcon'
 
 // Visual state priority (highest wins):
 //   factory > element > completionCandidate > patternMatch(complete) > partialMatch(near-miss)
@@ -70,6 +70,10 @@ export default function HexCell({
       onClick={() => onClick(q, r)}
       style={{cursor: (isValidTarget || isFactory) ? 'pointer' : 'default'}}
     >
+      {/* Soul-metal hover tooltip on a placed token · native SVG <title> on the hoverable group
+          (the inner token <g> is pointer-events:none) · PLATO_BOOKS · Pillar 1 */}
+      {element && <title>{elementSoulMetalLabel(element)}</title>}
+
       {/* Base hex polygon */}
       <polygon
         points={points}
