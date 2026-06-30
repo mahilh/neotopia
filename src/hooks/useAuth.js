@@ -60,16 +60,16 @@ export function useAuth() {
     if (!user || !name?.trim()) return { error: 'No user or empty name' }
     const cleaned = name.trim().slice(0, 20)
 
-    // player_profiles.username is globally UNIQUE and each player keeps ONE row (keyed by user_id), so a
-    // claim is an INSERT on first run and a RENAME on later runs (Lobby reuses this to edit the name · BUG-05).
-    // Two correctness traps this path must avoid:
-    //  (1) RENAME MUST PRESERVE STATS. A blanket upsert that re-sends elo/games/index would reset them to 0
-    //      on every rename. So we UPDATE only the username when a row exists, and lean on the column DEFAULTS
-    //      (elo 1000 · games 0 · index 0 · verified live) for a fresh insert.
-    //  (2) A TAKEN NAME MUST NOT BRICK THE LOBBY. Writing a name another player (or this user's orphaned old
-    //      anon id) already holds raises 23505 → that raw 409 string used to surface to the user and stall the
-    //      claim screen, leaving the real-room flow unreachable (T1 S23). We translate it to one clear,
-    //      actionable line so the user simply picks another name and the flow continues.
+    // player_profiles.username is NON-unique (migration 012 dropped UNIQUE(username) · confirmed against the
+    // live schema this session · Rule 68) and each player keeps ONE row (keyed by user_id), so a claim is an
+    // INSERT on first run and a RENAME on later runs (Lobby reuses this to edit the name · BUG-05). The one
+    // correctness trap this path must still avoid:
+    //   RENAME MUST PRESERVE STATS. A blanket upsert that re-sends elo/games/index would reset them to 0 on
+    //   every rename. So we UPDATE only the username when a row exists, and lean on the column DEFAULTS
+    //   (elo 1000 · games 0 · index 0 · verified live) for a fresh insert.
+    // (The old "name taken" 23505 translation was retired in S25 · with usernames non-unique the write can no
+    //  longer raise a username collision, so there is nothing to catch · confirmed by Mahil's decision + a live
+    //  constraint check. Any write error below is now infra-only and returns its real message.)
     const { data: existing } = await supabase
       .from('player_profiles').select('id').eq('user_id', user.id).maybeSingle()
 
@@ -78,12 +78,9 @@ export function useAuth() {
       : await supabase.from('player_profiles').insert({ user_id: user.id, username: cleaned, avatar_color: 'blue' })
 
     if (error) {
-      // A UNIQUE(username) violation (23505 on player_profiles_username_key) means the name is taken · give a
-      // friendly, actionable message. A 23505 on any OTHER constraint (e.g. a user_id race) falls through to
-      // its real message rather than mislabel it "taken".
-      const detail = `${error.message ?? ''} ${error.details ?? ''}`
-      const nameTaken = (error.code === '23505' || /duplicate key/i.test(detail)) && /username/i.test(detail)
-      return { error: nameTaken ? 'That name is taken. Please choose another.' : (error.message ?? 'Could not save name') }
+      // Non-bricking: return any write error as one clean line so the claim screen never stalls on a raw error
+      // object (the old bug · T1 S23). No username-collision special-casing · collisions are impossible post-012.
+      return { error: error.message ?? 'Could not save name' }
     }
 
     try {

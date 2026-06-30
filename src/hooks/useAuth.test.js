@@ -99,9 +99,12 @@ describe('useAuth', () => {
     expect(payload).not.toHaveProperty('neotopia_index')
   })
 
-  test('a taken username returns a friendly message, never the raw 409, and does not store the claim', async () => {
+  test('a username 23505 is no longer special-cased as "taken" · usernames are non-unique since migration 012', async () => {
     h.session = { user: { id: 'uid-2' } }
     h.maybeSingleFn.mockResolvedValue({ data: null, error: null }) // new user → insert path
+    // This error can no longer occur in prod (UNIQUE(username) was dropped · verified live S25), but the guard
+    // locks the removal in: if the retired "name taken" translation ever comes back, this fails. The raw DB
+    // message now passes straight through (infra-only error handling · no username special-casing).
     h.insertFn.mockResolvedValue({
       error: { code: '23505', message: 'duplicate key value violates unique constraint "player_profiles_username_key"' },
     })
@@ -110,8 +113,9 @@ describe('useAuth', () => {
 
     let res
     await act(async () => { res = await result.current.claimUsername('Taken') })
-    expect(res.error).toBe('That name is taken. Please choose another.')
-    expect(result.current.username).not.toBe('Taken') // a failed claim must not persist
+    expect(res.error).not.toBe('That name is taken. Please choose another.')
+    expect(res.error).toContain('duplicate key')
+    expect(result.current.username).not.toBe('Taken') // a failed claim still must not persist
   })
 
   test('a non-username DB error passes its real message through (not mislabeled "taken")', async () => {
