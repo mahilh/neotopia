@@ -114,59 +114,99 @@ async function listCardArt() {
   return files;
 }
 
-// ── --validate-manifest (T3 S22) ────────────────────────────────────────────────────────────────
+// ── --validate-manifest (T3 S22 · hardened after adversarial review) ──────────────────────────────
 // Born from SELFIMPROVE flaw #7 + Rule 71: "Sync ≠ current." The manifest is SYNCED to Drive every
-// NIGHTSAVE, but the FACTS inside it (HEAD hash · test count) are last-WRITTEN snapshots that rot the
-// moment a commit lands or a test is added. Two sessions in a row booted on a manifest whose HEAD/Tests
-// line lied. This command makes the rot machine-detectable: it reads the live truth (git HEAD + a real
-// `vitest run`) and compares it to what MANIFEST_SKILL.md claims · prints MATCH or DRIFT with exact
-// values · exits 1 on drift so it is usable as a pre-NIGHTSAVE / CI gate. It NEVER edits the manifest
-// (detector, not fixer · reconciliation is a deliberate human/NIGHTSAVE step). The HEAD it compares is
-// the working-tree HEAD where the gate RUNS (Rule 67: gate what's true where the gate runs).
+// NIGHTSAVE, but the FACTS inside it (HEAD hash · test count) are write-time snapshots that rot the
+// moment a commit lands or a test is added. This command makes the rot machine-detectable and exits 1
+// on real drift so it gates pre-NIGHTSAVE / CI. It NEVER edits the manifest (detector, not fixer).
+//
+// THREE THINGS THE NAIVE FIRST VERSION GOT WRONG (each caught by adversarial review · all fixed here):
+//  1. HEAD can NEVER exactly-equal the live committed HEAD: a tracked file cannot contain the short hash
+//     of the very commit that includes it (the manifest's HEAD is at best its own commit's PARENT). So
+//     `manHead === liveHead` is structurally unsatisfiable in any committed checkout → a permanent red
+//     light. A snapshot is SUPPOSED to lag · so instead validate that manHead is a real ANCESTOR of live
+//     HEAD (names a commit actually on this history, not a garbage/forked hash) and report HOW FAR behind.
+//     Hard-fail only when manHead is NOT an ancestor, or is more than MAX_HEAD_DRIFT commits behind.
+//  2. The manifest declares HEAD/Tests TWICE (header line + PRODUCTION STATE block). A non-global match
+//     read only the FIRST, so a PARTIAL reconcile (update one, forget the other) passed as MATCH. Now we
+//     collect ALL declarations and require internal agreement before comparing to live.
+//  3. On a vitest FAILURE the count regex was unanchored and captured the "Test Files N passed" line
+//     instead of "Tests N passed". Both passed/failed parses are now anchored to the Tests summary line.
+// (Rule 67: gate what's true WHERE the gate runs · the HEAD/tests checked are this checkout's live truth.)
+const MAX_HEAD_DRIFT = 20; // the manifest is reconciled every NIGHTSAVE; even a busy multi-terminal session
+                           // rarely pushes >20 commits between reconciles, so beyond that the manifest spans
+                           // multiple UNreconciled sessions = genuinely stale. Tune freely · HEAD gate only.
 async function validateManifest() {
   const { execSync } = require('child_process');
   const repoRoot = path.join(__dirname, '..');
+  const git = (cmd) => execSync(cmd, { cwd: repoRoot, encoding: 'utf8' }).trim();
   const manifestPath = path.join(SKILLS_DIR, 'MANIFEST_SKILL.md');
   if (!fs.existsSync(manifestPath)) { console.error(`❌ MANIFEST not found: ${manifestPath}`); process.exit(1); }
   const manifest = fs.readFileSync(manifestPath, 'utf8');
 
   // ── Live truth ──────────────────────────────────────────────────────────────────────────────
   let liveHead = null;
-  try { liveHead = execSync('git rev-parse --short HEAD', { cwd: repoRoot, encoding: 'utf8' }).trim(); }
+  try { liveHead = git('git rev-parse --short HEAD'); }
   catch (e) { console.error(`❌ git rev-parse failed: ${e.message}`); process.exit(1); }
 
   console.log('🔍 MANIFEST VALIDATION · running vitest (live test count) ...');
   let liveTests = null, liveFailed = 0;
-  try {
-    const out = execSync('npx vitest run', { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 });
+  // Anchor to the "Tests" summary line · vitest prints "Test Files N passed" FIRST, so an unanchored
+  // /(\d+)\s+passed/ captures the FILE count, not the test count (finding #3).
+  const parseTests = (out) => {
     const pm = out.match(/Tests\s+.*?(\d+)\s+passed/s); if (pm) liveTests = parseInt(pm[1], 10);
+    const fm = out.match(/Tests\s+.*?(\d+)\s+failed/s); if (fm) liveFailed = parseInt(fm[1], 10);
+  };
+  try {
+    parseTests(execSync('npx vitest run', { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }));
   } catch (e) {
-    // vitest exits non-zero when a test fails · still parse the counts (a failing suite is itself drift).
-    const out = (e.stdout || '') + (e.stderr || '');
-    const pm = out.match(/(\d+)\s+passed/); if (pm) liveTests = parseInt(pm[1], 10);
-    const fm = out.match(/(\d+)\s+failed/); if (fm) liveFailed = parseInt(fm[1], 10);
+    parseTests((e.stdout || '') + (e.stderr || '')); // non-zero exit on failure · still parse (a failing suite is drift)
   }
 
-  // ── Manifest claims ─────────────────────────────────────────────────────────────────────────
-  const headM  = manifest.match(/HEAD:\s*([0-9a-f]{7,40})/i);
-  const testsM = manifest.match(/Tests:\s*(\d+)/i);
-  const manHead  = headM  ? headM[1]  : '(unparseable)';
-  const manTests = testsM ? parseInt(testsM[1], 10) : null;
+  // ── Manifest claims · collect ALL declarations, require internal agreement (finding #2 · partial reconcile) ──
+  const uniq = (arr) => [...new Set(arr)];
+  const headDecls = uniq([...manifest.matchAll(/HEAD:\s*([0-9a-f]{7,40})/gi)].map(m => m[1].toLowerCase()));
+  const testDecls = uniq([...manifest.matchAll(/Tests:\s*(\d+)/gi)].map(m => parseInt(m[1], 10)));
+  const headConsistent  = headDecls.length === 1;
+  const testsConsistent = testDecls.length === 1;
+  const manHead  = headDecls.length ? headDecls.join(' / ') : '(none)';
+  const manTests = testDecls.length ? testDecls.join(' / ') : '(none)';
 
-  // ── Compare ─────────────────────────────────────────────────────────────────────────────────
-  const headOk  = liveHead != null && manHead === liveHead;
-  const testsOk = liveTests != null && manTests != null && manTests === liveTests && liveFailed === 0;
-  const fmt = (ok) => ok ? '✅ MATCH' : '❌ DRIFT';
+  // ── HEAD: ancestry + distance, NOT equality (finding #1) ──────────────────────────────────────
+  // manHead is regex-constrained to hex [0-9a-f]{7,40}, so interpolating it into the git command below
+  // has zero shell-injection surface (it cannot contain a metacharacter).
+  let headOk = false, headDetail = '';
+  if (!headConsistent) {
+    headDetail = headDecls.length ? `manifest disagrees with itself: ${manHead}` : 'no HEAD: declaration found';
+  } else {
+    const h = headDecls[0];
+    let isAncestor = false;
+    try { execSync(`git merge-base --is-ancestor ${h} HEAD`, { cwd: repoRoot, stdio: 'ignore' }); isAncestor = true; }
+    catch { isAncestor = false; } // non-zero exit = not an ancestor (or unknown object)
+    if (!isAncestor) {
+      headDetail = `${h} is NOT an ancestor of live HEAD ${liveHead} (off-branch / unknown / garbage hash)`;
+    } else {
+      let distance = null;
+      try { distance = parseInt(git(`git rev-list --count ${h}..HEAD`), 10); } catch { distance = null; }
+      if (distance === 0) { headOk = true; headDetail = 'exactly current'; }
+      else if (distance != null && distance <= MAX_HEAD_DRIFT) { headOk = true; headDetail = `${distance} commit(s) behind (≤ ${MAX_HEAD_DRIFT} · fresh)`; }
+      else { headDetail = `${distance} commit(s) behind (> ${MAX_HEAD_DRIFT} · STALE · reconcile)`; }
+    }
+  }
+
+  // ── Tests: exact match across all declarations + zero failures (finding #3 makes liveTests trustworthy) ──
+  const testsOk = testsConsistent && liveTests != null && testDecls[0] === liveTests && liveFailed === 0;
+  const mark = (ok) => ok ? '✅ MATCH' : '❌ DRIFT';
 
   console.log('🔍 MANIFEST VALIDATION');
-  console.log(`  HEAD   · live ${liveHead} · manifest ${manHead} · ${fmt(headOk)}`);
-  console.log(`  Tests  · live ${liveTests == null ? '(unknown · vitest unparsed)' : liveTests}${liveFailed ? ` (${liveFailed} FAILED)` : ''} · manifest ${manTests == null ? '(unparseable)' : manTests} · ${fmt(testsOk)}`);
+  console.log(`  HEAD   · live ${liveHead} · manifest ${manHead} · ${mark(headOk)} · ${headDetail}`);
+  console.log(`  Tests  · live ${liveTests == null ? '(unknown · vitest unparsed)' : liveTests}${liveFailed ? ` (${liveFailed} FAILED)` : ''} · manifest ${manTests}${testsConsistent ? '' : ' (self-inconsistent)'} · ${mark(testsOk)}`);
   console.log('────────────────────────────────────────────────────────────');
   if (headOk && testsOk) {
-    console.log('✅ MANIFEST CURRENT · HEAD + test count match live source.');
+    console.log('✅ MANIFEST CURRENT · test count matches live · HEAD is a recent on-branch ancestor.');
     return;
   }
-  console.error('❌ DRIFT DETECTED · MANIFEST_SKILL.md is stale · reconcile its HEAD/Tests line to live truth before NIGHTSAVE --all (else you sync rot · Rule 71).');
+  console.error('❌ DRIFT DETECTED · MANIFEST_SKILL.md is stale or self-inconsistent · reconcile its HEAD/Tests declarations to live truth before NIGHTSAVE --all (else you sync rot · Rule 71).');
   process.exit(1);
 }
 
