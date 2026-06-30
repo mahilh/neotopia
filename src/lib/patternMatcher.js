@@ -220,6 +220,9 @@ export function calculateFinalScore(regionalScores, unusedBonusCount = 0, cluste
   const sorted = [...regionalScores].sort((a, b) => b - a) // descending
   const best = sorted[0] || 0
   const second = sorted[1] || 0
+  // Plato's Law (Republic Book VIII): a civilization is judged by its weakest soul-part · the worst
+  // region is tripled and dominates the final score. Soul-metals = elements (Republic Book III):
+  // Gold(Technology) · Silver(Energy) · Bronze(BioFarming) · Iron(Community).
   const worst = sorted[2] || 0
   return best + second + (worst * 3) + (unusedBonusCount * 3) + clusterBonus
 }
