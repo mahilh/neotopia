@@ -84,7 +84,24 @@ test.describe('Card art reveal (solo · real store · cards 01-20 live)', () => 
       timeout: 15_000,
     }).toBe('1')
 
-    // Snapshot the full contract now that a reveal has completed.
+    // RACE GUARD (T3 S22 · adversarial-review finding): the `loaded` set is read from DOM decode state
+    // (img.complete && naturalWidth>0) but .art-skeleton unmounts only when React's imgLoaded state COMMITS
+    // (CardFrame onLoad). A straggler PNG can be decode-complete one event-loop turn BEFORE its onLoad task +
+    // React re-render drop the skeleton · a single snapshot caught in that window would false-RED on working
+    // art. So poll until the SETTLED state: at least one card loaded AND zero loaded cards still carry a
+    // skeleton. Returns -1 (keep polling) until a card loads, then the still-shimmering count, which settles
+    // to 0. If the reveal genuinely never unmounts the skeleton, this times out · an honest RED, clear message.
+    await expect.poll(() => page.evaluate(() => {
+      const cards = [...document.querySelectorAll('.project-card')]
+      const loaded = cards.filter(c => { const im = c.querySelector('img.art-reveal'); return im && im.complete && im.naturalWidth > 0 })
+      if (loaded.length === 0) return -1
+      return loaded.filter(c => c.querySelector('.art-skeleton')).length
+    }), {
+      message: 'loaded cards never settled shimmer-free · CardFrame did not unmount .art-skeleton after load',
+      timeout: 15_000,
+    }).toBe(0)
+
+    // Snapshot the full contract now that the reveal has completed AND settled (race-free per the poll above).
     const report = await page.evaluate(() => {
       const cards = [...document.querySelectorAll('.project-card')]
       const loaded = cards.filter(c => {
