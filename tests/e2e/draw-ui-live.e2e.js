@@ -124,6 +124,14 @@ test.describe('Live-DB draw path (T3 S23 · real-room offer-draw routes through 
       const startBtn = host.getByRole('button', { name: /^start game$/i })
       await expect(startBtn, 'Start Game must enable after the joiner readies').toBeVisible({ timeout: 30_000 })
       await startBtn.click()
+      // Arm a waiter for the host's session load: useGameSync.fetchAndSeed issues GET game_sessions?select=id,state
+      // on realtime SUBSCRIBED, then setSessionId. The host STARTED the game so its board renders from LOCAL state
+      // at once, but sessionId loads async AFTER the subscribe · a draw click landing before it lands takes the
+      // LOCAL path (isRealRoom false) · a harness race, NOT a product regression (Rule 57). We gate on this below.
+      const hostSeeded = host.waitForResponse(
+        r => /\/rest\/v1\/game_sessions\?/.test(r.url()) && /select=id/i.test(r.url()) && r.request().method() === 'GET',
+        { timeout: 25_000 },
+      ).catch(() => null)
       await host.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 20_000 })
       await expect(host.locator(BOARD)).toBeVisible({ timeout: 20_000 })
       roomId = host.url().match(/\/game\/([0-9a-f-]+)/i)?.[1] ?? null
@@ -131,6 +139,12 @@ test.describe('Live-DB draw path (T3 S23 · real-room offer-draw routes through 
       hostSession = await host.evaluate(() => localStorage.getItem('neotopia-auth'))
 
       await dismissTutorial(host)
+
+      // Gate: wait for the host's useGameSync to have loaded sessionId (isRealRoom now true) BEFORE drawing, so
+      // the anti-fallback assertion tests a GENUINE fallback and never a slow-session-load race. The settle lets
+      // the setSessionId re-render commit after the fetch response resolves.
+      await hostSeeded
+      await host.waitForTimeout(300)
 
       // [4] Snapshot the authoritative state BEFORE the draw (Rule 53 · the DB is the witness).
       const before = await readState(roomId)
@@ -141,10 +155,15 @@ test.describe('Live-DB draw path (T3 S23 · real-room offer-draw routes through 
       const clickedId = offerBefore[0] // the FIRST offer card · the one .first() + onDrawOffer(0) will take
       console.log('[draw-ui] before · offer:', offerBefore, '· deck', deckBefore, '· totalHand', handsBefore)
 
-      // [5] Arm the network witness, THEN click the first Offer card. A POST to /rpc/draw_card_for_seat is
-      //     emitted ONLY by the wired RPC branch (isRealRoom) · its arrival is the proof the click did not fall
-      //     back to the local path. If isRealRoom were false the click would draw locally and this would time
-      //     out · an honest RED that says the wiring did not route through the RPC.
+      // [5] ANTI-FALLBACK REGRESSION GUARD (T3 S24 · forge SECOND priority). The mode-aware branch T1 shipped
+      //     (real auth room → RPC · solo/bot → local deck.shift) is the ONLY thing keeping the whole-state
+      //     snapshot clobber race (17f5931) closed. A POST to /rpc/draw_card_for_seat is emitted ONLY by the
+      //     wired RPC branch (isRealRoom = roomId && sync.sessionId && mySeat != null). So we ARM the network
+      //     witness, click the first Offer card, and REQUIRE the RPC POST. If a future change makes GameRoom
+      //     silently fall back to the local path for an auth room, no POST fires, the wait times out, and we
+      //     convert that into a loud, unmistakable failure naming the reopened race (rather than a bare
+      //     Playwright timeout). This is the one regression no faster test catches (the branch lives in
+      //     GameRoom.jsx · the hooks are unit-covered but the routing is not).
       const rpcResponse = host.waitForResponse(
         r => r.url().includes('/rpc/draw_card_for_seat') && r.request().method() === 'POST',
         { timeout: 15_000 },
@@ -153,7 +172,15 @@ test.describe('Live-DB draw path (T3 S23 · real-room offer-draw routes through 
       await expect(offerCard, 'an enabled Offer card must be clickable on the host turn').toBeVisible({ timeout: 10_000 })
       await offerCard.click()
 
-      const resp = await rpcResponse
+      let resp
+      try {
+        resp = await rpcResponse
+      } catch {
+        throw new Error('ANTI-FALLBACK REGRESSION · a real-room offer-draw did NOT fire the draw_card_for_seat '
+          + 'RPC after the session was confirmed loaded · GameRoom silently fell back to the local deck.shift '
+          + 'path · the 17f5931 concurrent-draw clobber race is reopened (the isRealRoom RPC branch was removed '
+          + 'or broke in an authenticated room)')
+      }
       expect(resp.ok(), `draw_card_for_seat RPC must return 2xx (got ${resp.status()})`).toBe(true)
       console.log('[draw-ui] RPC fired ·', resp.request().method(), resp.status(), '·', resp.url().split('/rest/')[1])
 
