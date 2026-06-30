@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest'
+import { describe, test, expect, beforeEach } from 'vitest'
 import { useGameStore, PRODUCTION_TILES } from './gameStore'
 import { PROJECT_CARDS } from '../lib/projectCards'
 
@@ -27,6 +27,13 @@ const seededShuffle = (rng, arr) => {
 }
 
 const store = () => useGameStore.getState()
+
+// Hermetic store per test (T2 S24 · the forge's engineFuzz half b). Every test below calls initGame (a full
+// reset), but resetting the singleton to its pristine initial state BEFORE each test makes the file
+// independent of any state a prior test left behind · robust to ordering / cross-test pollution regardless
+// of timeout headroom. zustand v5 getInitialState() returns the create() initializer's object (state +
+// actions) and replace=true restores it wholesale · immer never mutates that base, so it stays pristine.
+beforeEach(() => { useGameStore.setState(useGameStore.getInitialState(), true) })
 
 // Every LEGAL placement available to the current seat right now (factory element × bordering region × valid hex).
 function legalPlacements() {
@@ -233,7 +240,8 @@ describe('engine fuzz · Flow mode termination (T2 S20)', () => {
 
     expect(violated).toEqual([])
     expect(stalled).toEqual([]) // the soft-lock is closed: no Flow game freezes on 'playing'
-  })
+  }, 20000) // 150 Flow games · ~2s idle but ~6.2-6.9s under full-suite CPU contention · explicit budget so the
+            // default 5s testTimeout cannot flake it (T2 S24 · forge half a · this ONE test only · not global)
 
   test('worst case · deck+offer fully drained BEFORE the clock still reaches scoring (every tile count)', () => {
     // The exact shape the S18 bot hit, generalized: every card in hands while tiles are still on the board.
