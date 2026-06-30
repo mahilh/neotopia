@@ -1,5 +1,5 @@
 // NeoTopia · Card-art reveal guard (T3 S22). Cards 01-20 got real painterly PNGs (03292b6 · 20/56 in
-// public/art/cards/card_NN.png). Until now the CardFrame art path had NO E2E — only the shimmer placeholder
+// public/art/cards/card_NN.png). Until now the CardFrame art path had NO E2E · only the shimmer placeholder
 // was ever exercised. This file is the regression guard for the reveal seam: a card whose PNG exists must
 // (1) actually decode a non-broken image and fade it in (opacity 0→1 · .art-reveal · index.css), and
 // (2) UNMOUNT its shimmering .art-skeleton placeholder once loaded (CardFrame.jsx · conditional render).
@@ -11,19 +11,19 @@
 // the DEV store hook (window.__neotopia_store · GameRoom.jsx) seeded through the app's OWN initGame with the
 // REAL DECK export (Rule 36 · mirror the real setup path · never a separately-imported store). initGame deals
 // hand=deck.splice(0,3) + offer=deck.splice(0,4) from the FRONT of the deck (gameStore.js), so FRONT-LOADING
-// the 20 art-bearing ids makes the 7 visible CardFrames deterministically art-bearing — no shuffle-luck flake
+// the 20 art-bearing ids makes the 7 visible CardFrames deterministically art-bearing · no shuffle-luck flake
 // (Rule 32/33). Solo /game (no roomId · no anon sign-in) · CI-cheap · rate-limit-free · same class as
 // flow-mode.e2e.js / mobile.e2e.js · read-only (no Supabase write).
 //
 // SCOPE (honest · Rule 63): proves the art-reveal CONTRACT for a card that HAS a PNG. It does NOT assert how
 // MANY of the 56 cards have art (that climbs as Mahil generates more · asserting a count would be a brittle
-// lie the day card 21 lands) — only that the reveal mechanism works for the art that exists today.
+// lie the day card 21 lands) · only that the reveal mechanism works for the art that exists today.
 
 import { test, expect } from '@playwright/test'
 
 // Reach the solo board and confirm the DEV store hook is live before driving it. Resilience copied from
 // flow-mode.e2e.js (T3 S20): a slow-but-healthy store init on a loaded CI runner must SKIP (visible in the
-// report), not RED — a flaky timeout reading like a real regression is worse than an honest skip (Rule 57).
+// report), not RED · a flaky timeout reading like a real regression is worse than an honest skip (Rule 57).
 async function gotoSoloBoard(page) {
   await page.goto('/game')
   await page.waitForSelector('[data-game-phase="playing"]', { timeout: 15_000 })
@@ -36,8 +36,8 @@ async function gotoSoloBoard(page) {
   } catch {
     seeded = false
   }
-  if (!seeded) console.warn(`[card-art] store seed exceeded ${SEED_BUDGET_MS}ms — slow init · SKIPPING (not failing)`)
-  test.skip(!seeded, `store seed exceeded ${SEED_BUDGET_MS}ms (slow store initialization) — skipped to avoid a flaky CI failure`)
+  if (!seeded) console.warn(`[card-art] store seed exceeded ${SEED_BUDGET_MS}ms · slow init · SKIPPING (not failing)`)
+  test.skip(!seeded, `store seed exceeded ${SEED_BUDGET_MS}ms (slow store initialization) · skipped to avoid a flaky CI failure`)
 }
 
 test.describe('Card art reveal (solo · real store · cards 01-20 live)', () => {
@@ -80,7 +80,7 @@ test.describe('Card art reveal (solo · real store · cards 01-20 live)', () => 
       const im = [...document.querySelectorAll('img.art-reveal')].find(i => i.complete && i.naturalWidth > 0)
       return im ? getComputedStyle(im).opacity : '0'
     }), {
-      message: 'no card art PNG decoded to full opacity — /art/cards/card_NN.png not serving, <img> broken, or reveal stuck',
+      message: 'no card art PNG decoded to full opacity · /art/cards/card_NN.png not serving, <img> broken, or reveal stuck',
       timeout: 15_000,
     }).toBe('1')
 
@@ -96,7 +96,7 @@ test.describe('Card art reveal (solo · real store · cards 01-20 live)', () => 
         totalCards: cards.length,
         loadedCount: loaded.length,
         // A card whose PNG loaded must have UNMOUNTED its shimmer placeholder (CardFrame drops .art-skeleton
-        // once imgLoaded). Any loaded card still carrying one means the reveal half-fired — a real bug.
+        // once imgLoaded). Any loaded card still carrying one means the reveal half-fired · a real bug.
         loadedStillShimmering: loaded.filter(c => c.querySelector('.art-skeleton')).length,
         sampleSrc: sample ? new URL(sample.src).pathname : null,
         sampleNaturalW: sample ? sample.naturalWidth : 0,
