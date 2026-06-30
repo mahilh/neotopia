@@ -5,6 +5,7 @@ import { ELEMENT_COLORS } from '../utils/hexUtils'
 import { useAuth } from '../hooks/useAuth'
 import { useGameSync } from '../hooks/useGameSync'
 import { useGameActions } from '../hooks/useGameActions'
+import { useDrawCard } from '../hooks/useDrawCard'
 import { usePatternHighlight } from '../hooks/usePatternHighlight'
 import GameBoard from '../components/Board/GameBoard'
 import ActionBar from '../components/ActionBar'
@@ -42,6 +43,13 @@ export default function GameRoom() {
   // useGameSync subscribes to game_sessions + seeds the store when roomId is set (no-op when null).
   // Lives here so moves persist (pushState) and remote moves stream in for the whole /game lifetime.
   const sync = useGameSync(roomId ?? null, user?.id)
+
+  // Atomic seat-scoped draw (T3 S22 · migration 011 · draw_card_for_seat). The whole-state snapshot
+  // (pushState) lets two simultaneous draws clobber each other (17f5931 · last-write-wins · a draw is
+  // silently LOST). This RPC serializes concurrent draws on a FOR UPDATE row lock and writes back
+  // game_sessions.state, so the drawn card lands in every client's hand via useGameSync's
+  // postgres_changes re-seed · no local store mutation here (the DB row update IS the sync · Rule 16).
+  const { drawCard: drawViaRpc, isDrawing: isDrawingCard, error: drawError } = useDrawCard()
 
   const [initialized, setInitialized] = useState(false)
   const [scoreFlash, setScoreFlash] = useState(null) // { card, regionName } · the score story moment
@@ -139,6 +147,27 @@ export default function GameRoom() {
   } = useGameActions({ sync, mySeat })
 
   const factory = factories.find(f => f.id === selectedFactory)
+
+  // Draw a card from The Offer. In a REAL authenticated room we route through the atomic RPC so
+  // concurrent draws can't clobber (the bug T2 flagged · 17f5931); the card returns and also lands in
+  // hand when the RPC's game_sessions.state write streams back via postgres_changes. The RPC needs the
+  // session UUID (sync.sessionId · NOT roomId, which is room_id) and enforces seat ownership + auth
+  // server-side. Solo dev has no auth/session (sessionId is null · the RPC would reject), so it keeps the
+  // local deterministic draw path · this also preserves the bot harness and the existing unit tests.
+  const isRealRoom = !!(roomId && sync?.sessionId && mySeat != null)
+  const onDrawOffer = async (i) => {
+    const card = theOffer[i]
+    if (!card) return
+    if (isRealRoom) {
+      const { card: drawn, error } = await drawViaRpc({
+        sessionId: sync.sessionId, seat: mySeat, source: 'offer', cardIndex: i,
+      })
+      // error is surfaced inline under The Offer (drawError) · never tear down the turn (do not crash).
+      if (!error) addLogEntry(`drew ${drawn?.name ?? card.name}`)
+    } else if (handleDrawCard('offer', i)) {
+      addLogEntry(`drew ${card.name}`)
+    }
+  }
 
   // Near-miss psychology · usePatternHighlight (T2) computes per region · merge all 3.
   // Only nudge "place here" while the player can still act (no actions = no placement).
@@ -373,15 +402,27 @@ export default function GameRoom() {
                 <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, padding: '8px 0' }}>Deck empty</div>
               )}
               {theOffer.map((card, i) => {
-                const disabled = actionsLeft === 0 || !isMyTurn
+                // isDrawingCard disables every offer card during the RPC round-trip · prevents a
+                // double-fire and keeps the affordance honest (CardFrame size is unchanged · 44px · Rule 4).
+                const disabled = actionsLeft === 0 || !isMyTurn || isDrawingCard
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-offer"
                     card={{ ...card, element: cardPrimaryElement(card) }}
-                    onClick={disabled ? undefined : () => { const c = theOffer[i]; if (handleDrawCard('offer', i)) addLogEntry(`drew ${c.name}`) }}
+                    onClick={disabled ? undefined : () => onDrawOffer(i)}
                   />
                 )
               })}
             </div>
+            {/* Draw status · mid-flight hint or the RPC's own refusal message (e.g. 'deck is empty' ·
+                'not your turn') · inline + non-blocking so a failed draw never crashes the turn. */}
+            {(isDrawingCard || drawError) && (
+              <div data-testid="draw-status" style={{
+                marginTop: 6, textAlign: 'center', fontSize: 11, letterSpacing: 0.3,
+                color: drawError ? 'rgba(226,75,74,0.9)' : 'rgba(255,255,255,0.4)',
+              }}>
+                {isDrawingCard ? 'Drawing…' : drawError}
+              </div>
+            )}
           </div>
 
           {/* HAND */}
