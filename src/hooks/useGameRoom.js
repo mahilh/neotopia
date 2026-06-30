@@ -146,9 +146,13 @@ export function useGameRoom(user, username) {
       const { data: room, error, code } = await insertRoomWithRetry(user.id, generateRoomCode())
       if (error || !room) { setLobbyError(error?.message ?? 'Could not create room'); return }
 
-      // Ensure a profile row exists (FK-safe · idempotent with useAuth's claim).
+      // Best-effort backstop: ensure this user has a profile row (its username feeds the global leaderboard).
+      // Normally created at claim time (useAuth) · NOTHING FKs player_profiles, so a miss never blocks the room.
+      // ignoreDuplicates → ON CONFLICT (user_id) DO NOTHING: never overwrite/rename an existing row and never
+      // 409-block creation. A brand-new user_id whose chosen name is already taken is tolerated here (the claim
+      // screen owns the rename · T3 S24) · room creation proceeds regardless.
       await supabase.from('player_profiles').upsert(
-        { user_id: user.id, username }, { onConflict: 'user_id' }
+        { user_id: user.id, username }, { onConflict: 'user_id', ignoreDuplicates: true }
       )
 
       const { error: seatErr } = await claimSeat(room.id, user.id, username, 0)
@@ -198,8 +202,9 @@ export function useGameRoom(user, username) {
         const taken = new Set((rows ?? []).map(r => r.seat_number))
         const next = [0, 1, 2, 3].find(s => !taken.has(s))
         if (next === undefined) { setLobbyError('Room is full'); return }
+        // Best-effort profile backstop (see createRoom) · DO NOTHING on conflict · never blocks the join.
         await supabase.from('player_profiles').upsert(
-          { user_id: user.id, username }, { onConflict: 'user_id' }
+          { user_id: user.id, username }, { onConflict: 'user_id', ignoreDuplicates: true }
         )
         const { seat: claimed, error: seatErr } = await claimSeat(room.id, user.id, username, next)
         if (seatErr) { setLobbyError(seatErr.message); return }

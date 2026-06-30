@@ -60,25 +60,38 @@ export function useAuth() {
     if (!user || !name?.trim()) return { error: 'No user or empty name' }
     const cleaned = name.trim().slice(0, 20)
 
-    const { error } = await supabase.from('player_profiles').upsert({
-      user_id: user.id,
-      username: cleaned,
-      avatar_color: 'blue',
-      elo_rating: 1000,
-      games_played: 0,
-      games_won: 0,
-      neotopia_index: 0,
-    }, { onConflict: 'user_id' })
+    // player_profiles.username is globally UNIQUE and each player keeps ONE row (keyed by user_id), so a
+    // claim is an INSERT on first run and a RENAME on later runs (Lobby reuses this to edit the name · BUG-05).
+    // Two correctness traps this path must avoid:
+    //  (1) RENAME MUST PRESERVE STATS. A blanket upsert that re-sends elo/games/index would reset them to 0
+    //      on every rename. So we UPDATE only the username when a row exists, and lean on the column DEFAULTS
+    //      (elo 1000 · games 0 · index 0 · verified live) for a fresh insert.
+    //  (2) A TAKEN NAME MUST NOT BRICK THE LOBBY. Writing a name another player (or this user's orphaned old
+    //      anon id) already holds raises 23505 → that raw 409 string used to surface to the user and stall the
+    //      claim screen, leaving the real-room flow unreachable (T1 S23). We translate it to one clear,
+    //      actionable line so the user simply picks another name and the flow continues.
+    const { data: existing } = await supabase
+      .from('player_profiles').select('id').eq('user_id', user.id).maybeSingle()
 
-    if (!error) {
-      try {
-        localStorage.setItem(USERNAME_KEY, cleaned)
-        localStorage.setItem(CLAIMED_KEY, '1')
-      } catch { /* localStorage blocked — session-only, fine */ }
-      setUsername(cleaned)
+    const { error } = existing
+      ? await supabase.from('player_profiles').update({ username: cleaned }).eq('user_id', user.id)
+      : await supabase.from('player_profiles').insert({ user_id: user.id, username: cleaned, avatar_color: 'blue' })
+
+    if (error) {
+      // A UNIQUE(username) violation (23505 on player_profiles_username_key) means the name is taken · give a
+      // friendly, actionable message. A 23505 on any OTHER constraint (e.g. a user_id race) falls through to
+      // its real message rather than mislabel it "taken".
+      const detail = `${error.message ?? ''} ${error.details ?? ''}`
+      const nameTaken = (error.code === '23505' || /duplicate key/i.test(detail)) && /username/i.test(detail)
+      return { error: nameTaken ? 'That name is taken. Please choose another.' : (error.message ?? 'Could not save name') }
     }
 
-    return { error: error?.message ?? null }
+    try {
+      localStorage.setItem(USERNAME_KEY, cleaned)
+      localStorage.setItem(CLAIMED_KEY, '1')
+    } catch { /* localStorage blocked · session-only, fine */ }
+    setUsername(cleaned)
+    return { error: null }
   }, [user])
 
   const isClaimed = (() => {
