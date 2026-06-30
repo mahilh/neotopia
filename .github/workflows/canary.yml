@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'   # current LTS · the vitest quality gate (T2 S24 · was '22', not '20' as the forge premise said)
           cache: 'npm'
 
       - name: Install

@@ -25,7 +25,9 @@ const FILE_IDS = {
 };
 
 const CARD_ART_FOLDER = '1mAMAeriwZSlrTJTFczFX56HCasvUQfyo';
-const SKILLS_FOLDER   = '16VcjTyJA95ELauwukSEGXFt3FCgHu1R2';
+// (the skills Drive folder ID is documented in CLAUDE.md + MANIFEST · the sync writes to the per-file
+//  FILE_IDS doc IDs above, never to the folder itself, so a SKILLS_FOLDER constant here was dead · removed
+//  T2 S24. listCardArt is the only folder-scoped op and it uses CARD_ART_FOLDER.)
 
 async function getClients() {
   const auth = new google.auth.GoogleAuth({
