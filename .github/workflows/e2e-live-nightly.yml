@@ -7,6 +7,9 @@ name: E2E Live (nightly)
 #
 # Currently runs: flow-mode-live.e2e.js (T3 S18) — the real lobby Flow toggle (data-testid="mode-flow" · T1
 # 5d759aa) → game_sessions.mode='flow' + the persisted 9-tile/15s Flow clock, verified against live Postgres.
+# Also runs: draw-ui-live.e2e.js (T3 S23 · added to this workflow T2 S24) · a real authenticated room's
+# offer-draw routed through the atomic draw_card_for_seat RPC · asserts the RPC POST fired (vs the local
+# fallback) and exactly one offer card moves to a single hand · pairs with the draw-rpc-concurrency proof.
 # New heavy live-DB flows belong here too (this is the home for "needs Supabase, too flaky to merge-gate").
 #
 # REQUIRES repo secrets: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (the same pair e2e.yml / bot-health.yml use).
@@ -44,8 +47,8 @@ jobs:
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run live-DB Flow mode E2E
-        run: npx playwright test tests/e2e/flow-mode-live.e2e.js --reporter=list
+      - name: Run live-DB Flow mode + draw-UI E2E
+        run: npx playwright test tests/e2e/flow-mode-live.e2e.js tests/e2e/draw-ui-live.e2e.js --reporter=list
 
       - name: Upload Playwright report on failure
         if: failure()
