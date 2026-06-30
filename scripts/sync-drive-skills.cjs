@@ -176,8 +176,15 @@ async function validateManifest() {
   // manHead is regex-constrained to hex [0-9a-f]{7,40}, so interpolating it into the git command below
   // has zero shell-injection surface (it cannot contain a metacharacter).
   let headOk = false, headDetail = '';
-  if (!headConsistent) {
-    headDetail = headDecls.length ? `manifest disagrees with itself: ${manHead}` : 'no HEAD: declaration found';
+  if (headDecls.length === 0) {
+    // DESIRED END STATE (Rule 72 · T2 S23): the manifest stores NO static head hash. A tracked file can
+    // never contain the short hash of its own commit, so any stored value is born stale (it reconciled to
+    // a value already wrong the instant it was committed · S21 64264f8, S22 f43bf11). Absence is correct;
+    // there is nothing to rot. This command is now the LIVE-state reporter · print live head and pass.
+    headOk = true;
+    headDetail = `no stored head claim (Rule 72 · nothing to rot) · live ${liveHead}`;
+  } else if (!headConsistent) {
+    headDetail = `manifest disagrees with itself: ${manHead}`;
   } else {
     const h = headDecls[0];
     let isAncestor = false;
@@ -194,19 +201,25 @@ async function validateManifest() {
     }
   }
 
-  // ── Tests: exact match across all declarations + zero failures (finding #3 makes liveTests trustworthy) ──
-  const testsOk = testsConsistent && liveTests != null && testDecls[0] === liveTests && liveFailed === 0;
+  // ── Tests: zero failures ALWAYS required · a stored count (if any) must also match (Rule 72 · T2 S23) ──
+  // With no stored count (the desired end state) the only drift signal is a FAILING suite · a count rots
+  // the moment a test is added, so we no longer demand one. When a count IS still stored, keep the exact-
+  // match gate (finding #3 makes liveTests trustworthy) so a stale leftover count is still caught.
+  const testsOk = testDecls.length === 0
+    ? (liveTests != null && liveFailed === 0)
+    : (testsConsistent && liveTests != null && testDecls[0] === liveTests && liveFailed === 0);
   const mark = (ok) => ok ? '✅ MATCH' : '❌ DRIFT';
 
   console.log('🔍 MANIFEST VALIDATION');
   console.log(`  HEAD   · live ${liveHead} · manifest ${manHead} · ${mark(headOk)} · ${headDetail}`);
-  console.log(`  Tests  · live ${liveTests == null ? '(unknown · vitest unparsed)' : liveTests}${liveFailed ? ` (${liveFailed} FAILED)` : ''} · manifest ${manTests}${testsConsistent ? '' : ' (self-inconsistent)'} · ${mark(testsOk)}`);
+  const manTestsLabel = testDecls.length === 0 ? '(none · by design · Rule 72)' : `${manTests}${testsConsistent ? '' : ' (self-inconsistent)'}`;
+  console.log(`  Tests  · live ${liveTests == null ? '(unknown · vitest unparsed)' : liveTests}${liveFailed ? ` (${liveFailed} FAILED)` : ''} · manifest ${manTestsLabel} · ${mark(testsOk)}`);
   console.log('────────────────────────────────────────────────────────────');
   if (headOk && testsOk) {
-    console.log('✅ MANIFEST CURRENT · test count matches live · HEAD is a recent on-branch ancestor.');
+    console.log('✅ MANIFEST CURRENT · head/test state verified against live (no stale snapshot to reconcile).');
     return;
   }
-  console.error('❌ DRIFT DETECTED · MANIFEST_SKILL.md is stale or self-inconsistent · reconcile its HEAD/Tests declarations to live truth before NIGHTSAVE --all (else you sync rot · Rule 71).');
+  console.error('❌ DRIFT DETECTED · fix before NIGHTSAVE --all (else you sync rot · Rule 71): if a FAILING suite, make tests green; if a stale leftover head/test line in MANIFEST_SKILL.md, REMOVE it (do NOT re-add a snapshot · Rule 72).');
   process.exit(1);
 }
 

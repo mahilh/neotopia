@@ -231,3 +231,9 @@ A self-improving system that syncs files but never refreshes the facts inside th
 faithfully mirrors rot. Sync ≠ current. Boot premise-checks must validate HEAD
 (git rev-parse --short HEAD) and test count (vitest) from live source at the moment
 of use — never from the skill file's last-written content.
+
+RULE 72 (T3 S22 · June 30 2026):
+A freshness/drift gate cannot compare a committed artifact to its own live identity by equality.
+Its recorded HEAD is at best its commit's parent. Gate on ancestry + bounded distance, never equality.
+Running a verifier once proves it executes, not that its verdict is sound · adversarial review found
+3 real logic flaws in the first --validate-manifest that a single passing run did not surface.
