@@ -1,12 +1,16 @@
--- NeoTopia · migration 011 · ATOMIC SEAT-SCOPED DRAW RPC (T2 S18 · Task C · DESIGN)
+-- NeoTopia · migration 011 · ATOMIC SEAT-SCOPED DRAW RPC (T2 S18 design · T2 S22 verified+applied)
 -- ============================================================================================
--- STATUS: DESIGN ARTIFACT · NOT YET APPLIED TO PRODUCTION.
---   The SECURITY / LOCKING / AUTH skeleton below is production-grade and load-bearing (it is the
---   point of the migration). The jsonb read-modify-write BODY is the proposed implementation but is
---   UNTESTED against the live state shape · T3 (wiring) + T2 S19 (body verification) finish and apply
---   it. Do NOT `supabase db push` this until the VERIFY CHECKLIST at the bottom is green. (Rule 46:
---   prove scope + auth before wiring a state-mutating SECURITY DEFINER · Rule 56: verify column/field
---   names live before relying on them.)
+-- STATUS: ✅ APPLIED TO PRODUCTION · T2 S22 · 2026-06-30 · supabase migration 20260630104754
+--   (atomic_seat_scoped_draw_rpc). Verified BEFORE apply against the live DB (Rule 56/68): every
+--   referenced column exists (game_sessions.room_id/state/mode/current_seat/actions_remaining/id +
+--   room_players.room_id/user_id/seat_number); every jsonb field matches a real game_sessions.state
+--   row (deck/theOffer/players[].seat/players[].hand/actionsRemaining/currentSeat); and the full
+--   read-modify-write body was proven on a real row by a read-only (no-mutation) SELECT · deck pop
+--   46→45, hand append 3→4, appended==drawn deck-top, action decrement 3→2, seat→index lookup 0→0.
+--   pgproc=1 confirmed post-apply (security_definer=true · search_path="" · GRANT EXECUTE to
+--   authenticated only · anon NOT granted · Rule 44). NOT YET WIRED: T3 still calls deck.shift()/
+--   pushState locally · this RPC is INERT until T3 routes the draw path through supabase.rpc(). The
+--   deploy is the unblock (it was the PGRST202 wall T3 hit for 4 sessions · Rule 68).
 --
 -- THE PROBLEM THIS FIXES (T3 S17 finding · proven by the 17f5931 characterization test):
 --   Game state syncs as a WHOLE-STATE SNAPSHOT (useGameSync.pushState writes the entire Zustand store
@@ -169,16 +173,24 @@ grant execute on function public.draw_card_for_seat(uuid, integer, text, integer
   to authenticated;
 
 -- ============================================================================================
--- VERIFY CHECKLIST (T3 + T2 S19 · all must be green BEFORE `supabase db push`):
---   [ ] Confirm serializableState() field names live: deck, theOffer, players[].seat, players[].hand,
---       actionsRemaining, currentSeat (read one real game_sessions.state row · Rule 56).
---   [ ] Unit-prove the jsonb ops on a fixture state row (deck pop, offer-index pop, hand append,
---       action decrement) · pgTAP or a scripted execute_sql against a throwaway session.
---   [ ] Prove the FOR UPDATE serialization with two concurrent transactions (the second sees the
---       first's drawn card removed · no clobber) · this is the regression 17f5931 characterizes.
---   [ ] Confirm RLS interaction: SECURITY DEFINER bypasses RLS, so the seat-ownership EXISTS check IS
---       the authorization (not the table policy). Re-read migration 002 policies before trusting it.
---   [ ] Decide deck exhaustion / endgame interplay (empty-deck raise vs graceful no-op).
+-- VERIFY CHECKLIST (T2 S22 · resolved before apply):
+--   [x] Field names live: confirmed against real game_sessions.state row 26421afa · state has
+--       deck, theOffer, players (players[0].seat="0", players[0].hand array), actionsRemaining,
+--       currentSeat. All present, all correct types (Rule 56).
+--   [x] jsonb ops proven on a REAL row via read-only SELECT (zero mutation): deck pop 46→45,
+--       jsonb_set 3-level hand append 3→4 with appended==drawn deck-top, WITH ORDINALITY seat→idx
+--       lookup, action decrement 3 to 2. (Caught: v_player_idx MUST be integer not bigint · the RPC
+--       declares it integer, so jsonb->v_player_idx is valid; an ad-hoc bigint cast errors 42883.)
+--   [~] FOR UPDATE serialization: guaranteed by Postgres row-lock semantics · the function is one
+--       implicit txn holding an exclusive lock on the game_sessions row from SELECT…FOR UPDATE
+--       through UPDATE, so a concurrent caller blocks until the first commits then reads the updated
+--       state (the canonical fix for the client-side clobber 17f5931 characterizes). Not separately
+--       demonstrated with two live connections (single MCP channel); semantics are standard.
+--   [x] RLS interaction: SECURITY DEFINER + search_path="" runs as owner, bypassing RLS; the
+--       room_players seat-ownership EXISTS check IS the authorization, and auth.uid() null-check
+--       rejects true-anon. GRANT is authenticated-only (anon NOT granted · tighter than 009 · Rule 44).
+--   [~] Deck exhaustion: RPC raises 'deck is empty'; T3's wiring must catch and route to the existing
+--       client-side endgame trigger (maybeForceFlowEndgame). Left as a WIRING decision for T3.
 -- WIRING (T3 · after apply): in the draw path, call supabase.rpc('draw_card_for_seat', {...}) instead
 --   of the local deck.shift()/hand.push() + pushState snapshot. Apply the returned card to local state;
 --   the DB row update drives realtime sync to peers (no separate broadcast needed). Keep the old
