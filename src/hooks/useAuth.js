@@ -5,9 +5,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { reportBackendUp, reportBackendDown, registerBackendRetry, getBackendHealth } from './useConnectionHealth'
 
 const USERNAME_KEY = 'neotopia_username'
 const CLAIMED_KEY  = 'neotopia_username_claimed'
+const HEALTH_SOURCE = 'auth' // key in the useConnectionHealth aggregate · see useGameSync's 'game-sync'
 
 export function useAuth() {
   const [user, setUser] = useState(null)
@@ -20,7 +22,40 @@ export function useAuth() {
 
   useEffect(() => {
     let mounted = true
-    let signingIn = false
+    let inFlight = false
+
+    // Anonymous sign-in · now RETRYABLE and REPORTED (T3 S26).
+    // The failure this closes: when Supabase was unreachable, signInAnonymously() rejected once, we set an
+    // authError NO CONSUMER READ (Lobby destructures user/username/isLoading/isClaimed/claimUsername · never
+    // authError), flipped isLoading false, and the lobby rendered a completely normal "Choose your name"
+    // screen. The app looked healthy, the name went nowhere, and there was no path back · no retry, and no
+    // recovery when the network returned. A failure now reports OFFLINE (so a degraded UI can say so) and is
+    // recoverable from two triggers below. `inFlight` replaces the old one-shot `signingIn` latch: it still
+    // prevents CONCURRENT sign-ins, but it releases afterwards so a retry is possible. Minting is still gated
+    // on INITIAL_SESSION alone, so a later SIGNED_OUT can never silently re-create a user.
+    const attemptSignIn = async () => {
+      if (!mounted || inFlight) return
+      inFlight = true
+      try {
+        const { data, error } = await supabase.auth.signInAnonymously()
+        if (!mounted) return
+        if (error) {
+          setAuthError(error.message)
+          setIsLoading(false)
+          // Terminal by construction · unlike the realtime channel there is no retry budget to burn down
+          // here: signInAnonymously fires once per trigger and never self-retries, so one failure IS the
+          // give-up state. Reporting OFFLINE (not RECONNECTING) is therefore the honest signal.
+          reportBackendDown(HEALTH_SOURCE, error.message)
+          return
+        }
+        setAuthError(null)
+        setUser(data.user) // the subsequent SIGNED_IN event will reaffirm this idempotently
+        setIsLoading(false)
+        reportBackendUp(HEALTH_SOURCE)
+      } finally {
+        inFlight = false
+      }
+    }
 
     // Drive auth ENTIRELY off onAuthStateChange. INITIAL_SESSION fires once, AFTER the client
     // has hydrated the persisted session from storage · so we never race getSession() against
@@ -31,29 +66,42 @@ export function useAuth() {
       if (!mounted) return
 
       if (session?.user) {
-        // Persisted / refreshed / freshly-signed-in session · adopt it.
+        // Persisted / refreshed / freshly-signed-in session · adopt it. Reaching this proves the backend
+        // answered, so it also clears any earlier degraded report (a refresh that succeeds after an outage).
         setUser(session.user)
         setIsLoading(false)
+        setAuthError(null)
+        reportBackendUp(HEALTH_SOURCE)
         return
       }
 
-      // No session. Mint an anonymous user ONLY when INITIAL_SESSION confirms none is persisted
-      // (and only once · a later SIGNED_OUT must not silently re-create one).
-      if (event === 'INITIAL_SESSION' && !signingIn) {
-        signingIn = true
-        supabase.auth.signInAnonymously().then(({ data, error }) => {
-          if (!mounted) return
-          if (error) { setAuthError(error.message); setIsLoading(false); return }
-          setUser(data.user) // the subsequent SIGNED_IN event will reaffirm this idempotently
-          setIsLoading(false)
-        })
+      // No session. Mint an anonymous user ONLY when INITIAL_SESSION confirms none is persisted.
+      if (event === 'INITIAL_SESSION') {
+        attemptSignIn()
       } else {
         setUser(null)
         setIsLoading(false)
       }
     })
 
-    return () => { mounted = false; subscription.unsubscribe() }
+    // Two ways back from a failed sign-in:
+    //   · the browser regains network → re-attempt, but ONLY from the failed state, so a routine flap
+    //     during a healthy session never fires a redundant sign-in;
+    //   · an explicit retry (a "Try again" control reads useBackendHealth().retry · it never imports this hook).
+    const onOnline = () => { if (getBackendHealth().isOffline) attemptSignIn() }
+    window.addEventListener('online', onOnline)
+    const unregisterRetry = registerBackendRetry(HEALTH_SOURCE, attemptSignIn)
+
+    return () => {
+      mounted = false
+      window.removeEventListener('online', onOnline)
+      unregisterRetry()
+      subscription.unsubscribe()
+      // NOTE · deliberately NO clearBackendSource('auth') here. Auth is a PROCESS-WIDE fact, and useAuth is
+      // mounted by both Lobby and GameRoom · dropping the source when one unmounts would erase a real outage
+      // the other is still living through. (useGameSync clears its source because a game channel genuinely
+      // ceases to exist when you leave the room.)
+    }
   }, []) // empty dep array: runs once on mount
 
   const claimUsername = useCallback(async (name) => {
