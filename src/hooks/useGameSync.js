@@ -12,6 +12,42 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useGameStore } from '../store/gameStore'
+import {
+  reportBackendUp, reportBackendRetrying, reportBackendDown,
+  registerBackendRetry, clearBackendSource,
+} from './useConnectionHealth'
+
+// ── Reconnect budget (T3 S26) ─────────────────────────────────────────────────────────────────────────────
+// THE BUG THIS REPLACES (measured · not theoretical): both failure paths below used to schedule
+// `setTimeout(() => connect(roomId), 1000)` · a FIXED 1s delay, no ceiling, no give-up. Against an
+// unreachable backend that is a 1Hz reconnect storm that runs until the tab closes, and it compounds three
+// ways: (1) every round tears down and re-creates a channel and re-fires a REST seed, so each round costs
+// several failed requests, not one; (2) the 'system' error handler AND the .subscribe(CHANNEL_ERROR)
+// callback BOTH fire for the same failure, so each round scheduled TWO timers → the error count grew
+// superlinearly (the observed 6 → 18 in seconds), not linearly; (3) the timers were never cleared, so one
+// left pending across a room change or unmount resurrected a channel cleanup() had already removed.
+//
+// The replacement is a single-timer exponential backoff with a hard stop:
+//   attempt 1..6 → 1s · 2s · 4s · 8s · 16s · 30s (capped) ≈ 61s of patient retrying, then GIVE UP.
+// Giving up is the point. A dead backend is not fixed by asking it faster; the correct end state is a
+// terminal 'offline' the UI can render, plus an explicit way back in (the browser 'online' event, or a
+// user-driven retry via useConnectionHealth). Deterministic delays (no jitter): NeoTopia rooms are ≤4
+// players so there is no thundering herd to smear, and a fixed schedule is exactly assertable in a test
+// (Rule 63 · the evidence is the schedule, not "it builds").
+export const RECONNECT_BASE_MS = 1000
+export const RECONNECT_MAX_MS = 30_000
+export const RECONNECT_MAX_ATTEMPTS = 6
+export const HEALTH_SOURCE = 'game-sync'
+
+/**
+ * Backoff delay for a 1-based attempt number · doubles from BASE, clamped at MAX. Pure · exported for the test.
+ * The non-finite guard is not decoration: Math.floor(NaN) is NaN, and setTimeout(fn, NaN) fires at 0ms · a
+ * junk attempt number would turn the backoff into the very hot loop this whole change exists to remove.
+ */
+export function reconnectDelayMs(attempt) {
+  const n = Number.isFinite(attempt) ? Math.max(1, Math.floor(attempt)) : 1
+  return Math.min(RECONNECT_BASE_MS * 2 ** (n - 1), RECONNECT_MAX_MS)
+}
 
 // JSON-serialisable snapshot of the store: drops action functions (jsonb can't hold them ·
 // structuredClone would THROW on them) and collapses the pendingMoves Set. syncFromServer
@@ -72,6 +108,8 @@ export function useGameSync(roomId, currentUserId) {
   const channelRef = useRef(null)
   const sessionIdRef = useRef(null)   // game_sessions.id · required for game_events FK (NOT room_id)
   const connectRef = useRef(null)     // latest connect fn · lets the reconnect handler avoid a stale closure
+  const retryTimerRef = useRef(null)  // the SINGLE in-flight reconnect timer · never two (see the budget note)
+  const attemptRef = useRef(0)        // consecutive failed connects · reset to 0 by a successful SUBSCRIBED
   // sessionId is ALSO held as reactive state so it can be RETURNED to consumers (T1's FinalScore wires the
   // Global Index off it · T3 S16). The ref alone is not enough: a ref read in the return value is frozen at
   // render time and a ref mutation does not re-render, so `sessionId: sessionIdRef.current` could stay null
@@ -96,6 +134,40 @@ export function useGameSync(roomId, currentUserId) {
     return true
   }, [syncFromServer, setSession])
 
+  // Cancel any pending reconnect. Called before scheduling a new one, on a successful subscribe, and on
+  // unmount/room change · that last one is what stops a queued timer from resurrecting a channel the effect
+  // cleanup already removed.
+  const clearRetry = useCallback(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+  }, [])
+
+  // Schedule the next reconnect, or give up. THE DEDUPE IS LOAD-BEARING: the 'system' error event and the
+  // subscribe(CHANNEL_ERROR) callback both fire for a single failure, so without this guard every failure
+  // scheduled two timers and the retry rate doubled each round. One pending timer at a time, always.
+  const scheduleReconnect = useCallback((targetRoomId, reason) => {
+    if (retryTimerRef.current) return // a reconnect is already queued for this failure · do not stack another
+
+    const attempt = attemptRef.current + 1
+    if (attempt > RECONNECT_MAX_ATTEMPTS) {
+      // Budget exhausted. Stop scheduling entirely · no timer, no further requests · and hand the UI a
+      // terminal state it can render. Recovery is now explicit: the browser 'online' event below, or a
+      // user-driven retryBackend() (both reset the budget via resetAndConnect).
+      reportBackendDown(HEALTH_SOURCE, reason ?? 'realtime unreachable', attemptRef.current)
+      return
+    }
+
+    attemptRef.current = attempt
+    const delay = reconnectDelayMs(attempt)
+    reportBackendRetrying(HEALTH_SOURCE, { attempt, reason: reason ?? 'realtime unreachable' })
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null // clear BEFORE reconnecting so the next failure can schedule again
+      connectRef.current?.(targetRoomId)
+    }, delay)
+  }, [])
+
   const connect = useCallback((targetRoomId) => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
@@ -114,49 +186,79 @@ export function useGameSync(roomId, currentUserId) {
         }
       )
       .on('system', {}, (payload) => {
-        // Re-seed from the DB after a transport drop · brief debounce avoids thrashing on flaps.
+        // Re-seed from the DB after a transport drop · backed off, deduped against the CHANNEL_ERROR path.
         if (payload?.status === 'error' || payload?.extension === 'postgres_changes' && payload?.status === 'closed') {
-          setTimeout(() => connectRef.current?.(targetRoomId), 1000)
+          scheduleReconnect(targetRoomId, 'transport dropped')
         }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          // Connected. Cancel any queued retry, hand back the full budget for the NEXT outage, and clear the
+          // degraded flag · a recovery must reset the counter or a long session would slowly exhaust it
+          // across unrelated flaps and give up on a backend that is actually fine.
+          clearRetry()
+          attemptRef.current = 0
+          reportBackendUp(HEALTH_SOURCE)
           await fetchAndSeed(targetRoomId) // seed AFTER subscribe so no UPDATE is missed in the gap
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          setTimeout(() => connectRef.current?.(targetRoomId), 1000)
+          scheduleReconnect(targetRoomId, `channel ${status.toLowerCase()}`)
         }
       })
 
     channelRef.current = channel
-  }, [syncFromServer, fetchAndSeed, setSession])
+  }, [syncFromServer, fetchAndSeed, setSession, scheduleReconnect, clearRetry])
 
   connectRef.current = connect
 
   useEffect(() => {
     if (!roomId) return
+
+    // A fresh room gets a fresh budget · a previous room's exhausted attempts must never make this one
+    // give up early.
+    clearRetry()
+    attemptRef.current = 0
     connect(roomId)
+
+    // Full recovery: cancel any queued backoff, hand back the WHOLE budget, reconnect NOW. This is the only
+    // way out of the terminal 'offline' state, so it is deliberately shared by both escape hatches below.
+    const resetAndConnect = () => {
+      clearRetry()
+      attemptRef.current = 0
+      connect(roomId)
+    }
 
     // Real-world recovery beyond Supabase's own WS retry · the 'system'/CHANNEL_ERROR paths above
     // do not fire reliably on every drop (laptop sleep, Chrome network-throttle, mobile tab-suspend):
     //   · 'online'         → the browser regained network · do a FULL reconnect (fresh channel + reseed).
+    //                        Kept as this hook's OWN listener rather than folded into useConnectionHealth:
+    //                        a silent WS drop never reports a failure, so health can still read 'online'
+    //                        while this channel is dead · a health-gated handler would miss exactly that
+    //                        case, which is the one this listener was added for.
     //   · visibilitychange → a backgrounded tab often has its WS suspended (esp. mobile · 65% of play) ·
     //                        on return, reseed from the DB so the board is current even if the socket
     //                        silently missed UPDATEs. Cheap (one row) · Supabase auto-reconnects the WS.
-    const onOnline = () => connect(roomId)
+    const onOnline = () => resetAndConnect()
     const onVisible = () => { if (document.visibilityState === 'visible') fetchAndSeed(roomId) }
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisible)
 
+    // Make that same recovery reachable from a UI that cannot know which transport broke (a "Try again"
+    // control reads useBackendHealth and calls retry() · it never imports this hook).
+    const unregisterRetry = registerBackendRetry(HEALTH_SOURCE, resetAndConnect)
+
     return () => {
       window.removeEventListener('online', onOnline)
       document.removeEventListener('visibilitychange', onVisible)
+      unregisterRetry()
+      clearRetry() // a queued reconnect would otherwise resurrect a channel this cleanup just removed
+      clearBackendSource(HEALTH_SOURCE) // this transport no longer exists · it must stop dragging the flag down
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
       }
       setSession(null) // clear ref + reactive state on room change/unmount
     }
-  }, [roomId, connect, fetchAndSeed, setSession])
+  }, [roomId, connect, fetchAndSeed, setSession, clearRetry])
 
   // Low-level persist: write current store state to game_sessions (→ every client syncs) plus a
   // best-effort append to the game_events audit log. Returns { error } from the state write only ·
