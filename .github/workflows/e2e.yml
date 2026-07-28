@@ -3,11 +3,17 @@ name: NeoTopia E2E
 # Realtime reconnect proofs (Playwright · headless chromium). Separate from canary.yml's unit gate
 # so a heavier browser run never blocks the fast quality gate · and so its logs/artifacts stand alone.
 #
-# SCOPED to reconnect.e2e.js (T3 S13). It previously ran `npx playwright test` (the WHOLE suite) — an
+# SCOPED to the transport-resilience proofs. It previously ran `npx playwright test` (the WHOLE suite) · an
 # unintended scope-creep as game-ux / two-human / phase-over-wire were added. The full suite does many
 # anonymous sign-ins and flakes on Supabase's per-IP hourly rate limit in CI. So now: the placement guard
-# runs in e2e-placement-guard.yml (game-ux · the merge-gating check); reconnect runs here; the heavy
-# two-human + phase-over-wire flows are run locally / on demand, not on the blocking CI path.
+# runs in e2e-placement-guard.yml (game-ux · the merge-gating check); reconnect + backend-down run here; the
+# heavy two-human + phase-over-wire flows are run locally / on demand, not on the blocking CI path.
+#
+# backend-down.e2e.js (T3 S26) joins this workflow rather than the live-nightly one because it is
+# deterministic and offline BY CONSTRUCTION: it aborts every Supabase request itself, so it makes no
+# successful backend call and cannot touch the anon rate limit that keeps the live suites off this path. The
+# secrets below are still required (the DEV SERVER refuses to boot without them · src/lib/supabase.js throws)
+# but their values are never reached.
 on:
   push:
     branches: [main]
@@ -16,7 +22,7 @@ on:
 
 jobs:
   reconnect:
-    name: Reconnect E2E
+    name: Reconnect + backend-down E2E
     runs-on: ubuntu-latest
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -35,8 +41,8 @@ jobs:
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run reconnect E2E
-        run: npx playwright test tests/e2e/reconnect.e2e.js
+      - name: Run reconnect + backend-down E2E
+        run: npx playwright test tests/e2e/reconnect.e2e.js tests/e2e/backend-down.e2e.js
 
       - name: Upload report on failure
         if: failure()
