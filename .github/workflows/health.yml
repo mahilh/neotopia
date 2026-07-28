@@ -1,0 +1,152 @@
+name: Production Health
+
+# THE GAP THIS CLOSES (T2 S26 · measured, not theoretical)
+#
+# Vercel reported 0 runtime errors for 7 days while NeoTopia was unplayable. That number was never a
+# health signal: api/ is empty, the project ships zero serverless functions, so Vercel only ever sees
+# static asset delivery. It would still read 0 if Supabase disappeared entirely.
+#
+# Detection, however, already existed. bot-health.yml drove production every morning and reported FAIL
+# ("start-failed": 3, proxy=0) the whole time. Nobody acted, because `gh run list` shows bot-health has
+# succeeded exactly ONCE EVER (2026-06-27) and has been red for 32 consecutive runs since. THAT is the
+# real defect: a permanently-red check is indistinguishable from noise, and it buried the genuinely new
+# E2E-Live failure that started 2026-07-27.
+#
+# So this workflow is built around two rules the old one broke:
+#   1. BE TRUSTWORTHY. scripts/healthcheck.cjs is ~3s of plain HTTP · no browser, no Playwright, no
+#      game-logic coupling, no "SOFT-PASS" tolerance band. It fails only when production is genuinely
+#      broken, so RED MEANS SOMETHING.
+#   2. ACTUALLY REACH A HUMAN. A red run in the Actions tab is not an alert. On failure this opens a
+#      GitHub issue; while it stays broken it comments on the SAME issue instead of opening new ones
+#      (no alarm-fatigue spam); when it recovers it closes the issue automatically. The issue list
+#      therefore always reflects CURRENT production state.
+#
+# COST, STATED HONESTLY: every run performs a real anonymous sign-in, which mints a permanent row in
+# auth.users (that is the point · it is the exact hop Vercel cannot see). At :00/:30 that is ~48
+# users/day, ~1.4k/month, against a 50k free-tier MAU allowance. auth.users already holds 2,476 rows,
+# 100% anonymous. If that growth ever matters, drop the cadence or add a periodic purge of anonymous
+# users with no room_players row · do NOT solve it by removing the auth stage, which is the one stage
+# that would have caught the outage.
+
+on:
+  schedule:
+    - cron: '0,30 * * * *'   # every 30 minutes
+  workflow_dispatch: {}
+  push:
+    branches: [main]          # a deploy is the most likely moment to break production
+
+concurrency:
+  group: health
+  cancel-in-progress: false   # never cancel a run that might be the one that reports an outage
+
+permissions:
+  contents: read
+  issues: write               # required to open/comment/close the alert issue
+
+jobs:
+  health:
+    name: Synthetic check vs production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5        # the check itself is ~3s · anything near this IS a failure
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      HEALTH_URL: https://neotopia.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # No `npm ci` on purpose: healthcheck.cjs has ZERO dependencies. Skipping install removes the
+      # largest source of false reds (a registry hiccup must never be reported as a production outage).
+      - name: Run health check
+        id: check
+        run: |
+          set +e
+          node scripts/healthcheck.cjs --json > health.json
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          cat health.json
+
+      # Defensive by necessity: if healthcheck.cjs dies before writing health.json, this step must
+      # still produce a summary, because the alerting steps below depend on it. A crashed check is
+      # itself an outage signal and must never be swallowed by a missing-file error.
+      - name: Render human summary
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            let r = null;
+            try { r = JSON.parse(fs.readFileSync("health.json", "utf8")); } catch (e) { r = null; }
+            let md;
+            if (!r) {
+              md = "### UNHEALTHY · the health check produced no report\n\n" +
+                   "scripts/healthcheck.cjs crashed or was killed before writing health.json. " +
+                   "Treat this as an outage until proven otherwise · inspect the job log.";
+            } else {
+              const line = s => `| ${s.stage} | ${s.ok ? "PASS" : (s.critical ? "FAIL" : "warn")} | ${s.status ?? "-"} | ${s.ms}ms | ${s.error ?? ""} |`;
+              md = [
+                `### ${r.healthy ? "Healthy" : "UNHEALTHY"} · ${r.target ?? "(unknown target)"}`,
+                "", "| stage | result | status | time | detail |", "|---|---|---|---|---|",
+                ...(r.stages || []).map(line), "",
+                r.healthy ? "" : `**Failed stages:** ${(r.failedStages || []).join(", ") || "(check crashed)"}`,
+              ].join("\n");
+            }
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+            fs.writeFileSync("summary.md", md);
+          '
+
+      # ── ALERTING · the part that was actually missing ────────────────────────────────────────────
+      # Dedupe by title so a sustained outage produces ONE issue with a comment trail, not 48 issues a
+      # day. That dedupe is what keeps this readable when it matters most.
+      - name: Open or update alert issue
+        if: steps.check.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Interpolate into env, never straight into the shell (workflow-injection hygiene). These
+          # particular values are repo-controlled rather than attacker-supplied, but the habit is the
+          # protection · the day someone adds an event-driven trigger, this is already correct.
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          TITLE="🔴 NeoTopia production health check FAILED"
+          BODY="$(cat summary.md)
+
+          Run: ${RUN_URL}
+          Commit: ${COMMIT_SHA}"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            echo "Alert issue #$EXISTING already open · commenting instead of opening a duplicate."
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --label "incident" || \
+              gh issue create --title "$TITLE" --body "$BODY"   # retry unlabelled if the label is absent
+          fi
+
+      # Auto-close on recovery so an open issue always means "production is broken RIGHT NOW". Without
+      # this, the alert rots into exactly the ignorable permanent-red signal this workflow replaces.
+      - name: Close alert issue on recovery
+        if: steps.check.outputs.exit_code == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="🔴 NeoTopia production health check FAILED"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "✅ Recovered · health check green at $(date -u +%FT%TZ). Run: ${RUN_URL}"
+            gh issue close "$EXISTING"
+          fi
+
+      - name: Upload health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-${{ github.run_id }}
+          path: health.json
+          retention-days: 14
+
+      - name: Fail the job when production is unhealthy
+        if: steps.check.outputs.exit_code != '0'
+        run: exit 1
