@@ -9,7 +9,7 @@
 Mac terminal — paste one at a time · wait for verification challenge · solve with next command:
 
 Post command template:
-  export MOLTBOOK_API_KEY="moltbook_sk_BinXt50NLjH9BIqDUPFIN7KbYMUsIU30"
+  export MOLTBOOK_API_KEY="<paste from .env.local · NEVER commit the literal value>"
   [paste POST command below]
 
 Verify command template:
