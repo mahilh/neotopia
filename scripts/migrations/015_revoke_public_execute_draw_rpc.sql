@@ -1,0 +1,30 @@
+-- NeoTopia · migration 015 · close the PUBLIC EXECUTE hole on draw_card_for_seat
+-- ============================================================================================
+-- STATUS: ✅ APPLIED TO PRODUCTION 2026-07-29 · proven with a live query (see PROOF below).
+--
+-- THE CLASS, NOT THE INSTANCE. Postgres grants EXECUTE to PUBLIC on EVERY new function by default,
+-- and PUBLIC includes anon. Writing `GRANT EXECUTE ... TO authenticated` therefore does NOT remove
+-- anon access · it only adds a redundant second grant. Migration 011's header claimed
+-- "authenticated only · anon NOT granted"; the live ACL was
+--     {=X/postgres,postgres=X/postgres,authenticated=X/postgres}
+-- where the LEADING `=X` IS the PUBLIC grant (empty grantee = PUBLIC), and
+--     has_function_privilege('anon','public.draw_card_for_seat(uuid,integer,text,integer)','EXECUTE')
+-- returned TRUE. The GRANT was written; the REVOKE never was (Rule 61 · verify the value, not the
+-- signature). `create or replace function` PRESERVES the ACL, so no later migration ever fixed it.
+--
+-- SAFE FOR REAL PLAYERS · PROVEN, NOT ASSUMED: a live signInAnonymously session carries
+-- role="authenticated" (is_anonymous=true), verified by decoding a real access_token. This removes
+-- an UNAUTHENTICATED-caller path only. Nobody who can play today loses access.
+--
+-- PROOF (run after apply):
+--   select has_function_privilege('anon','public.draw_card_for_seat(uuid,integer,text,integer)','EXECUTE');
+--   OBSERVED: false   (was true before this migration)
+--   ACL now: {postgres=X/postgres,authenticated=X/postgres}   · the leading =X is gone
+--
+-- THE REST OF THE CLASS IS AUDITED IN docs/SECURITY_SURFACE.md section 5. Four other SECURITY
+-- DEFINER functions still carry the PUBLIC default grant; two of them (increment_neotopia_index,
+-- record_civilization_score) are unauthenticated-reachable WRITES and are additionally granted to
+-- anon EXPLICITLY, so revoking PUBLIC alone would not close them. Left unchanged deliberately ·
+-- they sit on a live client call path and deserve a deliberate change with a test, not a wrap-up edit.
+revoke all on function public.draw_card_for_seat(uuid, integer, text, integer) from public, anon;
+grant execute on function public.draw_card_for_seat(uuid, integer, text, integer) to authenticated;
