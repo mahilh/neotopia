@@ -15,10 +15,73 @@ import { DECK } from '../lib/projectCards'
 import { usePresence } from './usePresence'
 import { getModeConfig, DEFAULT_GAME_MODE } from '../store/gameConfig'
 import { getClusterTotal } from '../lib/patternMatcher'
+import { getBackendHealth } from './useConnectionHealth'
 
 // Seat → colour. room_players has UNIQUE(room_id, player_color) AND UNIQUE(room_id, seat_number),
 // so deriving colour from the (unique) seat keeps colour unique too · no extra coordination.
 const SEAT_COLORS = ['blue', 'red', 'green', 'purple']
+
+// ── Join contract (T3 S27 · consumed by the /join/:code screen · contract posted to comms first) ──────────
+//
+// WHY A CODE AND NOT A MESSAGE. Before this, joinRoom returned `undefined` and published its outcome only as
+// an English string in `lobbyError`. That is sufficient for the lobby's single inline <p>, and insufficient
+// for a deep-link screen, which has to render four genuinely different UIs from the same call: "type your
+// name" (not an error at all), "that link is dead", "that room is full", and "the servers are unreachable".
+// Branching those apart on message text would break silently the first time a word changed · so the reason
+// is a stable machine code and the message is disposable human copy. Rule 63: expose the value the consumer
+// actually has to decide on.
+//
+// The return value is purely ADDITIVE · every path still sets `lobbyError` exactly as before, so Lobby.jsx
+// (which ignores the return) is unchanged and unbroken.
+export const JOIN_FAILURE = Object.freeze({
+  BACKEND_OFFLINE:   'BACKEND_OFFLINE',   // health already reads offline · no request was attempted
+  NOT_AUTHENTICATED: 'NOT_AUTHENTICATED', // no anon session yet · still booting, or sign-in failed
+  NAME_REQUIRED:     'NAME_REQUIRED',     // session but no display name · the normal first-visit path
+  INVALID_CODE:      'INVALID_CODE',      // not 6 chars after normalising · malformed URL
+  NOT_FOUND:         'NOT_FOUND',         // no room carries that code
+  ALREADY_STARTED:   'ALREADY_STARTED',   // room is mid-game and this user is NOT a member of it
+  ROOM_FULL:         'ROOM_FULL',         // every seat taken
+  SEAT_CONFLICT:     'SEAT_CONFLICT',     // lost every seat race · rare, retryable
+  BUSY:              'BUSY',              // another create/join/start is in flight in this hook
+  NETWORK:           'NETWORK',           // the request errored · transport / RLS / unknown
+})
+
+// Human copy for each code. Deliberately separate from the codes themselves so rewording can never change
+// what a consumer branches on.
+const FAILURE_MESSAGE = {
+  [JOIN_FAILURE.BACKEND_OFFLINE]:   'Servers unreachable',
+  [JOIN_FAILURE.NOT_AUTHENTICATED]: 'Still connecting',
+  [JOIN_FAILURE.NAME_REQUIRED]:     'Username required',
+  [JOIN_FAILURE.INVALID_CODE]:      'Enter a 6-character code',
+  [JOIN_FAILURE.NOT_FOUND]:         'Room not found',
+  [JOIN_FAILURE.ALREADY_STARTED]:   'Game already started',
+  [JOIN_FAILURE.ROOM_FULL]:         'Room is full',
+  [JOIN_FAILURE.SEAT_CONFLICT]:     'Could not claim a seat',
+  [JOIN_FAILURE.BUSY]:              'Already joining',
+  [JOIN_FAILURE.NETWORK]:           'Could not reach the room',
+}
+
+// Codes are typed by humans off a screenshot or pasted out of a URL · normalise before anything else so the
+// 6-char DB CHECK is measured against what will actually be sent, not the raw input.
+function normalizeCode(raw) {
+  return String(raw ?? '').trim().toUpperCase()
+}
+
+// A single failure constructor so every exit from joinRoom/peekRoom has the identical shape. `message`
+// overrides the canned copy for NETWORK, where the real cause is more useful than a generic line.
+function joinFailure(reason, message) {
+  return { ok: false, reason, message: message ?? FAILURE_MESSAGE[reason] ?? 'Could not join' }
+}
+
+// Pre-flight. The health aggregator is only consulted for its TERMINAL verdict: `isOffline` means some
+// transport already exhausted its retry budget, so a request now is a request we know will fail, and the
+// honest answer is BACKEND_OFFLINE rather than a network error dressed up as "Room not found" (the exact
+// misattribution the 07-27 nightly triage burned two days on). `reconnecting` is deliberately NOT blocked ·
+// a request may well still succeed while a *different* transport is mid-backoff, and refusing it would
+// invent an outage. Reuses T3's existing aggregator · this hook registers no health source of its own.
+function offlineGuard() {
+  return getBackendHealth().isOffline ? joinFailure(JOIN_FAILURE.BACKEND_OFFLINE) : null
+}
 
 // 6-char room code from unambiguous characters only (no I, O, 0, 1 · they misread aloud/typed).
 // Length is 6 to satisfy the DB CHECK (length(room_code) = 6) · a shorter code fails 23514.
@@ -49,10 +112,26 @@ async function insertRoomWithRetry(hostId, code, attempt = 0) {
   return { data, error, code }
 }
 
+// Why did the server refuse the seat? Called only after a 42501, to turn "permission denied" into the
+// reason a player can act on. Re-reads the room because the refusal proves our earlier read is now stale:
+// the room started, or filled, in the gap between our check and our write. Falls back to SEAT_CONFLICT
+// (retryable, honest) when the re-read itself cannot answer · never to NETWORK, which would blame the
+// transport for a server that replied.
+async function denialReason(roomId) {
+  const { data: room } = await supabase
+    .from('game_rooms').select('status, max_players, player_count').eq('id', roomId).maybeSingle()
+  if (!room) return JOIN_FAILURE.NOT_FOUND
+  if (room.status !== 'waiting') return JOIN_FAILURE.ALREADY_STARTED
+  if ((room.player_count ?? 0) >= (room.max_players ?? 4)) return JOIN_FAILURE.ROOM_FULL
+  return JOIN_FAILURE.SEAT_CONFLICT
+}
+
 // Insert a room_players row at `seat`. On a seat/colour unique collision (23505 · concurrent
 // joiner grabbed it first) re-read the taken seats and try the next free one, up to maxRetries.
-// Returns { seat } on success or { error }. Server-side UNIQUE is the real arbiter · the client
-// read is only a hint, so we trust the insert, not the pre-read.
+// Returns { seat } on success, or { error, reason } where `reason` is a JOIN_FAILURE code · the
+// caller must not have to re-derive the failure class from an English message (T3 S27).
+// Server-side UNIQUE is the real arbiter · the client read is only a hint, so we trust the
+// insert, not the pre-read.
 async function claimSeat(roomId, userId, username, preferredSeat, maxRetries = 4) {
   let seat = preferredSeat
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -65,17 +144,33 @@ async function claimSeat(roomId, userId, username, preferredSeat, maxRetries = 4
       is_ready: false,
     })
     if (!error) return { seat }
-    if (error.code !== '23505') return { error }
+
+    // RLS DENIAL · 42501 insufficient_privilege (T3 S27 · added after T2 landed migration 015 mid-session).
+    // room_players_join now requires the target room to be `waiting` AND under capacity, enforced
+    // server-side (verified live in pg_policies, not read off the migration file · Rule 68). So the
+    // authoritative "you cannot join this room" answer now arrives as a permission error, and the client's
+    // own pre-checks are only a fast path around it.
+    // Mapping this to NETWORK would tell a player "could not reach the room" about a room that answered
+    // perfectly and refused them for a specific, explainable reason · the precise misattribution class this
+    // session exists to close. One extra read on a rare path buys the accurate reason.
+    if (error.code === '42501') return { error, reason: await denialReason(roomId) }
+
+    if (error.code !== '23505') return { error, reason: JOIN_FAILURE.NETWORK }
 
     // Seat (or its colour) was taken between our read and write · find the next free seat.
     const { data: rows } = await supabase
       .from('room_players').select('seat_number').eq('room_id', roomId)
     const taken = new Set((rows ?? []).map(r => r.seat_number))
     const next = [0, 1, 2, 3].find(s => !taken.has(s))
-    if (next === undefined) return { error: { message: 'Room is full' } }
+    if (next === undefined) {
+      return { error: { message: FAILURE_MESSAGE[JOIN_FAILURE.ROOM_FULL] }, reason: JOIN_FAILURE.ROOM_FULL }
+    }
     seat = next
   }
-  return { error: { message: 'Could not claim a seat' } }
+  return {
+    error: { message: FAILURE_MESSAGE[JOIN_FAILURE.SEAT_CONFLICT] },
+    reason: JOIN_FAILURE.SEAT_CONFLICT,
+  }
 }
 
 // Strip the Zustand store down to a JSON-serialisable snapshot: drops action FUNCTIONS (jsonb
@@ -168,14 +263,98 @@ export function useGameRoom(user, username) {
     }
   }, [user?.id, username])
 
-  // JOIN ROOM (by code)
+  // PEEK ROOM · read-only preview of a room by code. Added for the /join/:code deep link (T3 S27).
+  //
+  // WHY IT EXISTS SEPARATELY FROM joinRoom: a stranger arriving on a share link has no display name yet,
+  // and joinRoom cannot work without one (room_players.username is NOT NULL and is written at seat-claim
+  // time · verified live). Without a read-only peek, the join screen would have to demand a name BEFORE it
+  // could tell the player whether the room even exists · so a dead link would cost a name entry to discover.
+  // This makes the preview possible: both SELECT policies are `USING (true)` for public (verified live in
+  // pg_policies · rooms_read_all, room_players_read), so an unauthenticated visitor can read a room and its
+  // roster with the anon key alone.
+  //
+  // NO WRITES, NO STATE. It touches neither the DB nor this hook's state, so it is safe to call on mount,
+  // on every keystroke, or twice concurrently · and it is deliberately NOT behind busyRef, which exists to
+  // serialise MUTATIONS. It also never sets lobbyError: a preview of a dead link is not a lobby error, and
+  // showing one would put a red line under an unrelated screen.
+  const peekRoom = useCallback(async (rawCode) => {
+    const offline = offlineGuard()
+    if (offline) return offline
+
+    const code = normalizeCode(rawCode)
+    if (code.length !== 6) return joinFailure(JOIN_FAILURE.INVALID_CODE)
+
+    const { data: room, error } = await supabase
+      .from('game_rooms')
+      .select('id, room_code, status, max_players')
+      .eq('room_code', code)
+      .maybeSingle()
+
+    if (error) return joinFailure(JOIN_FAILURE.NETWORK, error.message)
+    if (!room) return joinFailure(JOIN_FAILURE.NOT_FOUND)
+
+    // Roster from room_players rather than game_rooms.player_count · but NOT because that column is dead.
+    // CORRECTED (T3 S27 · verified live in pg_trigger, after an in-repo comment asserted the opposite):
+    // `trg_player_count` on room_players is a SECURITY DEFINER trigger that recounts and writes
+    // game_rooms.player_count on every insert/delete, so the column IS maintained · the RLS-in-front-of-it
+    // reasoning ("no joiner can UPDATE game_rooms") was true and irrelevant, because the trigger runs as
+    // definer, not as the joiner. It is load-bearing too: migration 015's capacity check reads it.
+    // We still count rows here because this query is already being made for the roster, and one source for
+    // both playerCount and players cannot disagree with itself.
+    const { data: rows, error: rosterErr } = await supabase
+      .from('room_players').select('seat_number, user_id, username').eq('room_id', room.id)
+    if (rosterErr) return joinFailure(JOIN_FAILURE.NETWORK, rosterErr.message)
+
+    const roster = rows ?? []
+    const maxPlayers = room.max_players ?? 4
+    // isHost is derived from seat 0 rather than game_rooms.host_id · the host always takes seat 0 at
+    // createRoom, and this keeps the preview to two SELECTs without exposing a user id to the client.
+    const players = [...roster]
+      .sort((a, b) => a.seat_number - b.seat_number)
+      .map(r => ({ username: r.username, seat: r.seat_number, isHost: r.seat_number === 0 }))
+
+    return {
+      ok: true,
+      roomId: room.id,
+      roomCode: room.room_code ?? code,
+      status: room.status,
+      playerCount: roster.length,
+      maxPlayers,
+      players,
+      canJoin: room.status === 'waiting' && roster.length < maxPlayers,
+      // Needs a session to be answerable at all · an anonymous peek reports false rather than guessing.
+      rejoinable: !!user?.id && roster.some(r => r.user_id === user.id),
+    }
+  }, [user?.id])
+
+  // JOIN ROOM (by code) · returns a structured result (see JOIN_FAILURE) AND sets lobbyError as before.
   const joinRoom = useCallback(async (rawCode) => {
-    if (busyRef.current) return
-    if (!user?.id || !username) { setLobbyError('Username required'); return }
-    const code = rawCode.toUpperCase().trim()
-    if (code.length !== 6) { setLobbyError('Enter a 6-character code'); return }
+    // BUSY was previously `return` with no value, which a caller could not distinguish from success · a
+    // deep-link screen that awaited joinRoom twice (React 18 StrictMode double-invoke, or an impatient
+    // double tap) would have seen the second call resolve to undefined and had no way to know it did
+    // nothing. It is a named outcome now. It deliberately does NOT set lobbyError: nothing is wrong.
+    if (busyRef.current) return joinFailure(JOIN_FAILURE.BUSY)
+
+    const offline = offlineGuard()
+    if (offline) { setLobbyError(offline.message); return offline }
+
+    // Auth and name are separated because they need different UI. "No session yet" is a transport/timing
+    // problem the player cannot fix by typing; "no name" is a form they can fill in. Collapsing both into
+    // 'Username required' (the old behaviour) told a player to do something that could not help them.
+    if (!user?.id) { const f = joinFailure(JOIN_FAILURE.NOT_AUTHENTICATED); setLobbyError(f.message); return f }
+    if (!username) { const f = joinFailure(JOIN_FAILURE.NAME_REQUIRED); setLobbyError(f.message); return f }
+
+    const code = normalizeCode(rawCode)
+    if (code.length !== 6) { const f = joinFailure(JOIN_FAILURE.INVALID_CODE); setLobbyError(f.message); return f }
+
     busyRef.current = true
     setLobbyError(null)
+
+    const fail = (reason, message) => {
+      const f = joinFailure(reason, message)
+      setLobbyError(f.message)
+      return f
+    }
 
     try {
       const { data: room, error } = await supabase
@@ -184,38 +363,82 @@ export function useGameRoom(user, username) {
         .eq('room_code', code)
         .maybeSingle()
 
-      if (error) { setLobbyError(error.message); return }
-      if (!room) { setLobbyError('Room not found'); return }
-      if (room.status !== 'waiting') { setLobbyError('Game already started'); return }
+      if (error) return fail(JOIN_FAILURE.NETWORK, error.message)
+      if (!room) return fail(JOIN_FAILURE.NOT_FOUND)
 
-      // Occupancy + seat from room_players (authoritative · game_rooms.player_count is not
-      // maintained: a non-host cannot UPDATE game_rooms under RLS, so the column goes stale).
-      const { data: rows } = await supabase
+      // Occupancy + seat from room_players. These client-side checks are a FAST PATH, not the boundary ·
+      // migration 015 enforces waiting-and-under-capacity server-side, and claimSeat maps its 42501 back
+      // to the right reason. Checking here just avoids a doomed write in the common case.
+      const { data: rows, error: rosterErr } = await supabase
         .from('room_players').select('seat_number, user_id').eq('room_id', room.id)
+      if (rosterErr) return fail(JOIN_FAILURE.NETWORK, rosterErr.message)
       const existing = (rows ?? []).find(r => r.user_id === user.id)
 
-      let mySeat
+      // ── MEMBERSHIP IS CHECKED BEFORE STATUS · this ORDER is the bug fix (T3 S27) ────────────────────
+      // The old code rejected any room whose status was not 'waiting' BEFORE looking for an existing
+      // membership row. So a player who refreshed mid-game and hit their OWN room's code was told "Game
+      // already started" · about a game they were sitting in, holding a seat, with a valid session. That
+      // made /join/:code useless as a rejoin link, which is exactly what a share link gets used for once
+      // a game is running. A member re-entering writes NOTHING (no seat claim, no profile upsert) · it is
+      // a pure local-state restore, so admitting them is strictly safer than the alternative.
       if (existing) {
-        mySeat = existing.seat_number // rejoin · reuse our own seat
-      } else {
-        if ((rows ?? []).length >= room.max_players) { setLobbyError('Room is full'); return }
-        const taken = new Set((rows ?? []).map(r => r.seat_number))
-        const next = [0, 1, 2, 3].find(s => !taken.has(s))
-        if (next === undefined) { setLobbyError('Room is full'); return }
-        // Best-effort profile backstop (see createRoom) · DO NOTHING on conflict · never blocks the join.
-        await supabase.from('player_profiles').upsert(
-          { user_id: user.id, username }, { onConflict: 'user_id', ignoreDuplicates: true }
-        )
-        const { seat: claimed, error: seatErr } = await claimSeat(room.id, user.id, username, next)
-        if (seatErr) { setLobbyError(seatErr.message); return }
-        mySeat = claimed
+        const inProgress = room.status === 'playing'
+
+        // A rejoiner into a live game must arrive with the RIGHT mode, or presence reports them as a
+        // classic player in a Flow game and the roster lies. Mode lives on game_sessions.mode (migration
+        // 010), which only exists once the host has started · so this read is scoped to the in-progress
+        // path and its failure is non-fatal (worst case the presence label is wrong · never a blocked
+        // rejoin). Rule 40 · the composed mode seam, traced rather than assumed.
+        if (inProgress) {
+          const { data: session } = await supabase
+            .from('game_sessions').select('mode').eq('room_id', room.id).maybeSingle()
+          if (session?.mode) setGameMode(getModeConfig(session.mode).id ?? DEFAULT_GAME_MODE)
+        }
+
+        setIsHost(existing.seat_number === 0)
+        setSeat(existing.seat_number)
+        setRoomCode(code)
+        setRoomId(room.id)
+        // 'playing' routes straight into /game/:roomId via Lobby's existing onGameStart effect · dropping
+        // a mid-game rejoiner into the waiting room instead would strand them behind a Start button only
+        // the host has (Rule 65 · trace the composed value, do not stop at "the hook set some state").
+        setRoomPhase(inProgress ? 'playing' : 'lobby')
+        return {
+          ok: true,
+          roomId: room.id,
+          roomCode: code,
+          seat: existing.seat_number,
+          isHost: existing.seat_number === 0,
+          rejoined: true,
+          inProgress,
+        }
       }
 
+      // Not a member · now status matters. A stranger cannot walk into a running game.
+      if (room.status !== 'waiting') return fail(JOIN_FAILURE.ALREADY_STARTED)
+
+      const maxPlayers = room.max_players ?? 4
+      if ((rows ?? []).length >= maxPlayers) return fail(JOIN_FAILURE.ROOM_FULL)
+      const taken = new Set((rows ?? []).map(r => r.seat_number))
+      const next = [0, 1, 2, 3].find(s => !taken.has(s))
+      if (next === undefined) return fail(JOIN_FAILURE.ROOM_FULL)
+
+      // Best-effort profile backstop (see createRoom) · DO NOTHING on conflict · never blocks the join.
+      await supabase.from('player_profiles').upsert(
+        { user_id: user.id, username }, { onConflict: 'user_id', ignoreDuplicates: true }
+      )
+      const { seat: claimed, error: seatErr, reason } = await claimSeat(room.id, user.id, username, next)
+      if (seatErr) return fail(reason ?? JOIN_FAILURE.NETWORK, seatErr.message)
+
       setIsHost(false)
-      setSeat(mySeat)
+      setSeat(claimed)
       setRoomCode(code)
       setRoomId(room.id)
       setRoomPhase('lobby')
+      return {
+        ok: true, roomId: room.id, roomCode: code, seat: claimed,
+        isHost: false, rejoined: false, inProgress: false,
+      }
     } finally {
       busyRef.current = false
     }
@@ -302,6 +525,6 @@ export function useGameRoom(user, username) {
 
   return {
     roomId, roomCode, seat, isHost, isReady, lobbyPlayers, lobbyError, roomPhase, gameMode,
-    createRoom, joinRoom, setReady, startGame, leaveRoom, setGameMode,
+    createRoom, joinRoom, peekRoom, setReady, startGame, leaveRoom, setGameMode,
   }
 }
