@@ -28,6 +28,7 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import { loadEnv, deleteRoomAsHost } from './seedHelpers'
+import { assertBackendReachable, assertSessionEstablished } from './preconditions'
 
 const NAME_INPUT = 'Builder name (max 20)'
 const BOARD = 'svg[aria-label*="NeoTopia"]'
@@ -46,6 +47,10 @@ function uniqueName(prefix) {
 // flow-mode-live.e2e.js · resilient to both.
 async function gotoLobby(page) {
   await page.goto('/')
+  // PRECONDITION GATE (T3 S27) · before ANY feature locator. On 07-27 this spec's sibling reported
+  // "[data-testid=mode-flow] not found" during a DNS outage · the third domino in the chain, blamed on a
+  // component that was never broken. The gate below reports the outage as an outage. See preconditions.js.
+  await assertBackendReachable(page, { context: 'draw-ui-live · lobby entry' })
   const input = page.getByPlaceholder(NAME_INPUT)
   const enterCiv = page.getByRole('button', { name: /enter the civilization/i })
   await expect(input.or(enterCiv).first()).toBeVisible({ timeout: 15_000 })
@@ -57,7 +62,11 @@ async function gotoLobby(page) {
 
 async function claimName(page, name) {
   await gotoLobby(page)
-  await page.getByPlaceholder(NAME_INPUT).fill(name)
+  const input = page.getByPlaceholder(NAME_INPUT)
+  // The stronger half: an ENABLED name field proves a session actually exists, which is precisely the
+  // precondition the 07-27 chain violated (sign-in failed → no session → the lobby never advanced).
+  await assertSessionEstablished(page, input, { context: 'draw-ui-live · claim name' })
+  await input.fill(name)
   await page.getByRole('button', { name: /enter neotopia/i }).click()
 }
 

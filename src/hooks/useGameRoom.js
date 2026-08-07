@@ -63,8 +63,17 @@ const FAILURE_MESSAGE = {
 
 // Codes are typed by humans off a screenshot or pasted out of a URL · normalise before anything else so the
 // 6-char DB CHECK is measured against what will actually be sent, not the raw input.
+//
+// THE SEPARATORS ARE NOT DECORATION (T3 S27 · found by reading T1's half of the seam, not by guessing).
+// T1's src/utils/roomLink.js normalizeRoomCode strips whitespace AND dashes, because that is what a code
+// picks up in transit: someone reads "ABC234" off a screen and retypes it as "abc-234" or "ABC 234". Their
+// invite path normalises before calling us, but the manual code field does not · so with a laxer normaliser
+// upstream and a stricter one here, the SAME string would be accepted through one door and rejected as
+// INVALID_CODE through the other. Two normalisers for one value is two contracts (Rule 45), and the
+// composed behaviour is where that hides (Rule 65). Matching their rule here makes joinRoom tolerant no
+// matter which caller reaches it, and leaves the DB CHECK as the single arbiter of what is actually valid.
 function normalizeCode(raw) {
-  return String(raw ?? '').trim().toUpperCase()
+  return String(raw ?? '').trim().toUpperCase().replace(/[\s-]/g, '')
 }
 
 // A single failure constructor so every exit from joinRoom/peekRoom has the identical shape. `message`

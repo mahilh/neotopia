@@ -34,6 +34,7 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import { loadEnv, deleteRoomAsHost } from './seedHelpers'
+import { assertBackendReachable, assertSessionEstablished } from './preconditions'
 
 const NAME_INPUT = 'Builder name (max 20)'
 const BOARD = 'svg[aria-label*="NeoTopia"]'
@@ -51,6 +52,10 @@ function uniqueName(prefix) {
 // Landing, '/lobby' → Lobby · the hero CTA "Enter the Civilization" navigates to /lobby). Resilient to both.
 async function gotoLobby(page) {
   await page.goto('/')
+  // PRECONDITION GATE (T3 S27) · this is THE spec whose failure started all of this. On 07-27/07-28 it
+  // reported "[data-testid=mode-flow] not found" through a DNS outage · the third domino, blamed on a
+  // component that was never broken and never deleted. The gate names the layer that actually broke.
+  await assertBackendReachable(page, { context: 'flow-mode-live · lobby entry' })
   const input = page.getByPlaceholder(NAME_INPUT)
   const enterCiv = page.getByRole('button', { name: /enter the civilization/i }) // only the hero CTA carries this name
   await expect(input.or(enterCiv).first()).toBeVisible({ timeout: 15_000 })
@@ -62,7 +67,11 @@ async function gotoLobby(page) {
 
 async function claimName(page, name) {
   await gotoLobby(page)
-  await page.getByPlaceholder(NAME_INPUT).fill(name)
+  const input = page.getByPlaceholder(NAME_INPUT)
+  // An ENABLED name field is a positive witness that anonymous sign-in landed · stronger than "no failure
+  // has been reported yet", and exactly the precondition the 07-27 chain violated.
+  await assertSessionEstablished(page, input, { context: 'flow-mode-live · claim name' })
+  await input.fill(name)
   await page.getByRole('button', { name: /enter neotopia/i }).click()
 }
 

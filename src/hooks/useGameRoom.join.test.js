@@ -155,6 +155,21 @@ describe('joinRoom · success shape (what T1 renders from)', () => {
     expect(res.roomCode).toBe('ABC234') // what T1 should render · not the raw URL segment
   })
 
+  test('separators a human adds when retyping are stripped · the seam with T1 normalizeRoomCode', async () => {
+    // T1's src/utils/roomLink.js strips whitespace AND dashes; a stricter rule here would accept the same
+    // string through the invite route (which normalises first) and reject it from the manual code field
+    // (which does not). One value, two normalisers, divergent behaviour · exactly the composed-seam bug
+    // class Rule 65 is about. These are the shapes a code really arrives in off a screenshot.
+    for (const typed of ['abc-234', 'ABC 234', ' abc 234 ', 'a-b-c-2-3-4']) {
+      db.rooms = []; db.players = []
+      seedWaitingRoom()
+      const hook = renderHook(() => useGameRoom(USER, 'Newcomer'))
+      const res = await callJoin(hook, typed)
+      expect(res.ok, `"${typed}" should resolve to ABC234`).toBe(true)
+      expect(res.roomCode).toBe('ABC234')
+    }
+  })
+
   test('the seat claim actually writes a room_players row with the display name', async () => {
     seedWaitingRoom({ players: [{ user_id: 'u-host', username: 'Host', seat_number: 0 }] })
     const hook = renderHook(() => useGameRoom(USER, 'Newcomer'))
