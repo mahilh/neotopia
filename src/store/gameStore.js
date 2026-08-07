@@ -61,13 +61,20 @@ const SCORE_THRESHOLDS = [7, 13, 18]
 // overlay. The game teaches numerology through play · never by announcing it. The symbol for 9 deliberately
 // avoids the hexagram/Star-of-David (CLAUDE.md banned · Flower-of-Life lineage) · T1 may restyle the glyphs.
 const SACRED_MILESTONE_NUMBERS = [7, 9, 13, 18, 27, 36]
+// Sacred score thresholds. The numbers and the glyphs carry the mystery-school meaning (7 spiritual
+// perfection · 9 the Ennead · 13 transformation · 18 life doubled · 27 three nines · 36 the four
+// elements) and are FIXED · they are the esoteric spine of the game and never change.
+// The MESSAGE is the one part a player actually reads, so it is written for someone who has never
+// heard of any of that: plain city-builder language about what just happened on their board. The
+// meaning is still there, said in the open rather than in code words (T2 S27). MilestoneOverlay
+// renders symbol + message straight from here (Rule 62) · this table is the single source of truth.
 const SACRED_MILESTONES = {
-  7:  { message: 'Sacred Seven · Spiritual Perfection Awakens',      symbol: '✴' },
-  9:  { message: 'Nine · Completion · The Ennead Speaks',            symbol: '✷' },
-  13: { message: 'Thirteen · Sacred Feminine · Transformation',      symbol: '☽' },
-  18: { message: 'Eighteen · Life Doubled · The District Breathes',  symbol: '⬡' },
-  27: { message: 'Twenty-Seven · Three Nines · Mastery',             symbol: '△' },
-  36: { message: 'Thirty-Six · The Four Elements Complete',          symbol: '◆' },
+  7:  { message: 'Seven points · your first district takes shape',           symbol: '✴' },
+  9:  { message: 'Nine points · a quarter of the city, finished',            symbol: '✷' },
+  13: { message: 'Thirteen points · no longer the plan you started with',    symbol: '☽' },
+  18: { message: 'Eighteen points · people live here now',                   symbol: '⬡' },
+  27: { message: 'Twenty-Seven points · you build like a veteran',           symbol: '△' },
+  36: { message: 'Thirty-Six points · all four elements in balance',         symbol: '◆' },
 }
 
 const createInitialFactories = () => [

@@ -187,15 +187,24 @@ Bonus tokens × 3: the universe's gift for restraint.
 
 The game contains sacred milestones that are never announced:
 
-  Total score reaches 7: "Sacred Seven · Spiritual Perfection"
-  Total score reaches 9: "Nine · Completion · The Ennead Speaks"
-  Total score reaches 13: "Thirteen · Sacred Feminine · Transformation"
-  Total score reaches 18: "Eighteen · Life Doubled · The District Breathes"
-  Total score reaches 27: "Twenty-Seven · Three Nines · Mastery"
-  Total score reaches 36: "Thirty-Six · The Four Elements Complete"
+The numbers and their glyphs are fixed and carry the meaning. The line a player reads is written
+plainly, so the moment lands on someone who has never heard of any of this (T2 S27):
+
+  | Score | Glyph | What the player reads                                | The code underneath  |
+  |-------|-------|------------------------------------------------------|----------------------|
+  | 7     | ✴     | Seven points · your first district takes shape        | Spiritual perfection |
+  | 9     | ✷     | Nine points · a quarter of the city, finished         | The Ennead speaks    |
+  | 13    | ☽     | Thirteen points · no longer the plan you started with | Sacred feminine · transformation |
+  | 18    | ⬡     | Eighteen points · people live here now                | Life doubled         |
+  | 27    | △     | Twenty-Seven points · you build like a veteran        | Three nines · mastery |
+  | 36    | ◆     | Thirty-Six points · all four elements in balance      | The four elements complete |
+
+Source of truth: `SACRED_MILESTONES` in `src/store/gameStore.js`. `MilestoneOverlay` reads the
+glyph and the line straight from there and never re-hardcodes them (Rule 62).
 
 These appear as brief overlays when crossed. They are discovered, not documented.
-Discovery is the deepest form of education.
+Discovery is the deepest form of education · which is why the esoteric column above lives in the
+rulebook and never on the player's screen.
 
   36 elements total placed = 3+6 = 9 = COMPLETION
   The bot first achieved this in bot v4.3. Room HF9QYE. June 27 2026.
