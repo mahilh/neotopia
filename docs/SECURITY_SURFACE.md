@@ -112,7 +112,16 @@ trigger here · it would not bound the fanout.
 
 ---
 
-## 4 · A stranger can join a live game · `room_players` INSERT has no real authorization
+## 4 · ✅ CLOSED (T2 S27 · migration 015) · A stranger can join a live game
+
+> **Status: fixed and proven live.** Migration 015 is APPLIED to `wynccumuisjxbptjlfwq`, not merely
+> committed (Rule 68). The original write-up is preserved below, with two of its four claims
+> **corrected** — verifying against the live schema before fixing showed the finding was partly
+> already closed and partly worse than described. See "What was actually true" and "Proof" at the
+> end of this section.
+>
+> `room_players_join` now reads:
+> `WITH CHECK (user_id = auth.uid() AND EXISTS (SELECT 1 FROM game_rooms r WHERE r.id = room_players.room_id AND r.status = 'waiting' AND r.player_count < r.max_players))`
 
 | | |
 |---|---|
@@ -150,6 +159,69 @@ WITH CHECK (
 ```
 
 and stop treating a `room_players` row as evidence of anything until it is server-assigned.
+
+### What was actually true (T2 S27 · checked against the live DB before fixing)
+
+Two of the four missing checks above were **already enforced**, by structure rather than by policy —
+the finding read the policy and stopped there:
+
+- **"the room exists"** was never open. `room_players.room_id` is a FK to `game_rooms(id)`; an insert
+  naming a non-existent room fails on the constraint, not on RLS.
+- **"the room has capacity"** was already closed *at `max_players = 4`*, which is every room in
+  production: `CHECK (seat_number BETWEEN 0 AND 3)` + `UNIQUE (room_id, seat_number)` +
+  `UNIQUE (room_id, user_id)` cap any room at 4 distinct rows. **A 5th player was never possible.**
+  The genuine gap was narrower: `max_players` is `CHECK (2..4)`, so a 2- or 3-seat room accepted 4.
+
+**"the room is in a joinable state" was genuinely open, and it is the whole severity of the finding.**
+21 rooms were live in `status = 'playing'` at the time of the fix, every one joinable by any
+anonymous session.
+
+The fix also had to close a hole the finding did not mention, which would have made the new INSERT
+policy decorative. `room_players_update_own` is `FOR UPDATE USING (user_id = auth.uid())` with a
+**NULL `WITH CHECK`**, so Postgres reuses `USING` as the check: the new row only has to still be
+*about you*, leaving `room_id` and `seat_number` free to change. A player could join a `waiting` room
+legitimately and then PATCH `room_id` across into a live game without ever touching the INSERT
+policy. `WITH CHECK` cannot see the OLD row, so this is closed at the grant layer instead —
+`REVOKE UPDATE ON room_players`, then `GRANT UPDATE (is_ready, character, username)`. Verified safe
+first: nothing in `src/`, `tests/`, `scripts/` or `api/` issues an UPDATE against `room_players`.
+
+Capacity is enforced through `game_rooms.player_count`, not a `count(*)` over `room_players` — a
+subquery against `room_players` from inside its own policy raises *"infinite recursion detected in
+policy"*. That column is safe to lean on: `trg_player_count` recomputes it as a full `count(*)`
+`AFTER INSERT OR DELETE`, runs `SECURITY DEFINER` (RLS never starves it), and showed **zero drift
+across all 355 live rooms**. Being `AFTER`, the value the policy reads is the pre-insert count.
+It is still a denormalized second contract (Rule 45), which is why the structural seat cap remains
+the load-bearing bound and this sits on top.
+
+> ⚠️ **Stale comment, T3 lane.** `src/hooks/useGameRoom.js:191` asserts *"game_rooms.player_count is
+> not maintained: a non-host cannot UPDATE game_rooms under RLS, so the column goes stale"*. That is
+> false — the trigger is `SECURITY DEFINER` and bypasses RLS entirely. The code around it is correct
+> (it counts `room_players` directly); only the comment misleads.
+
+**Accepted, not a regression:** the host may UPDATE their own `game_rooms` row (`rooms_update_host`),
+so a malicious host can raise `max_players` or zero `player_count` in a room *they own*. They choose
+`max_players` at creation anyway, so capacity is host-discretionary by design, and the seat
+CHECK + UNIQUE still cap that room at 4. No cross-room escalation.
+
+**No client regression.** `useGameRoom.joinRoom` already refuses a non-`waiting` room client-side and,
+on a rejoin, REUSES the caller's existing `room_players` row rather than inserting a new one — so a
+legitimate mid-game reconnect never reaches this policy.
+
+### Proof · executed live as the real `authenticated` role, fixtures rolled back
+
+Run inside `SET LOCAL ROLE authenticated` with a forged `request.jwt.claims`, so RLS applied exactly
+as it does to a browser session (`postgres` would have bypassed it). Room totals before and after:
+355 / 355, zero fixture rows and zero orphaned seats left behind.
+
+| # | Scenario | Outcome |
+|---|---|---|
+| 1 | join an OPEN `waiting` room (legitimate player) | **ALLOWED** ← the control: normal play still works |
+| 2 | join a room in `status = 'playing'` | BLOCKED · RLS |
+| 3 | join a FULL 2-seat room (`player_count = max_players`) | BLOCKED · RLS |
+| 4 | PATCH own row's `room_id` → live game | BLOCKED · permission denied |
+| 5 | PATCH own `seat_number` | BLOCKED · permission denied |
+| 6 | PATCH own `is_ready` (lobby ready toggle) | **ALLOWED** ← the lobby capability that had to survive |
+| 7 | 5th player joins a FULL 4-seat `waiting` room (seated 4/4, `player_count` read back as 4) | BLOCKED · RLS |
 
 ---
 
