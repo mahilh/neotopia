@@ -198,7 +198,11 @@ describe('engine fuzz · random legal play', () => {
 
     expect(violated).toEqual([])
     expect(stalled).toEqual([])
-  })
+  }, 20000) // 150 Classic games · ~2s in isolation but 5.2-5.8s under full-suite CPU contention (T1 S26 measured
+            // 4 failures in 8 composed runs, every one with 'terminated 150/150 · violated 0' in its own stdout ·
+            // the clock lost, not an assertion). Same explicit budget the Flow sibling below got in 68a06f0 ·
+            // this ONE test only, not global. Load-bearing beyond CI: --validate-manifest runs its own vitest,
+            // so a marginal timeout here makes the Rule 71 drift gate a coin flip. (T2 S27)
 
   test('end-game, once triggered, always reaches scoring within 2 full rounds (4 endTurns)', () => {
     // Any game whose end-flag fired must have scored within <= 2*nPlayers endTurns of the trigger.
