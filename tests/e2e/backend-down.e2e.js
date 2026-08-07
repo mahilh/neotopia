@@ -28,9 +28,13 @@
 // THE WITNESS · html[data-backend-status], written by src/hooks/useConnectionHealth.js. It is deliberately a
 // root-element attribute rather than a component: it exists whether or not a banner has been built, it doubles
 // as the CSS hook a degraded style hangs off, and it satisfies Rule 50 (a testid on a permanently-mounted
-// element proves nothing about state · assert the attribute that FLIPS). The pixel-level banner is a render-lane
-// deliverable; the last test here activates automatically the moment that lane ships a [data-testid=
-// "backend-degraded"] element, and reports honestly (rather than passing silently) until then.
+// element proves nothing about state · assert the attribute that FLIPS).
+//
+// STALE-COMMENT CORRECTION (T3 S27): this note used to say the last test would activate "the moment that lane
+// ships a [data-testid=backend-degraded] element". That element never existed and never will · the render lane
+// shipped a TONE-scoped testid instead (backend-offline / backend-reconnecting, from deriveBackendStatus), and
+// the last test has been asserting backend-offline directly ever since. Nothing failed, which is exactly why it
+// survived: a comment describing a name the codebase never used, quietly misinforming the next reader.
 //
 // CI: deterministic + offline-by-construction · belongs on the merge-gating path, not the live-nightly one.
 // Run locally:  npx playwright test tests/e2e/backend-down.e2e.js
@@ -128,12 +132,19 @@ test.describe('backend unreachable · the app must degrade, not pretend', () => 
     // hatch fires.
     //
     // It deliberately asserts the app KNOCKS AGAIN rather than that it comes back ONLINE. Asserting a real
-    // recovery would require a genuinely successful anonymous sign-in against live Supabase, which drags a
-    // deterministic offline test onto the live path and straight into the per-IP anon rate limit that already
-    // forced this suite's live tests to nightly (seedHelpers.signInAnonRetry exists for exactly that). The
-    // backend stays blocked here; "a new attempt was made" is the whole claim, and it is the falsifiable one.
-    // The completing half · a successful reconnect clearing the flag AND restoring the full retry budget · is
-    // proven deterministically in useGameSync.reconnect.test.js.
+    // recovery would require a genuinely successful sign-in against live Supabase, which drags a deterministic
+    // offline test onto the live path and straight into the per-IP anon rate limit that already forced this
+    // suite's live tests to nightly (seedHelpers.signInAnonRetry exists for exactly that). The backend stays
+    // blocked here; "a new attempt was made" is the whole claim, and it is the falsifiable one.
+    //
+    // THE COMPLETING HALF NOW EXISTS (T3 S27 · this was my carried S26 gap, closed rather than re-deferred):
+    //   · deterministic  → useGameSync.reconnect.test.js · a successful subscribe clears the flag and hands
+    //     back the full retry budget, asserted with fake timers.
+    //   · in a browser   → backend-recovery-live.e2e.js · kills ONLY the realtime socket (so auth stays up and
+    //     the cost is one anon sign-in), waits for the terminal 'offline', restores the socket, and asserts
+    //     html[data-backend-status] returns to 'online' and HOLDS there. Worst-wins across sources means only
+    //     a genuine re-subscribe could have cleared it.
+    // So this test is no longer the strongest recovery claim in the repo · it is the deterministic floor.
     const backend = await killBackend(context)
     await page.goto('/lobby')
     await expect(page.locator(HEALTH)).toHaveAttribute('data-backend-status', 'offline', { timeout: 30_000 })
