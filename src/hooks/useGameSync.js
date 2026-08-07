@@ -122,16 +122,30 @@ export function useGameSync(roomId, currentUserId) {
   // Pull the current authoritative row: caches the session id AND seeds local state. Run on first
   // connect and on every reconnect, because Realtime may have dropped UPDATEs while disconnected
   // (and a client that subscribes after the host's INSERT never receives that INSERT event).
+  //
+  // RETURN SHAPE · { ok, seeded, error } (T3 S27 · this used to return a bare boolean).
+  // The boolean conflated two states that must NOT be treated alike, which is precisely why the seed
+  // failure went unreported (the S26 gap · subscribe succeeds, REST seed fails, health still reads online):
+  //   · error truthy      → the REST call genuinely FAILED. We are subscribed but hold no authoritative
+  //                         state · the board is blank or stale while the socket claims everything is fine.
+  //                         That is a degraded client and it must say so. → { ok: false }
+  //   · no row (data null)→ PERFECTLY HEALTHY and extremely common: every player sitting in a lobby has a
+  //                         roomId but no game_sessions row until the host presses Start. maybeSingle()
+  //                         returns { data: null, error: null } for zero rows. Reporting this as a failure
+  //                         would put every waiting lobby into a reconnect storm — a far worse bug than the
+  //                         one being fixed. → { ok: true, seeded: false }
+  // The distinction is the whole fix. `ok` means "the backend answered"; `seeded` means "there was state".
   const fetchAndSeed = useCallback(async (targetRoomId) => {
     const { data, error } = await supabase
       .from('game_sessions')
       .select('id, state')
       .eq('room_id', targetRoomId)
       .maybeSingle()
-    if (error || !data) return false
+    if (error) return { ok: false, seeded: false, error }
+    if (!data) return { ok: true, seeded: false, error: null } // reachable · nothing to seed yet
     setSession(data.id)
     if (data.state) syncFromServer(data.state)
-    return true
+    return { ok: true, seeded: true, error: null }
   }, [syncFromServer, setSession])
 
   // Cancel any pending reconnect. Called before scheduling a new one, on a successful subscribe, and on
@@ -193,13 +207,31 @@ export function useGameSync(roomId, currentUserId) {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // Connected. Cancel any queued retry, hand back the full budget for the NEXT outage, and clear the
-          // degraded flag · a recovery must reset the counter or a long session would slowly exhaust it
-          // across unrelated flaps and give up on a backend that is actually fine.
+          // The socket is up · cancel the queued retry that led us here.
           clearRetry()
-          attemptRef.current = 0
-          reportBackendUp(HEALTH_SOURCE)
-          await fetchAndSeed(targetRoomId) // seed AFTER subscribe so no UPDATE is missed in the gap
+
+          // Seed AFTER subscribe so no UPDATE is missed in the gap.
+          const seed = await fetchAndSeed(targetRoomId)
+
+          // ── THE SUCCESS CONDITION IS "SUBSCRIBED **AND** SEEDED" (T3 S27) ────────────────────────────
+          // Neither the budget reset nor the healthy report may happen until BOTH hold. Two reasons, and
+          // the second is the load-bearing one:
+          //   · honesty · a client with a live socket but no authoritative state is degraded, and used to
+          //     report ONLINE. That was the carried S26 gap.
+          //   · TERMINATION · if `attemptRef` were reset on the socket alone, a persistently failing seed
+          //     would loop forever: subscribe ok → attempts=0 → seed fails → schedule → reconnect →
+          //     subscribe ok → attempts=0 → … a brand-new storm of exactly the class the backoff exists to
+          //     kill. Keeping the budget tied to the full success makes the ladder monotonic, so a seed
+          //     that never recovers walks the 6 attempts and lands in a terminal 'offline' like any other
+          //     dead transport.
+          // Recovery deliberately reuses scheduleReconnect rather than adding a seed-only retry timer:
+          // ONE owner per transport, one pending timer, one budget (the double-scheduling note above).
+          if (seed.ok) {
+            attemptRef.current = 0
+            reportBackendUp(HEALTH_SOURCE)
+          } else {
+            scheduleReconnect(targetRoomId, `state seed failed · ${seed.error?.message ?? 'unknown'}`)
+          }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           scheduleReconnect(targetRoomId, `channel ${status.toLowerCase()}`)
         }
@@ -238,7 +270,16 @@ export function useGameSync(roomId, currentUserId) {
     //                        on return, reseed from the DB so the board is current even if the socket
     //                        silently missed UPDATEs. Cheap (one row) · Supabase auto-reconnects the WS.
     const onOnline = () => resetAndConnect()
-    const onVisible = () => { if (document.visibilityState === 'visible') fetchAndSeed(roomId) }
+    // A returning tab reseeds · and if THAT reseed fails, it is reported like any other seed failure rather
+    // than swallowed. Pre-fix this was a bare fire-and-forget call: the tab came back, the seed failed, and
+    // the player looked at a stale board with a perfectly healthy-looking UI (T3 S27 · same gap, second
+    // call site · a fix applied to only one of the two entry points would have left the hole half open).
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      fetchAndSeed(roomId).then((seed) => {
+        if (!seed.ok) scheduleReconnect(roomId, `state seed failed · ${seed.error?.message ?? 'unknown'}`)
+      })
+    }
     window.addEventListener('online', onOnline)
     document.addEventListener('visibilitychange', onVisible)
 
@@ -258,7 +299,7 @@ export function useGameSync(roomId, currentUserId) {
       }
       setSession(null) // clear ref + reactive state on room change/unmount
     }
-  }, [roomId, connect, fetchAndSeed, setSession, clearRetry])
+  }, [roomId, connect, fetchAndSeed, setSession, clearRetry, scheduleReconnect])
 
   // Low-level persist: write current store state to game_sessions (→ every client syncs) plus a
   // best-effort append to the game_events audit log. Returns { error } from the state write only ·
