@@ -2,13 +2,14 @@
 // T1 owns this file (src/pages/ · CLAUDE.md lane grant). Mobile-first · every target is >= 44px.
 // Auth: useAuth (T2). Room: useGameRoom (T3). No window.confirm anywhere.
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { useGameRoom } from '../hooks/useGameRoom'
+import { useGameRoom, JOIN_FAILURE } from '../hooks/useGameRoom'
 import ElementIcon from '../components/Board/ElementIcon'
 import { GAME_MODES } from '../store/gameConfig'
 import { useBackendHealth } from '../hooks/useConnectionHealth'
 import { deriveBackendStatus } from '../utils/backendStatus'
+import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roomLink'
 
 const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#7F77DD'] // blue · red · green · purple (by seat)
 
@@ -104,7 +105,9 @@ function BackendBanner({ backend, onRetry }) {
 // stated reason above them reads as "not right now", which is the truth.
 const inert = (base) => ({ ...base, opacity: 0.35, cursor: 'not-allowed' })
 
-export default function Lobby({ onGameStart }) {
+// `initialCode` arrives only from the /join/:code invite route (App.jsx · JoinRoute). Everything
+// about the invite path is additive: with no code this component behaves exactly as it did before.
+export default function Lobby({ onGameStart, initialCode = null }) {
   const { user, username, isLoading: authLoading, authError, isClaimed, claimUsername } = useAuth()
 
   // Reachability comes from T3's aggregator (useConnectionHealth · every transport reports into it and
@@ -126,7 +129,7 @@ export default function Lobby({ onGameStart }) {
   }
   const {
     roomId, roomCode, isHost, isReady, lobbyPlayers, lobbyError, roomPhase,
-    createRoom, joinRoom, setReady, startGame, leaveRoom, gameMode, setGameMode,
+    createRoom, joinRoom, peekRoom, setReady, startGame, leaveRoom, gameMode, setGameMode,
   } = useGameRoom(user, username)
 
   const [nameInput, setNameInput] = useState('')
@@ -137,6 +140,23 @@ export default function Lobby({ onGameStart }) {
   const [editingName, setEditingName] = useState(false) // username edit mode (BUG-05)
   const [editName, setEditName] = useState('')
   const [savedFlash, setSavedFlash] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)     // invite-link copy feedback (S27)
+  const [autoJoining, setAutoJoining] = useState(false)   // an invite join is in flight
+  const [inviteDismissed, setInviteDismissed] = useState(false) // player chose to type a code instead
+  const [peek, setPeek] = useState(null)                  // peekRoom preview of the invited room
+  const [joinResult, setJoinResult] = useState(null)      // structured outcome of the invite join
+
+  // The invite code, cleaned of everything it picks up in transit (case, spaces, dashes). Shape is
+  // checked here so an obviously-broken link fails instantly and honestly, instead of costing a
+  // round trip to come back as the generic 'Room not found'.
+  const inviteCode = initialCode ? normalizeRoomCode(initialCode) : ''
+  const hasInvite = inviteCode !== '' && !inviteDismissed
+  const inviteValid = isRoomCodeShape(inviteCode)
+
+  // One attempt per code. joinRoom's own busyRef makes a second concurrent call return SILENTLY ·
+  // no error, no state change · so under StrictMode's double-mount an unguarded auto-join would look
+  // like a join that simply never happened. The latch is keyed on the CODE, not on mount count.
+  const joinAttemptRef = useRef(null)
 
   // Game start is a side effect · never call onGameStart during render (it would update a parent
   // mid-render). Fire it from an effect once the room transitions to playing. Pass roomId so the
@@ -144,6 +164,110 @@ export default function Lobby({ onGameStart }) {
   useEffect(() => {
     if (roomPhase === 'playing' && roomId) onGameStart?.(roomId)
   }, [roomPhase, roomId, onGameStart])
+
+  // ── Invite preview ──────────────────────────────────────────────
+  // peekRoom (T3 S27) reads the room and its roster with the anon key and writes nothing, so it can
+  // run before the visitor has a name or even a session. That ordering is the point: a dead or full
+  // link is reported BEFORE we ask a stranger to type anything, instead of after. It re-runs once a
+  // session exists because `rejoinable` is unanswerable without one.
+  const canUseRooms = backend.canUseRooms
+  useEffect(() => {
+    if (!hasInvite || !inviteValid) return
+    if (roomPhase !== 'idle') return
+    let alive = true
+    Promise.resolve(peekRoom(inviteCode)).then(r => { if (alive) setPeek(r) })
+    return () => { alive = false }
+  }, [hasInvite, inviteValid, inviteCode, roomPhase, peekRoom])
+
+  // ── Invite auto-join ────────────────────────────────────────────
+  // The whole point of a share link: the player should not have to type a code they already clicked.
+  // This waits for the preconditions to be genuinely true rather than firing early · for an invitee,
+  // "no session yet" and "no name yet" are the NORMAL opening state, not errors, and firing then
+  // would burn the one attempt on a guaranteed NAME_REQUIRED. canUseRooms is read as a primitive
+  // because `backend` is a fresh object on every render.
+  useEffect(() => {
+    if (!hasInvite || !inviteValid) return
+    if (roomPhase !== 'idle') return          // already in a room · nothing to do
+    if (!canUseRooms || !user?.id || !username) return
+    if (joinAttemptRef.current === inviteCode) return
+    joinAttemptRef.current = inviteCode
+    setAutoJoining(true)
+    // joinRoom returns a structured { ok } / { ok:false, reason, message } (T3 S27). Branch on
+    // `reason`, never on the message text · the codes are the contract and the copy is not.
+    Promise.resolve(joinRoom(inviteCode))
+      .then(r => setJoinResult(r ?? null))
+      .finally(() => setAutoJoining(false))
+  }, [hasInvite, inviteValid, inviteCode, roomPhase, canUseRooms, user?.id, username, joinRoom])
+
+  // Let the player try the same code again after a failure (a full room can empty, a server can come
+  // back). Clearing the latch re-arms the effect above; joinRoom clears lobbyError itself on entry.
+  function retryInvite() {
+    joinAttemptRef.current = null
+    setJoinResult(null)
+    setPeek(null)
+    setAutoJoining(false)
+  }
+
+  // ── What the invite screen should say when the player cannot get in ──────────────────────────
+  // Every branch names the real obstacle and then says what to do next · a stranger who followed a
+  // link is the least-oriented person in the product and a bare 'Room not found' strands them.
+  // Terminal cases only: a network or offline failure is NOT here, because the banner already
+  // explains it and the join is still worth retrying.
+  function inviteBlock() {
+    if (!inviteValid) {
+      return {
+        headline: "This invite link isn't valid",
+        detail: 'A room code is 6 characters, and never uses the letter I or O, or the digits 0 or 1. Ask for a new link, or type a code yourself.',
+      }
+    }
+    const reason = peek?.ok === false ? peek.reason : joinResult?.ok === false ? joinResult.reason : null
+    if (reason === JOIN_FAILURE.INVALID_CODE) {
+      return { headline: "This invite link isn't valid", detail: 'Ask for a new link, or type a code yourself.' }
+    }
+    if (reason === JOIN_FAILURE.NOT_FOUND) {
+      return {
+        headline: 'This room no longer exists',
+        detail: 'It may have been closed, or the link may have a typo. Ask for a new link, or type a code yourself.',
+      }
+    }
+    if (reason === JOIN_FAILURE.ROOM_FULL) {
+      return { headline: 'That room is full', detail: 'Every seat is taken. Ask them to start a new game, or join a different room.' }
+    }
+    if (reason === JOIN_FAILURE.ALREADY_STARTED) {
+      return { headline: 'That game has already started', detail: 'You can join a different room, or ask them for a new game.' }
+    }
+    // The preview can rule the room out before any join is attempted. `rejoinable` overrides it: a
+    // player returning to their OWN in-progress game is admitted by design (T3 S27), so a room that
+    // is un-joinable to a stranger is still open to them.
+    if (peek?.ok && !peek.canJoin && !peek.rejoinable) {
+      return peek.status === 'playing'
+        ? { headline: 'That game has already started', detail: 'You can join a different room, or ask them for a new game.' }
+        : { headline: 'That room is full', detail: `All ${peek.maxPlayers} seats are taken. Ask them to start a new game, or join a different room.` }
+    }
+    return null
+  }
+
+  // Copy for the RETRYABLE failures. A player must never be shown a raw database error as the
+  // explanation of what happened to them · proven necessary live: a seat-colour CHECK violation
+  // surfaced to the screen as `new row for relation "room_players" violates check constraint ...`,
+  // which tells a person nothing they can act on. The raw text is still rendered, small and quiet,
+  // because it is what makes a screenshot diagnosable for us (same treatment as the backend banner).
+  function inviteRetryDetail(reason) {
+    switch (reason) {
+      case JOIN_FAILURE.SEAT_CONFLICT:    return 'Someone took the last seat first.'
+      case JOIN_FAILURE.BACKEND_OFFLINE:  return "Can't reach NeoTopia's servers right now."
+      case JOIN_FAILURE.NOT_AUTHENTICATED: return 'Still connecting. Give it a moment.'
+      case JOIN_FAILURE.BUSY:             return 'Already on the way in.'
+      default:                            return 'Something went wrong on the way in.'
+    }
+  }
+
+  // Fall back to the ordinary manual path, with the code they arrived with already filled in.
+  function dismissInvite() {
+    setInviteDismissed(true)
+    setView('join')
+    setCodeInput(inviteValid ? inviteCode : '')
+  }
 
   async function handleClaim() {
     setClaimError(null)
@@ -156,6 +280,18 @@ export default function Lobby({ onGameStart }) {
     if (!roomCode) return
     navigator.clipboard?.writeText(roomCode)
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+      .catch(() => {})
+  }
+
+  // S27 · copy the whole clickable invite link, not just the code. This is the one-tap path: the
+  // person receiving it taps, types a name, and is in the room. buildInviteUrl returns null rather
+  // than a half-built URL if the code is unusable, so a link that cannot work never reaches a
+  // clipboard · hence the guard rather than an optimistic template string.
+  function copyInviteLink() {
+    const url = buildInviteUrl(roomCode, window.location.origin)
+    if (!url) return
+    navigator.clipboard?.writeText(url)
+      .then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000) })
       .catch(() => {})
   }
 
@@ -177,6 +313,29 @@ export default function Lobby({ onGameStart }) {
     )
   }
 
+  // ── An invite link that cannot work ─────────────────────────────
+  // Deliberately BEFORE the username claim. peekRoom needs no session, so a dead, closed or full
+  // link is answerable immediately · making a stranger type a name first and THEN telling them the
+  // room is gone is the version of this screen that wastes their time.
+  const blocked = hasInvite && roomPhase === 'idle' ? inviteBlock() : null
+  if (blocked) {
+    return (
+      <div style={centeredScreen}>
+        <h1 style={title}>NEOTOPIA</h1>
+        <div style={card} data-testid="invite-blocked">
+          <p style={label}>Invite link</p>
+          <div style={inviteCodeLine}>{inviteValid ? inviteCode : String(initialCode ?? '').slice(0, 10)}</div>
+          <p style={inviteHeadline}>{blocked.headline}</p>
+          <p style={inviteDetail}>{blocked.detail}</p>
+          <button style={primaryBtn} data-testid="invite-manual" onClick={dismissInvite}>
+            Enter a code instead
+          </button>
+        </div>
+        <p style={stageLine}>Free to play · no download · no account</p>
+      </div>
+    )
+  }
+
   // ── Username claim ──────────────────────────────────────────────
   if (!isClaimed || !username) {
     // A first-time visitor has no persisted session, so a dead backend fails sign-in outright and
@@ -189,11 +348,19 @@ export default function Lobby({ onGameStart }) {
     return (
       <div style={centeredScreen}>
         <h1 style={title}>NEOTOPIA</h1>
-        <p style={tagline}>Build a consciousness civilization · 2055 approaches</p>
+        <p style={tagline}>Build the city of 2055 · two to four players</p>
         <ElementRow />
         <BackendBanner backend={backend} onRetry={retryBackend} />
+        {/* Why this stranger is here. Without it, an invite link opens on a name prompt with no
+            explanation of what they are about to enter. */}
+        {hasInvite && inviteValid && (
+          <p style={inviteNote} data-testid="invite-context">
+            Joining room <span style={inviteNoteCode}>{inviteCode}</span>
+            {peek?.ok && ` · ${peek.playerCount} of ${peek.maxPlayers} players`}
+          </p>
+        )}
         <div style={card}>
-          <p style={label}>Choose your name</p>
+          <p style={label}>{hasInvite && inviteValid ? 'Choose a name to enter' : 'Choose your name'}</p>
           <input
             style={backend.canUseRooms ? input : inert(input)}
             placeholder="Builder name (max 20)"
@@ -214,7 +381,52 @@ export default function Lobby({ onGameStart }) {
             Enter NeoTopia
           </button>
         </div>
-        <p style={stageLine}>Stage 2 of 5 · The Awareness</p>
+        <p style={stageLine}>Free to play · no download · no account</p>
+      </div>
+    )
+  }
+
+  // ── Invite · going in, or a failure worth retrying ──────────────
+  // Reached only once the name exists, so the auto-join effect is armed. Terminal failures never
+  // land here (they were answered by the blocked screen above) · what remains is the wait itself
+  // and the retryable class: a lost seat race, a transport error, a server that just came back.
+  if (hasInvite && roomPhase === 'idle') {
+    const retryable = joinResult?.ok === false && !autoJoining
+    return (
+      <div style={centeredScreen}>
+        <h1 style={title}>NEOTOPIA</h1>
+        <div style={codeBox}>
+          <p style={label}>Joining room</p>
+          <div style={codeDisplay} data-testid="invite-code">{inviteCode}</div>
+          {peek?.ok && (
+            <p style={muted} data-testid="invite-roster">
+              {peek.playerCount} of {peek.maxPlayers} players waiting
+            </p>
+          )}
+        </div>
+
+        <BackendBanner backend={backend} onRetry={retryBackend} />
+
+        {!retryable && (
+          <>
+            <div style={spinner} />
+            <p style={muted} data-testid="invite-joining">
+              {canUseRooms ? 'Taking you in…' : 'Waiting for the connection…'}
+            </p>
+          </>
+        )}
+
+        {retryable && (
+          <div style={card} data-testid="invite-error">
+            <p style={inviteHeadline}>Could not get you in</p>
+            <p style={inviteDetail}>{inviteRetryDetail(joinResult.reason)}</p>
+            {/* The cause, verbatim · small and quiet. Useful to us in a screenshot, ignorable to a
+                player, and never the sentence they have to read to understand what happened. */}
+            {joinResult.message && <p style={downReason}>{joinResult.message}</p>}
+            <button style={primaryBtn} data-testid="invite-retry" onClick={retryInvite}>Try again</button>
+            <button style={secondaryBtn} data-testid="invite-manual" onClick={dismissInvite}>Enter a code instead</button>
+          </div>
+        )}
       </div>
     )
   }
@@ -233,9 +445,16 @@ export default function Lobby({ onGameStart }) {
         <div style={codeBox}>
           <p style={label}>Room Code</p>
           <div style={codeDisplay} data-testid="room-code">{roomCode}</div>
-          <button style={copyBtn} onClick={copyCode}>
-            {copied ? '✓ Copied' : 'Copy code'}
-          </button>
+          {/* The link is the one-tap path · whoever receives it taps, types a name, and is in here.
+              The code stays alongside it because it is what you read out loud in the same room. */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button style={shareBtn} data-testid="copy-invite-link" onClick={copyInviteLink}>
+              {linkCopied ? '✓ Link copied' : 'Copy invite link'}
+            </button>
+            <button style={copyBtn} data-testid="copy-room-code" onClick={copyCode}>
+              {copied ? '✓ Copied' : 'Copy code'}
+            </button>
+          </div>
         </div>
 
         <div style={playerList}>
@@ -385,7 +604,7 @@ export default function Lobby({ onGameStart }) {
         </div>
       )}
 
-      <p style={stageLine}>Stage 2 of 5 · The Awareness</p>
+      <p style={stageLine}>Free to play · no download · no account</p>
     </div>
   )
 }
@@ -406,6 +625,14 @@ const backBtn = { position: 'absolute', top: 20, left: 20, minHeight: 44, paddin
 const codeBox = { textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }
 const codeDisplay = { fontSize: 40, fontWeight: 700, letterSpacing: 12, color: '#C89440', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', textShadow: '0 0 16px rgba(200,148,64,0.35)' }
 const copyBtn = { minHeight: 44, padding: '0 20px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)', fontSize: 13, cursor: 'pointer', letterSpacing: 0.5 }
+// ── Invite link (S27) · gold because sharing the room is the primary action in the waiting room,
+// and gold is already this app's "this is the important one" accent (room code, selected mode). ──
+const shareBtn = { minHeight: 44, padding: '0 20px', borderRadius: 8, border: '1px solid rgba(200,148,64,0.45)', background: 'rgba(200,148,64,0.12)', color: '#C89440', fontSize: 13, fontWeight: 500, cursor: 'pointer', letterSpacing: 0.5 }
+const inviteNote = { color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', margin: 0, lineHeight: 1.6 }
+const inviteNoteCode = { color: '#C89440', fontWeight: 700, letterSpacing: 2, fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums' }
+const inviteCodeLine = { fontSize: 26, fontWeight: 700, letterSpacing: 8, color: '#C89440', fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums', textAlign: 'center', wordBreak: 'break-all' }
+const inviteHeadline = { color: 'rgba(255,255,255,0.9)', fontSize: 16, fontWeight: 500, margin: 0, textAlign: 'center' }
+const inviteDetail = { color: 'rgba(255,255,255,0.5)', fontSize: 13, lineHeight: 1.6, margin: 0, textAlign: 'center' }
 const editIcon = { minHeight: 44, minWidth: 44, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.5)', fontSize: 14, cursor: 'pointer' }
 const playerList = { width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8 }
 const playerRow = { minHeight: 56, display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }
