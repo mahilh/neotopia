@@ -1,14 +1,20 @@
 import { useEffect } from 'react'
 import { useGameStore } from '../store/gameStore'
 
-// Plato's Cave Allegory · the ascent out of the cave, one phrase per sacred threshold (PLATO_BOOKS ·
-// Pillar 3). NEW lore layered over the store's symbol/message · never a re-hardcode of either (Rule 62) ·
-// keyed off the live milestone number the store already hands us.
-const CAVE_ASCENT = { 7: 'First light', 9: 'Turning', 13: 'Eyes open', 18: 'Clear sight', 27: 'The Good', 36: 'Return' }
+// One plain build-progress phrase per milestone · the same ascent shape (Plato's Cave, PLATO_BOOKS ·
+// Pillar 3) told in city-builder words a first-time player reads without explanation. NEW copy layered
+// over the store's symbol/message · never a re-hardcode of either (Rule 62) · keyed off the live
+// milestone number the store already hands us. T1 S27: the WORDS were rewritten, the KEYS were not ·
+// 7/9/13/18/27/36 are balance-tested and 3-6-9 aligned, and they never change.
+// Read these COMPOSED with the store's message above them, not alone (Rule 65 · T2 rewrote
+// SACRED_MILESTONES in the same session). 9 is 'First blocks done' rather than 'First lights on'
+// because the line above it at 9 reads "a quarter of the city, finished" · and "first lights" under
+// "finished" is a small contradiction the player would feel without being able to name it.
+const BUILD_STAGES = { 7: 'Foundations set', 9: 'First blocks done', 13: 'District online', 18: 'Skyline rising', 27: 'Landmark built', 36: 'Master builder' }
 
-// The mystery school reveals itself · a brief centered overlay when a player's total crosses a sacred
-// number (7/9/13/18/27/36 · fired by the store's tryScoreCard · T2 S15). Auto-dismisses after 2500ms
-// (2+5=7 · spiritual perfection). The symbol + message come STRAIGHT from the live signal (the store
+// A brief centered overlay when a player's total crosses a milestone number (7/9/13/18/27/36 · fired
+// by the store's tryScoreCard · T2 S15). Auto-dismisses after 2500ms. The symbol + message come
+// STRAIGHT from the live signal (the store
 // already spreads SACRED_MILESTONES into sacredMilestone · Rule 62: read the value, never re-hardcode a
 // table that can drift · the store is the single source of truth for which glyph each milestone carries).
 export default function MilestoneOverlay() {
@@ -43,10 +49,10 @@ export default function MilestoneOverlay() {
       <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: 12, letterSpacing: 1.5, maxWidth: 280, lineHeight: 1.5 }}>
         {message}
       </div>
-      {/* Cave-ascent phrase · Plato's allegory made scoreable (PLATO_BOOKS · Pillar 3) */}
-      {CAVE_ASCENT[milestone] && (
-        <div data-testid="cave-ascent" style={{ fontSize: 11, color: 'rgba(200,148,64,0.7)', marginTop: 14, letterSpacing: 4, textTransform: 'uppercase' }}>
-          The Cave · {CAVE_ASCENT[milestone]}
+      {/* Plain build-progress phrase · what this milestone means for the city, in words that need no gloss */}
+      {BUILD_STAGES[milestone] && (
+        <div data-testid="milestone-phrase" style={{ fontSize: 11, color: 'rgba(200,148,64,0.7)', marginTop: 14, letterSpacing: 4, textTransform: 'uppercase' }}>
+          {BUILD_STAGES[milestone]}
         </div>
       )}
     </div>

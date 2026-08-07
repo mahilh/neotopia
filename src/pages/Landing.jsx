@@ -1,5 +1,9 @@
 // NeoTopia · the civilization's front door (route '/').
-// Copy is the canonical wording from docs/NEOTOPIA_LANDING_PAGE.md · every line passes the
+// Copy DIVERGED from docs/NEOTOPIA_LANDING_PAGE.md in T1 S27 (language grounding): the doc is now the
+// older wording. Where they disagree, this file is what ships and the doc needs updating, not this.
+// The setting and register are unchanged · what left was the metaphysical vocabulary a first-time
+// player could not parse ("consciousness civilization", "when the land is claimed ... precedent").
+// Copy was previously the canonical wording from docs/NEOTOPIA_LANDING_PAGE.md · every line passes the
 // Civilization Narrative Coherence test (Dimension 35): it would stand on a placard in a real
 // NeoTopia district. Voice rules honored: no exclamation marks · '·' never em dashes · civilization
 // first, game second. The Global Index counter is the REAL aggregate (getGlobalIndex · same source
@@ -85,7 +89,7 @@ export default function Landing() {
           Every move you make becomes a building in 2055.
         </h1>
         <p style={{ fontSize: 'clamp(13px, 2vw, 17px)', color: 'rgba(255,255,255,0.45)', letterSpacing: 1, maxWidth: 560, lineHeight: 1.7, margin: '0 0 12px' }}>
-          Pure strategy · No dice · Build a consciousness civilization in real time
+          Pure strategy · No dice · Build a city together in real time
         </p>
         <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', letterSpacing: 2, marginBottom: 44 }}>
           Two to four players · Browser-based · No download required
@@ -127,7 +131,7 @@ export default function Landing() {
         </h2>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, maxWidth: 680, margin: '0 0 14px' }}>
           NeoTopia is a hexagonal strategy game set in the year 2055. You and up to three others build a
-          consciousness civilization · placing elements, completing patterns, and scoring districts.
+          city · placing elements, completing patterns, and scoring districts.
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, maxWidth: 680, margin: '0 0 14px' }}>
           Each turn you choose three times: draw a project card, or move an element from a factory into
@@ -141,7 +145,7 @@ export default function Landing() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
           <MicroCard tag="PLACE" lines={['Move elements from factories into regions.', 'Build patterns. Complete districts.']} />
           <MicroCard tag="SCORE" lines={['Match your hand to the board.', 'Each completed pattern builds a named civilization project.']} />
-          <MicroCard tag="BALANCE" lines={["Your worst region's score is multiplied by three.", 'You cannot ignore a failing district. Balance is civilizational law.']} />
+          <MicroCard tag="BALANCE" lines={["Your worst region's score is multiplied by three.", 'You cannot ignore a failing district. Balance is not optional.']} />
         </div>
       </section>
 
@@ -164,18 +168,18 @@ export default function Landing() {
           These aren't fictional buildings.
         </h2>
         <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', lineHeight: 1.9, margin: '0 0 18px', letterSpacing: 0.3 }}>
-          Solar Temple · BioFarm Collective · Healing Sanctuary · Open Contact Embassy · Crystal Academy
-          · Quantum Observatory.
+          Solar farms · seed archives · healing centres · research domes · water towers · community
+          halls.
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 18px' }}>
           Every project card in this game is named after a real district that will exist in the physical
-          NeoTopia civilization by 2055. When you score a Solar Temple, you are not earning five points.
-          You are rehearsing the construction of a building that Mahil Hussain intends to see standing on
-          Earth within his lifetime.
+          NeoTopia city by 2055. When you score a Solar Temple, you are not earning five points. You are
+          rehearsing the construction of a building that Mahil intends to see standing on Earth within
+          his lifetime.
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 32px' }}>
-          NeoTopia was founded by Syed Mahil Hussain. The game is Stage 2 of a 5-stage civilization
-          project. You are playing in Stage 2. Stage 5 is land.
+          NeoTopia was founded by Mahil. Building it takes five stages · this game is the second one.
+          The last stage is real land, really bought and really built on.
         </p>
         <blockquote style={{
           margin: 0, padding: '20px 28px', borderLeft: '2px solid rgba(255,215,0,0.4)',
@@ -199,12 +203,13 @@ export default function Landing() {
             {shownIndex}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>
-            consciousness districts built across all NeoTopia games
+            districts built across all NeoTopia games
           </div>
         </div>
         <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', lineHeight: 1.8, margin: 0 }}>
           When you score a project card, it joins a permanent global counter of every district ever built
-          across every game ever played. When the land is claimed, these numbers become precedent.
+          across every game ever played. When the real city breaks ground, this is the record of everyone
+          who helped design it.
         </p>
       </section>
 
@@ -214,7 +219,7 @@ export default function Landing() {
         borderTop: '1px solid rgba(255,255,255,0.05)',
       }}>
         <h2 style={{ fontSize: 'clamp(22px, 3.6vw, 34px)', fontWeight: 200, color: 'rgba(255,255,255,0.92)', lineHeight: 1.4, margin: '0 0 40px', letterSpacing: -0.3 }}>
-          The civilization began in consciousness.<br />
+          The civilization began as an idea.<br />
           Then it became code.<br />
           Now two humans can play it in real time.
         </h2>

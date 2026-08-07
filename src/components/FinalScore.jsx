@@ -238,7 +238,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
       {/* CIVILIZATION HEADER */}
       <div style={{ textAlign: 'center', marginBottom: 56, flexShrink: 0 }}>
         <div style={{ fontSize: 10, letterSpacing: 8, color: 'rgba(255,255,255,0.2)', marginBottom: 16, textTransform: 'uppercase' }}>
-          NeoTopia · Consciousness Civilization
+          NeoTopia · Civilization Record
         </div>
         <div style={{ fontSize: 52, fontWeight: 100, color: 'rgba(255,255,255,0.92)', letterSpacing: 12, marginBottom: 8, fontVariantNumeric: 'tabular-nums' }}>
           2055
@@ -270,7 +270,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
               <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: 10 }}>
                 {isWinner && (
                   <span style={{ fontSize: 11, color: 'rgba(255,215,0,0.7)', border: '1px solid rgba(255,215,0,0.3)', borderRadius: 4, padding: '2px 6px', letterSpacing: 1 }}>
-                    FOUNDER
+                    WINNER
                   </span>
                 )}
                 <span style={{ color: isWinner ? 'rgba(255,215,0,0.9)' : 'rgba(255,255,255,0.8)', fontWeight: 500, fontSize: 16 }}>
@@ -359,12 +359,14 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
       </div>
 
       {/* Plato's civilizational decay law made visible · the worst region is tripled because a city
-          dominated by one soul-part collapses under its own imbalance (PLATO_BOOKS · Pillar 2). */}
+          dominated by one soul-part collapses under its own imbalance (PLATO_BOOKS · Pillar 2).
+          T1 S27 · the on-screen line now STATES the rule instead of gesturing at it · the tripling is
+          the strongest mechanic in the game and the end screen was the one place it went unexplained. */}
       <div style={{
         maxWidth: 640, textAlign: 'center', marginBottom: 48, flexShrink: 0,
         fontSize: 12, letterSpacing: 1.5, lineHeight: 1.6, color: 'rgba(255,160,40,0.8)',
       }}>
-        The weakest district carries the heaviest weight.
+        Your lowest-scoring region counts three times. A city is only as strong as its weakest district.
       </div>
 
       {/* ELEMENT CLUSTERS · the connected patterns the civilization formed (board-global · the most
@@ -380,7 +382,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
             Element Clusters
           </div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
-            the connected patterns this civilization formed · 1 point per token (board game rule)
+            the largest connected group of each element, in each region · 1 point per token
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {clusterDetail.map((c, i) => (
@@ -431,14 +433,14 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
           {shownIndex.toLocaleString()}
         </div>
         <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', lineHeight: 1.7 }}>
-          consciousness districts built across all NeoTopia games
+          districts built across all NeoTopia games
         </div>
         <div style={{ marginTop: 14, fontSize: 14, color: 'rgba(255,255,255,0.5)', padding: '8px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          {winner.username} founded the highest civilization at{' '}
+          {winner.username} scored the highest at{' '}
           <span style={{ fontVariantNumeric: 'tabular-nums', color: 'rgba(255,215,0,0.85)' }}>{winner.total}</span>
         </div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-          this game added {totalProjectsBuilt} toward the physical civilization by 2055
+          this game added {totalProjectsBuilt} districts
         </div>
 
         {/* Civilization SCORE ledger (points) · getGlobalCivilizationTotal · shown optimistically with this
@@ -451,7 +453,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
               points
             </div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-              Your civilization contributed {localScore} to Stage 2 of 5
+              your game added {localScore} points to that total
             </div>
           </div>
         )}
@@ -470,9 +472,9 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
         Start New Civilization
       </button>
 
-      {/* Civilization stage line · connects the end-game moment back to the real 5-stage vision */}
+      {/* Closing line · the same footer wording the landing page ends on, so the loop reads as one voice */}
       <div style={{ marginTop: 30, fontSize: 11, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', flexShrink: 0 }}>
-        Stage 2 of 5 · The Awareness
+        NeoTopia · Building the civilization · 2055
       </div>
     </div>
   )

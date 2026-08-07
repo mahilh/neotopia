@@ -51,7 +51,7 @@ export const ELEMENT_SOUL_METAL = {
   technology: { metal: 'Gold',   virtue: 'Wisdom',      district: 'AetherNet' },
   energy:     { metal: 'Silver', virtue: 'Courage',     district: 'Free Energy' },
   biofarming: { metal: 'Bronze', virtue: 'Nourishment', district: 'Living Earth' },
-  community:  { metal: 'Iron',   virtue: 'Community',    district: 'Source Temple' },
+  community:  { metal: 'Iron',   virtue: 'Belonging',    district: 'Source Temple' },
 }
 
 // "Technology · Gold · Wisdom · AetherNet" · the one hover label every element surface shares.
