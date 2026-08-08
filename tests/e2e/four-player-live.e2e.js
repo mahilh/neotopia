@@ -139,7 +139,7 @@ function takeTurn(seat, defects) {
  * offline guard and the live proof exercise byte-identical game logic · if they diverged, the cheap one
  * would stop being evidence about the expensive one.
  */
-function playCompleteGame({ onTurn } = {}) {
+async function playCompleteGame({ onTurn } = {}) {
   const defects = []
   const seatSequence = []
   let totalPlacements = 0
@@ -167,8 +167,13 @@ function playCompleteGame({ onTurn } = {}) {
       }
     }
 
+    // AWAITED, one turn at a time. These writes are last-write-wins on a single row, so firing them
+    // concurrently lets an earlier turn's 'playing' land AFTER the final turn's 'finished' and leave the
+    // session looking mid-game forever. The first live run failed exactly that way · it read as "the
+    // terminal phase does not persist", a product-shaped bug, and was entirely this harness overlapping
+    // writes the real client never overlaps (useGameSync awaits each pushState). Rule 57, twice in one file.
     if (onTurn) {
-      const stop = onTurn({ seat, turns, defects })
+      const stop = await onTurn({ seat, turns, defects })
       if (stop === false) break
     }
     turns++
@@ -255,7 +260,7 @@ test.describe('the 4-player game · every seat, a full game, against production'
       'the engine and useGameRoom disagree about seat colours · the 4-player join bug class is reopening',
     ).toEqual(SEAT_COLORS)
 
-    const run = playCompleteGame()
+    const run = await playCompleteGame()
     const { finals, clusterTotal } = assertCompleteFourPlayerGame(run)
 
     console.log(`\n[engine] ${run.seatSequence.length} turns · ${run.seatSequence.length / 4} rounds · ` +
@@ -269,7 +274,6 @@ test.describe('the 4-player game · every seat, a full game, against production'
 
     const defects = []          // everything wrong that does not stop the game · reported at the end
     const clients = []
-    const pending = []          // in-flight game_sessions writes · drained before the assertions
     let roomId = null
     let host = null
 
@@ -368,31 +372,31 @@ test.describe('the 4-player game · every seat, a full game, against production'
 
       // ── 4 · PLAY THE WHOLE GAME · every turn pushed by the player who owns that seat ─────────────────
       let pushes = 0
-      const run = playCompleteGame({
-        onTurn: ({ seat, turns }) => {
+      const run = await playCompleteGame({
+        onTurn: async ({ seat, turns }) => {
           const actor = clients.find(c => c.seat === seat)
           expect(actor, `no client owns seat ${seat}`).toBeTruthy()
 
-          // Persist exactly as the real client does · same columns, same 'scoring' → 'finished' mapping.
-          // Awaited via a promise chain because onTurn is synchronous by design (the engine loop must not
-          // interleave), so the write is queued and drained below.
-          pending.push(
-            actor.client.from('game_sessions').update({
-              state: serializable(),
-              current_seat: useGameStore.getState().currentSeat,
-              turn_number: useGameStore.getState().turnNumber,
-              actions_remaining: useGameStore.getState().actionsRemaining,
-              production_tiles_remaining: useGameStore.getState().productionTilesRemaining,
-              phase: phaseColumn(useGameStore.getState().phase),
-            }).eq('room_id', roomId).then(({ error }) => {
-              if (error) defects.push(`seat ${seat} could not push state on turn ${turns}: ${error.message}`)
-              else pushes++
-            }),
-          )
+          // Persist exactly as the real client does · same columns, same 'scoring' → 'finished' mapping,
+          // and AWAITED so turns land in order (see the note in playCompleteGame).
+          const snap = serializable()
+          const { error } = await actor.client.from('game_sessions').update({
+            state: snap,
+            current_seat: snap.currentSeat,
+            turn_number: snap.turnNumber,
+            actions_remaining: snap.actionsRemaining,
+            production_tiles_remaining: snap.productionTilesRemaining,
+            phase: phaseColumn(snap.phase),
+          }).eq('room_id', roomId)
+
+          if (error) {
+            defects.push(`seat ${seat} could not push state on turn ${turns}: ${error.message}`)
+            return false // stop the game · an unpersisted turn makes everything after it fiction
+          }
+          pushes++
           return true
         },
       })
-      await Promise.all(pending)
       defects.push(...run.defects)
 
       // ── 5-8 · EVERY ENGINE CLAIM · the same assertions the offline guard makes ───────────────────────
