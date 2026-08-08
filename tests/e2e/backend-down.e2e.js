@@ -42,7 +42,10 @@
 import { test, expect } from '@playwright/test'
 
 // The whole point is waiting out a give-up; the default 60s is not enough headroom.
-test.beforeEach(() => { test.setTimeout(120_000) })
+// The whole point is waiting out give-ups. 120 was sized before the game-route test polled for quiescence
+// (T3 S29): its worst case is now a 45s attribute wait + up to 90s settling + a 15s hold = 150s. Raised with
+// slack rather than discovered by a timeout on a slow CI runner.
+test.beforeEach(() => { test.setTimeout(210_000) })
 
 const HEALTH = 'html[data-backend-status]'
 
@@ -112,18 +115,77 @@ test.describe('backend unreachable · the app must degrade, not pretend', () => 
     await page.goto('/game/00000000-0000-4000-8000-000000000000')
 
     await expect(page.locator(HEALTH)).toHaveAttribute('data-backend-status', 'offline', { timeout: 45_000 })
-    expect(backend.count()).toBeGreaterThan(0)
 
-    // ANTI-STORM · this is the browser-layer regression guard on the old fixed-1000ms forever loop. Once the
-    // app has given up, its knocking on a dead host must STOP. The old code would have added roughly one
+    // ── SELF-DIAGNOSING ASSERTIONS (T3 S29) ───────────────────────────────────────────────────────────────
+    // This test went red exactly once, in S28, on the merge-gating path. It could not be diagnosed, because
+    // the run had been piped through `tail -12` and the assertion text scrolled away · and it has since gone
+    // green six consecutive times (2 re-runs in S28, 4 dedicated repro runs in S29), so there is nothing left
+    // to reproduce against. Guessing a fix for an unreproduced failure would be inventing a bug.
+    //
+    // What CAN be fixed is the diagnosability. The only evidence that survived was the run's wall-clock: the
+    // whole 9-test suite finished in 32.1s while this test alone takes ~19s, so it failed FAST · which rules
+    // out both long waits below (a 45s attribute timeout and a 15s settle) and points at the count assertion
+    // that fires immediately. The interesting question a future failure must answer is how health can read
+    // 'offline' having counted ZERO blocked requests · a live candidate is a failure path that never reaches
+    // the network at all (a client-side auth/session error would report down without a request to intercept).
+    // So each assertion now carries the state that would answer it. If this ever fires again, the message is
+    // the investigation instead of the start of one.
+    const health = await readHealth(page)
+    expect(
+      backend.count(),
+      `health reports offline but ZERO requests were intercepted · so nothing the app did was blocked by ` +
+      `this test, and the offline verdict came from somewhere else. health=${JSON.stringify(health)}`,
+    ).toBeGreaterThan(0)
+
+    // ── ANTI-STORM · the browser-layer regression guard on the old fixed-1000ms forever loop ─────────────
+    // Once the app has given up, its knocking on a dead host must STOP. The old code added roughly one
     // reconnect per second (two, while both failure signals each scheduled their own timer).
+    //
+    // THE BUG THIS TEST HAD, and it was the test's, not the product's (T3 S29 · found by making the
+    // assertion self-diagnosing, then watching it fire with its state attached):
+    //   2 → 9 in 15s (+7) · health={"status":"offline","source":"auth","attempt":0,...}
+    // `source: "auth"` is the whole story. useConnectionHealth is WORST-WINS across sources, so
+    // data-backend-status flips to 'offline' the instant the FIRST source goes terminal · and on a /game/
+    // route auth fails almost immediately while game-sync still has most of its 1·2·4·8·16·30 ladder left
+    // to run. The old code started measuring "has it stopped knocking?" the moment auth gave up, so it was
+    // timing a window in which a perfectly correct, BOUNDED retry ladder was still legitimately executing.
+    // Whether it passed depended on where in that ladder the 15s window happened to land · which is exactly
+    // why it flaked once on the merge gate in S28 and then went green six times in a row.
+    //
+    // So wait for the thing the assertion actually claims: that requests have STOPPED, not that one source
+    // reported terminal. Quiescence is the real precondition, and polling for it is both more honest and
+    // faster than sleeping out the worst-case ladder (Rule 63 · assert the property you mean).
+    const QUIET_MS = 5_000
+    const MAX_SETTLE_MS = 90_000 // > the full 61s ladder plus slack · exceeded means it never gave up
+    let last = backend.count()
+    let quietSince = Date.now()
+    const settleDeadline = Date.now() + MAX_SETTLE_MS
+
+    while (Date.now() < settleDeadline) {
+      await page.waitForTimeout(1_000)
+      const now = backend.count()
+      if (now !== last) { last = now; quietSince = Date.now() }
+      else if (Date.now() - quietSince >= QUIET_MS) break
+    }
+
+    expect(
+      Date.now() < settleDeadline,
+      `the app never stopped knocking · still issuing requests after ${MAX_SETTLE_MS / 1000}s ` +
+      `(${backend.count()} total). THIS is the storm regression. health=${JSON.stringify(await readHealth(page))}`,
+    ).toBe(true)
+
+    // Now the claim can be tested honestly: having genuinely gone quiet, it must STAY quiet.
     const settled = backend.count()
     await page.waitForTimeout(15_000)
     const after = backend.count()
 
-    // A small allowance, not zero: an unrelated in-flight request may still land in the first moments after
-    // the give-up. What must NOT happen is unbounded growth · 15 seconds of the old behaviour was ~15-30.
-    expect(after - settled).toBeLessThanOrEqual(3)
+    // A small allowance, not zero: an unrelated in-flight request may still land. What must NOT happen is
+    // growth resuming · 15 seconds of the old behaviour was ~15-30.
+    expect(
+      after - settled,
+      `the app resumed knocking on a dead host after going quiet · ${settled} → ${after} in 15s ` +
+      `(+${after - settled}). health=${JSON.stringify(await readHealth(page))}`,
+    ).toBeLessThanOrEqual(3)
   })
 
   test('giving up is not a dead end · regaining network makes the app try again', async ({ page, context }) => {
