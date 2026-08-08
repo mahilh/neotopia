@@ -11,9 +11,13 @@
 
 import { useState } from 'react'
 import ElementIcon from './Board/ElementIcon'
+import { toRomanNumeral } from '../utils/romanNumeral'
 
+// `label` is what the element-type bar prints under the art. It must be the SAME word the rest of the
+// game uses \u00B7 'Sustainable Energy' was the odd one out (every other surface says 'Energy') and at hand
+// size it measured 121.5u inside a 120u frame, so it ran off both edges of every Energy card.
 const ELEMENT_COLORS = {
-  energy: { primary: '#E24B4A', secondary: '#c73b3a', glow: 'rgba(226,75,74,0.4)', symbol: '\u26A1', label: 'Sustainable Energy' },
+  energy: { primary: '#E24B4A', secondary: '#c73b3a', glow: 'rgba(226,75,74,0.4)', symbol: '\u26A1', label: 'Energy' },
   biofarming: { primary: '#1D9E75', secondary: '#16845f', glow: 'rgba(29,158,117,0.4)', symbol: '\u25C8', label: 'BioFarming' },
   technology: { primary: '#7F77DD', secondary: '#6b63c9', glow: 'rgba(127,119,221,0.4)', symbol: '\u25CE', label: 'Technology' },
   community: { primary: '#378ADD', secondary: '#2a70c5', glow: 'rgba(55,138,221,0.4)', symbol: '\u2736', label: 'Community' },
@@ -25,8 +29,6 @@ const CORNER_SYMBOLS = {
   technology: ['\u2736', '\u25C6', '\u2736', '\u25C6'], // Star + diamond
   community: ['\u25CB', '\u2234', '\u25CB', '\u2234'],  // Circle + therefore
 }
-
-const POINT_VALUES = { 2: 'II', 3: 'III', 4: 'IIII', 5: 'IIIII' }
 
 // ── Procedural sacred geometry · the placeholder shown until a pixel-art PNG loads ──
 // Per the NeoTopia esoteric repository: Energy = Torus (Fohat · Orichalcum · self-sustaining flow) ·
@@ -179,12 +181,16 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           {card.name || card.id}
         </text>
 
-        {/* Corner symbols - ancient rune feel */}
+        {/* Corner symbols - ancient rune feel.
+            The two BOTTOM glyphs sit ABOVE the horizontal rule, not level with the footer. They used to
+            share the footer band with the point numeral and overlapped it on every card measured (7/7,
+            all four elements) · a decorative glyph was sitting on top of the one number a player has to
+            read to choose a card. The rule now separates frame decoration from card information. */}
         {[
           [s.borderW + 7, s.borderW + s.fontSize + 18],
           [s.width - s.borderW - 13, s.borderW + s.fontSize + 18],
-          [s.borderW + 7, s.height - s.borderW - 12],
-          [s.width - s.borderW - 13, s.height - s.borderW - 12],
+          [s.borderW + 7, s.height - s.borderW - 26],
+          [s.width - s.borderW - 13, s.height - s.borderW - 26],
         ].map((pos, i) => (
           <text
             key={i}
@@ -268,7 +274,8 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           </text>
         )}
 
-        {/* Point value - Roman numeral bottom right */}
+        {/* Point value - Roman numeral bottom right (src/utils/romanNumeral.js · total, so a future
+            point value cannot fall back to an Arabic digit sitting next to Roman ones) */}
         <text
           x={s.width - s.borderW - 8}
           y={s.height - s.borderW - 6}
@@ -279,7 +286,7 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           fontFamily="serif"
           fontWeight="bold"
         >
-          {POINT_VALUES[card.points] || card.points || ''}
+          {toRomanNumeral(card.points)}
         </text>
 
         {/* Decorative horizontal rule above description */}
@@ -331,9 +338,13 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
         />
       )}
 
-      {/* Placeholder when no art yet · element-specific procedural sacred geometry + a small id caption.
-          The id stays so Mahil knows which card to generate next; it fades out under the real PNG. The
-          art-skeleton class adds a slow opacity breath (signals "art loading", not "art broken" · T1 S17 D). */}
+      {/* Placeholder when no art yet · element-specific procedural sacred geometry. The art-skeleton class
+          adds a slow opacity breath (signals "art loading", not "art broken" · T1 S17 D).
+          The card's own id used to be captioned here so Mahil could see which PNG to generate next. It is
+          a database key, and 36 of the 56 cards still have no art, so in production it was a developer
+          breadcrumb printed across a third of the deck. It is now DEV-only (same gate as the
+          window.__neotopia_store hook in GameRoom): the affordance survives where it is used, and a player
+          sees the card's NAME · which the frame already prints along its top edge · and nothing else. */}
       {(imgError || !imgLoaded) && (
         <div className="art-skeleton" style={{
           position: 'absolute',
@@ -349,14 +360,16 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
             : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, lineHeight: 0 }}>
                 <ElementIcon element={el} color={colors.primary} size={s.fontSize + 24} />
               </div>}
-          <div style={{
-            position: 'absolute', bottom: 3, left: 0, right: 0,
-            fontSize: 8, color: colors.secondary, opacity: 0.45, fontFamily: 'serif',
-            textAlign: 'center', letterSpacing: 0.3, padding: '0 4px',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {card.id}
-          </div>
+          {import.meta.env.DEV && (
+            <div data-testid="card-id-dev" style={{
+              position: 'absolute', bottom: 3, left: 0, right: 0,
+              fontSize: 8, color: colors.secondary, opacity: 0.45, fontFamily: 'serif',
+              textAlign: 'center', letterSpacing: 0.3, padding: '0 4px',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {card.id}
+            </div>
+          )}
         </div>
       )}
     </div>
