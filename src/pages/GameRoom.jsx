@@ -325,6 +325,8 @@ export default function GameRoom() {
                   return (
                   <button key={el.type}
                     className="neo-soul-btn"
+                    data-testid="element-btn"
+                    data-element={el.type}
                     title={elementSoulMetalLabel(el.type) ?? undefined}
                     onClick={() => handleElementSelect(el.type)}
                     style={{
@@ -370,6 +372,8 @@ export default function GameRoom() {
                   const regionColors = ['#7F77DD', '#1D9E75', '#E24B4A']
                   return (
                     <button key={rid}
+                      data-testid="region-btn"
+                      data-region={rid}
                       onClick={() => handleRegionSelect(rid)}
                       style={{
                         height: 44, padding: '0 14px', borderRadius: 8, cursor: 'pointer',

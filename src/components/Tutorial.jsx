@@ -27,8 +27,19 @@ const buildSteps = (cfg, isFlow) => [
     visual: null,
   },
   {
+    // THIS STEP DESCRIBED A FLOW THE GAME DOES NOT HAVE (fixed T1 S29).
+    // It said: click a factory, then click an empty hex. That is two clicks. Placement is four, and
+    // the two it left out are where a player gets stranded · after clicking a factory, NO hex is
+    // highlighted yet, so the instruction "then click any empty hex" does nothing at all. The panel is
+    // asking which element and which region first, and a player who was told about two steps has no
+    // reason to look there.
+    // This overlay exists because a playtest reached turn 17 with an empty board (see the file header).
+    // T2 S29 measured the same shape still happening in production: across 339 sessions exactly ONE
+    // ever had an element placed. Verified by driving the real UI at 375px and 1280px · all four
+    // controls are on screen and the loop completes, so the interaction works and only the
+    // instructions for it were wrong.
     heading: 'To place an element',
-    body: 'Click any factory token (the colored icons between the regions). An element leaves the factory. Then click any empty hex in the adjacent region to place it there.',
+    body: 'Click a factory token (the coloured icons between the regions). The panel then asks you two things: which element to take, and which region to put it in. Pick both, and the hexes you are allowed to use light up on the board. Click one of them to place it.',
     visual: 'factory',
   },
   {
@@ -119,31 +130,47 @@ export default function Tutorial({ onDismiss }) {
           {s.body}
         </p>
 
-        {/* Factory → Board visual (step 2 · the action they missed) */}
+        {/* Factory → Board visual (step 2 · the action they missed).
+            Column, not a single row: the diagram gained a third stage this session and at 375px the
+            boxes plus the caption no longer fit on one line · the caption was being pushed outside the
+            dialog. Boxes on their own row, caption beneath, so it holds at phone width. */}
         {s.visual === 'factory' && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24,
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, marginBottom: 24,
             padding: '14px 18px', background: 'rgba(255,255,255,0.03)',
             borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)',
           }}>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <div className="tut-factory" style={{
-              width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
+              width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
               border: '2px solid rgba(226,75,74,0.7)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
             }}>
               ⚡
             </div>
-            <div style={{ fontSize: 20, color: 'rgba(255,255,255,0.3)', margin: '0 4px' }}>→</div>
+            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>→</div>
+            {/* The two middle steps the old caption skipped · drawn as a step so the picture and the
+                words describe the same interaction (they did not before). */}
             <div style={{
-              width: 48, height: 48, flexShrink: 0, background: 'rgba(127,119,221,0.12)',
+              minWidth: 62, height: 44, flexShrink: 0, background: 'rgba(200,148,64,0.10)',
+              borderRadius: 10, border: '1px solid rgba(200,148,64,0.5)', padding: '0 4px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9.5, color: 'rgba(200,148,64,0.9)', textAlign: 'center', lineHeight: 1.25,
+            }}>
+              pick element<br />+ region
+            </div>
+            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>→</div>
+            <div style={{
+              width: 44, height: 44, flexShrink: 0, background: 'rgba(127,119,221,0.12)',
               borderRadius: 10, border: '1px solid rgba(127,119,221,0.5)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, color: 'rgba(127,119,221,0.85)', textAlign: 'center', lineHeight: 1.3,
+              fontSize: 10, color: 'rgba(127,119,221,0.85)', textAlign: 'center', lineHeight: 1.25,
             }}>
-              hex<br />on<br />board
+              lit<br />hex
             </div>
+           </div>
             <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
-              Factory token → place on any adjacent region
+              Factory → choose element and region → click a highlighted hex
             </p>
           </div>
         )}
