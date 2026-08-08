@@ -69,10 +69,18 @@ async function createSeededGame() {
   if (aerr) throw new Error('anon sign-in: ' + aerr.message)
   const userId = auth.user.id
 
+  // SEAT FIRST, THEN PROMOTE (T3 S29 · was: create at 'playing', then seat · which migration 016 forbids).
+  // room_players_join's WITH CHECK requires the target room to be status='waiting' AND under capacity, so
+  // seating a player into an already-'playing' room is now an RLS violation:
+  //   "new row violates row-level security policy for table \"room_players\""
+  // The DB is right and this harness was wrong. It modelled a transition the product never performs · the
+  // real app always goes create → lobby → start (useGameRoom.createRoom seats the host while the room is
+  // 'waiting', and startGame flips it to 'playing' afterwards). So this ordering is not a workaround for the
+  // policy, it is the harness finally matching the path it claims to exercise (Rule 36).
   const code = roomCode()
   const { data: room, error: rerr } = await admin
     .from('game_rooms')
-    .insert({ room_code: code, host_id: userId, status: 'playing', max_players: 4, player_count: 1 })
+    .insert({ room_code: code, host_id: userId, status: 'waiting', max_players: 4, player_count: 1 })
     .select()
     .single()
   if (rerr) throw new Error('game_rooms insert: ' + rerr.message)
@@ -81,6 +89,11 @@ async function createSeededGame() {
     room_id: room.id, user_id: userId, username: 'E2E_BOT', player_color: 'blue', seat_number: 0, is_ready: true,
   })
   if (perr) throw new Error('room_players insert: ' + perr.message)
+
+  // Now promote · rooms_update_host lets the host update their own room, and every test below needs a room
+  // that is actually mid-game.
+  const { error: uerr } = await admin.from('game_rooms').update({ status: 'playing' }).eq('id', room.id)
+  if (uerr) throw new Error('game_rooms promote to playing: ' + uerr.message)
 
   const seeded = { ...SEED, turnNumber: 1 }
   const { error: serr } = await admin.from('game_sessions').insert({
