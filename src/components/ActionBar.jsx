@@ -3,8 +3,11 @@
 // Left: whose turn it is · Center: 3 action dots (filled = used) · Right: bonus tokens + End Turn.
 
 // Bonus token presentation · type → short label + effect hint + accent (element palette).
+// The KEYS are the engine's contract (gameStore.js useBonus · T2's lane) and never change. Only the
+// label/hint are player-facing: 'Automatization' was a translation artefact from the original board
+// game, and 'Automation' is the ordinary English word for the same thing.
 const BONUS_META = {
-  automatization: { label: 'Auto',       hint: 'Automatization · +1 action this turn',        color: '#E24B4A' },
+  automatization: { label: 'Auto',       hint: 'Automation · +1 action this turn',            color: '#E24B4A' },
   subsidy:        { label: 'Subsidy',    hint: 'Subsidy · draw 2 cards (Offer first)',        color: '#1D9E75' },
   initiative:     { label: 'Initiative', hint: 'Initiative · place an element from reserve',  color: '#7F77DD' },
   permits:        { label: 'Permits',    hint: 'Permits · place in the outer ring',           color: '#378ADD' },
