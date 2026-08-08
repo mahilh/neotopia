@@ -181,7 +181,11 @@ export const useGameStore = create(immer((set, get) => ({
       seat: i,
       userId: p.userId,
       username: p.username,
-      color: ['blue', 'red', 'green', 'purple'][i],
+      // Seat colours · MUST match useGameRoom.SEAT_COLORS (the list that writes room_players.player_color)
+      // and the live CHECK on that column: ARRAY['blue','gold','green','red']. Seat 3 was 'purple' here,
+      // which is not in the CHECK · nothing renders this field today, so it never 400'd, but three lists
+      // describing one value is three contracts and the odd one out is the one that bites later. (T2 S29)
+      color: ['blue', 'red', 'green', 'gold'][i],
       hand: [],
       bonusTokens: [],
       scores: [0, 0, 0],

@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'vitest'
 import { useGameStore, shuffleArray, PRODUCTION_TILES } from './gameStore'
 import { PROJECT_CARDS } from '../lib/projectCards'
+import { SEAT_COLORS } from '../hooks/useGameRoom'
 
 describe('gameStore', () => {
   test('shuffleArray returns all elements', () => {
@@ -8,6 +9,26 @@ describe('gameStore', () => {
     const shuffled = shuffleArray(arr)
     expect(shuffled).toHaveLength(5)
     expect([...shuffled].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5])
+  })
+
+  // Seat colours live in THREE places: this store, useGameRoom.SEAT_COLORS (which writes
+  // room_players.player_color), and the live CHECK on that column
+  // (ARRAY['blue','gold','green','red']). Seat 3 had drifted to 'purple' here, which is not a
+  // legal column value · it never 400'd only because nothing renders this field yet, so the
+  // divergence was invisible rather than absent. Pin the store list to SEAT_COLORS so the two
+  // JS lists can never drift again, and pin membership to the DB's legal set so neither can
+  // drift away from the column. (T2 S29 · verified against the live CHECK before writing.)
+  test('initGame seat colours match useGameRoom.SEAT_COLORS and the DB player_color CHECK', () => {
+    const DB_LEGAL_COLORS = ['blue', 'gold', 'green', 'red'] // live CHECK on room_players.player_color
+    useGameStore.getState().initGame(
+      [0, 1, 2, 3].map(i => ({ userId: `u${i}`, username: `P${i}` })),
+      shuffleArray(PROJECT_CARDS),
+      shuffleArray(PRODUCTION_TILES),
+    )
+    const colors = useGameStore.getState().players.map(p => p.color)
+    expect(colors).toEqual(SEAT_COLORS)                       // same list, same order, seat for seat
+    colors.forEach(c => expect(DB_LEGAL_COLORS).toContain(c)) // and every one is a legal column value
+    expect(new Set(colors).size).toBe(4)                      // UNIQUE (room_id, player_color)
   })
 
   test('initGame sets correct player count', () => {
