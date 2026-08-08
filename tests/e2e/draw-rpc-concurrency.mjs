@@ -80,9 +80,12 @@ async function main() {
 
     // ── 2. Seed room -> room_players(seat 0) -> game_sessions with a known sentinel deck (real RLS path) ─
     const code = makeRoomCode()
+    // SEAT FIRST, THEN PROMOTE (T3 S29). migration 016's room_players_join requires status='waiting' AND
+    // spare capacity, so seating into an already-'playing' room is an RLS violation. Matches the real
+    // create → lobby → start path (Rule 36).
     const { data: room, error: rerr } = await clientA
       .from('game_rooms')
-      .insert({ room_code: code, host_id: userId, status: 'playing', max_players: 4, player_count: 1 })
+      .insert({ room_code: code, host_id: userId, status: 'waiting', max_players: 4, player_count: 1 })
       .select().single()
     if (rerr) throw new Error('game_rooms insert: ' + rerr.message)
     roomId = room.id
@@ -91,6 +94,9 @@ async function main() {
       room_id: roomId, user_id: userId, username: 'E2E_DRAWTEST_' + code, player_color: 'blue', seat_number: SEAT, is_ready: true,
     })
     if (perr) throw new Error('room_players insert: ' + perr.message)
+
+    const { error: uerr } = await clientA.from('game_rooms').update({ status: 'playing' }).eq('id', roomId)
+    if (uerr) throw new Error('game_rooms promote to playing: ' + uerr.message)
 
     const deck = sentinelDeck(DECK_SIZE)
     const seedState = {
