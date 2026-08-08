@@ -11,6 +11,21 @@ import { useBackendHealth } from '../hooks/useConnectionHealth'
 import { deriveBackendStatus } from '../utils/backendStatus'
 import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roomLink'
 
+// Seat → the colour actually painted on a roster avatar. These hexes are the ONLY seat colour a player
+// ever sees: the `color` on a store player and the `player_color` on a room_players row are never
+// rendered anywhere (grepped S28).
+//
+// SEAT 3 DIVERGES FROM ITS STORED NAME AND THAT IS A PRODUCT DECISION, NOT AN OVERSIGHT.
+// Three lists describe seat colour and they no longer agree:
+//   useGameRoom.js SEAT_COLORS  ['blue','red','green','gold']    ← written to the DB (T3 S28 · the live
+//                                                                  CHECK rejects 'purple', which is why
+//                                                                  no 4-player game could start)
+//   gameStore.js:184            ['blue','red','green','purple']  ← in-memory only, still says purple
+//   here                        #7F77DD                          ← purple, what seat 3 looks like
+// Nothing breaks today because no code paints from either name. But a row now says 'gold' about a
+// player who is visibly purple, so whoever renders a colour name next inherits the contradiction.
+// Repainting seat 3 gold is a one-line change here · it needs Mahil's call, not mine (Rule 45 · a
+// duplicated contract is a second contract).
 const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#7F77DD'] // blue · red · green · purple (by seat)
 
 // The four elements a civilization is built from · decorative row on the entry screens · reuses the
