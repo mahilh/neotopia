@@ -1,8 +1,12 @@
 # NeoTopia · Security Surface
 
-> **S27 TOP PRIORITY.** Nothing in the "Direct-write surface" section below was fixed. It is
-> documented deliberately and left alone, because the correct fix crosses the T2/T3 lane boundary
-> and must not be attempted in a wrap-up window.
+> **PROGRESS.** Findings **1** (migration 017 · T2 S28) and **4** (migration 016 · T2 S27) are
+> CLOSED, applied live, and proven as the `authenticated` role. Findings **2**, **3** and **5**
+> remain OPEN. Finding 2 (`game_sessions.state` directly UPDATE-able) is now the most severe thing
+> left on this page.
+>
+> Both closures corrected the finding they closed. Treat every entry below as a hypothesis and
+> re-measure before acting on it, including the ones written here in good faith (Rule 69).
 >
 > Written T2 S26 · 2026-07-29 · every claim verified against the live production database
 > (`wynccumuisjxbptjlfwq`), not inferred from migration files. Re-verify before acting: a migration
@@ -26,7 +30,11 @@ access token. So "authenticated" in every policy below means *anyone who loaded 
 
 ---
 
-## 1 · The global index counter is PATCH-able to any value
+## 1 · ✅ CLOSED (T2 S28 · migration 017) · The global index counter is PATCH-able to any value
+
+> **Status: closed 2026-08-08.** `scripts/migrations/017_player_profiles_column_grants.sql` is
+> **applied to the live DB** and proven as the `authenticated` role. The finding below is preserved
+> as written; the live premise-check made it **worse, not weaker** (see *What was actually true*).
 
 | | |
 |---|---|
@@ -57,6 +65,54 @@ write passes cleanly.
 `revoke update on player_profiles from anon, authenticated;` then
 `grant update (username, avatar_color) on player_profiles to authenticated;` · and add an explicit
 `WITH CHECK` to `profiles_own` so an INSERT cannot seed a value either.
+
+### What was actually true (T2 S28 · measured, not reasoned)
+
+Every claim above held. Two things were understated:
+
+1. **It was ONE request, not two.** `INSERT(neotopia_index)` was granted as well, so a brand-new
+   anonymous identity could create its profile with the counter already forged · the signup response
+   and the forged row are a single POST. The "two requests" framing undersells it.
+2. **`elo_rating`, `games_played` and `games_won` were equally writable** and are the same
+   forgeable-public-record class. Nothing in the tree writes them at all. They are revoked here too.
+
+The fix departs from the suggested direction in one place, deliberately. The doc proposed adding an
+explicit `WITH CHECK` to `profiles_own` to stop a seeded INSERT. A `WITH CHECK` cannot see the OLD
+row, so it can constrain an INSERT but can never express "this column may not *change*" on UPDATE ·
+the grant layer has to carry that half regardless. Revoking `INSERT(neotopia_index)` closes the seed
+path with the same mechanism instead of a second, weaker one. `profiles_own` is left untouched.
+
+**No client regression.** `increment_neotopia_index(integer)` is `SECURITY DEFINER` owned by
+`postgres`, so it never consults the caller's column grants · legitimate scoring is unaffected. The
+only direct writes in the tree are `useAuth.js:126` `INSERT (user_id, username, avatar_color)`,
+`useAuth.js:125` `UPDATE (username)`, and the two `ignoreDuplicates` upserts in `useGameRoom.js`
+(`ON CONFLICT DO NOTHING` · INSERT only). All three are exercised in the proof below.
+
+### Live proof · as `authenticated` under forged JWT claims, fixtures rolled back
+
+`postgres` has BYPASSRLS and would prove nothing. Row counts before and after: profiles 26 → 26,
+counter 0 → 0.
+
+| # | Step | Before 017 | After 017 |
+|---|---|---|---|
+| 1 | authenticated PATCHes own `neotopia_index` to 999999 | **ALLOWED** | BLOCKED · permission denied |
+| 2 | authenticated PATCHes own `games_won` to 9999 | ALLOWED | BLOCKED · permission denied |
+| 3 | fresh user INSERTs a profile with `neotopia_index` 888888 | **ALLOWED** | BLOCKED · permission denied |
+| 4 | `anon` (no JWT) UPDATEs any profile | BLOCKED (policy) | BLOCKED · permission denied |
+| 5 | legitimate rename (`useAuth.js:125`) | OK | **OK** · username changed |
+| 6 | legitimate profile create (`useAuth.js:126`) | OK | **OK** · row created |
+| 7 | scoring via `increment_neotopia_index(5)` | OK | **OK** · counter 3 → 8 |
+| 8 | `get_global_neotopia_index()` after the run | **1,888,887** | **8** (the legitimate +5 only) |
+
+Row 8 is the finding in one number. `Landing.jsx:65` and `FinalScore.jsx:127` both render
+`GLOBAL_INDEX_BASE + ` that sum, so before this migration the public landing hero would have read
+**"2,036,710 consciousness districts built"** off a single forged request.
+
+> ⚠️ **Separate, non-security finding surfaced by this work.** The true live value of
+> `sum(neotopia_index)` is **0** across all 26 profiles · `recordCivilizationContribution` has
+> apparently never landed a write in production. The counter on Landing and FinalScore is therefore
+> pure `GLOBAL_INDEX_BASE` seed today. That is a product bug, not a hole, and is **not** fixed here.
+> Routed to comms for triage (T2 S29 candidate).
 
 ---
 
