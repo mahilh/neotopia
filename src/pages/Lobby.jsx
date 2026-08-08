@@ -15,18 +15,30 @@ import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roo
 // ever sees: the `color` on a store player and the `player_color` on a room_players row are never
 // rendered anywhere (grepped S28).
 //
-// SEAT 3 DIVERGES FROM ITS STORED NAME AND THAT IS A PRODUCT DECISION, NOT AN OVERSIGHT.
-// Three lists describe seat colour and they no longer agree:
-//   useGameRoom.js SEAT_COLORS  ['blue','red','green','gold']    ← written to the DB (T3 S28 · the live
-//                                                                  CHECK rejects 'purple', which is why
-//                                                                  no 4-player game could start)
-//   gameStore.js:184            ['blue','red','green','purple']  ← in-memory only, still says purple
-//   here                        #7F77DD                          ← purple, what seat 3 looks like
-// Nothing breaks today because no code paints from either name. But a row now says 'gold' about a
-// player who is visibly purple, so whoever renders a colour name next inherits the contradiction.
-// Repainting seat 3 gold is a one-line change here · it needs Mahil's call, not mine (Rule 45 · a
-// duplicated contract is a second contract).
-const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#7F77DD'] // blue · red · green · purple (by seat)
+// SEAT 3 IS GOLD (Mahil, S29). The live CHECK on room_players accepts only blue/gold/green/red, so
+// 'gold' is what the database stores for seat 3 (useGameRoom.js SEAT_COLORS, T3 S28) and #C89440 is
+// what a player now sees. Same token as the room code, the invite button and the winner line · the
+// palette gains no new entry.
+//
+// Measured before choosing, because "gold" alone does not say which gold (CIE76 dE from each seat,
+// and WCAG contrast for the white initials sitting on top):
+//                    vs blue  vs red  vs green   worst   white text
+//   #7F77DD purple      25      90       96        25      3.76:1     ← what it was
+//   #C89440 gold       101      51       67        51      2.70:1     ← chosen
+//   #B8871F deeper     108      55       70        55      3.22:1
+// The purple it replaces was the LEAST separable pair on the board (dE 25 from seat 0's blue, where
+// anything under ~25 starts to read as "same colour, different lighting"). Gold doubles the worst-case
+// separation, so four players are now easier to tell apart than three were.
+// KNOWN COST, not an oversight: white 12px initials on this gold measure 2.70:1, the weakest of the
+// four (the others are 3.39 to 3.93 and none of them reach the 4.5 that 12px bold wants). The name is
+// spelled out in full immediately to the right, so the initials are redundant rather than load-bearing.
+// #B8871F buys 3.22:1 if the initials should stand on their own · one line, but it adds a hex the
+// palette does not otherwise use.
+// All three copies of this list now agree, which they have not done before: useGameRoom.SEAT_COLORS
+// writes 'gold' (T3 S28), gameStore.js:188 says 'gold' (T2 S29), and seat 3 is painted gold here. The
+// three still exist as three separate literals though, so agreement is a coincidence maintained by
+// hand · Rule 45 stands, and one of them should eventually import from another.
+const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#C89440'] // blue · red · green · gold (by seat)
 
 // The four elements a civilization is built from · decorative row on the entry screens · reuses the
 // bespoke board ElementIcon so the lobby and the board speak one visual language (T1 S14).
