@@ -26,6 +26,7 @@ const db = {
   errors: {},            // table → error object to return instead of data
   inserts: [],           // every write attempt · { table, payload }
   conflictOnce: false,   // one-shot 23505 on the next room_players insert (seat race)
+  constraintOnce: false, // one-shot 23514 on the next room_players insert (schema drift · CHECK violation)
   denyJoin: false,       // room_players_join RLS refuses the insert (migration 015 · 42501)
 }
 
@@ -34,6 +35,47 @@ function rowsFor(table) {
   if (table === 'room_players') return db.players
   if (table === 'game_sessions') return db.sessions
   return []
+}
+
+// ── THE LIVE SCHEMA'S OWN RULES · transcribed verbatim from pg_constraint (T3 S28) ────────────────────────
+// WHY THIS EXISTS. Until now the stand-in accepted any row whose SEAT was free. That is why the 4th player
+// bug survived three separate discoveries: a test could seat four players and pass while the real database
+// rejected the fourth outright. A fake backend that is more permissive than the real one does not merely
+// fail to catch a bug · it actively certifies it. So the constraints the server actually enforces are
+// modelled here, and the error CODES are the real Postgres ones because the client branches on them.
+//
+// Read live from pg_constraint on wynccumuisjxbptjlfwq this session:
+//   room_players_player_color_check       CHECK (player_color = ANY (ARRAY['blue','gold','green','red']))
+//   room_players_seat_number_check        CHECK (seat_number >= 0 AND seat_number <= 3)
+//   room_players_room_id_player_color_key UNIQUE (room_id, player_color)
+//   room_players_room_id_seat_number_key  UNIQUE (room_id, seat_number)
+//   room_players_room_id_user_id_key      UNIQUE (room_id, user_id)
+//
+// ⚠ THIS IS A SECOND COPY OF A CONTRACT (Rule 45) and it can rot: nothing here notices if a migration
+// widens that CHECK. It is a copy that FAILS SAFE · a widened server set makes these tests stricter than
+// production, which shows up as a red test rather than as a silently broken player. The binding proof that
+// the copy still matches reality is tests/e2e/seat-colors-live.e2e.js, which asks the real database.
+const ALLOWED_PLAYER_COLORS = ['blue', 'gold', 'green', 'red']
+
+const checkViolation = (constraint) => ({
+  data: null,
+  error: { code: '23514', message: `new row for relation "room_players" violates check constraint "${constraint}"` },
+})
+const uniqueViolation = (constraint) => ({
+  data: null,
+  error: { code: '23505', message: `duplicate key value violates unique constraint "${constraint}"` },
+})
+
+// CHECKs are row-level and fire before index insertion, so they are evaluated first here too · the code the
+// client sees for a bad colour must be 23514, not 23505.
+function enforceRoomPlayers(payload) {
+  if (!ALLOWED_PLAYER_COLORS.includes(payload.player_color)) return checkViolation('room_players_player_color_check')
+  if (!(payload.seat_number >= 0 && payload.seat_number <= 3)) return checkViolation('room_players_seat_number_check')
+  const peers = db.players.filter(p => p.room_id === payload.room_id)
+  if (peers.some(p => p.seat_number === payload.seat_number)) return uniqueViolation('room_players_room_id_seat_number_key')
+  if (peers.some(p => p.player_color === payload.player_color)) return uniqueViolation('room_players_room_id_player_color_key')
+  if (peers.some(p => p.user_id === payload.user_id)) return uniqueViolation('room_players_room_id_user_id_key')
+  return null
 }
 
 function resolve(table, filters, op, payload, singular) {
@@ -50,8 +92,12 @@ function resolve(table, filters, op, payload, singular) {
         db.conflictOnce = false
         return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } }
       }
-      const taken = db.players.some(p => p.room_id === payload.room_id && p.seat_number === payload.seat_number)
-      if (taken) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } }
+      if (db.constraintOnce) {
+        db.constraintOnce = false
+        return checkViolation('room_players_player_color_check')
+      }
+      const violation = enforceRoomPlayers(payload)
+      if (violation) return violation
       db.players.push({ ...payload })
     }
     return { data: null, error: null }
@@ -96,7 +142,7 @@ vi.mock('./usePresence', () => ({
   }),
 }))
 
-import { useGameRoom, JOIN_FAILURE } from './useGameRoom'
+import { useGameRoom, JOIN_FAILURE, SEAT_COLORS } from './useGameRoom'
 import { reportBackendDown, __resetBackendHealth } from './useConnectionHealth'
 
 const USER = { id: 'u-me' }
@@ -121,7 +167,7 @@ async function callPeek(hook, code) {
 
 beforeEach(() => {
   db.rooms = []; db.players = []; db.sessions = []
-  db.errors = {}; db.inserts = []; db.conflictOnce = false; db.denyJoin = false
+  db.errors = {}; db.inserts = []; db.conflictOnce = false; db.constraintOnce = false; db.denyJoin = false
   fromSpy.mockClear()
   __resetBackendHealth()
 })
@@ -506,5 +552,117 @@ describe('back-compat · Lobby.jsx must keep working unchanged', () => {
     expect(hook.result.current.lobbyError).toBeNull()
     // And critically, the room was joined exactly once.
     expect(db.inserts.filter(i => i.table === 'room_players')).toHaveLength(1)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// THE 4th PLAYER · the seat that had no test, and therefore no floor (T3 S28)
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Seat 3 sent player_color='purple'; the live CHECK allows only (blue, gold, green, red). Every 4-player
+// game in the product's history failed at the fourth join, and the live table proves it: seat 3 has zero
+// rows, ever. The product's own copy says "two to four players".
+//
+// WHAT ACTUALLY LET IT SURVIVE is worth more than the one-word fix. It was found THREE times · T2 wrote it
+// into migration 014's notes in S26 ("LAUNCH BLOCKER, CONFIRMED LIVE, ONE WORD"), T1 hit it live in S27, the
+// forge raised it again in S28 · and was fixed zero times, because the array and the constraint sit in
+// different lanes and neither owner could close both halves. Three correct diagnoses and no fix is not an
+// attention problem, it is a missing test: nothing in the repo ever asserted that a 4th player can sit down.
+//
+// So these tests deliberately bind the two halves that were never bound. They run against a stand-in that
+// now enforces the REAL constraints (see enforceRoomPlayers above) · without that, every test below would
+// pass just as happily with 'purple' and would certify the bug instead of catching it.
+describe('the 4th player · seat 3 must be reachable', () => {
+  test('SEAT_COLORS is a valid seating for the live schema · every seat, not just the exercised ones', () => {
+    // The total guard. The behavioural tests below cover the seats a scenario happens to reach; this one
+    // covers the array itself, so a future edit to ANY index is caught even with no scenario for that seat.
+    expect(SEAT_COLORS).toHaveLength(4)                      // room_players_seat_number_check · 0..3
+    for (const [seat, colour] of SEAT_COLORS.entries()) {
+      expect(ALLOWED_PLAYER_COLORS, `seat ${seat} sends "${colour}", which the server's CHECK rejects`)
+        .toContain(colour)
+    }
+    // UNIQUE(room_id, player_color) · two seats sharing a colour would make one of them unfillable.
+    expect(new Set(SEAT_COLORS).size).toBe(SEAT_COLORS.length)
+  })
+
+  test('a 4th player joins a room that already holds three', async () => {
+    // The exact reproduction. Pre-fix this returned ok:false with a raw Postgres string.
+    seedWaitingRoom({
+      players: [
+        { user_id: 'u-host', username: 'Host', seat_number: 0, player_color: 'blue' },
+        { user_id: 'u-2', username: 'Two', seat_number: 1, player_color: 'red' },
+        { user_id: 'u-3', username: 'Three', seat_number: 2, player_color: 'green' },
+      ],
+    })
+
+    const hook = renderHook(() => useGameRoom(USER, 'Fourth'))
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, seat: 3, isHost: false, rejoined: false })
+    expect(hook.result.current.seat).toBe(3)
+    expect(hook.result.current.roomPhase).toBe('lobby')
+    expect(hook.result.current.lobbyError).toBeNull()
+
+    // The row really landed · a green assertion on the return shape alone would not prove the write survived.
+    expect(db.players).toHaveLength(4)
+    expect(db.players.find(p => p.seat_number === 3)).toMatchObject({ user_id: USER.id, player_color: 'gold' })
+  })
+
+  test('all four seats fill from empty · every colour the client sends is one the server accepts', async () => {
+    seedWaitingRoom({ players: [] })
+
+    const seats = []
+    for (const [i, name] of ['One', 'Two', 'Three', 'Four'].entries()) {
+      const hook = renderHook(() => useGameRoom({ id: `u-${i}` }, name))
+      seats.push(await callJoin(hook, 'ABC234'))
+    }
+
+    expect(seats.map(r => r.ok)).toEqual([true, true, true, true])
+    expect(seats.map(r => r.seat)).toEqual([0, 1, 2, 3])
+
+    // What was WRITTEN, in order · the value that the CHECK constraint judges.
+    const written = db.inserts.filter(i => i.table === 'room_players').map(i => i.payload.player_color)
+    expect(written).toEqual(['blue', 'red', 'green', 'gold'])
+    for (const colour of written) expect(ALLOWED_PLAYER_COLORS).toContain(colour)
+    expect(new Set(written).size).toBe(4) // UNIQUE(room_id, player_color) held for a genuinely full room
+  })
+
+  test('the FIFTH joiner is refused as ROOM_FULL · a full room is a product state, not an error', async () => {
+    // The counterweight. A fix that let seat 3 through by loosening the seat search could also let a 5th
+    // player in; this pins the boundary in the same breath as opening seat 3.
+    seedWaitingRoom({
+      players: [
+        { user_id: 'u-host', username: 'Host', seat_number: 0, player_color: 'blue' },
+        { user_id: 'u-2', username: 'Two', seat_number: 1, player_color: 'red' },
+        { user_id: 'u-3', username: 'Three', seat_number: 2, player_color: 'green' },
+        { user_id: 'u-4', username: 'Four', seat_number: 3, player_color: 'gold' },
+      ],
+    })
+
+    const hook = renderHook(() => useGameRoom(USER, 'Fifth'))
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: false, reason: JOIN_FAILURE.ROOM_FULL })
+    expect(db.players).toHaveLength(4)                                     // nothing was written
+    expect(db.inserts.filter(i => i.table === 'room_players')).toHaveLength(0)
+  })
+
+  test('a CHECK violation reads as SEAT_CONFLICT · never NETWORK, and never raw Postgres text', async () => {
+    // The failure MODE, held independently of whether today's array happens to trigger it. Before this, a
+    // 23514 fell through to NETWORK and the caller passed error.message straight to the screen, so a player
+    // was told "Could not reach the room" and shown a constraint name. A schema that drifts again must
+    // therefore say something true, or the next instance of this class is just as invisible as the last.
+    seedWaitingRoom({ players: [{ user_id: 'u-host', username: 'Host', seat_number: 0, player_color: 'blue' }] })
+    db.constraintOnce = true
+
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res.ok).toBe(false)
+    expect(res.reason).toBe(JOIN_FAILURE.SEAT_CONFLICT)
+    expect(res.reason).not.toBe(JOIN_FAILURE.NETWORK)
+    // The player sees the contract's own words, not the database's.
+    expect(res.message).toBe('Could not claim a seat')
+    expect(res.message).not.toMatch(/violates|constraint|relation|check/i)
   })
 })

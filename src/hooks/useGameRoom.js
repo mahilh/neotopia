@@ -19,7 +19,33 @@ import { getBackendHealth } from './useConnectionHealth'
 
 // Seat → colour. room_players has UNIQUE(room_id, player_color) AND UNIQUE(room_id, seat_number),
 // so deriving colour from the (unique) seat keeps colour unique too · no extra coordination.
-const SEAT_COLORS = ['blue', 'red', 'green', 'purple']
+//
+// ── SEAT 3 WAS 'purple' AND IT BROKE EVERY 4-PLAYER GAME (fixed T3 S28) ───────────────────────────────────
+// The server does not accept 'purple'. Read from pg_constraint on the live database this session, verbatim:
+//   room_players_player_color_check · CHECK (player_color = ANY (ARRAY['blue','gold','green','red']))
+//   room_players_seat_number_check  · CHECK (seat_number >= 0 AND seat_number <= 3)
+//   room_players_room_id_player_color_key · UNIQUE (room_id, player_color)
+// Seats 0/1/2 send blue/red/green and pass. Seat 3 sent 'purple' and ALWAYS failed with 23514, so the 4th
+// player could never join any room · on a product whose own copy says "two to four players".
+//
+// The live table agrees, and this is the part no amount of code reading would have shown: across the entire
+// production history of room_players the seat/colour distribution is seat 0 blue (32 rows), seat 1 red (24),
+// seat 2 green (2), and seat 3 NOTHING. Zero rows, ever. Not one 4-player game has begun.
+//
+// 'gold' is not a preference, it is FORCED: the allowed set has exactly four members, UNIQUE(room_id,
+// player_color) means a room cannot reuse one, and seats 0-2 hold blue/red/green. 'gold' is the only value
+// left. Every other permutation of the same four names would also work but would change what seats 0-2
+// store, which rooms already occupied by older clients would then collide with · so the minimal edit is the
+// safe one. Widening the CHECK to admit 'purple' was the alternative and was rejected: migrating a live
+// constraint on a table with 355 rooms is strictly more risk than changing one array element.
+//
+// ⚠ WHAT THIS DOES NOT FIX · the STORED name now disagrees with the PAINTED colour for seat 3. Nothing reads
+// player_color today (it is written here and read nowhere in src/), and Lobby.jsx paints from its own hex
+// array indexed by SEAT NUMBER, so no pixel changes and no player sees the word. But Lobby's seat-3 swatch is
+// #7F77DD, which is purple, so the database now labels that player 'gold'. That is a trap for whoever first
+// wires player_color into rendering. Reconciling it means editing Lobby.jsx (T1's lane) · written to comms
+// rather than reached across for. Until then the seat number, not this string, is the colour's real source.
+export const SEAT_COLORS = ['blue', 'red', 'green', 'gold']
 
 // ── Join contract (T3 S27 · consumed by the /join/:code screen · contract posted to comms first) ──────────
 //
@@ -163,6 +189,24 @@ async function claimSeat(roomId, userId, username, preferredSeat, maxRetries = 4
     // perfectly and refused them for a specific, explainable reason · the precise misattribution class this
     // session exists to close. One extra read on a rare path buys the accurate reason.
     if (error.code === '42501') return { error, reason: await denialReason(roomId) }
+
+    // CONSTRAINT VIOLATION · 23514 check_violation (T3 S28 · the second half of the seat-3 bug).
+    // This is a CLIENT bug by construction: the row we built is not one the schema permits. The server was
+    // reached and answered precisely, so calling it NETWORK told the player "Could not reach the room" about
+    // a database that was up · and because the caller passes seatErr.message through, what actually reached
+    // the screen was the raw Postgres string ("new row for relation \"room_players\" violates check
+    // constraint \"room_players_player_color_check\""). That blur is why a total 4-player outage read as
+    // flakiness for two sessions instead of as one wrong word.
+    // SEAT_CONFLICT, not a new code: "Could not claim a seat" is true here, and the join contract is already
+    // published and branched on by the /join/:code screen · inventing a tenth code would hand T1 an
+    // unhandled branch to discover in production. The raw signature stays for developers, off the screen.
+    if (error.code === '23514') {
+      console.error('[useGameRoom] seat row rejected by a CHECK constraint · this is a client/schema drift bug, not an outage:', error.message)
+      return {
+        error: { message: FAILURE_MESSAGE[JOIN_FAILURE.SEAT_CONFLICT] },
+        reason: JOIN_FAILURE.SEAT_CONFLICT,
+      }
+    }
 
     if (error.code !== '23505') return { error, reason: JOIN_FAILURE.NETWORK }
 

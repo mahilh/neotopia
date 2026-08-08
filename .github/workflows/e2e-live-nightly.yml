@@ -10,7 +10,12 @@ name: E2E Live (nightly)
 # Also runs: draw-ui-live.e2e.js (T3 S23 · added to this workflow T2 S24) · a real authenticated room's
 # offer-draw routed through the atomic draw_card_for_seat RPC · asserts the RPC POST fired (vs the local
 # fallback) and exactly one offer card moves to a single hand · pairs with the draw-rpc-concurrency proof.
+# Also runs: backend-recovery-live.e2e.js (T3 S27 · added to this workflow T2 S28) · blocks ONLY the realtime
+# websocket on a live backend and asserts the app returns to ONLINE, not merely that it retries · the honest
+# half of the recovery claim that backend-down.e2e.js (merge gate) cannot make.
 # New heavy live-DB flows belong here too (this is the home for "needs Supabase, too flaky to merge-gate").
+# Whatever you add, add it to the ONE playwright invocation below · the skip-guard step reads that run's
+# results.json and fails the job if any live spec skipped itself for want of credentials.
 #
 # REQUIRES repo secrets: VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY (the same pair e2e.yml / bot-health.yml use).
 # Playwright's webServer (playwright.config.js · reuseExistingServer: !CI) starts the dev server itself in CI —
@@ -29,7 +34,10 @@ jobs:
   flow-live:
     name: Live-DB Flow mode E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 was sized for two specs. backend-recovery-live measured 3.0m locally on its own (it waits out a
+    # real websocket death and a real re-subscribe · the waiting IS the test), so three specs no longer
+    # fit comfortably. Raised with headroom for a cold runner rather than discovered by a timeout.
+    timeout-minutes: 25
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -47,8 +55,52 @@ jobs:
       - name: Install Playwright chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run live-DB Flow mode + draw-UI E2E
-        run: npx playwright test tests/e2e/flow-mode-live.e2e.js tests/e2e/draw-ui-live.e2e.js --reporter=list
+      # backend-recovery-live.e2e.js (T3 S27) joins here in T2 S28. T3 wrote it as a requirement it could
+      # not fulfil itself · .github/ is not their lane, so the spec had existed without ever executing.
+      # It needs no fixture room (it subscribes to a deliberately ABSENT room id) and blocks only the
+      # realtime WEBSOCKET, leaving HTTP up, so it costs exactly ONE anonymous sign-in like its siblings.
+      #
+      # ONE run, both reporters. The list output stays human-readable in the log and the JSON file is
+      # what the skip-guard below reads · re-running the spec to collect JSON would spend a second
+      # anonymous sign-in against the very per-IP budget that put these specs on a nightly in the
+      # first place.
+      - name: Run live-DB Flow mode + draw-UI + backend-recovery E2E
+        run: >
+          npx playwright test
+          tests/e2e/flow-mode-live.e2e.js
+          tests/e2e/draw-ui-live.e2e.js
+          tests/e2e/backend-recovery-live.e2e.js
+          --reporter=list,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
+
+      # A SKIPPED live spec is indistinguishable from a passing one in the job's green tick, and every
+      # live spec here is built to skip itself when creds are absent (backend-recovery-live :84 and
+      # :127 · seedHelpers.loadEnv reads process.env first, then a .env.local that does not exist on a
+      # runner). So a missing, renamed or empty repo secret would let this workflow report success
+      # while proving nothing · a spec added to a workflow that never executes is the same silent
+      # no-op class as a sync script that prints "done" without syncing. Gate on what actually ran.
+      # `if: always()` so a genuine spec failure still gets this diagnosis printed alongside it.
+      - name: Assert the live specs actually RAN (a skip is a silent no-op)
+        if: always()
+        run: |
+          node -e '
+            const fs = require("fs");
+            if (!fs.existsSync("results.json")) {
+              console.error("no results.json · playwright did not get far enough to report");
+              process.exit(1);
+            }
+            const { stats = {} } = JSON.parse(fs.readFileSync("results.json", "utf8"));
+            console.log("expected=" + stats.expected + " skipped=" + stats.skipped + " unexpected=" + stats.unexpected);
+            if (stats.skipped > 0) {
+              console.error("FAIL · " + stats.skipped + " live spec(s) SKIPPED. Supabase creds are missing from this runner, so the green tick would have been meaningless. Check the VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY repo secrets.");
+              process.exit(1);
+            }
+            if (!stats.expected) {
+              console.error("FAIL · 0 tests passed. The specs did not execute at all.");
+              process.exit(1);
+            }
+          '
 
       - name: Upload Playwright report on failure
         if: failure()
