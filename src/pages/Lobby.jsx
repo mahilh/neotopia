@@ -38,7 +38,11 @@ import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roo
 // writes 'gold' (T3 S28), gameStore.js:188 says 'gold' (T2 S29), and seat 3 is painted gold here. The
 // three still exist as three separate literals though, so agreement is a coincidence maintained by
 // hand · Rule 45 stands, and one of them should eventually import from another.
-const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#C89440'] // blue · red · green · gold (by seat)
+// Exported so the distinguishability claim above is a GATE rather than a comment. The four-player
+// roster screenshot that would have shown this needs four live anonymous sessions, and the anon
+// sign-in budget is exhausted (T2 S29) · so the check that matters became a test instead of a picture
+// (Rule 31 · when live verification is blocked, convert it to something deterministic).
+export const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#C89440'] // blue · red · green · gold (by seat)
 
 // The four elements a civilization is built from · decorative row on the entry screens · reuses the
 // bespoke board ElementIcon so the lobby and the board speak one visual language (T1 S14).
