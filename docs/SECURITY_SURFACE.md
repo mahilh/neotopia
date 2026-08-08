@@ -166,6 +166,49 @@ rate limiter (migration 013's `check_rate_limit` is already live and proven), or
 `CHECK (pg_column_size(event_data) < N)` plus a global circuit-breaker tier. Do **not** put a plain
 trigger here · it would not bound the fanout.
 
+### Assessment (T2 S28 · measured, NOT implemented · S29 candidate)
+
+Live measurements taken 2026-08-08, so the eventual fix is sized on data rather than a guess:
+
+| | |
+|---|---|
+| Rows / total size | 235 rows · 168 kB |
+| **Largest `event_data` ever written** | **586 bytes** |
+| Existing constraints | `event_type` CHECK (7 values) · `seat_number` CHECK 0–3 · FK to `game_sessions` ON DELETE CASCADE |
+| Size constraint | **none** · this is the whole finding |
+| Realtime | confirmed in the `supabase_realtime` publication |
+| Writer | `useGameSync.js:335` · a direct client `.insert()` · no RPC in front of it |
+
+**The threat model changed when finding 4 closed, and the entry above is now partly stale.** It
+says "the only gate is membership, which section 4 shows is self-granted". Since migration 016 an
+attacker can no longer insert themselves into a *stranger's* live session, so the sharpest edge —
+one attacker amplifying into honest players' bandwidth in a game they gate-crashed — is gone. What
+remains is real but narrower, and worth stating precisely rather than inheriting the old severity:
+
+- **Still open · storage exhaustion.** An attacker creates their own room and session (both
+  legitimate, both free), then inserts unbounded `event_data` into it. Nothing bounds row size or
+  row count. This consumes the project's disk, which is shared with every real player.
+- **Still open · realtime quota burn.** Fanout now reaches only their own session's subscribers,
+  but the messages still count against the account-level realtime budget.
+- **Now closed by 016 · cross-room fanout amplification.** No longer reachable.
+
+**Recommended shape, cheapest-first.** These compose; 1 is worth doing even if 2 never happens.
+
+1. **`CHECK (pg_column_size(event_data) <= 4096)`.** One migration, no code change, no new
+   surface. 4 kB is ~7× the largest row the game has ever produced, so it cannot break real play,
+   and it converts "unbounded" into "bounded" in a single line. This is the high-value/low-risk half.
+2. **Route the append through a `SECURITY DEFINER` RPC that calls `check_rate_limit`** (migration
+   013 · already live and proven) and then `revoke insert on game_events from authenticated`, so
+   the direct path is closed rather than merely guarded. This is the half that bounds *rate*, which
+   a CHECK cannot. It touches `useGameSync.js:335` · **T3's file**, so it is a cross-lane task and
+   must be sequenced with them, not dropped on them.
+
+**Do not** bound this with a plain `BEFORE INSERT` trigger. It fires per row, so it cannot see rate,
+and a rejected row still costs the round trip · it would read as a fix without being one.
+
+**Not implemented this session** · T2 S28 was scoped to findings 1 and the CI wiring, and step 2
+crosses into T3's lane. Sequenced for S29.
+
 ---
 
 ## 4 · ✅ CLOSED (T2 S27 · migration 015) · A stranger can join a live game
