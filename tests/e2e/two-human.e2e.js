@@ -146,14 +146,19 @@ async function createSeededGame() {
   if (aerr) throw new Error('anon sign-in: ' + aerr.message)
   const userId = auth.user.id
   const code = roomCode()
+  // SEAT FIRST, THEN PROMOTE (T3 S29). migration 016's room_players_join requires status='waiting' AND
+  // spare capacity, so seating into an already-'playing' room is an RLS violation. Matches the real
+  // create → lobby → start path (Rule 36).
   const { data: room, error: rerr } = await admin
-    .from('game_rooms').insert({ room_code: code, host_id: userId, status: 'playing', max_players: 4, player_count: 1 })
+    .from('game_rooms').insert({ room_code: code, host_id: userId, status: 'waiting', max_players: 4, player_count: 1 })
     .select().single()
   if (rerr) throw new Error('game_rooms insert: ' + rerr.message)
   const { error: perr } = await admin.from('room_players').insert({
     room_id: room.id, user_id: userId, username: 'E2E_BOT', player_color: 'blue', seat_number: 0, is_ready: true,
   })
   if (perr) throw new Error('room_players insert: ' + perr.message)
+  const { error: uerr } = await admin.from('game_rooms').update({ status: 'playing' }).eq('id', room.id)
+  if (uerr) throw new Error('game_rooms promote to playing: ' + uerr.message)
   const seeded = { ...SEED, turnNumber: 1 }
   const { error: serr } = await admin.from('game_sessions').insert({
     room_id: room.id, state: seeded, current_seat: 0, turn_number: 1, actions_remaining: 3,
