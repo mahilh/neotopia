@@ -24,11 +24,18 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
     Flow E2E: in CI (gray-box via window.__neotopia_store)
     presence: mode-aware (in_lobby / in_game / in_flow_game)
 
+  ✅ GAMES_WON: award_game_win has a caller (T2 S35 · 4781b13 · FinalScore, every seat, retries 'no_game_end').
+     Was applied S33 and invoked by nothing for 2 sessions · game_wins had 0 rows against 3 finished games.
   🟡 CARD ART: 20/56 · shimmer is graceful fallback for the other 36 · real PNGs are the civilization's face
      (was recorded as 0/56 for ~15 sessions while 20 PNGs sat in public/art/cards/ · corrected T2 S34)
   ✅ CARD NAMES: bucket B APPLIED · 20 renamed (T2 S34 · T1's audit 28c077a, Mahil approved) · zero
      esoteric proper nouns left in the deck · Node/Gateway gone from every name · 56 stays 56 ·
      bucket A 24 and bucket C 12 untouched by design
+  ✅ CLUSTER OWNERSHIP: SHIPPED (T2 S35 · d1017c1) · placeElement stamps placedBy:seat · getClusterDetail(regions,
+     seat)/getClusterTotal(regions, seat) score the rulebook's "of their color" clause · game_end payload v2 with
+     final_scores[].cluster_bonus · MEASURED on the SAME 60 games under both rules: greedy-beats-random 46.7% (old
+     shared) -> 64.3% (per-player), control 50.0%. The cluster term was board-global and identical for everybody
+     from S18 to S35, so it could not change a ranking · that is why placement measured as noise all along.
   ✅ CLUSTER POINTS: SHIPPED · engine 2348daa (T2 S18 · getClusterDetail.bonus/getClusterTotal/calculateFinalScore
      3rd arg · 1pt per element in biggest cluster per region) · display 442b694 (T1 S19 · per-cluster +N pts +
      "+N total" line · folded into every player total + threaded regions→buildGameEndEvent so audit===screen)
@@ -98,7 +105,8 @@ ENGINE ARCHITECTURE:
   Scoring: tryScoreCard(seat,cardId,regionId,lastPlacedKey)→boolean
   Final score: calculateFinalScore(scores[], unusedCount)→number
   Cluster: getClusterDetail(regions)→[{element,count}] · element keys LOWERCASE
-  MISSING: cluster→points rule (T2 S18 Task A)
+  Cluster ownership: hexes carry placedBy · PASS THE SEAT to getClusterTotal/getClusterDetail (T2 S35).
+            No seat = the pre-S35 board-global reading, kept for the viz and for unowned pre-S35 boards.
   Flow mode config: getModeConfig(mode) · GAME_MODES.classic + GAME_MODES.flow
 
 DB CONTRACT (migrations 001-010):
@@ -109,12 +117,12 @@ DB CONTRACT (migrations 001-010):
 GAME MECHANICS:
   4-STEP PLACEMENT: factory→element-btn→region-btn→valid-hex (ALL force:true)
   FINAL SCORE: best+second+(worst×3)+(unused×3)+cluster
-  CLUSTER: 1pt per element in biggest cluster per region (BOARD GAME RULE · NOT YET CODED)
+  CLUSTER: 1pt per element token OF YOUR COLOR in the biggest cluster per region (rule p9 · CODED T2 S35)
   MODES: Classic (90s/12tiles) · Flow (15s/9tiles) · GAME_MODES single-source
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (72 · cumulative):
+PERMANENT ANTI-REGRESS RULES (74 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -241,3 +249,24 @@ A freshness/drift gate cannot compare a committed artifact to its own live ident
 Its recorded HEAD is at best its commit's parent. Gate on ancestry + bounded distance, never equality.
 Running a verifier once proves it executes, not that its verdict is sound · adversarial review found
 3 real logic flaws in the first --validate-manifest that a single passing run did not surface.
+
+RULE 73 (T2 S35 · August 9 2026):
+A scoring term that is IDENTICAL for every player cannot decide anything, however large it is.
+The cluster bonus sat at 40 points in a real finished game and moved nobody, because it was added to
+both totals equally · and every measurement of "placement skill is noise" for three sessions was
+actually measuring that. Before concluding a mechanic does not matter, check whether it is even
+capable of mattering: find the term, and ask whether it can DIFFER between players. A per-player
+term with a small effect is a balance question; a shared term is an arithmetic no-op wearing the
+costume of a balance question. Corollary for the data model: a rule quoted as "each player gains X
+for their Y" cannot be implemented at all if the record of Y carries no owner · the divergence will
+be documented as a compromise (S18 did document it, honestly) and then read for three sessions as
+though it were the rule.
+
+RULE 74 (T2 S35 · August 9 2026):
+When comparing an OLD rule to a NEW one, score the SAME games under both rather than running the
+experiment twice. Two runs invite exactly the confound that broke T3's S34 load experiment: the tree
+moved between treatment and control. Recomputing the old rule from the finished state of the new
+run's games costs nothing, removes the confound entirely, and makes the control auditable · here it
+turned "greedy 64.3%" into "46.7% vs 64.3% on identical play, control 50.0%", which is a claim and
+not a number. Sharpens T3's S31 stamping rule: a control must share the treatment's commit AND,
+where possible, its actual data.
