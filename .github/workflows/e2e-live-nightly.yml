@@ -37,7 +37,9 @@ jobs:
     # 15 was sized for two specs. backend-recovery-live measured 3.0m locally on its own (it waits out a
     # real websocket death and a real re-subscribe · the waiting IS the test), so three specs no longer
     # fit comfortably. Raised with headroom for a cold runner rather than discovered by a timeout.
-    timeout-minutes: 25
+    # 25 -> 40 in T2 S30 for four-player-live: it sets its own 240s per-test budget (spec :67) and
+    # spaces its four sign-ins 6s apart on purpose.
+    timeout-minutes: 40
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -64,12 +66,21 @@ jobs:
       # what the skip-guard below reads · re-running the spec to collect JSON would spend a second
       # anonymous sign-in against the very per-IP budget that put these specs on a nightly in the
       # first place.
-      - name: Run live-DB Flow mode + draw-UI + backend-recovery E2E
+      # four-player-live.e2e.js (T3 S29) joins here in T2 S30, on T3's explicit reinstated ask and NOT
+      # before: they withdrew it while it had never executed, then it went green against production
+      # (room MAPUBQ · 24 turns · 54 placements · every seat played), and only then asked for it. Wiring
+      # an unproven live spec into a nightly manufactures exactly the green tick the skip-guard below
+      # exists to prevent. It is the most sign-in-expensive spec in the repo · FOUR anonymous sessions
+      # plus one on teardown, against a budget of 30/hour per IP (measured live · docs/ANON_SIGNIN_BUDGET.md).
+      # That is affordable once a night on a dedicated runner IP and is affordable nowhere else, which is
+      # the whole reason this workflow exists. The concurrency group above keeps two runs from sharing it.
+      - name: Run live-DB Flow mode + draw-UI + backend-recovery + 4-player E2E
         run: >
           npx playwright test
           tests/e2e/flow-mode-live.e2e.js
           tests/e2e/draw-ui-live.e2e.js
           tests/e2e/backend-recovery-live.e2e.js
+          tests/e2e/four-player-live.e2e.js
           --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
