@@ -124,6 +124,44 @@ export async function getMyProfileStats() {
   }
 }
 
+// Award the win for a finished session (migration 020 · T2 S33). The whole-session comparison the
+// per-caller record_civilization_score could not make: award_game_win reads the `game_end` audit row,
+// the one place that already sees every seat, recomputes the winner from final_scores[].total and
+// increments the winner's games_won exactly once.
+//
+// IT DELIBERATELY IGNORES event_data.winner_seat, which the payload already carries. That field is a
+// stable-sort tiebreak ("lowest seat among the top scorers"), not a victory · all 3 game_end rows in
+// production are 0-0 ties reporting winner_seat 0, so trusting it would have awarded seat 0 a win in
+// every game ever finished here. A TIE AWARDS NOBODY.
+//
+// Nothing is taken from the request but the session id · the outcome comes from the stored row, so no
+// client can nominate itself, and a non-participant is rejected outright.
+//
+// >>> T1 · CALL SITE, and the ordering is load-bearing <<<
+//   WHERE  FinalScore.jsx, the same effect that already fires buildGameEndEvent.
+//   WHEN   AFTER sync.pushState(...) has resolved · this reads the row that push writes. A call that
+//          lands first returns 'no_game_end' and writes nothing.
+//   WHO    EVERY seat, not just the lowest. It is idempotent (game_wins.session_id is the primary key
+//          and the increment is conditioned on the insert actually happening), and the extra callers
+//          are the recovery path for when the lowest seat closes the tab before the write.
+//   SOLO   skip · a solo game has no session, exactly as with recordCivilizationContribution.
+//
+// Returns the RPC's own status string rather than void, and the caller should log it. A silent void
+// here would repeat the bug this function exists to end: games_played sat at 0 for six weeks and the
+// health monitor was red for 17 runs, both because a write path's failure looked exactly like its
+// success. 'awarded' | 'awarded_no_profile' | 'tie' | 'already_awarded' | 'no_game_end' |
+// 'no_winner_id' | null when the call itself failed.
+export async function awardGameWin(sessionId) {
+  if (!sessionId) return null
+  try {
+    const { data, error } = await supabase.rpc('award_game_win', { p_session_id: sessionId })
+    if (error) return null
+    return typeof data === 'string' ? data : null
+  } catch {
+    return null
+  }
+}
+
 // Grand total of the Global NeoTopia Index LEDGER (sum of every recorded game's total_score) · for the
 // FinalScore civilization display ("Civilization Index: N"). The ledger is public-readable (migration 009).
 // Best-effort · returns 0 on any failure. NOTE: sums client-side over the public rows · fine while the ledger
