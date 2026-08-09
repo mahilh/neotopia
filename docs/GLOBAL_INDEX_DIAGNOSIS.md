@@ -159,3 +159,56 @@ columns in this family (`games_played`, `games_won`, `elo_rating`) still have **
   no roster left to count. Counting forward from an honest zero beats a reconstruction nobody can check.
 - ⚠️ It counts **multiplayer games finished**, not games started, because `FinalScore` only calls it
   when a live `sessionId` exists. Solo games have no session and are correctly not counted.
+
+---
+
+# Addendum 2 · T2 S32 · the read path, and how `games_won` can be named honestly
+
+## The reader exists now · `getMyProfileStats()` (`src/lib/supabase.js`)
+
+Returns `{ gamesPlayed, gamesWon, elo } | null` for the caller's own profile (RLS is own-row, so it
+cannot see anyone else's). **Null means "unknown", not zero** · a consumer must render nothing rather
+than a zero, because an absent stat that looks like a real zero is precisely the failure this whole
+family of bugs is made of. T1 has the exact render requirement in the comment above the function.
+
+That closes the loop 019 opened: the value now has somebody watching it, which is the only mechanism
+that has ever caught one of these.
+
+## `games_won` · why it is still 0, and the design that can change that honestly
+
+`record_civilization_score` is **per caller**. It sees one player's scores and cannot see the other
+seats, so it cannot name a winner. That reasoning stands and nothing below weakens it: the fix is not
+to make that RPC guess, it is to do the comparison somewhere that can legitimately see the whole table.
+
+**The one place that already sees every seat is the `game_end` audit row.** `FinalScore` writes exactly
+one per game (lowest seat present, localStorage-guarded, `buildGameEndEvent` carries every player's
+final total including the cluster bonus, so the audit already equals the screen). So:
+
+```
+migration 020 · award_game_win(p_session_id uuid)     SECURITY DEFINER, owned by postgres
+  1. read the ONE game_end row for p_session_id from game_events
+  2. winner = max(total) over its players array
+     · a tie awards NOBODY the win (a shared first place is not a win, and picking one by seat
+       order would be inventing a result · the same objection as inventing one from a single row)
+  3. resolve that seat to a user_id via the audit payload
+  4. update player_profiles set games_won = games_won + 1 where user_id = <winner>
+  5. idempotent on the same key the ledger already uses · a UNIQUE row per session, so a re-fire
+     awards nothing. Do NOT key it on "have I already incremented" · key it on a row that exists.
+```
+
+Three properties that make it honest, and each is a constraint, not a nicety:
+
+- **It is not callable usefully by a liar.** The caller passes only a session id; the winner comes
+  from the stored audit row, not from the request. A client cannot nominate itself.
+- **It must not trust the caller's seat.** Any player in the session may fire it; the result is the
+  same regardless of who does, which is what makes a re-fire from a second client safe.
+- **It counts multiplayer finishes only**, exactly like `games_played`, because it reads a row that
+  only exists when there is a session. Practice games have none and must never count.
+
+**Backfill: none, again.** The 5 ledger rows are all score 0 and the purged sessions have no audit
+rows left. Counting forward from an honest zero beats a reconstruction nobody can verify.
+
+**Sequencing:** this is one migration and no client change, the same shape as 019, but it depends on
+the `game_end` payload's exact structure, which is T1's `buildGameEndEvent`. Read that file at the
+moment of writing the migration rather than trusting this paragraph (Rule 64) · the audit format has
+changed twice already this project.

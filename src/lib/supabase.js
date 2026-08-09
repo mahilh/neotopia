@@ -86,6 +86,44 @@ export async function recordCivilizationDetail({ sessionId, scores = [0, 0, 0], 
   return { error: error?.message ?? null }
 }
 
+// ── The read path for the three stat columns (T2 S32 · closing the trap named in S31) ─────────
+// games_played, games_won and elo_rating have a writer (migration 019) and NO READER. That is the
+// exact six-week mechanism this project keeps rediscovering: a value nobody reads is a value nobody
+// notices breaking, and every one of these has a resting value indistinguishable from correct.
+// A reader is not decoration · it is the only thing that would ever raise the alarm.
+//
+// RLS is own-row (profiles_own · user_id = auth.uid()), so this returns the CALLER's own stats and
+// cannot see anyone else's. Never throws · returns null when unauthenticated or unreachable, so a
+// consumer renders nothing rather than a broken zero (an absent stat and a zero stat must not look
+// the same · that confusion is the whole bug).
+//
+// >>> T1 · THE RENDER REQUIREMENT, precisely <<<
+//   WHERE   the lobby name/profile area, and FinalScore's own-player block.
+//   SHAPE   { gamesPlayed: number, gamesWon: number, elo: number } | null
+//   COPY    "Games played N" · show gamesWon ONLY once it can be non-zero (see below) · elo is
+//           seeded 1000 for everyone and is NOT yet meaningful, so do not display it as a rank.
+//   NULL    render NOTHING, not "0". The distinction is the point.
+//   NOTE    a practice game must never move these · practice has no session, so it cannot.
+export async function getMyProfileStats() {
+  try {
+    const { data: { user } = {} } = await supabase.auth.getUser()
+    if (!user) return null
+    const { data, error } = await supabase
+      .from('player_profiles')
+      .select('games_played, games_won, elo_rating')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (error || !data) return null
+    return {
+      gamesPlayed: Number(data.games_played) || 0,
+      gamesWon: Number(data.games_won) || 0,
+      elo: Number(data.elo_rating) || 0,
+    }
+  } catch {
+    return null
+  }
+}
+
 // Grand total of the Global NeoTopia Index LEDGER (sum of every recorded game's total_score) · for the
 // FinalScore civilization display ("Civilization Index: N"). The ledger is public-readable (migration 009).
 // Best-effort · returns 0 on any failure. NOTE: sums client-side over the public rows · fine while the ledger
