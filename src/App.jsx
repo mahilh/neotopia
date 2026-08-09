@@ -81,17 +81,23 @@ function LobbyRoute() {
 // query string so the entry point stays a plain link and a player can bookmark or re-run it, which is
 // the "replayable indefinitely" half of the intent.
 //
-// WHAT IS NOT DONE HERE, stated rather than implied: GameRoom calls useAuth() unconditionally, and
-// useAuth mints an anonymous identity when none is stored · so for a visitor with no session this
-// route still costs one sign-in today. Mahil's constraint is that practice costs ZERO, and that half
-// sits with T3 (requested in comms, with the one-hook shape it needs). Zero opponents is a complete,
-// working experience right now; bot seats are T2's and PracticeStart refuses to offer them until they
-// exist rather than handing a player an empty board.
+// CLOSED IN S33, and it is worth recording which half moved. In S32 this comment said the route still
+// cost one anonymous sign-in, because GameRoom called useAuth() unconditionally and useAuth mints an
+// identity when none is stored. That was true and it was mine to fix: GameRoom now splits into an
+// authed shell and a local one, and the practice route mounts the shell with no useAuth in its tree.
+// Zero sign-ins is now a property of the component graph rather than a promise in a comment.
+//
+// `practice` is a prop and not an inference from `bots`, because zero opponents is a legitimate
+// practice game AND the shape /game has always had · only the route knows the difference, and the
+// difference decides whether the game is written to the civilization's permanent record.
 function PracticeRoute() {
+  const navigate = useNavigate()
   const [params] = useSearchParams()
   const raw = Number.parseInt(params.get('bots') ?? '0', 10)
   const bots = Number.isFinite(raw) ? Math.min(3, Math.max(0, raw)) : 0
-  return <GameRoom practiceBots={bots} />
+  // Home rather than back · Back would re-enter whatever screen sent them here, and the board they
+  // just tore down is the one thing behind them.
+  return <GameRoom practice practiceBots={bots} onExitPractice={() => navigate('/')} />
 }
 
 function JoinRoute() {

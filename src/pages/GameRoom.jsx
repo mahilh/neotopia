@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
 import { ELEMENT_COLORS } from '../utils/hexUtils'
 import { useAuth } from '../hooks/useAuth'
 import { useGameSync } from '../hooks/useGameSync'
+import { useLocalSession, clearSaved, PRACTICE_HUMAN_ID, PRACTICE_STORAGE_KEY } from '../hooks/useLocalSession'
+import { useBotTurns } from '../hooks/useBotTurns'
 import { useGameActions } from '../hooks/useGameActions'
 import { useDrawCard } from '../hooks/useDrawCard'
 import { usePatternHighlight } from '../hooks/usePatternHighlight'
@@ -33,21 +35,116 @@ function cardPrimaryElement(card) {
   return best
 }
 
-// practiceBots · how many bot opponents the player asked for on the practice entry (T1 S32). Carried
-// here so the seam exists and is observable BEFORE the bots do (data-practice-bots below), rather than
-// being retrofitted through this file later. Seating a bot is T2's · until that interface lands the
-// local game seeds the one human it always has, which is exactly the zero-opponent case the practice
-// selector is currently allowed to offer.
-export default function GameRoom({ practiceBots = 0 }) {
+// ── WHO PAYS FOR AN IDENTITY · the two shells below are the whole zero-sign-in guarantee ───────────
+// Mahil's constraint on practice mode is that it costs ZERO anonymous sign-ins, and until now this file
+// broke it on its own: useAuth() was called unconditionally at the top of the board, and useAuth mints
+// an anonymous user the moment INITIAL_SESSION reports none stored. So /practice · the one path in the
+// product built for somebody who arrived alone, on a rate limit that is per-IP and shared by every
+// terminal and every CI runner · was spending exactly the resource it exists to survive. I stated that
+// plainly as unfinished in S32 rather than claiming the constraint held; this is the half that closes it.
+//
+// Rules of hooks say a hook cannot be called conditionally. It does not say a COMPONENT cannot be. Two
+// shells around one board is the honest shape: which one React mounts is decided by the route, once, and
+// the practice shell simply has no useAuth in its tree to call. Not a flag read at runtime · an absence.
+// `practice` is route-derived and constant for a mount, so the swap can never happen mid-game.
+function AuthedBoard(props) {
+  const { user } = useAuth()
+  return <Board {...props} user={user} />
+}
+function LocalBoard(props) {
+  // No auth hook anywhere below this line. A visitor who cannot sign in can still play.
+  return <Board {...props} user={null} />
+}
+
+/**
+ * @param {boolean} practice     the /practice route · a local game with no room, no session, no writes
+ * @param {number}  practiceBots opponents the player chose (0-3) · 0 is free exploration
+ * @param {() => void} onExitPractice  navigation out, fired AFTER the local session tears itself down
+ */
+export default function GameRoom({ practice = false, practiceBots = 0, onExitPractice }) {
+  return practice
+    ? <LocalBoard practice practiceBots={practiceBots} onExitPractice={onExitPractice} />
+    : <AuthedBoard practice={false} practiceBots={0} />
+}
+
+function Board({ user, practice, practiceBots, onExitPractice }) {
   // Route-param multiplayer: /game/:roomId → real game · /game (no param) → solo dev.
   // roomId from the URL survives a refresh (free rejoin · T3) · it is the clean signal for
   // "this is a real session" · NOT useGameStore.getState().roomId (T3 never populates that).
   const { roomId } = useParams()
-  const { user } = useAuth()
 
   // useGameSync subscribes to game_sessions + seeds the store when roomId is set (no-op when null).
   // Lives here so moves persist (pushState) and remote moves stream in for the whole /game lifetime.
   const sync = useGameSync(roomId ?? null, user?.id)
+
+  // ── PRACTICE · settle a leftover game BEFORE the local transport can restore it ───────────────────
+  // DECLARED ABOVE useLocalSession ON PURPOSE. Effects inside one component run in declaration order, so
+  // this is the only place that gets to speak first.
+  //
+  // useLocalSession restores a saved game before dealing a new one, and that is right: a refresh
+  // mid-practice must not lose the board. But it is handed only the count being asked for NOW and keeps
+  // no memory of the count the saved game was dealt with, so it cannot tell a refresh apart from a
+  // player who came back and chose differently. The caller knows both numbers. Without this, picking
+  // "1 bot", leaving with the Back button, and picking "3 bots" hands back the old one-bot game · the
+  // opponent selector would silently do nothing, which is the exact "the offer and the game disagree"
+  // failure this feature was built to stop making.
+  //
+  // Both sources are checked because they fail differently: sessionStorage survives a reload, the store
+  // survives in-app navigation, and zero-opponent practice never touches the transport at all · its own
+  // guard is phase === 'lobby', so dropping the phase is what re-arms it.
+  useEffect(() => {
+    if (!practice) return
+    const store = useGameStore.getState()
+    const live = store.phase !== 'lobby' && store.players.length > 0 ? store.players.length - 1 : null
+    let saved = null
+    try {
+      const raw = sessionStorage.getItem(PRACTICE_STORAGE_KEY)
+      const parsed = raw ? JSON.parse(raw) : null
+      if (Array.isArray(parsed?.players) && parsed.players.length > 0) saved = parsed.players.length - 1
+    } catch { /* storage blocked · then there is nothing persisted to disagree with */ }
+    const stale = (live != null && live !== practiceBots) || (saved != null && saved !== practiceBots)
+    if (!stale) return
+    clearSaved()
+    store.setPhase('lobby')
+  }, [practice, practiceBots])
+
+  // THE LOCAL TRANSPORT (T3 S32) · returns useGameSync's shape, so the board below cannot tell which one
+  // it is holding · that is the point of it. Active only from one bot upward: useLocalSession clamps to
+  // MIN_BOTS=1, so asking it for zero opponents would deal a bot the player did not ask for. Free
+  // exploration therefore stays on this file's own local-init path below, which already worked and is
+  // live. (Written to comms for T3: MIN_BOTS=0 would let both cases share one transport and give free
+  // exploration refresh-survival for free. Their constant, their call · not mine to change.)
+  const local = useLocalSession(practice && practiceBots >= 1, { bots: practiceBots })
+
+  // One handle for both worlds. Every consumer below takes this, never `sync` directly, so a practice
+  // game persists to its tab and a real game persists to Postgres through identical call sites.
+  const transport = practice ? local : sync
+
+  // Bot seats play themselves. Mounted UNCONDITIONALLY, exactly as its author specified: it is inert
+  // until some seat carries isBot, and initGame is the only writer of that flag, which only the local
+  // transport ever sets. A second gate here (`enabled: practice`) would be a second contract answering
+  // the same question, which is the mistake this session already found once in this very feature.
+  useBotTurns()
+
+  // ── LEAVING PRACTICE · explicit, because a route change does not do it ────────────────────────────
+  // T3's note, honoured: navigating away leaves the store holding a finished practice game at
+  // phase 'playing', so nothing downstream re-arms and the next visit stares at the old board. Without
+  // a teardown, "replayable indefinitely" is false the second time · re-entering with the same opponent
+  // count would resume the same game forever, with no way to ask for a new one.
+  //
+  // leavingRef is not defensive clutter: endPractice drops the store to 'lobby', and the local-init
+  // effect below now watches `phase` precisely so it can re-arm · which means without this latch, Leave
+  // would tear the game down and instantly deal a fresh one in the same commit, before the navigation
+  // lands. The latch is never cleared because the component is going away.
+  const leavingRef = useRef(false)
+  const endPractice = local.endPractice
+  const leavePractice = useCallback(() => {
+    leavingRef.current = true
+    // Safe for zero opponents too · endPractice carries no `active` guard, it resets unconditionally.
+    endPractice?.()
+    clearSaved()
+    onExitPractice?.()
+  }, [endPractice, onExitPractice])
 
   // Atomic seat-scoped draw (T3 S22 · migration 011 · draw_card_for_seat). The whole-state snapshot
   // (pushState) lets two simultaneous draws clobber each other (17f5931 · last-write-wins · a draw is
@@ -56,7 +153,6 @@ export default function GameRoom({ practiceBots = 0 }) {
   // postgres_changes re-seed · no local store mutation here (the DB row update IS the sync · Rule 16).
   const { drawCard: drawViaRpc, isDrawing: isDrawingCard, error: drawError } = useDrawCard()
 
-  const [initialized, setInitialized] = useState(false)
   const [scoreFlash, setScoreFlash] = useState(null) // { card, regionName } · the score story moment
   // First-turn onboarding (T1 S8). Shown once ever per browser (localStorage) · the first playtest
   // never discovered "place an element". We gate on isMyTurn + phase below, NOT on turnNumber: turns
@@ -86,9 +182,17 @@ export default function GameRoom({ practiceBots = 0 }) {
 
   // This client's seat · derived from the synced roster by matching our auth id (no need to thread
   // seat through navigation · it also restores correctly on rejoin-after-refresh). null in solo.
+  // In practice there is no auth id to match, so the human is found by the id the local transport gave
+  // them. This is NOT cosmetic: useGameActions reads `isMyTurn = mySeat == null || currentSeat === mySeat`,
+  // so leaving mySeat null with bots at the table would let the player act on a BOT's turn · take its
+  // elements, spend its actions, score into its regions. A one-player local game was fine with null
+  // because seat 0 was always the current seat; the moment a second seat exists, null stops meaning
+  // "solo" and starts meaning "no turn gate at all".
   const mySeat = useMemo(
-    () => players.find(p => p.userId && p.userId === user?.id)?.seat ?? null,
-    [players, user?.id],
+    () => (practice
+      ? players.find(p => p.userId === PRACTICE_HUMAN_ID)?.seat ?? null
+      : players.find(p => p.userId && p.userId === user?.id)?.seat ?? null),
+    [practice, players, user?.id],
   )
 
   // Dual-score view (T1 S13) · the "my" column follows my seat · in solo dev mySeat is null, so fall back
@@ -108,19 +212,27 @@ export default function GameRoom({ practiceBots = 0 }) {
     return () => clearInterval(id)
   }, [turnTimeRemaining, currentSeat, turnNumber, phase])
 
-  // DEV solo-init: ONLY when there is no route roomId (a real game is seeded by useGameSync).
-  // Gated on the route roomId per T3 · never inits a solo game over a real session.
+  // LOCAL-INIT · the one-player board. Serves /game (solo dev) and practice with zero opponents, which
+  // is a complete experience and the only one a rate-limited visitor can always reach.
+  // Gated on the route roomId per T3 · never inits a local game over a real session.
+  //
+  // The old `initialized` useState is gone. The phase guard was always the real one (initGame sets
+  // phase='playing', so this cannot loop), and the extra latch actively prevented re-arming: after the
+  // stale-game effect above drops the store to 'lobby', a component that had already initialised once
+  // would sit in front of an empty board forever. Depending on the subscribed `phase` slice instead
+  // means the re-arm is what re-runs this.
   useEffect(() => {
     if (roomId) return
-    if (!initialized && useGameStore.getState().phase === 'lobby') {
-      useGameStore.getState().initGame(
-        [{ userId: 'dev-1', username: 'Builder' }],
-        shuffleArray([...DECK]),
-        shuffleArray([...PRODUCTION_TILES]),
-      )
-      setInitialized(true)
-    }
-  }, [initialized, roomId])
+    if (leavingRef.current) return            // on the way out · do not deal a board nobody asked for
+    if (practice && practiceBots >= 1) return // the local transport deals that table, not this
+    if (phase !== 'lobby') return
+    useGameStore.getState().initGame(
+      // Same identity the transport uses, so mySeat resolves the same way at either table.
+      [practice ? { userId: PRACTICE_HUMAN_ID, username: 'You' } : { userId: 'dev-1', username: 'Builder' }],
+      shuffleArray([...DECK]),
+      shuffleArray([...PRODUCTION_TILES]),
+    )
+  }, [roomId, practice, practiceBots, phase])
 
   // DEV-only · force the end-game civilization record without playing all 56 cards.
   // Cmd+Shift+E sets the real terminal phase ('scoring') · stripped from production builds.
@@ -149,7 +261,7 @@ export default function GameRoom({ practiceBots = 0 }) {
     validTargets, patternHighlight, buildableMatches, uiPhase, isMyTurn,
     handleFactoryClick, handleElementSelect, handleRegionSelect,
     handleHexClick, handleCardScore, handleDrawCard, handleEndTurn,
-  } = useGameActions({ sync, mySeat })
+  } = useGameActions({ sync: transport, mySeat })
 
   const factory = factories.find(f => f.id === selectedFactory)
 
@@ -208,7 +320,9 @@ export default function GameRoom({ practiceBots = 0 }) {
   // session UUID (sync.sessionId · NOT roomId, which is room_id) and enforces seat ownership + auth
   // server-side. Solo dev has no auth/session (sessionId is null · the RPC would reject), so it keeps the
   // local deterministic draw path · this also preserves the bot harness and the existing unit tests.
-  const isRealRoom = !!(roomId && sync?.sessionId && mySeat != null)
+  // Practice can never satisfy this: there is no roomId and useLocalSession returns sessionId null on
+  // purpose, so the RPC path is unreachable and the local deterministic draw is used instead.
+  const isRealRoom = !!(roomId && transport?.sessionId && mySeat != null)
   const onDrawOffer = async (i) => {
     const card = theOffer[i]
     if (!card) return
@@ -292,7 +406,10 @@ export default function GameRoom({ practiceBots = 0 }) {
 
       {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
       {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
-      {phase === 'scoring' && <FinalScore players={players} mySeat={mySeat} sync={sync} roomId={roomId} regions={regions} />}
+      {/* `practice` is load-bearing, not decorative · see FinalScore's recordCivilizationContribution. */}
+      {phase === 'scoring' && (
+        <FinalScore players={players} mySeat={mySeat} sync={transport} roomId={roomId} regions={regions} practice={practice} />
+      )}
 
       {/* FIRST-GAME TUTORIAL · once ever per browser · shows for BOTH players the moment the game starts
           (NOT gated on isMyTurn · S8's isMyTurn gate meant the joining player never saw it until their
@@ -331,6 +448,17 @@ export default function GameRoom({ practiceBots = 0 }) {
           <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
             Turn {turnNumber}
           </span>
+          {/* Said out loud rather than left for the player to infer · nothing here reaches the
+              civilization record, and a player who has just built something deserves to know that
+              before the final screen tells them, not after. */}
+          {practice && (
+            <span data-testid="practice-badge" style={{
+              color: 'rgba(200,148,64,0.7)', fontSize: 11, letterSpacing: 1.2,
+              textTransform: 'uppercase', whiteSpace: 'nowrap',
+            }}>
+              Practice
+            </span>
+          )}
         </div>
         {/* Persistent instruction · always tells the player what to do next (colonist.io). */}
         <div data-testid="instruction" className="game-instruction" style={{
@@ -342,7 +470,24 @@ export default function GameRoom({ practiceBots = 0 }) {
         }}>
           {instruction}
         </div>
-        <div aria-hidden="true" />
+        {/* Third column mirrors the first so the instruction stays optically centred · `1fr auto 1fr`
+            sizes the outer columns equally whatever is in them, so putting a control here costs the
+            centring nothing. Empty (and hidden from the a11y tree) outside practice. */}
+        <div aria-hidden={practice ? undefined : 'true'} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {practice && (
+            <button
+              data-testid="leave-practice"
+              onClick={leavePractice}
+              style={{
+                minHeight: 44, padding: '0 14px', borderRadius: 8, cursor: 'pointer',
+                border: '1px solid rgba(255,255,255,0.14)', background: 'transparent',
+                color: 'rgba(255,255,255,0.6)', fontSize: 12, letterSpacing: 0.4, whiteSpace: 'nowrap',
+              }}
+            >
+              Leave practice
+            </button>
+          )}
+        </div>
         {/* Actions counter, turn status, and End Turn now live in the bottom ActionBar. */}
       </header>
 

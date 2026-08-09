@@ -69,7 +69,10 @@ function usePrefersReducedMotion() {
   return reduce
 }
 
-export default function FinalScore({ players = [], mySeat = null, sync = null, roomId = null, regions = [] }) {
+// practice · a local game against bots. It is a REAL game of NeoTopia by every rule, and it is shown in
+// full here on purpose · the score screen is the payoff, and hiding it would make practice feel like a
+// demo. What it must never be is COUNTED. Nothing below that writes is allowed to run for it. (T1 S33)
+export default function FinalScore({ players = [], mySeat = null, sync = null, roomId = null, regions = [], practice = false }) {
   const [revealed, setRevealed] = useState(false)
   const [liveIndex, setLiveIndex] = useState(null) // real DB aggregate · null until fetched
   const didFetchRef = useRef(false)                // getGlobalIndex fires exactly once
@@ -144,11 +147,23 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   // scoped + clamped [0,56] · both RPCs verified SECURITY DEFINER + granted anon · T1 S7). Separate
   // one-shot ref + live deps so a first render with an unresolved seat (mySeat null / myDistricts 0)
   // does NOT burn the latch · the effect re-runs until a valid contribution is actually recorded.
+  //
+  // THE PRACTICE GUARD, and why it is first rather than folded into the condition above it. Until S33
+  // this effect was protected by nothing but `mySeat == null`, and that held only by accident: a local
+  // game seeded userId 'dev-1', which never matched an auth id, so mySeat stayed null and the write was
+  // skipped. Practice mode ends that accident · the human seat has to be identified for the turn gate to
+  // work at all (otherwise the player can act on a bot's turn), and identifying it sets mySeat, which
+  // was the only thing standing between a practice game and the civilization's permanent record.
+  // Nor would "there is no session" have saved it: this RPC is fired through the shared supabase client
+  // and takes its player from auth.uid(), so for any RETURNING visitor · precisely the people who
+  // practise · the write would have succeeded. Bots would have built the real NeoTopia. (Rule 65: two
+  // lanes each shipped a correct half, and the bug lives in the composition.)
   useEffect(() => {
+    if (practice) return
     if (didRecordRef.current || mySeat == null || myDistricts <= 0) return
     didRecordRef.current = true
     recordCivilizationContribution(myDistricts).catch(() => {})
-  }, [mySeat, myDistricts])
+  }, [practice, mySeat, myDistricts])
 
   // Record THIS client's per-game detailed civilization scores into the Global Index LEDGER (migration 009 ·
   // record_civilization_score · server sets player_id=auth.uid() · UNIQUE(session_id,player_id) ON CONFLICT DO
@@ -157,6 +172,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   // T3 S16 (1e9e249) exposed it reactively from useGameSync · re-verified the value here before wiring (S16 D).
   // The latch is NOT burned while sessionId is still null, so the effect re-runs once it resolves.
   useEffect(() => {
+    if (practice) return // sessionId is already null in practice · stated anyway, so the rule is one rule
     if (didDetailRef.current) return
     const sessionId = sync?.sessionId
     // Rule 61 evidence gate · log the LIVE value before any write (do not remove · it proves the wire).
@@ -166,7 +182,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     if (!me) return
     didDetailRef.current = true
     recordCivilizationDetail({ sessionId, scores: me.scores, cardsBuilt: me.scoredCards.length }).catch(() => {})
-  }, [sync, mySeat, finalScores])
+  }, [practice, sync, mySeat, finalScores])
 
   // Append the game_end audit row ONCE per game · the permanent civilization record (T2 built the PURE
   // payload · the consumer fires it · comms T2 S8). "Exactly one client" = the lowest-seat present writes
@@ -178,6 +194,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   // the display total AND this payload in the SAME change, else the audit (0 cluster) diverges from the screen
   // (+N cluster) · gameEndEvent.js header · Rule 40/65. regions defaults to [] → 0 bonus when unavailable.
   useEffect(() => {
+    if (practice) return // a practice game writes no audit row · there is no session for it to belong to
     if (didGameEndRef.current) return
     if (!sync?.pushState || mySeat == null) return
     const seats = players.map(p => p.seat).filter(s => typeof s === 'number')
@@ -188,7 +205,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     try { if (guardKey) localStorage.setItem(guardKey, '1') } catch {}
     const { eventType, eventData } = buildGameEndEvent({ players, regions })
     sync.pushState(eventType, eventData)
-  }, [sync, mySeat, players, roomId, regions])
+  }, [practice, sync, mySeat, players, roomId, regions])
 
   // Global Index target = real persisted aggregate (already includes the seed) + this whole game's
   // contribution, shown optimistically · seed-only fallback before the fetch resolves / on error. A

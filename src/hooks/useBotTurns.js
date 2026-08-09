@@ -16,6 +16,16 @@ import { chooseBotAction, makeRng, DEFAULT_DIFFICULTY } from '../lib/botPolicy'
 
 export const BOT_MOVE_DELAY_MS = 650
 
+// Everything one bot action can move. Exported so a test can state the deadlock in the same terms the
+// driver does rather than re-deriving it.
+export function seatSignature(player, currentSeat, actionsRemaining, phase) {
+  return [
+    currentSeat, actionsRemaining, phase,
+    player?.hand?.length ?? 0,          // draw, and the card that leaves the hand when a district is built
+    player?.scoredCardIds?.length ?? 0, // the district itself · the move that used to cost nothing visible
+  ].join(':')
+}
+
 export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}) {
   const players = useGameStore(s => s.players)
   const currentSeat = useGameStore(s => s.currentSeat)
@@ -31,6 +41,26 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
   // bot that moves twice per tick silently plays a different game. The latch is keyed on the exact
   // (seat, actionsRemaining, phase) tuple the decision was made from · a repeat invocation for the
   // same tuple does nothing, and a genuine next step always changes at least one of the three.
+  //
+  // WIDENED BY T1 S33, after a live practice game deadlocked · T2 please review, this is your file and
+  // the second of two cross-lane edits I made tonight (the other is isBot in useLocalSession).
+  //
+  // The latch was keyed on (seat, actionsRemaining, phase). SCORING A CARD CHANGES NONE OF THE THREE:
+  // tryScoreCard mutates the hand, the score, scoredCardIds and region.lastBuiltIllustration, and
+  // deliberately does NOT spend an action (a district is the consequence of a placement, not a separate
+  // action · gameStore.js:363-400). But it DOES give `players` a new identity, so the effect re-ran,
+  // found an identical key, returned early · and the cleanup on that re-run had already cancelled the
+  // pending timer. Nothing rescheduled it. The seat froze for the rest of the game.
+  //
+  // Deterministic, not a race: every bot stalls the first time it does the most valuable thing it can
+  // do. It survived both lanes' tests because no test had ever let a bot reach a scorable board, and it
+  // survived my own first live run for the same reason (three clean bot turns, botCards: []). Measured
+  // by subscribing to the store during a stall: at t+650ms `changed: ["players","regions"]` with
+  // actionsRemaining still 3, and then silence.
+  //
+  // The key now carries the seat's own material state, so any action that advances the game advances
+  // the key. StrictMode protection is unchanged · a repeat invocation with identical state still
+  // produces an identical key.
   const lastKeyRef = useRef(null)
 
   // The completing-element rule needs the hex just placed, and it resets whenever the turn does.
@@ -44,7 +74,7 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
     const me = players.find(p => p.seat === currentSeat)
     if (!me?.isBot) return
 
-    const key = `${currentSeat}:${actionsRemaining}:${phase}`
+    const key = seatSignature(me, currentSeat, actionsRemaining, phase)
     if (lastKeyRef.current === key) return
     lastKeyRef.current = key
 
@@ -62,6 +92,14 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
         lastPlacedKey: lastPlacedRef.current,
         rng: rngRef.current,
       })
+      // The signature read from the LIVE store, before and after, so the safety net below measures what
+      // actually happened rather than what the action said it would do.
+      const signature = () => {
+        const x = useGameStore.getState()
+        return seatSignature(x.players.find(p => p.seat === seat), x.currentSeat, x.actionsRemaining, x.phase)
+      }
+      const before = signature()
+
       switch (action.type) {
         case 'placeElement':
           s.placeElement(seat, action.factoryId, action.elementType, action.q, action.r, action.regionId)
@@ -77,6 +115,17 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
         default:
           s.endTurn()
           lastPlacedRef.current = null
+      }
+
+      // SAFETY NET · widening the key fixes the one deadlock that was found. This closes the CLASS.
+      // Every store action here validates and can silently refuse (placeElement returns before mutating,
+      // tryScoreCard returns false, drawCard guards), and any refusal leaves the signature identical ·
+      // which means the latch above will not re-arm and this seat never moves again. A frozen board with
+      // no error is the worst failure this feature has, because it is indistinguishable from a bot that
+      // is still thinking. Passing the turn instead is a bad move; stopping the game is not a move at all.
+      if (signature() === before) {
+        useGameStore.getState().endTurn()
+        lastPlacedRef.current = null
       }
     }, delayMs)
 

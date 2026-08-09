@@ -122,6 +122,31 @@ export function useLocalSession(active, { bots = MIN_BOTS, mode = DEFAULT_GAME_M
       ...Array.from({ length: n }, (_, i) => ({
         userId: practiceBotId(i + 1),
         username: botNames?.[i] ?? `Bot ${i + 1}`,
+        // isBot ADDED BY T1 S33 · the one key that made this feature exist, and the only edit T1 made
+        // outside its own lane. Flagged rather than quietly landed (comms + commit message).
+        //
+        // WHY. This file's header states the contract as "a bot driver decides which seats it plays by
+        // asking isPracticeBot(player.userId)". useBotTurns.js does not ask that · it asks `player.isBot`,
+        // which is gameStore's own documented flag (gameStore.js:193-201, spread through initGame so a
+        // non-practice player shape stays byte-identical). Two contracts for one question, and each lane
+        // tested only its own side: this file's tests assert the bot USERIDS, botPolicy's tests build
+        // their own fixtures WITH isBot. Composed, the bots were seated and then sat there · currentSeat
+        // reached a bot and the game stopped, forever, because nothing was ever going to move it.
+        // Measured before this line was written: the bot seat's keys were
+        // [seat,userId,username,color,hand,bonusTokens,scores,scoredCardIds] and the driver returned at
+        // `if (!me?.isBot) return`. Stamping isBot by hand made the same seat move. (Rule 45/65.)
+        //
+        // RECONCILED TOWARD isBot, not toward the userId prefix, because the store flag is the one that
+        // survives contact with a real room: `local-bot-N` is a convention of THIS transport, so a bot
+        // seated any other way would be invisible to a prefix test, and `difficulty` has to travel with
+        // the seat regardless and already rides here. isPracticeBot() stays exported and correct · it is
+        // how the HUMAN seat is identified, which is a different question.
+        //
+        // difficulty is deliberately NOT set: initGame stamps `p.difficulty ?? 'builder'`, which is also
+        // botPolicy's DEFAULT_DIFFICULTY, which is the level Mahil chose for every practice game in S33.
+        // Declaring it a fourth time would be a fourth thing to keep in agreement · the composed result
+        // is pinned instead by GameRoom.practice.test.jsx, which goes red if any of the three drifts.
+        isBot: true,
       })),
     ]
     // getModeConfig resolves an unknown mode to Classic, so a bad value degrades instead of throwing.

@@ -25,7 +25,13 @@ import { useState } from 'react'
 // this session exists to stop making · so the counts that do not work say so, and cannot be picked.
 // FLIP THIS when T2's bot seats land. It is a single greppable constant on purpose (Rule 32 ·
 // constants, not magic), and the test below asserts the disabled options really are unclickable.
-export const BOT_OPPONENTS_READY = false
+//
+// FLIPPED · T1 S33. Not because the two hooks landed · they had already landed when this said false,
+// and flipping on that basis would have advertised a table where the bots never moved. The seats were
+// dealt without the one key the driver reads, so a practice game reached Bot 1 and stopped there,
+// permanently. It is true now because GameRoom.practice.test.jsx watches a bot take a real turn
+// through the same store actions a human click uses, and that test was red until it did.
+export const BOT_OPPONENTS_READY = true
 
 export const OPPONENT_CHOICES = [
   { bots: 0, label: 'Just me', detail: 'Free exploration · learn the board' },
