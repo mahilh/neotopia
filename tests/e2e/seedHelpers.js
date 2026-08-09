@@ -33,13 +33,11 @@ export function loadEnv() {
 export const SEED = JSON.parse(readFileSync(new URL('./fixtures/seededState.json', import.meta.url), 'utf8'))
 export const BOARD = 'svg[aria-label*="NeoTopia"]'
 
-// 6-char code · same unambiguous charset the app uses (DB CHECK: length = 6).
-export function makeRoomCode() {
-  const CH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let c = ''
-  for (let i = 0; i < 6; i++) c += CH[Math.floor(Math.random() * CH.length)]
-  return c
-}
+// Fixture identity lives in fixtureNames.js · pure, so vitest can unit-test the name guard without
+// Playwright's loader (this file reads seededState.json at module level and is import-only there).
+// Re-exported so no spec has to know about the split.
+export { uniqueName, UI_RESERVED_WORDS, makeRoomCode } from './fixtureNames'
+import { makeRoomCode as _makeRoomCode } from './fixtureNames'
 
 // Supabase rate-limits anonymous sign-ins per IP · a suite that mints many in a burst (or a fast local
 // re-run) can trip it. Back off and retry ONLY on that transient · fail fast on anything else.
@@ -62,7 +60,7 @@ export async function createSeededGame(storageKey = 'neotopia-e2e-seed') {
   const admin = createClient(url, key, { auth: { storageKey, persistSession: false } })
   const auth = await signInAnonRetry(admin)
   const userId = auth.user.id
-  const code = makeRoomCode()
+  const code = _makeRoomCode()
   // SEAT FIRST, THEN PROMOTE (T3 S29). migration 016's room_players_join requires the target room to be
   // status='waiting' AND under capacity, so seating into an already-'playing' room is an RLS violation.
   // This also brings the harness closer to the real path rather than further from it (Rule 36): the app

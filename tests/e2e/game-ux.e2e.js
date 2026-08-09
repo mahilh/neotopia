@@ -11,17 +11,12 @@
 // T1 in-game UI issue surfaced for fixing.
 
 import { test, expect } from '@playwright/test'
-import { deleteRoomAsHost } from './seedHelpers'
+import { deleteRoomAsHost, uniqueName } from './seedHelpers'
 
 const NAME_INPUT = 'Builder name (max 20)'
 const BOARD = 'svg[aria-label*="NeoTopia"]'
 
 // player_profiles.username is UNIQUE · a fresh name per run avoids the 2nd-run claim collision.
-function uniqueName(prefix) {
-  const t = Date.now().toString(36).slice(-5)
-  const r = Math.random().toString(36).slice(2, 5)
-  return (prefix + t + r).toUpperCase().slice(0, 20)
-}
 
 // Reach the lobby whether '/' is the lobby (committed) or the Landing (uses the real "Enter" CTA).
 async function gotoLobby(page) {

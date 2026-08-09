@@ -33,7 +33,7 @@
 
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, deleteRoomAsHost } from './seedHelpers'
+import { loadEnv, deleteRoomAsHost, uniqueName } from './seedHelpers'
 import { assertBackendReachable, assertSessionEstablished } from './preconditions'
 
 const NAME_INPUT = 'Builder name (max 20)'
@@ -42,11 +42,6 @@ const BOARD = 'svg[aria-label*="NeoTopia"]'
 // Unique, E2E%-prefixed names: player_profiles.username is UNIQUE (a fixed name collides on the second run), and
 // the 'E2E' prefix lets globalTeardown's purge_e2e_test_data() backstop sweep any residual profile row left by a
 // crash (migrations 006/007 · scoped to E2E%/BotAlpha%/BotBeta%). <=20 chars (claimUsername slices to 20).
-function uniqueName(prefix) {
-  const t = Date.now().toString(36).slice(-5)
-  const r = Math.random().toString(36).slice(2, 5)
-  return (prefix + t + r).toUpperCase().slice(0, 20)
-}
 
 // Reach the lobby whether '/' is the Lobby (older committed) or the Landing (current · App.jsx routes '/' →
 // Landing, '/lobby' → Lobby · the hero CTA "Enter the Civilization" navigates to /lobby). Resilient to both.

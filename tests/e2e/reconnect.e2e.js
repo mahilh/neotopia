@@ -26,7 +26,7 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
-import { deleteRoomAsHost } from './seedHelpers'
+import { deleteRoomAsHost, uniqueName } from './seedHelpers'
 
 // ---- env (process.env in CI · .env.local locally) -------------------------------------------------
 function loadEnv() {
@@ -134,11 +134,6 @@ const NAME_INPUT = 'Builder name (max 20)'
 const ELEMENT_RE = /energy|biofarming|technology|community/i
 const REGION_RE  = /sacred city|living earth|free energy/i
 
-function uniqueName(prefix) {
-  const t = Date.now().toString(36).slice(-5)
-  const r = Math.random().toString(36).slice(2, 5)
-  return (prefix + t + r).toUpperCase().slice(0, 20)
-}
 
 async function claimName(page, name) {
   await page.goto('/')

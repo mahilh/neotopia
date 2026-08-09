@@ -37,6 +37,7 @@
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync } from 'node:fs'
+import { uniqueName } from './seedHelpers'
 
 // ---- env (process.env in CI · .env.local locally) -------------------------------------------------
 function loadEnv() {
@@ -68,11 +69,6 @@ const NAME_INPUT = 'Builder name (max 20)'
 // can't claim a name a previous run's user already holds → claimUsername errors → the lobby never
 // advances). So every run gets a fresh name, still tagged 'E2E' so the rows are identifiable for a
 // service-role purge. <=20 chars (claimUsername slices to 20).
-function uniqueName(prefix) {
-  const t = Date.now().toString(36).slice(-5)
-  const r = Math.random().toString(36).slice(2, 5)
-  return (prefix + t + r).toUpperCase().slice(0, 20)
-}
 
 // ── Lobby UI helpers · selectors verified against the real Lobby.jsx / Landing.jsx (rule 36) ──────
 // Reach the lobby regardless of whether '/' is the lobby (committed) or the Landing (T1 in-flight).

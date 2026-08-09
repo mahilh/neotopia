@@ -27,7 +27,7 @@
 
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, deleteRoomAsHost } from './seedHelpers'
+import { loadEnv, deleteRoomAsHost, uniqueName } from './seedHelpers'
 import { assertBackendReachable, assertSessionEstablished } from './preconditions'
 
 const NAME_INPUT = 'Builder name (max 20)'
@@ -37,11 +37,6 @@ let ENV = null
 try { ENV = loadEnv() } catch { /* no creds · the test skips (nightly-class · needs live Supabase) */ }
 
 // player_profiles.username is UNIQUE · E2E%-prefixed so globalTeardown's purge_e2e_test_data backstop can sweep.
-function uniqueName(prefix) {
-  const t = Date.now().toString(36).slice(-5)
-  const r = Math.random().toString(36).slice(2, 5)
-  return (prefix + t + r).toUpperCase().slice(0, 20)
-}
 
 // Reach the lobby whether '/' is Lobby (older) or Landing (current · hero CTA navigates to /lobby). From
 // flow-mode-live.e2e.js · resilient to both.

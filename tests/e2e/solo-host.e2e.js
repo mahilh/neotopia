@@ -47,18 +47,13 @@
 
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, signInAnonRetry, deleteRoomAsHost } from './seedHelpers'
+import { loadEnv, signInAnonRetry, deleteRoomAsHost, uniqueName } from './seedHelpers'
 import { assertSessionEstablished } from './preconditions'
 
 const NAME_INPUT = 'Builder name (max 20)'
 
 test.beforeEach(() => { test.setTimeout(120_000) })
 
-function uniqueName(prefix) {
-  const t = Date.now().toString(36).slice(-5)
-  const r = Math.random().toString(36).slice(2, 5)
-  return (prefix + t + r).toUpperCase().slice(0, 20)
-}
 
 // Entry is resilient to which screen '/' is (Landing CTA or the lobby itself) · same shape as
 // two-human.e2e.js, which is the proven path (Rule 36 · mirror the real setup path, do not invent one).
@@ -216,7 +211,7 @@ test.describe('the lone visitor · the arrival nothing else models', () => {
       // ── the counterweight · a REAL browser joins the SAME room by the SAME code ───────────────
       // Without this the assertion above would be worthless: "roster shows 1" is also what a broken
       // presence channel looks like. Same room, same host page, different kind of participant.
-      await claimName(joiner, uniqueName('E2EJOIN'))
+      await claimName(joiner, uniqueName('E2EGUEST'))
       await joiner.getByRole('button', { name: 'Join Room' }).click({ timeout: 15_000 })
       await joiner.getByPlaceholder('ABC234').fill(code)
       await joiner.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15_000 })
