@@ -361,6 +361,11 @@ export const PROJECT_CARDS = [
 // Fresh, shuffleable copy of the deck.
 export const DECK = [...PROJECT_CARDS]
 
+// 56 is the physical game's count and the deck drives game length alongside the production tile
+// stack, so a wrong number here is not a warning, it is a different game. This used to console.error
+// and continue · which in production means nobody is told at all, the exact silent-failure shape this
+// project keeps finding (games_played sat at 0 for six weeks because no one ever read it back). It is
+// a compile-time constant: it can only trip if someone edits this file, and then it should stop them.
 if (PROJECT_CARDS.length !== 56) {
-  console.error('NeoTopia card count error:', PROJECT_CARDS.length, '(expected 56)')
+  throw new Error(`NeoTopia deck must be exactly 56 cards · found ${PROJECT_CARDS.length}`)
 }
