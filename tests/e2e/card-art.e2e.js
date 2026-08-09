@@ -21,23 +21,38 @@
 
 import { test, expect } from '@playwright/test'
 
-// Reach the solo board and confirm the DEV store hook is live before driving it. Resilience copied from
-// flow-mode.e2e.js (T3 S20): a slow-but-healthy store init on a loaded CI runner must SKIP (visible in the
-// report), not RED · a flaky timeout reading like a real regression is worse than an honest skip (Rule 57).
+// Reach the solo board and confirm the DEV store hook is live before driving it.
+//
+// THIS USED TO SKIP ITSELF, and that was wrong (T3 S35 · fixing my own S34 finding).
+//   The old shape was `test.skip(!seeded, 'store seed exceeded 2000ms')`, copied from flow-mode.e2e.js
+//   on the reasoning that a slow-but-healthy CI runner should not read as a regression. The reasoning is
+//   sound in general and does not apply here, which is the part I got wrong the first time.
+//
+//   A skipped test is indistinguishable from a passing one in a green tick · the same pathology as
+//   bot-health being red for 32 runs while carrying no information. This one runs on the MERGE GATE
+//   (.github/workflows/e2e.yml), so the failure mode is: somebody deletes the dev store seam, card-art
+//   silently skips, the gate goes green, and the only E2E covering the art-reveal path has quietly
+//   stopped covering anything.
+//
+//   MEASURED before changing it, 6 runs: the gap between [data-game-phase="playing"] appearing and
+//   window.__neotopia_store existing was 9, 9, 10, 10, 10, 25 ms. The old budget was 2000ms · eighty
+//   times the worst observation. Nothing that slow is "a slow runner": the seam is assigned by the same
+//   component render that sets data-game-phase, which this line has ALREADY waited up to 15s for. So a
+//   2s overrun does not mean slow, it means gone · and gone is precisely the regression worth failing on.
+//
+//   Kept generous rather than tight (10s · 400x the worst observation) so this still cannot flake on a
+//   loaded runner. The change is not "less patient", it is "a skip is not a pass". (Rule 63.)
 async function gotoSoloBoard(page) {
   await page.goto('/game')
   await page.waitForSelector('[data-game-phase="playing"]', { timeout: 15_000 })
-  const SEED_BUDGET_MS = 2_000
-  let seeded = true
-  try {
-    await expect
-      .poll(() => page.evaluate(() => typeof window.__neotopia_store !== 'undefined'), { timeout: SEED_BUDGET_MS })
-      .toBe(true)
-  } catch {
-    seeded = false
-  }
-  if (!seeded) console.warn(`[card-art] store seed exceeded ${SEED_BUDGET_MS}ms · slow init · SKIPPING (not failing)`)
-  test.skip(!seeded, `store seed exceeded ${SEED_BUDGET_MS}ms (slow store initialization) · skipped to avoid a flaky CI failure`)
+  await expect
+    .poll(() => page.evaluate(() => typeof window.__neotopia_store !== 'undefined'), {
+      timeout: 10_000,
+      message: 'the board rendered but window.__neotopia_store never appeared · the dev store seam this ' +
+        'spec drives is gone, so every assertion below would be testing nothing. Failing rather than ' +
+        'skipping: on the merge gate a skip is indistinguishable from a pass.',
+    })
+    .toBe(true)
 }
 
 test.describe('Card art reveal (solo · real store · cards 01-20 live)', () => {

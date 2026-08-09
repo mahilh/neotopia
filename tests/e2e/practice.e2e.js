@@ -311,3 +311,157 @@ test.describe('practice mode', () => {
     expect(after.phase).toBe('playing')
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// WHAT HAPPENS WHEN A PRACTICE GAME ENDS (T3 S35)
+//
+// The block above covers entry, a bot's turn, and a bot continuing after it scores. All of it stops before
+// the game does. Nothing had ever driven a practice game to its own ending, and four separate things are
+// only true at that moment · the endgame trigger, the score screen, the civilization ledger, and the way out.
+//
+// MEASURED FIRST, on a worktree pinned to one commit so no other lane's in-flight save could move it: three
+// bots reach 'scoring' at +90.1s, turn 37, with the production-tile clock running 12 -> 0 on bot placements
+// alone. The budget below is that observation with room for a cold runner, not a guess. (The first attempt at
+// this measurement ran against the shared dev server and showed a hard freeze at turn 4 · the console was
+// full of `[vite] hot updated: /src/pages/GameRoom.jsx`, which was another terminal saving a half-written
+// patternMatcher into my running game. Rule 57, and the reason these numbers came from an isolated tree.)
+const ENDGAME_BUDGET_MS = 210_000
+
+// The human's own turn is taken through the store here rather than through takeHumanTurn's three offer
+// clicks. Deliberate, and narrow: this block's question is whether the clock advances when BOTS hold the
+// seats, the human is only required to pass, and the real interface path is already asserted by the tests
+// above. Driving 37 turns of UI would also make this the slowest spec in the repo for no extra claim.
+const passHumanTurn = (page) => page.evaluate(() => window.__neotopia_store.getState().endTurn())
+
+test.describe('practice mode · the end of the game', () => {
+  test('a practice game reaches its own ending, shows the record, and writes nothing to it', async ({ page }) => {
+    test.setTimeout(ENDGAME_BUDGET_MS + 90_000)
+
+    // Watch the wire for the whole game, not just the score screen · a write could fire at any point.
+    const auth = []
+    const writes = []
+    const reads = []
+    page.on('request', (r) => {
+      const url = r.url()
+      if (/^https?:\/\/(localhost|127\.0\.0\.1)[:/]/.test(url) || url.startsWith('data:')) return
+      if (/\/auth\/v1\//.test(url)) auth.push(url)
+      // The two the score screen legitimately makes: the public Global Index counter. Both are READS with
+      // no session behind them. record_civilization_contribution / _detail are the WRITES, and they are the
+      // ones that must never fire · a bot must not be able to build the real NeoTopia.
+      else if (/record_civilization|award_game_win|game_events|game_sessions/.test(url)) writes.push(url)
+      else reads.push(url)
+    })
+
+    await page.goto('/practice?bots=3')
+    await boardReady(page)
+    const start = await read(page)
+    expect(start.players.filter(p => p.isBot)).toHaveLength(3)
+
+    // ── Q1 · does the endgame trigger at all when bots hold the seats? ────────────────────────────────────
+    // It is not obvious that it does. The clock only advances when a PLACEMENT empties a factory
+    // (gameStore.refillFactoryDraft), so a bot policy that drew more than it placed would leave the game
+    // running forever with nothing wrong on screen · the same silent-stall class as the S33 deadlock.
+    const started = Date.now()
+    let last = progress(start)
+    let lastMovedAt = Date.now()
+    let s = start
+    while (Date.now() - started < ENDGAME_BUDGET_MS) {
+      s = await read(page)
+      if (!s) throw new Error('the store seam vanished mid-game')
+      if (s.phase === 'scoring') break
+
+      const now = progress(s)
+      if (now !== last) { last = now; lastMovedAt = Date.now() }
+      if (s.currentSeat === humanSeat(s)) { await passHumanTurn(page); lastMovedAt = Date.now(); continue }
+
+      const stalled = Date.now() - lastMovedAt
+      expect(stalled, `seat ${s.currentSeat} is a bot and the board has not moved for ${stalled}ms · the ` +
+        `game has frozen short of its own ending (${JSON.stringify(s)})`).toBeLessThan(BOT_STALL_MS)
+      await page.waitForTimeout(POLL_MS)
+    }
+    expect(s.phase, `the game never ended within ${ENDGAME_BUDGET_MS}ms · last state ${JSON.stringify(s)}`)
+      .toBe('scoring')
+    console.log(`[practice] endgame reached after ${Date.now() - started}ms · turn ${s.turnNumber}`)
+
+    // ── Q2 · does the score screen render with no game_sessions row behind it? ────────────────────────────
+    // FinalScore takes sync.sessionId, and in practice that is null by construction (useLocalSession returns
+    // null rather than a fake id, because game_events.session_id is a real FK). A component that assumed a
+    // session would throw or render empty here, and the player would finish their first game at a blank
+    // screen · the one moment the mode is supposed to pay off.
+    const record = page.getByRole('dialog', { name: /final civilization record/i })
+    await expect(record, 'the game ended and no score screen appeared').toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('play-again-btn')).toBeVisible()
+
+    // ── Q3 · the ledger. THE ONE WITH A PERMANENT CONSEQUENCE. ────────────────────────────────────────────
+    // GameRoom.practice.test.jsx already pins this with mocks, and mutating its guard reddens it · so this is
+    // not the first proof, it is the LIVE one. A mock proves the component did not call a function it was
+    // handed; only the wire proves nothing left the machine. If this ever fires, bot-built districts enter
+    // the real civilization's permanent record and there is no clean way to take them back out.
+    expect(writes, 'a practice game wrote to the civilization record · bots must never build the real NeoTopia')
+      .toEqual([])
+    expect(auth, 'practice minted an identity · the mode exists for visitors who cannot sign in').toEqual([])
+    // Stated rather than left implicit: practice is auth-silent, NOT network-silent. The score screen reads
+    // the public Global Index for its counter. Recording the exact shape here so a future change that starts
+    // sending something else has to come through this line.
+    for (const url of reads) {
+      expect(url, `an unexpected request left a practice game: ${url}`)
+        .toMatch(/global_neotopia_index|get_global_neotopia_index/)
+    }
+    console.log(`[practice] wire at game end · ${auth.length} auth, ${writes.length} writes, ${reads.length} public reads`)
+  })
+
+  test('the board survives a refresh late in a practice game · bot moves included', async ({ page }) => {
+    test.setTimeout(120_000)
+    // THE REGRESSION GUARD for the bug this session fixed. Persisting only what the transport was asked to
+    // do left the saved snapshot behind by every bot move since the human's last action: a player who left a
+    // board with 13 elements came back to one with 11, at turn 8 instead of turn 10. The unit tests pin the
+    // subscription; this pins the thing the player actually experiences.
+    await page.goto('/practice?bots=3')
+    await boardReady(page)
+
+    const { snapshot: mid } = await playUntil(page, s => s.placed >= 6, {
+      budgetMs: 60_000,
+      label: 'enough bot placements to make a rewind visible',
+    })
+    expect(mid.placed).toBeGreaterThanOrEqual(6)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await boardReady(page, { tutorial: 'ignore' })
+    const back = await read(page)
+
+    // FALSE CASE, and the one that shipped: the game resumes perfectly and simply rewinds a round, which
+    // looks like the bots undoing their own moves. >= rather than === because the bots keep playing while
+    // the page comes back · the claim is that nothing was LOST, not that time stopped.
+    expect(back.placed, `the board rewound across a refresh · left ${mid.placed} elements, returned to ${back.placed}`)
+      .toBeGreaterThanOrEqual(mid.placed)
+    expect(back.turnNumber).toBeGreaterThanOrEqual(mid.turnNumber)
+  })
+
+  // KNOWN DEFECT · owned by T1 (src/components/FinalScore.jsx + src/pages/GameRoom.jsx), routed via comms.
+  // test.fail() rather than a skip or a deleted test: it runs, it documents the bug executably, and the day
+  // the fix lands this goes RED and whoever fixed it deletes this annotation. A skip would say nothing and a
+  // deleted test would say nothing louder. (My own S35 finding: a skip is indistinguishable from a pass.)
+  //
+  // MEASURED: at phase 'scoring' the leave-practice button is still in the DOM, and document.elementFromPoint
+  // at its centre returns the FinalScore dialog · position:fixed, inset:0, zIndex:300, background
+  // rgba(4,4,10,0.98). A real user click times out. The only reachable control is play-again, which calls
+  // navigate('/lobby') without endPractice(), so a practice player who finishes a game is sent to the
+  // multiplayer lobby and the practice teardown never runs.
+  //
+  // The annotation goes INSIDE the test body, not at describe scope. `test.fail()` written as a bare
+  // statement in the describe applies to EVERY test in that block · I wrote it that way first and it
+  // silently inverted all three: a genuine failure in the endgame test was reported as expected, and the
+  // one test that passed became the only reported failure. A blanket expected-to-fail is the loudest
+  // possible version of the exact pathology this session is about, so it is worth the line of comment.
+  test('a player who finishes a practice game can leave practice', async ({ page }) => {
+    test.fail()
+    await page.goto('/practice?bots=1')
+    await boardReady(page)
+    await page.evaluate(() => window.__neotopia_store.getState().setPhase('scoring'))
+    await expect(page.getByRole('dialog', { name: /final civilization record/i })).toBeVisible()
+
+    // No force: the question is whether a PLAYER can reach it, and force:true would answer a different one.
+    await page.getByTestId('leave-practice').click({ timeout: 5_000 })
+    await expect(page.getByTestId('practice-badge')).toBeHidden()
+  })
+})
