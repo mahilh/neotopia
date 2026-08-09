@@ -4,7 +4,7 @@ import { PROJECT_CARDS } from '../lib/projectCards'
 
 // card_01 · Fibonacci Solar Terrace · 2pt · pattern energy@(0,0)+energy@(1,0) · the simplest scorable shape.
 const card2 = PROJECT_CARDS.find(c => c.id === 'card_01')
-// card_17 · Orichalcum Energy Spire · 3pt · 3 energy in a line · for the multi-threshold case.
+// card_17 · Solar Updraft Tower · 3pt · 3 energy in a line · for the multi-threshold case.
 const card3 = PROJECT_CARDS.find(c => c.id === 'card_17')
 
 // Numerological milestones (T2 S15): tryScoreCard fires a one-shot `sacredMilestone` when a player's TOTAL

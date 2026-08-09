@@ -24,7 +24,11 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
     Flow E2E: in CI (gray-box via window.__neotopia_store)
     presence: mode-aware (in_lobby / in_game / in_flow_game)
 
-  🔴 CARD ART: 0/56 · shimmer is graceful fallback · real PNGs are the civilization's face
+  🟡 CARD ART: 20/56 · shimmer is graceful fallback for the other 36 · real PNGs are the civilization's face
+     (was recorded as 0/56 for ~15 sessions while 20 PNGs sat in public/art/cards/ · corrected T2 S34)
+  ✅ CARD NAMES: bucket B APPLIED · 20 renamed (T2 S34 · T1's audit 28c077a, Mahil approved) · zero
+     esoteric proper nouns left in the deck · Node/Gateway gone from every name · 56 stays 56 ·
+     bucket A 24 and bucket C 12 untouched by design
   ✅ CLUSTER POINTS: SHIPPED · engine 2348daa (T2 S18 · getClusterDetail.bonus/getClusterTotal/calculateFinalScore
      3rd arg · 1pt per element in biggest cluster per region) · display 442b694 (T1 S19 · per-cluster +N pts +
      "+N total" line · folded into every player total + threaded regions→buildGameEndEvent so audit===screen)
