@@ -19,8 +19,14 @@
  * over plain HTTP · including a genuine anonymous sign-in against Supabase Auth, the exact hop
  * Vercel can never see · and every stage reports its HTTP status as the witness (Rule 39).
  *
- * Stage 5 (profile upsert) is the precise call that returned 409 and bricked the lobby for a week.
- * This check would have caught that on the first run.
+ * Stage 5 (profile_claim_username) walks the precise call that returned 409 and bricked the lobby
+ * for a week. This check would have caught that on the first run.
+ *
+ * T2 S32 · AND THEN THIS FILE COMMITTED ITS OWN PATHOLOGY. Stage 5 was red for 17 consecutive runs
+ * with issue #1 open, and nothing a real player does was broken · it was using an upsert shape no
+ * client in the tree uses (see the comment at that stage). Everything above about a permanently-red
+ * check carrying no information was true of THIS FILE for 17 days. A monitor must exercise the
+ * shape the product uses, or the only thing it is measuring is itself.
  *
  * USAGE
  *   node scripts/healthcheck.cjs              # human-readable, exits non-zero if unhealthy
@@ -214,20 +220,47 @@ async function main() {
   //     against UNIQUE(username) and bricked the lobby for a week with Vercel reporting 0 errors.
   //     Migration 012 dropped that constraint; this stage is the standing guard that it stays gone.
   if (!NO_WRITE && accessToken) {
-    await stage('profile_upsert', true, async (signal) => {
+    //     T2 S32 · THIS STAGE WAS THE OUTAGE. It had been red for 17 runs with issue #1 open, and
+    //     nothing a real player does was ever broken. The old call used
+    //     `Prefer: resolution=merge-duplicates`, which makes PostgREST write ON CONFLICT DO UPDATE
+    //     SET *every column in the payload* · user_id included · and migration 017 deliberately
+    //     revoked UPDATE(user_id) so a client cannot reassign a profile to another account. The
+    //     monitor was the ONLY caller in the tree using that shape. It was reporting its own
+    //     unrealistic write, which is the exact pathology this file's header was written about:
+    //     a check that is always red carries no information (Rule 49). A monitor must exercise the
+    //     shape the PRODUCT uses, or it is measuring itself (Rule 36 · the harness must mirror the
+    //     real code path). Probed live by T3 against production, all four profile write paths:
+    //       upsert merge-duplicates (monitor only) 403 · insert 201 · update 204 · upsert
+    //       ignoreDuplicates (useGameRoom.js:302) 201
+    //     So both halves below are now literally useAuth.claimUsername's two branches
+    //     (useAuth.js:124-126), payload for payload.
+    await stage('profile_claim_username', true, async (signal) => {
+      // Branch A · FIRST CLAIM. The exact insert useAuth.js:126 performs, same three columns.
+      // This is also the call that returned 409 against UNIQUE(username) and bricked the lobby for
+      // a week in S24 · migration 012 dropped that constraint and this remains the standing guard.
       const username = `hc_${crypto.randomBytes(4).toString('hex')}`
-      const { res, json, status } = await req(
-        `${SUPA_URL}/rest/v1/player_profiles?on_conflict=user_id`,
-        {
-          method: 'POST',
-          headers: { ...authed(), Prefer: 'resolution=merge-duplicates,return=representation' },
-          body: JSON.stringify({ user_id: userId, username }),
-        }, signal)
-      if (!res.ok) {
-        const why = json?.message || `HTTP ${status}`
-        throw fail(`username claim failed · ${why}${status === 409 ? ' · THE S24 LOBBY-BRICKING 409 IS BACK' : ''}`, status)
+      const ins = await req(`${SUPA_URL}/rest/v1/player_profiles`, {
+        method: 'POST',
+        headers: { ...authed(), Prefer: 'return=representation' },
+        body: JSON.stringify({ user_id: userId, username, avatar_color: 'blue' }),
+      }, signal)
+      if (!ins.res.ok) {
+        const why = ins.json?.message || `HTTP ${ins.status}`
+        throw fail(`username claim failed · ${why}${ins.status === 409 ? ' · THE S24 LOBBY-BRICKING 409 IS BACK' : ''}`, ins.status)
       }
-      return { status }
+
+      // Branch B · RENAME. The exact update useAuth.js:125 performs when a row already exists.
+      // Worth walking as well as the insert: it is the branch every RETURNING player takes, and
+      // it is the one 017's column grants could silently narrow (it must carry username ONLY ·
+      // re-sending the stat columns would zero them, which is why the client sends one field).
+      const upd = await req(`${SUPA_URL}/rest/v1/player_profiles?user_id=eq.${userId}`, {
+        method: 'PATCH', headers: authed(), body: JSON.stringify({ username: `${username}_r` }),
+      }, signal)
+      if (!upd.res.ok) {
+        const why = upd.json?.message || `HTTP ${upd.status}`
+        throw fail(`username rename failed · ${why}`, upd.status)
+      }
+      return { status: ins.status, renameStatus: upd.status }
     })
 
     // 6 · room creation · the actual entry point to every multiplayer game, and the write path
@@ -264,7 +297,20 @@ async function main() {
       await req(`${SUPA_URL}/rest/v1/player_profiles?user_id=eq.${userId}`, {
         method: 'DELETE', headers: authed(),
       }, signal)
-      return { status }
+
+      // T2 S32 · READ BACK, do not assume. Both DELETEs above return 204 whether they removed a row
+      // or matched nothing · a policy that does not exist for DELETE affects 0 rows and reports no
+      // error. I shipped exactly that bug in an S31 probe: it printed "fixtures deleted" having
+      // deleted half of them, and only a later COUNT disagreed. A teardown is finished when a count
+      // says zero, not when the call returns (Rule 61, extended from reads to cleanup).
+      const left = async (path) => {
+        const r = await req(`${SUPA_URL}${path}&select=id`, { headers: authed() }, signal)
+        return Array.isArray(r.json) ? r.json.length : 0
+      }
+      const leaked = (await left(`/rest/v1/game_rooms?id=eq.${roomId}`))
+                   + (await left(`/rest/v1/player_profiles?user_id=eq.${userId}`))
+      if (leaked > 0) throw fail(`cleanup left ${leaked} fixture row(s) behind · they accumulate silently`, status)
+      return { status, verifiedEmpty: true }
     })
   }
 
