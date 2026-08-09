@@ -29,11 +29,9 @@ import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roo
 // The purple it replaces was the LEAST separable pair on the board (dE 25 from seat 0's blue, where
 // anything under ~25 starts to read as "same colour, different lighting"). Gold doubles the worst-case
 // separation, so four players are now easier to tell apart than three were.
-// KNOWN COST, not an oversight: white 12px initials on this gold measure 2.70:1, the weakest of the
-// four (the others are 3.39 to 3.93 and none of them reach the 4.5 that 12px bold wants). The name is
-// spelled out in full immediately to the right, so the initials are redundant rather than load-bearing.
-// #B8871F buys 3.22:1 if the initials should stand on their own · one line, but it adds a hex the
-// palette does not otherwise use.
+// The contrast cost S29 recorded here (white 12px initials at 2.70:1 on this gold, weakest of four)
+// is GONE as of S30, and not by changing this hex · see the ink note below. The swatches were never
+// the problem; white was.
 // All three copies of this list now agree, which they have not done before: useGameRoom.SEAT_COLORS
 // writes 'gold' (T3 S28), gameStore.js:188 says 'gold' (T2 S29), and seat 3 is painted gold here. The
 // three still exist as three separate literals though, so agreement is a coincidence maintained by
@@ -43,6 +41,41 @@ import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roo
 // sign-in budget is exhausted (T2 S29) · so the check that matters became a test instead of a picture
 // (Rule 31 · when live verification is blocked, convert it to something deterministic).
 export const SEAT_COLORS = ['#378ADD', '#E24B4A', '#1D9E75', '#C89440'] // blue · red · green · gold (by seat)
+
+// ── The initials, S30. The answer to "make the gold darker" was: stop using white ink. ────────────
+// S29 recorded white-on-gold at 2.70:1 as a known cost and offered #B8871F (3.22:1) as the fix. Both
+// numbers are below the 4.5 that 12px bold wants, so that trade bought 0.5 of contrast, added a hex
+// the palette does not otherwise use, and left the problem. Measuring the OTHER ink instead:
+//
+//                       white ink   dark ink (#1A1206)
+//     blue   #378ADD      3.59          5.16
+//     red    #E24B4A      3.93          4.71
+//     green  #1D9E75      3.39          5.47
+//     gold   #C89440      2.70          6.85      ← the one S29 flagged
+//     gold   #B8871F      3.22          5.76      ← the proposed swatch, still short on white
+//
+// White was failing on ALL FOUR seats, not just gold · these are mid-to-light saturated colours and
+// white text is simply the wrong pairing for them. Dark ink clears 4.5:1 on every seat, keeps the
+// palette exactly as it is, and rendered side by side it is visibly crisper (the gold worst by far on
+// white, best of the eight on dark). This is a wider change than "recolour seat 3" and a smaller one:
+// one style property, no new colour.
+//
+// Chosen by luminance rather than hardcoded per seat, so a future palette edit re-decides itself
+// instead of silently inheriting an ink that no longer suits it (Rule 45 · the second contract).
+const SEAT_INK_DARK = '#1A1206'
+const srgbToLinear = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 }
+const relLuminance = (hex) => {
+  const [r, g, b] = [1, 3, 5].map(i => srgbToLinear(parseInt(hex.slice(i, i + 2), 16)))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+export const contrastRatio = (a, b) => {
+  const [hi, lo] = [relLuminance(a), relLuminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+/** Whichever of the two inks the eye can actually read on this swatch. */
+export function seatInk(hex) {
+  return contrastRatio(hex, SEAT_INK_DARK) > contrastRatio(hex, '#FFFFFF') ? SEAT_INK_DARK : '#FFFFFF'
+}
 
 // The four elements a civilization is built from · decorative row on the entry screens · reuses the
 // bespoke board ElementIcon so the lobby and the board speak one visual language (T1 S14).
@@ -491,7 +524,7 @@ export default function Lobby({ onGameStart, initialCode = null }) {
         <div style={playerList}>
           {lobbyPlayers.map((p, i) => (
             <div key={p.userId ?? i} style={playerRow}>
-              <div style={{ ...avatar, background: SEAT_COLORS[p.seat ?? i % 4] }}>
+              <div style={{ ...avatar, background: SEAT_COLORS[p.seat ?? i % 4], color: seatInk(SEAT_COLORS[p.seat ?? i % 4]) }}>
                 {(p.username ?? '?').slice(0, 2).toUpperCase()}
               </div>
               <span style={playerName}>{p.username ?? 'Joining…'}</span>

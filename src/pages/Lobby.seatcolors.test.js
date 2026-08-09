@@ -65,3 +65,38 @@ describe('Lobby seat colours', () => {
     expect(DB_SEAT_COLORS[3]).toBe('gold')
   })
 })
+
+// ── The initials have to be readable too (T1 S30) ────────────────────────────────────────────────
+// Separation says which seat is which; contrast says whether you can read the two letters printed on
+// it. S29 shipped white ink at 2.70:1 on gold as a known cost. Measuring the other ink showed white
+// was failing on ALL FOUR seats (3.39 to 3.93), not just the one that got flagged.
+import { seatInk, contrastRatio } from './Lobby'
+
+describe('Lobby seat initials', () => {
+  // 12px 700 is not large-scale text under WCAG, so 4.5:1 is the bar that applies to it.
+  const MIN_CONTRAST = 4.5
+
+  it('prints every seat s initials in an ink a person can actually read', () => {
+    const failures = []
+    for (const [i, hex] of SEAT_COLORS.entries()) {
+      const ratio = contrastRatio(hex, seatInk(hex))
+      if (ratio < MIN_CONTRAST) failures.push(`seat ${i} (${hex}) on ${seatInk(hex)}: ${ratio.toFixed(2)}:1`)
+    }
+    expect(failures, `these seats fail 4.5:1 for 12px bold:\n  ${failures.join('\n  ')}`).toEqual([])
+  })
+
+  it('picks the better of the two inks rather than a habit', () => {
+    // The rule has to survive a palette edit · a future seat that is genuinely dark must get white
+    // back automatically, or this becomes a hardcoded preference wearing a function s clothes.
+    expect(contrastRatio('#101018', seatInk('#101018'))).toBeGreaterThan(contrastRatio('#101018', '#1A1206'))
+    expect(seatInk('#101018').toUpperCase()).toBe('#FFFFFF')
+    expect(seatInk('#FFE9A8').toUpperCase()).not.toBe('#FFFFFF') // a pale swatch must not keep white
+  })
+
+  it('agrees with the reference contrast values', () => {
+    // Anchors the maths itself, so a broken luminance function cannot quietly satisfy the gate above
+    // by returning the same wrong number for both inks.
+    expect(contrastRatio('#FFFFFF', '#000000')).toBeCloseTo(21, 1)
+    expect(contrastRatio('#C89440', '#FFFFFF')).toBeCloseTo(2.70, 1)
+  })
+})
