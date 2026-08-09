@@ -33,7 +33,12 @@ function cardPrimaryElement(card) {
   return best
 }
 
-export default function GameRoom() {
+// practiceBots · how many bot opponents the player asked for on the practice entry (T1 S32). Carried
+// here so the seam exists and is observable BEFORE the bots do (data-practice-bots below), rather than
+// being retrofitted through this file later. Seating a bot is T2's · until that interface lands the
+// local game seeds the one human it always has, which is exactly the zero-opponent case the practice
+// selector is currently allowed to offer.
+export default function GameRoom({ practiceBots = 0 }) {
   // Route-param multiplayer: /game/:roomId → real game · /game (no param) → solo dev.
   // roomId from the URL survives a refresh (free rejoin · T3) · it is the clean signal for
   // "this is a real session" · NOT useGameStore.getState().roomId (T3 never populates that).
@@ -278,6 +283,10 @@ export default function GameRoom() {
       data-game-phase={phase}
       data-my-turn={isMyTurn ? 'true' : 'false'}
       data-ui-phase={uiPhase}
+      // Observable seam for the practice path · 0 today for every route, and the number the player
+      // actually asked for once bot seats exist. A test can assert the request ARRIVED here without
+      // waiting on the half that consumes it.
+      data-practice-bots={practiceBots}
       style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}
     >
 

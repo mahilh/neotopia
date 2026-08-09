@@ -111,6 +111,25 @@ export default function Landing() {
           Enter the Civilization
         </button>
 
+        {/* PRACTICE (T1 S32) · the second door, and on this page specifically because the landing page
+            is the ONE screen that never signs anybody in (measured by T2 S30). A visitor who wants to
+            see the board before committing to anything can do it from here without an identity being
+            minted, which is the shape Mahil's zero-sign-in constraint asks for. It is also the only
+            path in the product for somebody who arrives ALONE · every other route ends at a Start
+            button that needs a second connected human. */}
+        <button
+          data-testid="landing-practice"
+          onClick={() => navigate('/practice?bots=0')}
+          style={{
+            marginTop: 16, height: 48, minHeight: 48, padding: '0 30px', borderRadius: 10,
+            border: '1px solid rgba(200,148,64,0.4)', background: 'rgba(200,148,64,0.1)',
+            color: 'rgba(255,255,255,0.85)', fontSize: 12, letterSpacing: 3, cursor: 'pointer',
+            textTransform: 'uppercase',
+          }}
+        >
+          Practice alone
+        </button>
+
         <a
           href="#how-it-works"
           onClick={scrollTo('how-it-works')}

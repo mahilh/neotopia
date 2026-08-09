@@ -11,6 +11,7 @@ import { useBackendHealth } from '../hooks/useConnectionHealth'
 import { deriveBackendStatus } from '../utils/backendStatus'
 import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roomLink'
 import { deriveLobbyGate } from '../utils/lobbyGate'
+import PracticeStart from '../components/PracticeStart'
 
 // Seat → the colour actually painted on a roster avatar. These hexes are the ONLY seat colour a player
 // ever sees: the `color` on a store player and the `player_color` on a room_players row are never
@@ -172,7 +173,7 @@ const inert = (base) => ({ ...base, opacity: 0.35, cursor: 'not-allowed' })
 
 // `initialCode` arrives only from the /join/:code invite route (App.jsx · JoinRoute). Everything
 // about the invite path is additive: with no code this component behaves exactly as it did before.
-export default function Lobby({ onGameStart, initialCode = null }) {
+export default function Lobby({ onGameStart, onRoomCode, onPractice, initialCode = null }) {
   const { user, username, isLoading: authLoading, authError, isClaimed, claimUsername } = useAuth()
 
   // Reachability comes from T3's aggregator (useConnectionHealth · every transport reports into it and
@@ -229,6 +230,27 @@ export default function Lobby({ onGameStart, initialCode = null }) {
   useEffect(() => {
     if (roomPhase === 'playing' && roomId) onGameStart?.(roomId)
   }, [roomPhase, roomId, onGameStart])
+
+  // ── THE ROOM CODE HAS TO SURVIVE A REFRESH (T1 S32) ─────────────────────────────────────────────
+  // Measured in S31: refreshing the waiting room destroyed the room from the player's side. Room
+  // membership lives in per-instance useState inside useGameRoom with nothing behind it, so a remount
+  // loses it · and a refresh is a remount. The player lands on the home screen with no code, no room,
+  // and no way back, while their seat stays held server-side (13 rooms in production sit like that).
+  // Refreshing is the most natural act on a screen where nothing appears to be happening.
+  //
+  // The URL is the one piece of state a refresh cannot destroy. Handing the code up lets the route
+  // carry it, and on the way back in the invite auto-join path takes over · joinRoom is already
+  // idempotent for a member (T3 S27 put the membership check BEFORE the status check precisely so a
+  // share link works as a rejoin link), so re-entering writes nothing and restores local state.
+  // Fired from an effect, never during render, and only on a real change · the route replaces the URL
+  // in response, and an unconditional call would hand it the same value on every render.
+  const lastSentCode = useRef(undefined)
+  useEffect(() => {
+    const next = roomCode ?? null
+    if (lastSentCode.current === next) return
+    lastSentCode.current = next
+    onRoomCode?.(next) // null on leave · a code left in the URL would rejoin a room they walked out of
+  }, [roomCode, onRoomCode])
 
   // ── Invite preview ──────────────────────────────────────────────
   // peekRoom (T3 S27) reads the room and its roster with the anon key and writes nothing, so it can
@@ -642,6 +664,16 @@ export default function Lobby({ onGameStart, initialCode = null }) {
             Join Room
           </button>
           {lobbyError && <p style={errorText}>{lobbyError}</p>}
+        </div>
+      )}
+
+      {/* PRACTICE (T1 S32) · deliberately its own card, below the two room actions and NOT gated on
+          backend.canUseRooms. Practice needs no room, no seat and no realtime, so making it inert
+          during an outage would take away the one thing that still works · and the outage is exactly
+          when a stranded visitor most needs somewhere to go. */}
+      {view === 'home' && (
+        <div style={card}>
+          <PracticeStart compact onStart={onPractice} />
         </div>
       )}
 
