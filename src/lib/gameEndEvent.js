@@ -16,11 +16,17 @@
 // can never disagree with the number the player saw on screen. (The forge's payload referenced a
 // non-existent `p.total`; the real total only exists via this engine call.)
 //
-// CLUSTER BONUS (T2 S18 · board game rule p9): a board-global term, computed once and added to every
-// player's total. It is regions-GUARDED below: the live FinalScore caller passes only { players } (no
-// regions), so the bonus is 0 there and the audit still matches the screen · until T1 threads regions
-// into both the display total AND this payload in the SAME change (comms T2 S18). A snapshot that DOES
-// carry regions (getState(), tests) gets the bonus folded in.
+// CLUSTER BONUS (board game rule p9): PER PLAYER since T2 S35. It was board-global from S18 until then ·
+// one number added identically to everybody, which inflated every total equally and could not change a
+// ranking. Hexes now carry `placedBy`, so each seat scores 1 point per token OF THEIR OWN on the biggest
+// cluster of each element per region, and this is the first term in the audit that differs between players.
+// Still regions-GUARDED below: a payload built from { players } alone has no board to walk, so every
+// cluster bonus is 0 and the audit still matches a screen computed the same way. A snapshot that DOES carry
+// regions (getState(), tests, the live FinalScore caller) gets each player's own bonus folded in.
+//
+// PAYLOAD VERSION 2. `final_scores[]` gains `cluster_bonus` and `total` is no longer a shared-bonus total.
+// The 3 historical rows are all version 1, all 0-0 with a 0 bonus, so nothing needs migrating · a reader
+// must branch on `version` rather than assume the field exists.
 
 import { calculateFinalScore, getClusterTotal } from './patternMatcher'
 
@@ -36,21 +42,25 @@ export const GAME_END_EVENT_TYPE = 'gameEnd'
 export function buildGameEndEvent(state) {
   const players = Array.isArray(state?.players) ? state.players : []
 
-  // Board-global cluster bonus (board game rule p9) · computed ONCE from the shared board, added to every
-  // player's total (the SAME number · no per-hex placer to attribute it per player · T2 S18). regions-guarded:
-  // absent (the live { players } path) → 0 → totals still match the screen (see header note).
-  const clusterBonus = getClusterTotal(Array.isArray(state?.regions) ? state.regions : [])
+  // The board, walked once per player below. regions-guarded: absent (a { players }-only payload) → every
+  // bonus is 0 → totals still match a screen computed the same way (see header note).
+  const regions = Array.isArray(state?.regions) ? state.regions : []
 
   const finalScores = players.map(p => {
     const scores = Array.isArray(p?.scores) ? p.scores : []
     const unusedBonus = Array.isArray(p?.bonusTokens) ? p.bonusTokens.length : 0
     const scoredCardIds = Array.isArray(p?.scoredCardIds) ? p.scoredCardIds : []
+    // THIS seat's own cluster points (board game rule p9 · T2 S35). A seat that is null cannot own a token,
+    // so it gets the honest 0 rather than the board total · never fall back to the global reading here, that
+    // is precisely the no-op this change exists to remove.
+    const clusterBonus = typeof p?.seat === 'number' ? getClusterTotal(regions, p.seat) : 0
     return {
       seat: p?.seat ?? null,
       user_id: p?.userId ?? null,
       username: p?.username ?? null,
       scores,                                                          // per-region totals [r0, r1, r2]
       unused_bonus: unusedBonus,                                       // each unused token = 3 pts at game end
+      cluster_bonus: clusterBonus,                                     // own tokens on each biggest cluster (v2)
       districts: scoredCardIds.length,                                 // cards this player scored (districts built)
       total: calculateFinalScore(scores, unusedBonus, clusterBonus),   // engine = single source of truth
     }
@@ -63,7 +73,7 @@ export function buildGameEndEvent(state) {
   return {
     eventType: GAME_END_EVENT_TYPE,
     eventData: {
-      version: 1,
+      version: 2, // v2 (T2 S35): final_scores[].cluster_bonus, and totals are per-player rather than shared
       final_scores: ranked,
       districts_built: finalScores.reduce((sum, p) => sum + p.districts, 0), // = global-index contribution
       winner_seat: ranked.length ? ranked[0].seat : null,

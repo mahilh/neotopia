@@ -107,29 +107,38 @@ const HEX_NEIGHBORS = [
 ]
 
 /**
- * Size of the largest connected cluster of one element type (BFS).
- * Consumed by getClusterDetail / getClusterTotal (the cluster bonus · board game rule p9) and the
- * getLargestCluster store selector. This is the ONE cluster walk · never reimplement it (rule 10).
+ * THE HEX KEYS of the largest connected cluster of one element type (BFS).
+ * This is the ONE cluster walk · never reimplement it (rule 10). findLargestCluster is its .length,
+ * and the per-player cluster bonus (T2 S35 · board game rule p9) needs the MEMBERS rather than the
+ * size, because it counts how many tokens IN that cluster each seat placed. Both callers therefore
+ * share a single BFS · a second walk could disagree with the first on a tie between equal-sized
+ * components, and then the points shown would not be the points scored.
  *
- * @param {Object} regionHexes - {[key:'q,r']: {element: string|null}}
+ * TIES ARE RESOLVED DETERMINISTICALLY: when two components of one element tie for largest, the one
+ * whose walk started at the earliest key in Object.keys order wins (strict `>` below keeps the first).
+ * The SIZE is identical either way, so this never mattered before · with per-seat attribution it does,
+ * because two equal clusters can be owned by different players. Deterministic is what matters here:
+ * every client walks the same synced hexes map in the same order and reaches the same cluster.
+ *
+ * @param {Object} regionHexes - {[key:'q,r']: {element: string|null, placedBy?: number}}
  * @param {string} elementType
- * @returns {number} largest connected-component size
+ * @returns {string[]} hex keys of the largest connected component · [] when the element is absent
  */
-export function findLargestCluster(regionHexes, elementType) {
+export function findLargestClusterMembers(regionHexes, elementType) {
   const keys = Object.keys(regionHexes).filter(k => regionHexes[k].element === elementType)
-  if (keys.length === 0) return 0
+  if (keys.length === 0) return []
 
   const visited = new Set()
-  let largest = 0
+  let largest = []
 
   for (const startKey of keys) {
     if (visited.has(startKey)) continue
     const queue = [startKey]
     visited.add(startKey)
-    let size = 0
+    const members = []
     while (queue.length) {
       const key = queue.shift()
-      size++
+      members.push(key)
       const [q, r] = key.split(',').map(Number)
       for (const dir of HEX_NEIGHBORS) {
         const nKey = `${q + dir.q},${r + dir.r}`
@@ -139,10 +148,23 @@ export function findLargestCluster(regionHexes, elementType) {
         }
       }
     }
-    largest = Math.max(largest, size)
+    if (members.length > largest.length) largest = members // strict > · first-found wins a tie
   }
 
   return largest
+}
+
+/**
+ * Size of the largest connected cluster of one element type.
+ * Consumed by getClusterDetail / getClusterTotal (the cluster bonus · board game rule p9) and the
+ * getLargestCluster store selector. Thin wrapper over the one BFS above (rule 10).
+ *
+ * @param {Object} regionHexes - {[key:'q,r']: {element: string|null}}
+ * @param {string} elementType
+ * @returns {number} largest connected-component size
+ */
+export function findLargestCluster(regionHexes, elementType) {
+  return findLargestClusterMembers(regionHexes, elementType).length
 }
 
 // The four element types · the LOWERCASE engine keys, identical to ELEMENT_COLORS (hexUtils/ProjectCard/
@@ -166,25 +188,48 @@ const ELEMENT_TYPES = ['energy', 'biofarming', 'technology', 'community']
  *    threshold means a lone token scores nothing here (matches the existing cluster definition the viz uses;
  *    flagged to Mahil in case the rulebook intends a singleton = 1pt · comms T2 S18).
  *
- * The board is SHARED: region.hexes stores `element` only, with NO per-hex placer (placeElement never
- * records who placed a hex), so clusters · and therefore the bonus · are GLOBAL to the board (a
- * CIVILIZATION bonus), not the board game's per-colour attribution. The data model carries no token colour
- * to split the bonus by; a future per-player placer would restore per-colour scoring (documented divergence
- * · comms T2 S18). getClusterTotal sums `bonus`; calculateFinalScore folds that one number in as a flat term.
+ * OWNERSHIP (T2 S35 · this is the change that made the rule able to decide a game).
+ * Until S35 a placed hex stored `element` and nothing else, so the engine could not attribute a token to
+ * anybody and this bonus was BOARD-GLOBAL · one number added identically to every player. Measured live at
+ * 40 points, to both players in a real finished game. A term equal for everyone cannot change a ranking, so
+ * the single rule in NeoTopia meant to make WHERE you place matter was arithmetically incapable of doing it
+ * (docs/ACTION_ECONOMY_FINDING.md §8). placeElement now records `placedBy: seat` on the hex, which restores
+ * the rulebook's actual wording:
  *
- * @param {Array} regions - [{ id, name, hexes: {[key:'q,r']: {element}} }]
- * @returns {Array} [{ regionId, regionName, element, count, bonus }] · count >= 2 · bonus === count ·
- *          deterministic order (region order, then ELEMENT_TYPES order)
+ *   "each player gains 1 Point for each Element Token OF THEIR COLOR on the biggest cluster in each Region."
+ *
+ * Note precisely what is and is not per-player. The CLUSTER is still found board-globally · adjacency is
+ * adjacency and the board is shared, so a cluster can be built by several players together, and `count` is
+ * the factual size of it regardless of who owns what. Only the BONUS is attributed: seat S scores 1 point
+ * per token IN that cluster carrying placedBy === S. The per-seat bonuses therefore sum to at most `count`,
+ * and to less when some members predate ownership tracking.
+ *
+ * BACKWARD COMPATIBILITY, and it is load-bearing rather than politeness. Omitting `seat` returns the old
+ * board-global reading (bonus === count). Games in flight when this shipped, the three historical game_end
+ * rows, and every saved fixture carry hexes with no `placedBy`, and a hex with no placer belongs to nobody:
+ * under a seat it scores zero for everyone, which is the honest answer, not a crash and not a windfall.
+ *
+ * @param {Array} regions - [{ id, name, hexes: {[key:'q,r']: {element, placedBy?}} }]
+ * @param {number} [seat] - attribute the bonus to this seat · omit for the legacy board-global total
+ * @returns {Array} [{ regionId, regionName, element, count, bonus }] · count >= 2 · deterministic order
+ *          (region order, then ELEMENT_TYPES order). bonus === count when seat is omitted, else the number
+ *          of that cluster's tokens placed by `seat` (0 is a valid, and reported, bonus).
  */
-export function getClusterDetail(regions = []) {
+export function getClusterDetail(regions = [], seat) {
+  const perSeat = typeof seat === 'number'
   const detail = []
   for (const region of regions) {
     if (!region?.hexes) continue
     for (const element of ELEMENT_TYPES) {
-      const count = findLargestCluster(region.hexes, element)
+      const members = findLargestClusterMembers(region.hexes, element)
+      const count = members.length
       if (count >= 2) {
-        // bonus === count · 1 point per element token on the biggest cluster (board game rule p9).
-        detail.push({ regionId: region.id, regionName: region.name, element, count, bonus: count })
+        // 1 point per element token on the biggest cluster (board game rule p9) · counting only this
+        // seat's tokens when a seat is given, every token when it is not.
+        const bonus = perSeat
+          ? members.reduce((n, k) => n + (region.hexes[k]?.placedBy === seat ? 1 : 0), 0)
+          : count
+        detail.push({ regionId: region.id, regionName: region.name, element, count, bonus })
       }
     }
   }
@@ -193,27 +238,33 @@ export function getClusterDetail(regions = []) {
 
 /**
  * Total cluster bonus across the whole board · the single number calculateFinalScore folds in.
- * Sums the per-cluster `bonus` (= count) of every >= 2 cluster getClusterDetail finds, so it reuses that
- * one BFS (rule 10) and can never disagree with the per-cluster figures T1 renders. The board is SHARED
- * with no per-hex placer, so this is a CIVILIZATION-level bonus · the SAME number for every player · not
- * the board game's per-colour split (the data model carries no token colour · documented divergence).
+ * Sums the per-cluster `bonus` of every >= 2 cluster getClusterDetail finds, so it reuses that one BFS
+ * (rule 10) and can never disagree with the per-cluster figures T1 renders.
+ *
+ * WITH a seat: that player's own cluster points · the term that finally differs between players (T2 S35).
+ * WITHOUT one: the legacy board-global total, kept for callers that have no seat to ask about.
  *
  * @param {Array} regions - same shape getClusterDetail takes
- * @returns {number} sum of biggest-cluster sizes (>= 2) over every region+element · 0 when none
+ * @param {number} [seat] - attribute to this seat · omit for the legacy board-global total
+ * @returns {number} 0 when there are no clusters, or none of them are this seat's
  */
-export function getClusterTotal(regions = []) {
-  return getClusterDetail(regions).reduce((sum, c) => sum + (c.bonus || 0), 0)
+export function getClusterTotal(regions = [], seat) {
+  return getClusterDetail(regions, seat).reduce((sum, c) => sum + (c.bonus || 0), 0)
 }
 
 /**
  * Final score for one player across all 3 regions.
  * Formula: best + 2nd + (worst x 3) + (unusedBonus x 3) + clusterBonus.
- * `clusterBonus` is the board-global cluster term (getClusterTotal · board game rule p9 · 1pt per element
- * token on the biggest cluster of that element per region). It is a FLAT peer term · added like the unused-
- * token bonus, NOT folded into a region score before the worst x3 weighting: CLAUDE.md's final-score
- * shorthand lists it as "+cluster", the unused bonus sets the flat-meta-term precedent, and the bonus is a
- * civilization quantity (the same for every player) so weighting it by an individual's worst region would be
- * arbitrary. (The region-fold reading is flagged to Mahil in comms · trivially swappable if he prefers it.)
+ * `clusterBonus` is THIS PLAYER'S cluster term (getClusterTotal(regions, seat) · board game rule p9 · 1pt per
+ * element token OF THEIR COLOR on the biggest cluster of that element per region · T2 S35). It is a FLAT peer
+ * term · added like the unused-token bonus, NOT folded into a region score before the worst x3 weighting:
+ * CLAUDE.md's final-score shorthand lists it as "+cluster" and the unused bonus sets the flat-meta-term
+ * precedent. (The region-fold reading is flagged to Mahil in comms · trivially swappable if he prefers it.)
+ *
+ * Until S35 this argument was board-global and therefore identical for every player, which made it incapable
+ * of changing a ranking · it inflated every total by the same amount and moved nobody. It is now per-seat, so
+ * this argument is the one place a placement decision reaches the final score. Callers MUST pass the seat's
+ * own value; passing the board total again would silently restore the old no-op.
  * Defaults to 0 so every existing caller · and the no-regions audit path · is unchanged until it passes the term.
  */
 export function calculateFinalScore(regionalScores, unusedBonusCount = 0, clusterBonus = 0) {

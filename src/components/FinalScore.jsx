@@ -31,11 +31,13 @@ const GLOBAL_INDEX_BASE = 147823 // canonical seed · fallback only · getGlobal
 const ELEMENT_LABELS = { energy: 'Energy', biofarming: 'BioFarming', technology: 'Technology', community: 'Community' }
 
 // One player's final record · derived purely from store-true fields, no fabricated data (rule 32).
-// `clusterBonus` is the board-global cluster term (board game rule p9 · getClusterTotal · T2 S18) — a FLAT
-// peer of the unused-token bonus that the engine folds into every player's total (calculateFinalScore's 3rd
-// arg). The SAME number for every player (the board is shared · no per-hex placer to attribute it · T2 S18),
-// so it lifts all totals equally and never changes the ranking. Passing it here makes the on-screen total
-// match the game_end audit record, which computes the identical total (gameEndEvent.js · rule 40/65/63).
+// `clusterBonus` is THIS PLAYER'S OWN cluster term (board game rule p9 · getClusterTotal(regions, seat) ·
+// T2 S35) — a FLAT peer of the unused-token bonus that the engine folds into the total (calculateFinalScore's
+// 3rd arg). It was board-global and therefore identical for everybody from S18 until S35, which meant it
+// lifted all totals equally and could never change the ranking; hexes now carry `placedBy`, so each player
+// scores only their own tokens on each biggest cluster and this term finally DIFFERS between players.
+// Passing it here makes the on-screen total match the game_end audit record, which computes the identical
+// per-player total (gameEndEvent.js v2 · rule 40/65/63).
 function recordFor(player, clusterBonus = 0) {
   const scores = [0, 1, 2].map(id => player.scores?.[id] ?? 0)
   const unusedBonus = player.bonusTokens?.length ?? 0
@@ -97,18 +99,30 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     () => (typeof patternMatcher.getClusterDetail === 'function' ? patternMatcher.getClusterDetail(regions) : []),
     [regions],
   )
-  // The board-global cluster bonus · the SAME flat term the engine folds into every player's final total
-  // (calculateFinalScore's 3rd arg · T2 S18). Derived from the SAME clusterDetail rendered below, so the
-  // "+N total" line can never disagree with the per-cluster rows (Rule 63) · this equals, by construction,
-  // patternMatcher.getClusterTotal(regions) (which is itself sum(getClusterDetail.bonus) · one BFS · rule 10).
+  // The board's TOTAL cluster points · the sum of the per-cluster rows shown below, i.e. every token on every
+  // biggest cluster. This is a civilization figure for the display only: since T2 S35 the engine scores each
+  // player just their OWN tokens, so per-seat bonuses sum to AT MOST this number (less when a cluster holds
+  // tokens placed before ownership tracking existed). It is deliberately NOT what any player's total uses.
   const clusterBonus = useMemo(
     () => clusterDetail.reduce((sum, c) => sum + (c.bonus || 0), 0),
     [clusterDetail],
   )
 
+  // T2 S35 · MINIMAL CROSS-LANE EDIT, flagged to T1 in comms. Each record now takes that seat's OWN cluster
+  // points, not the board total, so the on-screen total matches the game_end audit row (gameEndEvent.js v2,
+  // which computes getClusterTotal(regions, seat) per player). Shipping the engine change without this one
+  // line would have made the screen and the permanent record disagree · Rule 65, the composed bug that hides
+  // exactly when two lanes each ship a correct half. The per-cluster VISUALIZATION below is untouched and
+  // still shows civilization-level sizes: breaking those rows down by player is a real design job in T1's
+  // lane, not a seam fix, so it is handed over rather than guessed at.
   const finalScores = useMemo(
-    () => players.map(p => recordFor(p, clusterBonus)).sort((a, b) => b.total - a.total),
-    [players, clusterBonus],
+    () => players.map(p => recordFor(
+      p,
+      typeof p?.seat === 'number' && typeof patternMatcher.getClusterTotal === 'function'
+        ? patternMatcher.getClusterTotal(regions, p.seat)
+        : 0,
+    )).sort((a, b) => b.total - a.total),
+    [players, regions],
   )
   const totalProjectsBuilt = useMemo(
     () => finalScores.reduce((s, p) => s + p.scoredCards.length, 0),
@@ -388,8 +402,12 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
 
       {/* ELEMENT CLUSTERS · the connected patterns the civilization formed (board-global · the most
           educational end-screen moment). Each cluster is worth 1 point per token on it (board game rule p9 ·
-          getClusterDetail.bonus · T2 S18) · this is the same flat clusterBonus folded into every total above
-          (Rule 63 · the per-row points + the total line sum to that number). T1 S19 (was count-only · S17 Task C). */}
+          getClusterDetail.bonus). T1 S19 (was count-only · S17 Task C).
+          T2 S35 · THE COPY HERE CHANGED BECAUSE THE RULE DID. These rows are the whole board, and each point
+          now goes to WHOEVER PLACED that token, not to everybody. So the total below is what the board is
+          worth in aggregate, and it no longer equals what any single player received (Rule 63 · the screen
+          must not claim a number the engine does not award). Splitting these rows per player is the natural
+          next step and is T1's · handed over in comms rather than guessed at here. */}
       {clusterDetail.length > 0 && (
         <div style={{
           maxWidth: 420, width: '100%', padding: '22px 28px', borderRadius: 20,
@@ -399,7 +417,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
             Element Clusters
           </div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
-            the largest connected group of each element, in each region · 1 point per token
+            the largest connected group of each element, in each region · 1 point per token, to whoever placed it
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {clusterDetail.map((c, i) => (
@@ -421,14 +439,16 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
               </div>
             ))}
           </div>
-          {/* Board-global total · equals the clusterBonus added to every player's final score above */}
+          {/* Board total · what every cluster on the board is worth in aggregate. Since T2 S35 this is SPLIT
+              between the players by who placed each token, so it is NOT any one player's cluster score · the
+              label says "on the board" for exactly that reason. */}
           {clusterBonus > 0 && (
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
               marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.07)',
             }}>
               <span style={{ fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
-                Cluster bonus
+                Cluster points on the board
               </span>
               <span style={{ color: 'rgba(200,148,64,0.95)', fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                 +{clusterBonus} pts total

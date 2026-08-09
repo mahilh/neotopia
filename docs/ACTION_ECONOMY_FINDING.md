@@ -192,3 +192,67 @@ is plausible and is exactly what one playtest would settle.
 **The honest summary: the cheap levers act on the wrong variable, and the correct-by-the-rulebook lever
 is necessary but not proven sufficient.** No recommendation · "do nothing" remains genuinely on the
 table, and nothing in this document has been changed in shipped code.
+
+---
+
+# Part 3 · the rule was implemented, and it works  (T2 S35 · August 9 2026)
+
+Parts 1 and 2 ended with "no recommendation". Mahil made the decision after playing a game · turn 3,
+hand of 7, all three regions on 0, and his words were "the gameplay isn't as fun". That is §7 rendered on
+a screen. This part records what shipped and what it measured.
+
+## 11 · What changed
+
+`placeElement` now stamps `placedBy: seat` on the hex. That one field was the whole blocker: §8 established
+that the cluster bonus had to be board-global because a placed hex recorded `element` and nothing else, so
+the engine could not attribute a token to anybody. With ownership recorded, `getClusterDetail(regions, seat)`
+implements the rulebook's actual wording · "1 Point for each Element Token **of their color** on the biggest
+cluster in each Region" · and the term became the first thing in the final score that differs between players.
+
+The **cluster** is still found board-globally. Adjacency is adjacency on a shared board, so a cluster can be
+built by several players together and `count` remains its true size. Only the **bonus** is attributed.
+
+## 12 · The measurement, with the control it needs
+
+Greedy cluster-building against uniformly random placement. Same draw bias on both sides so the axis under
+test is placement and not the action economy, seat-controlled (every seed both ways), draws excluded from the
+denominator. 30 seeds, 60 finished games.
+
+Crucially, **both scoring rules were applied to the same 60 games.** Each finished game was scored once by the
+shipped per-player rule and once by recomputing the old shared bonus from that identical board. There is no
+second run and no second tree, so the comparison cannot be confounded the way T3's S34 load experiment was.
+
+| scoring rule | greedy beats random |
+|---|---|
+| OLD · one shared bonus, added to everybody (S18–S34) | **46.7%** · noise, as every prior measurement found |
+| NEW · per-player, rulebook p9 (S35) | **64.3%** |
+
+Control · identical policy both seats, same harness: **50.0%** under both rules, mean cluster advantage 0.00.
+The gate is not vacuous.
+
+Supporting figures: cluster scores differ between the two players in **60 of 60** games (before this change
+they differed in 0 of any game ever played, by construction), and the mean cluster advantage to the greedy
+policy is **7.57 points**.
+
+## 13 · Part 2 was too pessimistic, and it is worth saying why
+
+§10 predicted 53% from a harness that tracked ownership itself and scored the rulebook wording on the side.
+The shipped engine measures **64.3%**. That harness was a model of the change; this is the change. The gap
+is a reminder that a simulation of a fix and the fix are different objects, and the honest direction of the
+error is the flattering one · I under-promised, which is luck rather than judgement.
+
+So the §10 verdict "necessary but not proven sufficient" is now partly answered: placement skill went from
+indistinguishable-from-noise to clearly winning. It is still a one-ply greedy bot, and a 64% edge is not the
+same claim as "the board decides the game" · what can be said is that **where you place now changes who wins,
+and this morning it could not.**
+
+## 14 · What this does NOT settle
+
+- **Drawing may still dominate.** §7's finding stands untouched: the hand cap experiment acted on the wrong
+  variable, and nothing here rebalances the action economy. Mahil proposed cutting 3 actions to 1; that was
+  argued against on the grounds that building requires placing the FINAL element yourself, so with one action
+  per turn three opponents act between your placements and drawing becomes MORE dominant, not less. Not acted
+  on, and no measurement here bears on it either way.
+- **Still bot-versus-bot.** The §2 caveat is unchanged.
+- **The difficulty ladder is now stale.** Apprentice 13 / builder 68 / architect 100 was measured in a world
+  where placement could not matter. Re-measuring is §15.

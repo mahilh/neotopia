@@ -274,6 +274,13 @@ export const useGameStore = create(immer((set, get) => ({
 
     if (!region.hexes[hexKey]) region.hexes[hexKey] = {}
     region.hexes[hexKey].element = elementType
+    // WHO placed it (T2 S35). The board game's cluster rule scores "each Element Token OF THEIR COLOR",
+    // and until this line existed a hex recorded only its element, so the cluster bonus had to be
+    // board-global · one number added identically to every player, incapable of deciding anything
+    // (docs/ACTION_ECONOMY_FINDING.md §8). This is the token's colour. getClusterDetail(regions, seat)
+    // reads it; nothing else may write it (a hex is placed once and never cleared · placement requires
+    // an EMPTY hex, checked above, so this is write-once by construction).
+    region.hexes[hexKey].placedBy = seat
 
     // Bonus earn: covering a hex that carries a bonus token awards it to the placer. One-shot ·
     // the hex is now occupied and can never be covered again. (bonusType is seeded on hexes in
@@ -484,6 +491,10 @@ export const useGameStore = create(immer((set, get) => ({
         }
         if (!region.hexes[hexKey]) region.hexes[hexKey] = {}
         region.hexes[hexKey].element = elementType
+        // Same ownership stamp as placeElement (T2 S35). A token placed by a bonus token is still that
+        // player's token · the rulebook scores colour, not the route the element took onto the board.
+        // Missing this would make Private Initiative the one placement that scores nobody any points.
+        region.hexes[hexKey].placedBy = seat
         consumed = true
         break
       }
@@ -582,18 +593,21 @@ export const useGameStore = create(immer((set, get) => ({
   // FinalScore imports neither the store nor regions today. PREFERRED delivery (review C5): T1 passes
   // regions={regions} (GameRoom already reads them reactively) + useMemo(()=>computeClusterDetail(regions),
   // [regions]) — the pure fn avoids the fresh-array-every-call Object.is churn a selector subscription causes.
-  // This selector stays for non-React/imperative readers. DESCRIPTIVE sizes only · no cluster->points rule (rule 32).
-  getClusterDetail: () => computeClusterDetail(get().regions),
+  // This selector stays for non-React/imperative readers. Pass a seat for that player's own cluster points
+  // (board game rule p9 · T2 S35); omit it for the board-global sizes the viz shows.
+  getClusterDetail: (seat) => computeClusterDetail(get().regions, seat),
 
-  // Computed: the board's total cluster bonus (board game rule p9 · sum of getClusterDetail's per-cluster
-  // bonus · the SAME flat number folded into every player's final score). Civilization-level: the board is
-  // SHARED (no per-hex placer) so the bonus is not attributable per player (T2 S18 · see calculateFinalScore).
-  getClusterTotal: () => computeClusterTotal(get().regions),
+  // Computed: cluster bonus (board game rule p9 · 1pt per element token OF THAT SEAT'S COLOR on the biggest
+  // cluster of each element per region). PASS THE SEAT · without one this is the pre-S35 board-global number,
+  // which is identical for every player and therefore cannot affect a ranking (see calculateFinalScore).
+  getClusterTotal: (seat) => computeClusterTotal(get().regions, seat),
 
-  // Computed: final score for a player (best + 2nd + worst*3 + unusedBonus*3 + clusterBonus).
+  // Computed: final score for a player (best + 2nd + worst*3 + unusedBonus*3 + own cluster points).
   getFinalScore: (seat) => {
     const player = get().players.find(p => p.seat === seat)
     if (!player) return 0
-    return calculateFinalScore(player.scores, player.bonusTokens.length, computeClusterTotal(get().regions))
+    // The seat is threaded into the cluster term (T2 S35). Before that it was the board total and every
+    // player got the same number here · the reason a placement could not change who won.
+    return calculateFinalScore(player.scores, player.bonusTokens.length, computeClusterTotal(get().regions, seat))
   },
 })))

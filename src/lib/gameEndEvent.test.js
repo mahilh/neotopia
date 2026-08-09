@@ -29,9 +29,50 @@ describe('buildGameEndEvent', () => {
     expect(bySeat[2].total).toBe(21)
   })
 
-  test('cluster bonus (board game rule p9) folds into every total when the snapshot carries regions · T2 S18', () => {
-    // A shared board with one energy cluster of 3 in Sacred City → getClusterTotal = 3, added to EVERY player
-    // (civilization-level · the same number for all · no per-hex placer to attribute it per player).
+  // T2 S35 · REWRITTEN, and the rewrite is the point. This test used to assert the S18 reading: one
+  // board-global bonus added identically to every player (23→26, 12→15, 21→24). That reading was measured
+  // live at 40 points to both players in a finished game and, being equal for everyone, could not change a
+  // ranking · the one rule meant to reward placement was arithmetically inert. Hexes now carry `placedBy`
+  // and the audit scores the rulebook's actual wording, so the assertion below is the OPPOSITE claim: the
+  // cluster term must DIFFER between seats. If someone reverts the engine to the shared reading, seat 1 and
+  // seat 2 stop differing here and this goes red.
+  test('cluster bonus is PER PLAYER · each seat scores only the tokens it placed (rule p9 · T2 S35)', () => {
+    // One energy cluster of 3 in Sacred City. Seat 0 placed two of its tokens, seat 1 placed one, seat 2
+    // placed none · so the 3 points SPLIT 2/1/0 instead of landing 3/3/3.
+    const state = {
+      ...threePlayerScoringState(),
+      regions: [
+        { id: 0, name: 'Sacred City', hexes: {
+          '0,0': { element: 'energy', placedBy: 0 },
+          '1,0': { element: 'energy', placedBy: 0 },
+          '2,0': { element: 'energy', placedBy: 1 },
+        } },
+        { id: 1, name: 'Living Earth', hexes: {} },
+        { id: 2, name: 'Free Energy', hexes: {} },
+      ],
+    }
+    const { eventData } = buildGameEndEvent(state)
+    const bySeat = Object.fromEntries(eventData.final_scores.map(p => [p.seat, p]))
+
+    expect(bySeat[0].cluster_bonus).toBe(2)
+    expect(bySeat[1].cluster_bonus).toBe(1)
+    expect(bySeat[2].cluster_bonus).toBe(0)
+    // Totals move by each seat's OWN bonus · base 23/12/21 (see the test above) + 2/1/0.
+    expect(bySeat[0].total).toBe(calculateFinalScore([10, 4, 2], 1, 2))
+    expect(bySeat[0].total).toBe(25)
+    expect(bySeat[1].total).toBe(13)
+    expect(bySeat[2].total).toBe(21)
+    // The load-bearing claim, stated as a claim rather than left implicit in the numbers above: a term that
+    // is equal for every player cannot decide a game, and this one is no longer equal.
+    expect(new Set([bySeat[0].cluster_bonus, bySeat[1].cluster_bonus, bySeat[2].cluster_bonus]).size)
+      .toBeGreaterThan(1)
+    expect(eventData.version).toBe(2)
+  })
+
+  test('a hex with no placedBy belongs to nobody · pre-S35 boards score 0 for everyone, not the board total', () => {
+    // Every saved fixture, every game in flight when S35 shipped, and all 3 historical game_end rows carry
+    // hexes with `element` only. The honest answer for an unowned token is zero · never a fallback to the
+    // old global reading, which would silently hand every player the full board total again.
     const state = {
       ...threePlayerScoringState(),
       regions: [
@@ -42,11 +83,10 @@ describe('buildGameEndEvent', () => {
     }
     const { eventData } = buildGameEndEvent(state)
     const bySeat = Object.fromEntries(eventData.final_scores.map(p => [p.seat, p]))
-    // Each player's total is its no-cluster total + 3 (23→26, 12→15, 21→24).
-    expect(bySeat[0].total).toBe(calculateFinalScore([10, 4, 2], 1, 3))
-    expect(bySeat[0].total).toBe(26)
-    expect(bySeat[1].total).toBe(15)
-    expect(bySeat[2].total).toBe(24)
+    expect(bySeat[0].cluster_bonus).toBe(0)
+    expect(bySeat[0].total).toBe(23) // the unchanged no-cluster total · NOT 26
+    expect(bySeat[1].total).toBe(12)
+    expect(bySeat[2].total).toBe(21)
   })
 
   test('NO regions in the snapshot → cluster bonus 0 → totals match the screen (the live { players } path)', () => {
