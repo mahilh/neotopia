@@ -1,8 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import GameBoard from './GameBoard'
-import CivilizationMark from './CivilizationMark'
-import { REGIONS, hexToPixel } from '../../utils/hexUtils'
+import { REGIONS } from '../../utils/hexUtils'
 
 afterEach(cleanup)
 
@@ -12,12 +11,12 @@ afterEach(cleanup)
 // to notice, because the failure is visual and nobody gets a red.
 //
 // NAMING THE FALSE CASE FIRST for each:
-//   · the mark swallowing a click        → a placement that silently does nothing, at the exact centre
+//   · decoration swallowing a click      → a placement that silently does nothing, at the exact centre
 //                                          of the board where three factories live
 //   · the bevel returning to occupied    → measured, it costs ~1 point of token contrast ratio; the
 //     cells                                screenshot still looks fine, so only a number catches it
-//   · a hard-coded board centre          → moving a region leaves the emblem off-centre forever
-//   · the ray count drifting             → nine is the Council of Nine, not a styling choice
+//   · the centre filling up again        → the emblem was removed by the owner for taking up space and
+//                                          answering nothing · a test is where that decision survives
 
 const board = (props = {}) => render(<GameBoard {...props} />).container
 
@@ -27,23 +26,22 @@ describe('the board sits somewhere', () => {
     expect(c.querySelectorAll('[data-region-slab]')).toHaveLength(REGIONS.length)
   })
 
-  it('draws the mark at the derived centre of the three regions, not at a typed-in point', () => {
-    const c = board()
-    const mark = c.querySelector('[data-testid="civilization-mark"]')
-    expect(mark).not.toBeNull()
-    const centres = REGIONS.map(r => hexToPixel(r.cq, r.cr))
-    const cx = centres.reduce((s, p) => s + p.x, 0) / centres.length
-    const cy = centres.reduce((s, p) => s + p.y, 0) / centres.length
-    // FALSE CASE: a literal 216,145.5 passes today and is wrong the moment a region moves (Rule 32).
-    expect(mark.getAttribute('transform')).toBe(`translate(${cx},${cy})`)
+  it('leaves the centre empty · the emblem was removed and does not come back by accident', () => {
+    // S34 put a golden mark between the three regions. S35 took it out on Mahil's call: it was the
+    // only thing on the board a player might read as interactive, and it answered no question. This
+    // is the decision, written where a future "the middle looks bare" impulse will meet it.
+    expect(board().querySelector('[data-testid="civilization-mark"]')).toBeNull()
   })
 
-  it('never intercepts a click · the emblem sits under three factories', () => {
+  it('nothing painted behind the play may intercept a click', () => {
+    // Three factories converge on the board centre, and every decorative layer added here is drawn
+    // across them. FALSE CASE: a placement click at the middle of the board lands on scenery and does
+    // nothing at all · silent, and indistinguishable from the game being broken.
     const c = board()
-    const mark = c.querySelector('[data-testid="civilization-mark"]')
-    expect(mark.style.pointerEvents, 'a placement click at the board centre must reach the factory').toBe('none')
-    for (const slab of c.querySelectorAll('[data-region-slab]')) {
-      expect(slab.style.pointerEvents, 'the slab covers every hex in its region').toBe('none')
+    for (const sel of ['[data-region-slab]', '[data-board-ground]']) {
+      const nodes = [...c.querySelectorAll(sel)]
+      expect(nodes.length, `${sel} must exist for this assertion to mean anything`).toBeGreaterThan(0)
+      for (const n of nodes) expect(n.style.pointerEvents, `${sel} must not take clicks`).toBe('none')
     }
   })
 
@@ -77,44 +75,20 @@ describe('the bevel keeps off the cells that carry a token', () => {
   })
 })
 
-describe('the emblem', () => {
-  const mark = () => render(<CivilizationMark cx={0} cy={0} r={90} />).container
-
-  it('has nine rays, because nine is the Council of Nine', () => {
-    expect(mark().querySelectorAll('line')).toHaveLength(9)
-  })
-
-  it('carries no animation · it is behind the game, permanently', () => {
-    const c = mark()
-    for (const n of c.querySelectorAll('*')) {
-      expect(n.getAttribute('class') ?? '', 'nothing in the mark may animate').not.toMatch(/pulse|breathe|appear/)
-      expect(n.style?.animation ?? '').toBe('')
-    }
-  })
-
-  it('is drawn only in gold, and only the centre point is allowed to be bright', () => {
-    // The rejected art attempt failed by competing with the tokens. This pins the discipline rather
-    // than the appearance: one hue, and one exception to the opacity ceiling.
-    const c = mark()
-    const alphas = []
-    for (const n of c.querySelectorAll('*')) {
-      for (const attr of ['stroke', 'fill']) {
-        const v = n.getAttribute(attr)
-        if (!v || v === 'none') continue
-        expect(v, `${attr} must be the civilization gold`).toMatch(/^rgba\(200,148,64,/)
-        alphas.push(parseFloat(v.split(',')[3]))
+describe('nothing behind the play animates', () => {
+  it('the scenery holds still · every moving thing on this board is a game signal', () => {
+    // The board already spends motion on meaning: the valid-target ring pulses, the completion
+    // candidate pulses faster, the reachable preview breathes, the factories pulse to invite the
+    // first action. FALSE CASE: decoration that also moves, which spends the one channel those
+    // signals rely on and leaves the player scanning a board where everything twitches.
+    const c = board()
+    for (const sel of ['[data-region-slab]', '[data-board-ground]']) {
+      for (const n of c.querySelectorAll(sel)) {
+        for (const node of [n, ...n.querySelectorAll('*')]) {
+          expect(node.getAttribute('class') ?? '', `${sel} must not animate`).not.toMatch(/pulse|breathe|appear/)
+          expect(node.style?.animation ?? '').toBe('')
+        }
       }
     }
-    expect(alphas.length).toBeGreaterThan(8)
-    const loud = alphas.filter(a => a > 0.20)
-    expect(loud, 'only the Source point may exceed 20% opacity').toHaveLength(1)
-  })
-
-  it('scales entirely from r · nothing is pinned to one viewport', () => {
-    const small = render(<CivilizationMark cx={0} cy={0} r={45} />).container
-    const rays = [...small.querySelectorAll('line')]
-    // FALSE CASE: a hard-coded coordinate would keep the same value at both radii.
-    const maxExtent = Math.max(...rays.map(l => Math.abs(+l.getAttribute('x2'))))
-    expect(maxExtent).toBeLessThanOrEqual(45)
   })
 })

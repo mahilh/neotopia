@@ -1,7 +1,6 @@
 import { hexesInRadius, hexToPixel, REGIONS, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
 import { getBiomeForRegion } from '../../lib/terrainBiomes'
 import HexCell from './HexCell'
-import CivilizationMark from './CivilizationMark'
 
 // ── THE BOARD AS AN OBJECT, NOT THREE FILLS (T1 S34) ────────────────────────────────────────────
 // What a new visitor saw was three flat colour blobs floating on pure black. The gap against the
@@ -147,6 +146,7 @@ export default function GameBoard({
 
       {/* GROUND · painted first, under everything. */}
       <ellipse
+        data-board-ground=""
         cx={BOARD_CX} cy={BOARD_CY}
         rx={520} ry={470}
         fill="url(#neo-field)"
@@ -182,9 +182,12 @@ export default function GameBoard({
         )
       })}
 
-      {/* THE CENTRE · the civilization's emblem on the floor between the three regions. Painted after
-          the slabs and before the play hexes, so it can never sit on top of a token. */}
-      <CivilizationMark cx={BOARD_CX} cy={BOARD_CY} r={90} />
+      {/* THE CENTRE IS DELIBERATELY EMPTY (T1 S35 · reversal of S34, Mahil's call).
+          An emblem sat here for one session. It went because it was the only thing on the board a
+          player might mistake for interactive, and it answered no question they had. The ground and
+          the slabs already do the whole job the emblem was added for · "the board sits somewhere" ·
+          and they do it without putting a decoration where three factories converge. Anything that
+          wants this space again has to earn it by answering something. */}
 
       {/* Region hexes */}
       {REGIONS.map(reg => {
