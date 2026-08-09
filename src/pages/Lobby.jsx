@@ -295,6 +295,30 @@ export default function Lobby({ onGameStart, onRoomCode, onPractice, initialCode
     setAutoJoining(false)
   }
 
+  // ── THE TENTH OUTCOME · a member of a FINISHED room (T3 S32 finding · T1 S34 branch) ─────────
+  // T3 pinned this in a test and routed it here rather than smuggling it in, because the code that
+  // makes it fixable has to land on a screen that knows what to do with it. leaveRoom marks the room
+  // finished when the HOST leaves, but deletes only the host's own row · so every other seat outlives
+  // the room. Those players are still members, so they took the readmit branch and landed in a lobby
+  // for a game that was already over: nobody in presence, and a Start button that could never enable.
+  //
+  // BOTH HALVES LANDED IN THE SAME SESSION. This shipped first as
+  // `JOIN_FAILURE.ROOM_FINISHED ?? 'ROOM_FINISHED'`, because the code lives in useGameRoom (T3's lane)
+  // and did not exist yet · a bare read of a missing key is `undefined`, and a branch comparing against
+  // undefined can never match, so it would have been dead code that reads as handled. That is how a
+  // feature ships as "done" while doing nothing. T3 landed the emitter mid-session (12c1130, which
+  // cites this fallback by name), so the crutch is gone and the branch is live from both ends.
+  //
+  // One correction worth keeping, because I had it wrong in the first draft of this comment: the bare
+  // property would have been INERT, not dangerous. I wrote that it would fire on every healthy screen
+  // via `reason === undefined`; it would not, because `reason` falls through to null and
+  // `null === undefined` is false under `===`. Mutating the fallback away reddened exactly one test,
+  // the join-time branch, and left the "nothing has failed" guard green. That guard stays regardless ·
+  // it is what stops a future rewrite loosening the comparison.
+  const ROOM_FINISHED = JOIN_FAILURE.ROOM_FINISHED
+  const FINISHED_DETAIL =
+    'Rooms close when the game ends or the host leaves, and this one has closed. Start a new game, or ask for a fresh invite link.'
+
   // ── What the invite screen should say when the player cannot get in ──────────────────────────
   // Every branch names the real obstacle and then says what to do next · a stranger who followed a
   // link is the least-oriented person in the product and a bare 'Room not found' strands them.
@@ -323,9 +347,23 @@ export default function Lobby({ onGameStart, onRoomCode, onPractice, initialCode
     if (reason === JOIN_FAILURE.ALREADY_STARTED) {
       return { headline: 'That game has already started', detail: 'You can join a different room, or ask them for a new game.' }
     }
+    if (reason === ROOM_FINISHED) {
+      return { headline: 'That game is over', detail: FINISHED_DETAIL }
+    }
     // The preview can rule the room out before any join is attempted. `rejoinable` overrides it: a
     // player returning to their OWN in-progress game is admitted by design (T3 S27), so a room that
     // is un-joinable to a stranger is still open to them.
+    //
+    // FINISHED IS CHECKED FIRST AND AHEAD OF `rejoinable`, which is the whole point of this change.
+    // A finished room is over for its own members too · being a member is what USED to readmit them,
+    // into a lobby for a game that had already ended, with nobody in presence and a Start button that
+    // could never enable (T3's finding). Answering it here means the dead end is named before a write
+    // is even attempted. It is also a correctness fix in its own right: a finished room reached the
+    // `full` branch below and told a stranger "That room is full", which is a different situation with
+    // a different remedy · waiting for a seat will never work on a game that is over.
+    if (peek?.ok && peek.status === 'finished') {
+      return { headline: 'That game is over', detail: FINISHED_DETAIL }
+    }
     if (peek?.ok && !peek.canJoin && !peek.rejoinable) {
       return peek.status === 'playing'
         ? { headline: 'That game has already started', detail: 'You can join a different room, or ask them for a new game.' }
@@ -417,6 +455,15 @@ export default function Lobby({ onGameStart, onRoomCode, onPractice, initialCode
           <button style={primaryBtn} data-testid="invite-manual" onClick={dismissInvite}>
             Enter a code instead
           </button>
+          {/* Every branch of this screen is a dead end for somebody who followed a link and has no
+              other way into the product · a stranger with no room is precisely who practice was built
+              for, and it costs them no sign-in. Rendered only when a route actually supplies the
+              handler, so this can never become a button that does nothing. */}
+          {onPractice && (
+            <button style={secondaryBtn} data-testid="invite-practice" onClick={() => onPractice(0)}>
+              Play a practice game instead
+            </button>
+          )}
         </div>
         <p style={stageLine}>Free to play · no download · no account</p>
       </div>

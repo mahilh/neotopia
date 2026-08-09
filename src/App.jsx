@@ -103,5 +103,16 @@ function PracticeRoute() {
 function JoinRoute() {
   const navigate = useNavigate()
   const { code } = useParams()
-  return <Lobby initialCode={code} onGameStart={(roomId) => navigate(`/game/${roomId}`)} />
+  // onPractice was missing here, and this is the ONE route where it matters most: every dead-invite
+  // screen (room gone, room full, game started, game over) renders on this route, and a person who
+  // followed a link to a room that no longer exists is the most stranded visitor in the product.
+  // /lobby had the handler and the invite path did not, so the escape hatch existed everywhere except
+  // where somebody needed it.
+  return (
+    <Lobby
+      initialCode={code}
+      onPractice={(bots) => navigate(`/practice?bots=${bots}`)}
+      onGameStart={(roomId) => navigate(`/game/${roomId}`)}
+    />
+  )
 }
