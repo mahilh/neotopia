@@ -52,7 +52,7 @@ jobs:
       # 30/hour per-IP anon budget (measured live · docs/ANON_SIGNIN_BUDGET.md) — the test contributes 0.
       # Seat 3 turn order, endgame and scoring have been broken in production before; one sign-in is a
       # cheap standing guard against that returning. Runs in ~1s. (T2 S30)
-      - name: Run the 4-player ENGINE game (offline · no sign-in cost)
+      - name: Run the 4-player ENGINE game (offline · costs 1 teardown sign-in)
         run: npx playwright test tests/e2e/four-player-live.e2e.js --grep "ENGINE"
 
       - name: Upload report on failure
