@@ -20,7 +20,7 @@ import { calculateFinalScore } from '../lib/patternMatcher'
 import * as patternMatcher from '../lib/patternMatcher'
 import { ELEMENT_COLORS } from '../utils/hexUtils'
 import { DECK } from '../lib/projectCards'
-import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal, recordCivilizationDetail } from '../lib/supabase'
+import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal, recordCivilizationDetail, awardGameWin } from '../lib/supabase'
 import { buildGameEndEvent } from '../lib/gameEndEvent'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
@@ -81,6 +81,7 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   const didRecordRef = useRef(false)               // our own contribution records exactly once (when valid)
   const didGameEndRef = useRef(false)              // the game_end audit row fires exactly once
   const didDetailRef = useRef(false)               // the per-game civilization-score ledger row fires exactly once
+  const didAwardRef = useRef(false)                // award_game_win is asked exactly once per client (T2 S35)
   const reduceMotion = usePrefersReducedMotion()
   const navigate = useNavigate()
 
@@ -220,6 +221,44 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
     const { eventType, eventData } = buildGameEndEvent({ players, regions })
     sync.pushState(eventType, eventData)
   }, [practice, sync, mySeat, players, roomId, regions])
+
+  // Credit the winner (T2 S35 · migration 020's award_game_win, which shipped in S33 and has been invoked by
+  // NOTHING ever since · games_won has therefore been 0 for every player in the world, a value indistinguishable
+  // from "nobody has won yet". A writer with no caller resting at a plausible number is this project's signature
+  // bug and it had it again, one layer up from the last one.)
+  //
+  // FIRED FROM EVERY SEAT, deliberately, unlike the game_end row above which only the lowest seat writes. The
+  // RPC is idempotent (game_wins.session_id is the primary key, INSERT .. ON CONFLICT DO NOTHING) and recomputes
+  // the winner server-side from the stored game_end row, so every seat asking gets the same answer and the extra
+  // callers are the recovery path for the lowest seat closing its tab. It deliberately does NOT trust the
+  // payload's winner_seat: that field is a stable-sort artifact and all three historical rows are 0-0, so
+  // trusting it would have awarded seat 0 a win in every game ever finished.
+  //
+  // THE RACE, and why it is retried rather than ordered. This effect cannot see when the lowest seat's audit
+  // insert lands, and there is no ordering primitive between clients. A seat that asks too early gets
+  // 'no_game_end' and writes nothing · harmless, but if every seat asked once and every ask was early, the
+  // winner would go uncredited. So a 'no_game_end' is retried a few times; any other status is terminal.
+  useEffect(() => {
+    if (practice) return // a practice game has no session and credits nobody · same rule as every write here
+    if (didAwardRef.current) return
+    const sessionId = sync?.sessionId
+    if (!sessionId || mySeat == null) return // latch NOT burned · re-runs when sessionId resolves
+    didAwardRef.current = true
+
+    let cancelled = false
+    ;(async () => {
+      // 4 attempts over ~7s. The audit row is written by a peer in the same reveal, so this is generous.
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        const status = await awardGameWin(sessionId)
+        // Rule 61 · log the STATUS, not the fact that a call happened. 'awarded' vs 'awarded_no_profile' is
+        // the whole difference between a credited win and a success string over a zero-row write.
+        console.log('[NeoTopia] award_game_win:', status, '· session', sessionId, '· attempt', attempt + 1)
+        if (status !== 'no_game_end') return // awarded | awarded_no_profile | tie | already_awarded | null
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [practice, sync?.sessionId, mySeat])
 
   // Global Index target = real persisted aggregate (already includes the seed) + this whole game's
   // contribution, shown optimistically · seed-only fallback before the fetch resolves / on error. A

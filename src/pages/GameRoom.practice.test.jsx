@@ -17,6 +17,10 @@ vi.mock('../lib/supabase', () => ({
   getGlobalCivilizationTotal: async () => 0,
   recordCivilizationContribution: recordContribution,
   recordCivilizationDetail: recordDetail,
+  // T2 S35 · FinalScore now imports awardGameWin (migration 020's writer, which had no caller until this
+  // session). Practice returns before it is ever invoked, but a module mock that omits an import the
+  // component makes is a landmine for the first test in this file that reaches 'scoring' in a real room.
+  awardGameWin: vi.fn(async () => null),
 }))
 vi.mock('../hooks/useAuth', () => ({ useAuth: authSpy }))
 vi.mock('../hooks/useGameSync', () => ({ useGameSync: () => null }))
