@@ -38,8 +38,12 @@ const buildSteps = (cfg, isFlow) => [
     // ever had an element placed. Verified by driving the real UI at 375px and 1280px · all four
     // controls are on screen and the loop completes, so the interaction works and only the
     // instructions for it were wrong.
+    // S30 · rewritten again, because the interaction changed under it. The board now previews every
+    // hex the picked factory can reach, and clicking one of those chooses its region · so the trip to
+    // the region panel that the S29 copy taught is no longer the shortest way through. The copy
+    // teaches the BOARD path, since that is the one a player finds without reading anything.
     heading: 'To place an element',
-    body: 'Click a factory token (the coloured icons between the regions). The panel then asks you two things: which element to take, and which region to put it in. Pick both, and the hexes you are allowed to use light up on the board. Click one of them to place it.',
+    body: 'Click a factory token (the coloured icons between the regions). The board marks every hex that factory can reach with a dashed outline · click the one you want. Then pick which element goes there from the panel, and the hex lights up. Click it to place.',
     visual: 'factory',
   },
   {
@@ -130,48 +134,40 @@ export default function Tutorial({ onDismiss }) {
           {s.body}
         </p>
 
-        {/* Factory → Board visual (step 2 · the action they missed).
-            Column, not a single row: the diagram gained a third stage this session and at 375px the
-            boxes plus the caption no longer fit on one line · the caption was being pushed outside the
-            dialog. Boxes on their own row, caption beneath, so it holds at phone width. */}
+        {/* Factory → Board visual (step 2 · the action they missed). */}
         {s.visual === 'factory' && (
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, marginBottom: 24,
             padding: '14px 18px', background: 'rgba(255,255,255,0.03)',
             borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)',
           }}>
-           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div className="tut-factory" style={{
-              width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
-              border: '2px solid rgba(226,75,74,0.7)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-            }}>
-              ⚡
-            </div>
-            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>→</div>
-            {/* The two middle steps the old caption skipped · drawn as a step so the picture and the
-                words describe the same interaction (they did not before). */}
-            <div style={{
-              minWidth: 62, height: 44, flexShrink: 0, background: 'rgba(200,148,64,0.10)',
-              borderRadius: 10, border: '1px solid rgba(200,148,64,0.5)', padding: '0 4px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 9.5, color: 'rgba(200,148,64,0.9)', textAlign: 'center', lineHeight: 1.25,
-            }}>
-              pick element<br />+ region
-            </div>
-            <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>→</div>
-            <div style={{
-              width: 44, height: 44, flexShrink: 0, background: 'rgba(127,119,221,0.12)',
-              borderRadius: 10, border: '1px solid rgba(127,119,221,0.5)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 10, color: 'rgba(127,119,221,0.85)', textAlign: 'center', lineHeight: 1.25,
-            }}>
-              lit<br />hex
-            </div>
-           </div>
-            <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
-              Factory → choose element and region → click a highlighted hex
-            </p>
+           {/* A NUMBERED LIST, not a left-to-right flow (T1 S30). The interaction gained a fourth step
+               and the arrow diagram stopped fitting: measured 19px outside the dialog at 320px and 57px
+               of row overflow, because the dialog only offers ~200px of inner width there and four 44px
+               boxes plus three arrows cannot live in it. This layout has no width it can outgrow · each
+               step owns a line, the glyph carries the shape the player is looking for on the board, and
+               the label says what to do with it. Re-measured at 320/360/375/414/768: zero overflow. */}
+           {[
+             { glyph: '⚡', label: 'Click a factory token', cls: 'tut-factory',
+               style: { borderRadius: '50%', border: '2px solid rgba(226,75,74,0.7)', fontSize: 15 } },
+             { glyph: '⬡', label: 'Click one of the dashed hexes it lights on the board',
+               style: { borderRadius: 8, border: '2px dashed rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)', fontSize: 15 } },
+             { glyph: '●', label: 'Pick which element goes there',
+               style: { borderRadius: 8, border: '1px solid rgba(200,148,64,0.5)', background: 'rgba(200,148,64,0.10)', color: 'rgba(200,148,64,0.95)', fontSize: 13 } },
+             { glyph: '⬡', label: 'The hex lights up · click it to place',
+               style: { borderRadius: 8, border: '1px solid rgba(127,119,221,0.6)', background: 'rgba(127,119,221,0.18)', color: 'rgba(160,152,255,0.95)', fontSize: 15 } },
+           ].map((s, i) => (
+             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+               <div className={s.cls} style={{
+                 width: 28, height: 28, flexShrink: 0,
+                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 ...s.style,
+               }}>
+                 {s.glyph}
+               </div>
+               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.45 }}>{s.label}</span>
+             </div>
+           ))}
           </div>
         )}
 

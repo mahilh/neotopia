@@ -20,12 +20,13 @@ const placementStep = () => {
   // Step 0 is the turn structure; step 1 is placement. fireEvent (not node.click) so React commits
   // the state change inside act.
   fireEvent.click(screen.getByRole('button', { name: /next/i }))
-  // The BODY PARAGRAPH ONLY. An earlier version of this helper walked .closest('div') and picked up
-  // the whole dialog, including the diagram caption · which already contained the words being asserted,
-  // so the test passed against the exact broken copy it exists to catch. Scoping matters more than the
-  // assertions do (Rule 72 · a guard that cannot fail is worse than no guard).
-  const body = screen.getByText(/factory token/i)
-  expect(body.tagName, 'expected the body <p>, not a container').toBe('P')
+  // The BODY PARAGRAPH ONLY, and it has to be selected rather than assumed. An early version walked
+  // .closest('div') and picked up the whole dialog including the diagram caption · which contained the
+  // words being asserted, so it passed against the exact broken copy it exists to catch. Then S30 gave
+  // the diagram a step labelled "Click a factory token", so a bare getByText started matching two
+  // nodes. Both failures are the same one: the scope has to be stated, not inferred (Rule 72).
+  const body = screen.getAllByText(/factory token/i).find(el => el.tagName === 'P')
+  expect(body, 'expected exactly one body <p> naming the factory token').toBeDefined()
   return body.textContent ?? ''
 }
 
@@ -42,11 +43,15 @@ describe('Tutorial · the placement step teaches the flow the game actually has'
     expect(body, 'must send the player to the panel · this is the step nobody finds').toMatch(/panel/i)
   })
 
-  it('does not promise that clicking a hex works straight after the factory', () => {
+  it('says WHICH hexes can be clicked, and that placing still waits on the element', () => {
     const body = placementStep()
-    // Hexes only become clickable once an element AND a region are chosen. Copy that mentions hexes
-    // without mentioning that they light up first is describing the interaction the game does not have.
-    expect(body, 'must say the hexes light up, rather than implying any empty hex is clickable')
-      .toMatch(/highlight|light up|lit /i)
+    // S30 changed what is true here. Clicking a hex straight after the factory now DOES something · it
+    // aims · but only the previewed ones, and it still does not place. So the copy has two jobs it did
+    // not have before: name the dashed preview so the player knows which hexes are live, and keep the
+    // placing click distinct from the aiming one. "any empty hex" satisfies neither.
+    expect(body, 'must name the dashed preview · that is how a player tells a live hex from a dead one')
+      .toMatch(/dashed/i)
+    expect(body, 'placing still happens on a lit hex, after the element is chosen')
+      .toMatch(/light|lit /i)
   })
 })
