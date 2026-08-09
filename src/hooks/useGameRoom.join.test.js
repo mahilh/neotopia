@@ -666,3 +666,139 @@ describe('the 4th player · seat 3 must be reachable', () => {
     expect(res.message).not.toMatch(/violates|constraint|relation|check/i)
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// REJOIN · IS joinRoom IDEMPOTENT FOR A USER WHO ALREADY HOLDS A SEAT? (T3 S32)
+//
+// This is the load-bearing question under T1's refresh fix. Refreshing the waiting room loses the room
+// CLIENT-SIDE only: nothing in useGameRoom deletes anything on unmount or beforeunload · leaveRoom is the
+// only deleter and only the Leave button calls it. So the game_rooms row and the room_players row both
+// survive a refresh, and what is lost is the React state that remembered which room this was. That is the
+// whole of the 17 abandoned rooms, 13 still holding a seat: the seat outlives the tab that claimed it.
+//
+// T1's fix puts the code in the URL so /join/:code can restore the session. That only works if joinRoom
+// readmits a user who is already seated, WITHOUT writing anything · a rejoin that re-claimed a seat would
+// 23505 against UNIQUE(room_id, user_id), and a rejoin that re-upserted a profile would be a write on a
+// path that must be free to run on every page load.
+//
+// The ORDER of the checks is the fix, and it is the same fix as S27: membership is resolved BEFORE status
+// and BEFORE capacity. Every test below pins one consequence of that ordering, because each one is a
+// separate way the refresh path could quietly stop working.
+describe('joinRoom · REJOIN · the refresh path (T3 S32 · answering T1)', () => {
+  const SEATED = { user_id: USER.id, username: 'Me', seat_number: 2, player_color: 'green' }
+
+  test('an already-seated user in a WAITING room is readmitted · and writes NOTHING', async () => {
+    seedWaitingRoom({ players: [{ user_id: 'u-host', username: 'Host', seat_number: 0 }, SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({
+      ok: true, roomId: ROOM_ID, roomCode: 'ABC234',
+      seat: 2, isHost: false, rejoined: true, inProgress: false,
+    })
+    expect(hook.result.current.roomPhase).toBe('lobby')
+    expect(hook.result.current.seat).toBe(2)
+
+    // THE IDEMPOTENCY CLAIM ITSELF. "It did not error" is not the same as "it did not write" · a rejoin
+    // runs on every page load, so a write here would be a per-refresh cost and a 23505 waiting to happen.
+    expect(db.inserts, 'a rejoin must perform ZERO writes · no seat claim, no profile upsert').toHaveLength(0)
+    expect(db.players, 'the existing seat row is reused, never duplicated').toHaveLength(2)
+  })
+
+  test('three consecutive rejoins leave exactly one seat and zero writes · idempotent, not merely tolerant', async () => {
+    // Idempotence is a claim about REPETITION. One call proves the branch is reachable; it does not prove
+    // the second and third calls are free. A refresh loop (or React 18 StrictMode) does exactly this.
+    seedWaitingRoom({ players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const a = await callJoin(hook, 'ABC234')
+    const b = await callJoin(hook, 'ABC234')
+    const c = await callJoin(hook, 'ABC234')
+
+    for (const r of [a, b, c]) expect(r).toMatchObject({ ok: true, seat: 2, rejoined: true })
+    expect(db.players).toHaveLength(1)
+    expect(db.inserts).toHaveLength(0)
+  })
+
+  test('the refreshed HOST gets their host identity back · otherwise nobody can ever start', async () => {
+    // isHost is derived from seat_number === 0, not from local memory, so it survives the reload. If this
+    // regressed, a host who refreshed would return to their own room as an ordinary player and the Start
+    // button would belong to nobody · the room would be permanently unstartable while looking fine.
+    seedWaitingRoom({ players: [{ user_id: USER.id, username: 'Me', seat_number: 0, player_color: 'blue' }] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, seat: 0, isHost: true, rejoined: true })
+    expect(hook.result.current.isHost).toBe(true)
+    expect(db.inserts).toHaveLength(0)
+  })
+
+  test('a FULL room still readmits its OWN member · capacity is a rule for strangers', async () => {
+    // The capacity check sits AFTER the membership check. If that order ever flipped, the last player to
+    // join a 4-player room could never refresh: they would be told "Room is full" about a room they are
+    // sitting in. Same shape as the S27 status bug, one check further down.
+    seedWaitingRoom({
+      players: [
+        { user_id: 'u-host', username: 'Host', seat_number: 0 },
+        { user_id: 'u-b', username: 'B', seat_number: 1 },
+        { user_id: 'u-c', username: 'C', seat_number: 2 },
+        { user_id: USER.id, username: 'Me', seat_number: 3 },
+      ],
+    })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, seat: 3, rejoined: true })
+    expect(res.reason).toBeUndefined()
+    expect(db.inserts).toHaveLength(0)
+  })
+
+  test('rejoin into a PLAYING room goes straight to the board · the S27 fix, still holding', async () => {
+    // The original bug: status was checked before membership, so a player who refreshed mid-game was told
+    // "Game already started" about the game they were sitting in. Kept here because T1's URL fix makes
+    // this path run on EVERY reload rather than only when somebody pasted a link.
+    seedWaitingRoom({ status: 'playing', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, seat: 2, rejoined: true, inProgress: true })
+    expect(hook.result.current.roomPhase).toBe('playing')
+    expect(res.reason).not.toBe(JOIN_FAILURE.ALREADY_STARTED)
+    expect(db.inserts).toHaveLength(0)
+  })
+
+  test('a STRANGER is still refused · readmission is scoped to the seat holder, not to everyone', async () => {
+    // The counterweight. Every test above asserts that somebody gets IN, and a joinRoom that admitted
+    // anyone would satisfy all of them. Same room, same status, different user.
+    seedWaitingRoom({ status: 'playing', players: [{ user_id: 'u-someone-else', username: 'Other', seat_number: 0 }] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: false, reason: JOIN_FAILURE.ALREADY_STARTED })
+    expect(hook.result.current.roomPhase).not.toBe('playing')
+  })
+
+  test('WHAT REJOIN DOES WITH A FINISHED ROOM · documented, because it is reachable', async () => {
+    // Not a passing-by-accident assertion · this is the one case the ordering gets WRONG, recorded here
+    // so it is a known shape rather than a surprise. leaveRoom sets the room to 'finished' when the HOST
+    // leaves but only deletes the HOST's own row, so every other player's seat outlives the room. Those
+    // players are still members, so they take the readmit branch and land in roomPhase 'lobby' · a
+    // waiting room for a game that is over, with nobody in presence and a Start button that can never
+    // enable. Reported to T1/T2 rather than fixed here: the right answer is a distinct outcome code, and
+    // adding a tenth JOIN_FAILURE lands on T1's invite screen as an unhandled branch (the same reason
+    // S28 reused SEAT_CONFLICT instead of inventing a code).
+    seedWaitingRoom({ status: 'finished', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, rejoined: true, inProgress: false })
+    expect(hook.result.current.roomPhase).toBe('lobby')  // <- the phantom lobby, pinned
+    expect(db.inserts).toHaveLength(0)
+  })
+})
