@@ -19,6 +19,34 @@
 export const DIFFICULTIES = ['apprentice', 'builder', 'architect']
 export const DEFAULT_DIFFICULTY = 'builder'
 
+// THE LADDER IS NOT EXPOSED IN THE UI YET, AND THAT IS A DECISION, NOT AN OMISSION (Mahil · S33).
+// The three levels are ordered (proven below) but not CALIBRATED · 92/100/98% are bot-vs-bot rates,
+// which show that architect beats builder, not that builder is a fair fight for a person. A spread
+// that wide would teach badly: a player who loses 98-2 learns nothing and a player who wins 92-8
+// learns less. So practice runs at DEFAULT_DIFFICULTY and there is no picker. T1: do not build one.
+// It ships in the session it becomes honest.
+export const DIFFICULTY_SELECTABLE = false
+
+// ── THE REFERENCE OPPONENT · a fixed yardstick, deliberately NOT one of the three ────────────────
+// The problem with the numbers above is that they are all self-referential: every level is measured
+// against another level, so tuning any one of them silently moves the scale for the other two, and
+// none of the rates means anything in human terms. That is why one human game cannot calibrate the
+// ladder today · it would only tell us about whichever level was played.
+//
+// This is the fix, and it is the whole reason it exists: an opponent that NEVER CHANGES. Each level's
+// win rate is stated against this, not against its siblings. Then a single human game against the
+// reference locates the PLAYER on the same scale, and all three levels are calibrated at once,
+// because their distances from the yardstick are already known.
+//
+// >>> DO NOT TUNE THESE TWO CONSTANTS. EVER. <<< Changing them invalidates every rate ever recorded
+// against them, which is exactly the property that makes a benchmark worth having. If the reference
+// turns out to be badly chosen, add reference_v2 and keep this one.
+// It is not selectable as a difficulty (not in DIFFICULTIES) · it is a measuring instrument.
+export const REFERENCE_POLICY = 'reference'
+const REFERENCE_DRAW_BIAS = 0.25   // FROZEN
+// Reference behaviour, stated in words so it survives a refactor: always score a district when one is
+// available, otherwise draw a card 25% of the time, otherwise place on a uniformly random legal hex.
+
 // WHAT MEASUREMENT CHANGED (T2 S32 · this is the honest history of this file, keep it)
 // The first version graded difficulty on PLACEMENT QUALITY: random < greedy-cluster < greedy plus
 // worst-region defence. Measured with seat order controlled for (each matchup played both ways, so
@@ -102,7 +130,12 @@ export function chooseBotAction({
   if (state.phase !== 'playing') return { type: 'endTurn' }
   if ((state.actionsRemaining ?? 0) <= 0) return { type: 'endTurn' }
 
-  const level = DIFFICULTIES.includes(difficulty) ? difficulty : DEFAULT_DIFFICULTY
+  // REFERENCE_POLICY is accepted here but is absent from DIFFICULTIES, so it can never be selected as
+  // a difficulty · it exists only so the ladder can be measured against something that does not move.
+  const level = (DIFFICULTIES.includes(difficulty) || difficulty === REFERENCE_POLICY)
+    ? difficulty
+    : DEFAULT_DIFFICULTY
+  const drawBias = level === REFERENCE_POLICY ? REFERENCE_DRAW_BIAS : DRAW_BIAS[level]
 
   // 1 · SCORE. A completed district is the only thing that actually wins, so Builder and Architect
   //     always take one. Apprentice takes it only when it has nothing else to do, which is what makes
@@ -129,11 +162,15 @@ export function chooseBotAction({
     // DRAW BIAS · the axis that actually decides these games, and it was NOT the one I designed on.
     // See the header note "WHAT MEASUREMENT CHANGED". Higher = takes a card instead of building more
     // often = stronger, because a bigger hand is more completable districts later.
-    if (rng() < DRAW_BIAS[level]) {
+    if (rng() < drawBias) {
       if ((state.theOffer ?? []).length > 0) return { type: 'drawCard', seat, source: 'offer', cardIndex: 0 }
       if ((state.deck ?? []).length > 0) return { type: 'drawCard', seat, source: 'deck', cardIndex: 0 }
     }
-    if (level === 'apprentice') return { type: 'placeElement', seat, ...pick(placements, rng) }
+    // Apprentice and the reference both place at random · they differ only in draw bias and in
+    // whether they take an available district, which keeps the yardstick simple to describe.
+    if (level === 'apprentice' || level === REFERENCE_POLICY) {
+      return { type: 'placeElement', seat, ...pick(placements, rng) }
+    }
 
     const worstRegion = regionIds[weakestRegionIndex(player)]
     let best = null, bestScore = -Infinity
