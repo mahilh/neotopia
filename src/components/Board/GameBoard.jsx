@@ -1,5 +1,4 @@
-import { hexesInRadius, hexToPixel, REGIONS, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
-import { getBiomeForRegion } from '../../lib/terrainBiomes'
+import { hexesInRadius, hexToPixel, REGIONS, TERRAIN, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
 import HexCell from './HexCell'
 
 // ── THE BOARD AS AN OBJECT, NOT THREE FILLS (T1 S34) ────────────────────────────────────────────
@@ -45,17 +44,88 @@ const BOARD_CY = REGION_CENTRES.reduce((s, p) => s + p.y, 0) / REGION_CENTRES.le
 // factory overlap at r>108) · keep r < 72.
 const FACTORY_HIT_R = 70
 
-// T1 S21 · vivid per-region biome fill for empty hexes — the product-owner palette that makes the 3 regions
-// read as distinct living biomes ("feel like a real world"). RECONCILES with T2's terrainBiomes (src/lib · its
-// lane · Rule 62): that data ships intentionally DARK atmospheric bases (#1a1528 / #0d1f14 / #1f0d0d) that on
-// the near-black canvas read as muted-grey; this overrides ONLY the empty-hex FILL at the presentation layer
-// (my lane) with the chosen saturated colors, and falls back to T2's biome.colors.hex for any unexpected id
-// (Rule 65). Keyed by region id (hexUtils REGIONS: 0 Sacred City · 1 Living Earth · 2 Free Energy). Alpha is
-// tuned so the biome reads clearly while element tokens + the white region-score text keep contrast (Rule 55).
-const BIOME_HEX_FILL = {
-  0: 'rgba(34,68,170,0.35)',   // Sacred City  · deep indigo   #2244AA
-  1: 'rgba(29,122,58,0.35)',   // Living Earth · forest green  #1D7A3A
-  2: 'rgba(204,85,34,0.35)',   // Free Energy  · warm amber-red #CC5522
+// ── TERRAIN DRAWN ON THE GROUND (T1 S35) ────────────────────────────────────────────────────────
+// Colour carries most of "this is water / grass / desert", but a flat colour is still only a label in
+// a different alphabet. What makes the physical board a place is that each area is made of something.
+//
+// The S34 constraint is unchanged and is the reason the earlier art attempt was rejected: nothing here
+// may compete with an element token. So the DRAWN terrain is put where a token can never be · outside
+// the slab entirely, on the arc of each region that faces AWAY from the board centre.
+//
+// THAT ARC IS MEASURED, NOT PICKED. All three factories sit on the inward side of their regions, and
+// the factories are the busiest controls on the board (each carries a 70-unit invisible tap circle).
+// Computed from the real coordinates, the nearest factory is 146° off Sacred City's outward heading,
+// 146° off Living Earth's and 150° off Free Energy's · so a ±62° outward window has ~84° of clearance
+// on either side of the nearest one. The motifs cannot crowd a factory, and being pointer-events none
+// they could not steal its click even if they did.
+const MOTIF_ARC = (62 * Math.PI) / 180
+
+const polar = (cx, cy, rad, a) => `${(cx + rad * Math.cos(a)).toFixed(1)},${(cy + rad * Math.sin(a)).toFixed(1)}`
+
+// A ring segment sampled as a polyline · avoids SVG arc-flag arithmetic and lets a crest wobble.
+const arcPoints = (cx, cy, rad, a0, a1, wobble = 0, cycles = 2, steps = 26) =>
+  Array.from({ length: steps + 1 }, (_, i) => {
+    const t = i / steps
+    return polar(cx, cy, rad + wobble * Math.sin(t * Math.PI * cycles), a0 + (a1 - a0) * t)
+  }).join(' ')
+
+// Grass reads as many small marks rather than a few long ones · 2 staggered rows of leaning blades.
+const tuftLines = (cx, cy, a0, a1) => {
+  const out = []
+  for (let row = 0; row < 2; row++) {
+    const rad = 190 + row * 24
+    for (let i = 0; i < 7; i++) {
+      const t = (i + (row ? 0.5 : 0)) / 7
+      const a = a0 + (a1 - a0) * t
+      const tilt = ((i + row) % 2 ? 1 : -1) * 0.22 // alternating lean · a field, not a comb
+      out.push({
+        x1: +(cx + rad * Math.cos(a)).toFixed(1), y1: +(cy + rad * Math.sin(a)).toFixed(1),
+        x2: +(cx + (rad + 13) * Math.cos(a + tilt)).toFixed(1), y2: +(cy + (rad + 13) * Math.sin(a + tilt)).toFixed(1),
+      })
+    }
+  }
+  return out
+}
+
+// One motif per terrain, drawn on the outward arc of its region. Deterministic by construction · no
+// Math.random anywhere (rule 32), so two clients render the identical board and a screenshot diff is
+// meaningful. Nothing here animates: every moving thing on this board is a game signal, and scenery
+// that also moves spends the channel those signals rely on.
+function TerrainMotif({ terrain, cx, cy }) {
+  const t = TERRAIN[terrain]
+  if (!t) return null
+  const mid = Math.atan2(cy - BOARD_CY, cx - BOARD_CX) // heading away from the middle of the board
+  const a0 = mid - MOTIF_ARC
+  const a1 = mid + MOTIF_ARC
+  const common = { fill: 'none', stroke: t.ink, strokeLinecap: 'round' }
+  const span = (f0, f1) => [a0 + (a1 - a0) * f0, a0 + (a1 - a0) * f1]
+  // Per-terrain, because equal alpha is not equal presence: sand ink is the lightest of the three and
+  // 14 small grass strokes read far quieter than 3 long arcs at the same opacity.
+  const OPACITY = { water: 0.17, desert: 0.15, grass: 0.24 }[terrain]
+
+  return (
+    <g data-terrain-motif={terrain} style={{ pointerEvents: 'none' }} opacity={OPACITY}>
+      {terrain === 'water' && [186, 209, 232].map((rad, i) => (
+        // Ripples spread as complete rings, so these span the whole window · the dash pattern is what
+        // keeps them from reading as a fence.
+        <polyline key={rad} {...common} points={arcPoints(cx, cy, rad, a0, a1)}
+          strokeWidth={i === 1 ? 2.4 : 1.8}
+          strokeDasharray={['17 14', '9 16', '24 13'][i]} strokeDashoffset={i * 9} />
+      ))}
+      {terrain === 'desert' && [[184, 0, 0.62], [209, 0.28, 0.95], [234, 0.52, 1]].map(([rad, f0, f1], i) => (
+        // Dune crests, and the STAGGER is what makes them dunes rather than more ripples. Drawn as
+        // three full concentric arcs they were the same shape as the water motif in a different
+        // colour, which is a way of saying nothing twice. A dune is a long unbroken crest that starts
+        // and stops somewhere, so each one takes its own slice of the window and overlaps its
+        // neighbour, and the solid stroke plus a deeper wobble keeps them separate from the ripples.
+        <polyline key={rad} {...common} points={arcPoints(cx, cy, rad, ...span(f0, f1), 9 - i * 2, 1.5)}
+          strokeWidth={i === 0 ? 2.8 : 2.1} />
+      ))}
+      {terrain === 'grass' && tuftLines(cx, cy, a0, a1).map((l, i) => (
+        <line key={i} {...common} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} strokeWidth={2.3} />
+      ))}
+    </g>
+  )
 }
 
 export default function GameBoard({
@@ -127,12 +197,36 @@ export default function GameBoard({
 
         {/* The floor the board sits on. A radial field rather than a rectangle: a rect would draw its
             own edges into the letterbox and put a visible box around the game. This just stops the
-            board being cut out of nothing. */}
+            board being cut out of nothing.
+            NEUTRAL SINCE S35. It used to warm to gold at the centre, which was there to seat the
+            emblem. With the emblem gone a gold glow in the middle is a highlight on nothing, and it
+            would fight the three terrain washes for the same space. */}
         <radialGradient id="neo-field" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="rgba(200,148,64,0.038)" />
-          <stop offset="55%"  stopColor="rgba(120,110,150,0.020)" />
+          <stop offset="0%"   stopColor="rgba(150,158,178,0.030)" />
+          <stop offset="55%"  stopColor="rgba(120,126,150,0.017)" />
           <stop offset="100%" stopColor="rgba(0,0,0,0)" />
         </radialGradient>
+
+        {/* TERRAIN WASH · one per terrain. This is what makes the FLOOR read as water, grass and
+            desert rather than the regions being three coloured stickers on a neutral table. Each is
+            centred on its region and reaches past the slab, so where two regions face each other the
+            washes overlap and the ground between them blends · which is the actual structural thing
+            Catan has and we did not: land that meets other land.
+            THE PROFILE PEAKS OUTSIDE THE SLAB, WHICH IS THE WHOLE TRICK. The obvious gradient is
+            brightest at the region's centre and fades outward · and the region's centre is precisely
+            where the 19 play hexes are, so that shape spends all of its luminance in the one place it
+            has to pay for it (measured: it cost desert tokens 9.6% of their contrast ratio). The slab
+            ends at 166 of the wash's 240, i.e. 69% of the way out, so the peak is put at 72%: almost
+            nothing under the play, full strength on the open ground where it is free and where the
+            terrain actually needs to read. */}
+        {Object.entries(TERRAIN).map(([key, t]) => (
+          <radialGradient key={key} id={`neo-wash-${key}`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor={`rgba(${t.wash},0.022)`} />
+            <stop offset="45%"  stopColor={`rgba(${t.wash},0.040)`} />
+            <stop offset="72%"  stopColor={`rgba(${t.wash},0.095)`} />
+            <stop offset="100%" stopColor={`rgba(${t.wash},0)`} />
+          </radialGradient>
+        ))}
 
         {/* Lift. Applied to the slab ONLY, never to the 57 play hexes: one shadow per region is three
             filter passes instead of fifty-seven, and shadowing each hex separately would put a dark
@@ -153,18 +247,36 @@ export default function GameBoard({
         style={{ pointerEvents: 'none' }}
       />
 
+      {/* TERRAIN · the floor around each region takes that region's terrain, then the motif is drawn
+          on the outward arc where no token can ever sit. Painted before the slabs, so the slab edge
+          reads as the shoreline where the terrain meets the built district. */}
+      {REGIONS.map(reg => {
+        const { x, y } = hexToPixel(reg.cq, reg.cr)
+        return (
+          <g key={`terrain-${reg.id}`} data-board-ground="" style={{ pointerEvents: 'none' }}>
+            <circle data-terrain-wash={reg.terrain} cx={x} cy={y} r={240} fill={`url(#neo-wash-${reg.terrain})`} />
+            <TerrainMotif terrain={reg.terrain} cx={x} cy={y} />
+          </g>
+        )
+      })}
+
       {/* REGION SLABS · each region becomes one object resting on that ground, rather than a loose
           scatter of hexes. The soft ellipse glow that used to be here is kept on top of the slab: the
           slab gives the edge and the shadow, the glow keeps the centre from looking like a flat card. */}
       {REGIONS.map(reg => {
         const {x, y} = hexToPixel(reg.cq, reg.cr)
+        const t = TERRAIN[reg.terrain]
         return (
           <g key={`slab-${reg.id}`} style={{ pointerEvents: 'none' }} data-region-slab={reg.id}>
             <polygon
               points={bigHex(x, y, PLATTER_R)}
-              // 4% fill, not 7%. The depth read comes from the EDGE and the SHADOW · the fill was
-              // buying almost no dimensionality and paying for it in token contrast.
-              fill={`${reg.color}0A`}
+              // THE SPLIT THAT KEEPS THIS READABLE (S35): everything that is FLOOR takes the terrain
+              // colour, everything that is IDENTITY or SIGNAL keeps `reg.color`. So the slab's face is
+              // terrain (it is ground) and its EDGE stays the region's own colour (it is the boundary
+              // of a district, and the same colour the region's score and its valid-target ring use).
+              // 5% fill, not 7%: the depth read comes from the edge and the shadow, and every point of
+              // fill under the play is paid for in token contrast.
+              fill={`rgba(${t.wash},0.05)`}
               stroke={`${reg.color}33`}
               strokeWidth={1.5}
               strokeLinejoin="round"
@@ -176,7 +288,7 @@ export default function GameBoard({
             <ellipse
               cx={x} cy={y}
               rx={HEX_SIZE * 3.8} ry={HEX_SIZE * 3.5}
-              fill={reg.color} opacity={0.04}
+              fill={`rgb(${t.wash})`} opacity={0.05}
             />
           </g>
         )
@@ -192,7 +304,6 @@ export default function GameBoard({
       {/* Region hexes */}
       {REGIONS.map(reg => {
         const regionData = regions.find(r => r.id === reg.id) || {hexes: {}}
-        const biome = getBiomeForRegion(reg.id) // T2's terrain palette · gives each region a distinct empty-hex base
         return (
         <g key={`region-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} data-region-group={reg.id}>
         {hexesInRadius(reg.cq, reg.cr, reg.radius).map(hex => {
@@ -210,7 +321,10 @@ export default function GameBoard({
               isPartialMatch={isPartialMatch(hex.q, hex.r)}
               isCompletionCandidate={isCompletionCandidate(hex.q, hex.r)}
               regionColor={reg.color}
-              biomeFill={BIOME_HEX_FILL[reg.id] ?? biome.colors.hex}
+              // The empty-hex terrain. This is the DOMINANT read of a region · 19 cells of it against
+              // a small label · and it is also the one terrain layer that is free, because HexCell
+              // resolves `element` before `biomeFill`: a hex that carries a token never renders this.
+              biomeFill={TERRAIN[reg.terrain].fill}
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
           )
@@ -296,24 +410,48 @@ export default function GameBoard({
         )
       })}
 
-      {/* Region name labels + current player's region score (sits above each region · never over hexes) */}
+      {/* TERRAIN + district name + the current player's region score, above each region, never over a
+          hex. THE ORDER IS THE POINT (S35): what a region is MADE OF leads, and what it is CALLED
+          follows underneath. The physical board carries both · the district lives in the rulebook and
+          the terrain is what is painted · and the screen had only ever shown the rulebook half, which
+          is why three abstract names sat on three flat colours.
+          The district name keeps `reg.color` rather than the terrain ink, so a player can still tie
+          "Sacred City" to the purple its score and its target rings are drawn in. */}
       {REGIONS.map(reg => {
         const {x, y} = hexToPixel(reg.cq, reg.cr)
         const score = regionScores[reg.id] ?? 0
+        const t = TERRAIN[reg.terrain]
         return (
           <g key={`label-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} style={{userSelect:'none'}}>
+            {/* SIZED FROM THE PHONE, NOT FROM THE FILE. These are SVG user units and the board is
+                HEIGHT-constrained at 375px: measured, the whole board renders at 0.3263 of user
+                units there, so the old 13/9.5/18 came out at 5.0px, 3.5px and 6.5px. A 3.5px
+                district name is not a subtitle, it is a deleted one · and 6.5px was the region
+                SCORE, the number that says whether you are winning. 26/21/30 render at 8.5px,
+                7.7px and 11.5px, and the three lines clear each other by 1.3-1.7px · the first
+                spacing I tried overlapped them by 0.8px and 1.6px, which the render showed and the
+                arithmetic had not. Re-measure after any change to the board's height budget. */}
+            <text
+              data-terrain-label={reg.terrain}
+              x={x} y={y - HEX_SIZE * 4.45}
+              textAnchor="middle" dominantBaseline="central"
+              fill={t.ink} fontSize={26} fontWeight={600}
+              style={{textTransform:'uppercase', letterSpacing:4}}
+            >
+              {t.name}
+            </text>
             <text
               x={x} y={y - HEX_SIZE * 3.55}
               textAnchor="middle" dominantBaseline="central"
-              fill={reg.color} fontSize={11} fontWeight={500}
-              style={{opacity: 0.7, textTransform:'uppercase', letterSpacing:2}}
+              fill={reg.color} fontSize={20} fontWeight={500}
+              style={{opacity: 0.72, textTransform:'uppercase', letterSpacing:2.2}}
             >
               {reg.name}
             </text>
             <text
-              x={x} y={y - HEX_SIZE * 2.78}
+              x={x} y={y - HEX_SIZE * 2.62}
               textAnchor="middle" dominantBaseline="central"
-              fill="white" fontSize={18} fontWeight={700}
+              fill="white" fontSize={30} fontWeight={700}
               style={{opacity: 0.92, fontVariantNumeric: 'tabular-nums'}}
             >
               {score}
