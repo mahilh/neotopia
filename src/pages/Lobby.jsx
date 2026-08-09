@@ -10,6 +10,7 @@ import { GAME_MODES } from '../store/gameConfig'
 import { useBackendHealth } from '../hooks/useConnectionHealth'
 import { deriveBackendStatus } from '../utils/backendStatus'
 import { normalizeRoomCode, isRoomCodeShape, buildInviteUrl } from '../utils/roomLink'
+import { deriveLobbyGate } from '../utils/lobbyGate'
 
 // Seat → the colour actually painted on a roster avatar. These hexes are the ONLY seat colour a player
 // ever sees: the `color` on a store player and the `player_color` on a room_players row are never
@@ -497,9 +498,12 @@ export default function Lobby({ onGameStart, initialCode = null }) {
 
   // ── Waiting room ────────────────────────────────────────────────
   if (roomPhase === 'lobby') {
-    const others = lobbyPlayers.filter(p => !p.isHost)
-    const readyCount = others.filter(p => p.isReady).length
-    const canStart = lobbyPlayers.length >= 2 && others.every(p => p.isReady)
+    // THE WALL, NAMED (T1 S31 · src/utils/lobbyGate.js). Traced live on localhost: a first visitor
+    // types a name, creates a room, and lands here in front of a permanently disabled button reading
+    // "Waiting for players (0/0 ready)" with nothing on screen saying a second person is required.
+    // The gate itself is unchanged · whether a lone player SHOULD be able to start is a product
+    // decision, not a copy fix. What changed is that the screen now says what it is waiting for.
+    const { canStart, startLabel, hint } = deriveLobbyGate({ players: lobbyPlayers, isHost })
 
     return (
       <div style={centeredScreen}>
@@ -548,13 +552,18 @@ export default function Lobby({ onGameStart, initialCode = null }) {
 
         {lobbyError && <p style={errorText}>{lobbyError}</p>}
 
+        {/* The one sentence this screen was missing. Host-only · a joiner is not the person who can do
+            anything about an empty room, so telling them to invite someone would be noise. */}
+        {hint && <p data-testid="lobby-hint" style={lobbyHint}>{hint}</p>}
+
         {isHost ? (
           <button
+            data-testid="start-btn"
             style={{ ...primaryBtn, opacity: canStart ? 1 : 0.4, cursor: canStart ? 'pointer' : 'default' }}
             disabled={!canStart}
             onClick={startGame}
           >
-            {canStart ? 'Start Game' : `Waiting for players (${readyCount}/${others.length} ready)`}
+            {startLabel}
           </button>
         ) : (
           <button
@@ -706,6 +715,12 @@ const hostBadge = { fontSize: 9, padding: '2px 6px', borderRadius: 4, background
 const readyBadge = { fontSize: 11, padding: '3px 8px', borderRadius: 4, background: 'rgba(30,200,100,0.15)', color: '#1DC864' }
 const waitingBadge = { fontSize: 11, padding: '3px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }
 const errorText = { color: '#E24B4A', fontSize: 12, margin: 0, textAlign: 'center' }
+// Not errorText's red: waiting for a second player is the normal state of a room somebody just made,
+// not a fault. Neutral, and sized to be read rather than skimmed past (T1 S31).
+const lobbyHint = {
+  color: 'rgba(255,255,255,0.55)', fontSize: 13, lineHeight: 1.5, margin: '0 0 4px',
+  textAlign: 'center', maxWidth: 320,
+}
 // ── Backend banners · terminal failure reuses errorText's red so trouble reads as one visual
 // language · a recoverable retry uses the gold accent instead, because it is not an error yet. ──
 const downBanner = { width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', gap: 8, padding: 16, borderRadius: 12, border: '1px solid rgba(226,75,74,0.35)', background: 'rgba(226,75,74,0.08)', boxSizing: 'border-box' }
