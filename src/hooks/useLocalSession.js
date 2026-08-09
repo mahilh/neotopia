@@ -97,6 +97,10 @@ export function useLocalSession(active, { bots = MIN_BOTS, mode = DEFAULT_GAME_M
   // One activation = one game. Without this, any re-render that changed `bots` or `mode` would
   // re-init and silently destroy a game in progress · the selector belongs to the screen BEFORE this.
   const startedRef = useRef(false)
+  // Set for the duration of endPractice(), which mutates the store on purpose. Without it the
+  // subscription below would observe that teardown and write the blank slate straight back into the
+  // storage key endPractice had just cleared · a teardown that un-does itself.
+  const tearingDownRef = useRef(false)
 
   useEffect(() => {
     if (!active) {
@@ -156,6 +160,41 @@ export function useLocalSession(active, { bots = MIN_BOTS, mode = DEFAULT_GAME_M
     setReady(true)
   }, [active, bots, mode, username, botNames])
 
+  // ── PERSIST EVERY COMMITTED CHANGE, not only the ones routed through this transport (T3 S35) ──────
+  // MEASURED, not assumed: after 19 turns of a real practice game the saved snapshot still read turn 1,
+  // 12 tiles, 0 elements placed. A player who left a board with 13 elements and refreshed came back to
+  // one with 11, at turn 8 instead of turn 10. The restore path above was working perfectly · there was
+  // simply almost nothing to restore.
+  //
+  // WHY. sendMove/pushState below persist correctly, and useGameActions calls them for every human
+  // action. useBotTurns does not: it drives seats with useGameStore.getState().<action>() directly
+  // (useBotTurns.js:82,98,127), which is a legitimate choice · it is a driver, not a client, and it
+  // predates this transport. But it means every bot move between two human actions was invisible here,
+  // so a refresh rewound the board by up to a full round of opponents' play.
+  //
+  // FIXED AT THE TRANSPORT, not by asking useBotTurns to route through it. Persistence is this file's
+  // job, and a rule of the form "everyone who mutates the store must remember to tell the transport" is
+  // exactly the kind of second contract that was already broken once here (Rule 45): the isBot key had
+  // two contracts for one question and the seats sat still. A subscription cannot be forgotten by a
+  // caller that does not know it exists, and it covers writers that do not exist yet.
+  //
+  // Unconditional rather than debounced, on measurement: the snapshot is 20KB and a clone+stringify
+  // costs 0.13ms, so even the once-a-second turn-timer tick is 0.13ms/s. Debouncing would buy nothing
+  // real and would open a window in which a refresh loses the last move · which is the entire bug.
+  //
+  // sendMove/pushState keep their own writeSaved calls. They are not redundant: pushState mirrors
+  // useGameSync's contract, where a caller that awaits it is entitled to assume the write has already
+  // happened when it resolves. This subscription is the safety net underneath them, and both being
+  // independently sufficient is the shape T1 shipped in useBotTurns for the same reason.
+  useEffect(() => {
+    if (!active || !ready) return
+    const unsubscribe = useGameStore.subscribe(() => {
+      if (tearingDownRef.current) return
+      writeSaved(snapshot())
+    })
+    return unsubscribe
+  }, [active, ready])
+
   // Persist the current store. Mirrors useGameSync.pushState's RESULT shape ({error}) so a caller that
   // checks `if (error)` behaves identically in both modes · the point of a drop-in is that the calling
   // code cannot tell which transport it has.
@@ -184,14 +223,27 @@ export function useLocalSession(active, { bots = MIN_BOTS, mode = DEFAULT_GAME_M
   // a syncFromServer that MERGES. Returning the store to a lobby-phase blank slate also re-arms
   // GameRoom's own solo-init guard, so entering practice a second time deals a fresh board.
   const endPractice = useCallback(() => {
-    clearSaved()
-    startedRef.current = false
-    const store = useGameStore.getState()
-    // initGame is the only full reset the store has · run it with a throwaway single player and then
-    // drop back to 'lobby' so nothing downstream mistakes the blank slate for a playable game.
-    store.initGame([{ userId: PRACTICE_HUMAN_ID, username: 'You' }], [], [])
-    store.setPhase('lobby')
-    setReady(false)
+    // Raised BEFORE clearSaved, and lowered only after the last store mutation below. The two store
+    // calls that follow are the teardown itself, and the persistence subscription above is still live
+    // for them · React unsubscribes on the next commit, not synchronously here. Without this flag the
+    // blank slate would be written straight back into the key this line just cleared, and the next
+    // visit would restore a one-player game with an empty deck. Ordering matters more than the flag:
+    // clearing first and lowering last is what makes the whole teardown atomic from storage's view.
+    tearingDownRef.current = true
+    try {
+      clearSaved()
+      startedRef.current = false
+      const store = useGameStore.getState()
+      // initGame is the only full reset the store has · run it with a throwaway single player and then
+      // drop back to 'lobby' so nothing downstream mistakes the blank slate for a playable game.
+      store.initGame([{ userId: PRACTICE_HUMAN_ID, username: 'You' }], [], [])
+      store.setPhase('lobby')
+      setReady(false)
+    } finally {
+      // try/finally so a throw in initGame cannot leave this latched · a stuck flag would silently
+      // disable persistence for the rest of the tab's life, which is the original bug with no symptom.
+      tearingDownRef.current = false
+    }
   }, [])
 
   // sessionId is null, not a fake id: game_events.session_id is a real FK and anything that needs one

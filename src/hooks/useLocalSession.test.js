@@ -221,6 +221,106 @@ describe('useLocalSession · it survives a refresh, which is the whole reason it
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
+// T3 S35 · the tests above all persist THROUGH sendMove, and every one of them passed while the feature
+// was broken in production. That is the vacuity this block exists to close.
+//
+// MEASURED on a pinned build before a line was changed: after 19 turns of a real practice game the
+// saved snapshot still read turn 1, 12 tiles, 0 elements placed. A player who left a board with 13
+// elements and refreshed came back to one with 11, at turn 8 instead of turn 10. useBotTurns drives its
+// seats with useGameStore.getState().<action>() directly rather than through this transport, so every
+// bot move between two human actions was never written down · and "restore on refresh", the entire
+// reason this file persists at all, was quietly worth about one turn.
+describe('useLocalSession · a move this transport was never told about is still saved (T3 S35)', () => {
+  test('a store mutation made WITHOUT sendMove is persisted · this is how bots move', () => {
+    const hook = renderHook(() => useLocalSession(true, { bots: 2 }))
+    expect(hook.result.current.ready).toBe(true)
+    const dealt = JSON.parse(sessionStorage.getItem(PRACTICE_STORAGE_KEY))
+    expect(dealt.currentSeat).toBe(0)
+
+    // EXACTLY what useBotTurns does (useBotTurns.js:127) · no transport call anywhere.
+    act(() => { useGameStore.getState().endTurn() })
+
+    const saved = JSON.parse(sessionStorage.getItem(PRACTICE_STORAGE_KEY))
+    // FALSE CASE, and the one that shipped: the store advances, the game plays on perfectly, and the
+    // snapshot silently keeps saying seat 0 · so the bug is invisible until somebody refreshes.
+    expect(saved.currentSeat, 'the bot lane does not call sendMove · persistence cannot depend on it')
+      .toBe(useGameStore.getState().currentSeat)
+    expect(saved.currentSeat).toBe(1)
+    hook.unmount()
+  })
+
+  test('the board that comes back after a remount is the one that was on screen, not the one last pushed', () => {
+    const first = renderHook(() => useLocalSession(true, { bots: 2 }))
+    // One human action through the transport, then two moves that bypass it · the real interleaving.
+    act(() => { useGameStore.getState().endTurn() })
+    act(() => { useGameStore.getState().endTurn() })
+    act(() => { useGameStore.getState().endTurn() })
+    const onScreen = useGameStore.getState().currentSeat
+    expect(onScreen).toBe(0) // wrapped all the way round · 3 seats, 3 end-turns
+    const turnOnScreen = useGameStore.getState().turnNumber
+    expect(turnOnScreen).toBeGreaterThan(1)
+    first.unmount()
+
+    useGameStore.getState().setPhase('lobby')
+    const second = renderHook(() => useLocalSession(true, { bots: 2 }))
+    expect(second.result.current.ready).toBe(true)
+    expect(useGameStore.getState().turnNumber,
+      'the player refreshed and the board rewound to before the opponents played').toBe(turnOnScreen)
+    second.unmount()
+  })
+
+  test('an INACTIVE hook still writes nothing, even while another game mutates the store', () => {
+    // The subscription must be gated exactly as tightly as the rest of the hook. GameRoom constructs
+    // this hook on every render of a REAL online game (rules of hooks · both transports are always
+    // built, one is chosen), so a subscription that ran while inactive would persist every online
+    // game into this tab's practice slot and hand it back as a practice board.
+    const hook = renderHook(() => useLocalSession(false, { bots: 2 }))
+    act(() => { useGameStore.getState().setPhase('playing') })
+    act(() => { useGameStore.getState().endTurn() })
+    expect(sessionStorage.getItem(PRACTICE_STORAGE_KEY)).toBeNull()
+    hook.unmount()
+  })
+
+  test('going INACTIVE without unmounting stops the writing too', () => {
+    // The `active` half of the subscription's gate has to be tested through a TRANSITION, not a fresh
+    // inactive render · that was a real gap. Rendering inactive from the start proves nothing about it,
+    // because `ready` is only ever set true on the active path, so `!ready` alone already covers that
+    // case. Deleting `!active` left the whole suite green until this test existed. (Rule 63.)
+    //
+    // The transition is the live scenario: GameRoom computes active as `practice && practiceBots >= 1`
+    // and keeps this hook mounted across an in-app move from practice into a real room. For one commit
+    // `active` is false while `ready` is still true · long enough, without the gate, to write a REAL
+    // online game into this tab's practice slot and hand it back later as a practice board.
+    const hook = renderHook(({ on }) => useLocalSession(on, { bots: 1 }), { initialProps: { on: true } })
+    expect(hook.result.current.ready).toBe(true)
+    const savedWhileActive = sessionStorage.getItem(PRACTICE_STORAGE_KEY)
+    expect(savedWhileActive).toBeTruthy()
+
+    hook.rerender({ on: false })
+    act(() => { useGameStore.getState().endTurn() })
+
+    expect(sessionStorage.getItem(PRACTICE_STORAGE_KEY),
+      'the hook went inactive and kept persisting · a real game can land in the practice slot')
+      .toBe(savedWhileActive)
+    hook.unmount()
+  })
+
+  test('after unmount the subscription is gone · a torn-down game does not keep writing', () => {
+    const hook = renderHook(() => useLocalSession(true, { bots: 1 }))
+    act(() => { useGameStore.getState().endTurn() })
+    const atUnmount = sessionStorage.getItem(PRACTICE_STORAGE_KEY)
+    hook.unmount()
+
+    // FALSE CASE: a leaked subscription outlives the component, so the NEXT game (or a real online
+    // game sharing this store) keeps overwriting a practice slot nobody is playing.
+    act(() => { useGameStore.getState().endTurn() })
+    expect(sessionStorage.getItem(PRACTICE_STORAGE_KEY),
+      'the store moved after unmount and the snapshot followed it · the subscription leaked')
+      .toBe(atUnmount)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
 describe('useLocalSession · leaving practice', () => {
   test('endPractice clears the snapshot and returns the store to a lobby-phase blank slate', async () => {
     const hook = renderHook(() => useLocalSession(true, { bots: 2 }))
