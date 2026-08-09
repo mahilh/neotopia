@@ -32,6 +32,22 @@ const OFFLINE_DETAIL   = 'Your session could not be started, so rooms are unavai
 const RETRY_HEADLINE   = 'Reconnecting…'
 const RETRY_DETAIL     = 'The connection dropped. Trying to restore it.'
 
+// ── The 429 is not an outage, and saying it is drives the player away (T2 S30 → T1 S30) ────────────
+// Anonymous sign-ins are capped at 30 per hour PER IP (read live from the Management API by T2 ·
+// docs/ANON_SIGNIN_BUDGET.md). Only FIRST-TIME visitors spend it, so four people on home wifi are fine
+// · but a classroom, a cafe, an office or a mobile carrier NAT is one shared IP, and the 31st new
+// visitor that hour is refused. Every one of those refusals currently renders as "Can't reach
+// NeoTopia's servers", which is false: the servers are up, the game is fine, and waiting a few minutes
+// genuinely works. A player told the game is broken leaves; a player told to wait waits.
+//
+// The only signal available at this layer is Supabase's own message text, because useAuth passes
+// error.message and not the HTTP status (its lane · the status would be a stronger witness · Rule 39).
+// So this is a text match, and a text match can go stale when a vendor rewrites a string. It degrades
+// to the generic copy above, which is exactly today's behaviour · never to something worse.
+const RATE_LIMITED = /rate limit|too many requests|\b429\b/i
+const LIMIT_HEADLINE = 'Too many new players from your network'
+const LIMIT_DETAIL   = 'NeoTopia gives every new visitor a guest session, and this network has used up its allowance for the hour. Nothing is broken · try again in a few minutes, or from another connection.'
+
 /**
  * @param {object}  input
  * @param {boolean} input.authLoading  useAuth().isLoading · auth has not settled yet
@@ -42,7 +58,7 @@ const RETRY_DETAIL     = 'The connection dropped. Trying to restore it.'
  *        "nothing has reported a failure", which is exactly that module's own cold-start meaning, so
  *        an unwired caller degrades to the auth-only signals rather than to a scary state.
  *
- * @returns {{tone: string, canUseRooms: boolean, showBanner: boolean, isOffline: boolean,
+ * @returns {{tone: string, canUseRooms: boolean, showBanner: boolean, isOffline: boolean, isRateLimited: boolean,
  *            headline: string, detail: string, reason: ?string}}
  */
 export function deriveBackendStatus({ authLoading, authError, user, health } = {}) {
@@ -59,23 +75,29 @@ export function deriveBackendStatus({ authLoading, authError, user, health } = {
   const isOffline = Boolean(h.isOffline) || Boolean(authError) || (!authLoading && !user)
 
   if (isOffline) {
+    // Raw cause, rendered small · useful to us in a screenshot, ignorable to a player. Prefer the
+    // aggregator's reason (it names which transport died) over the bare auth message.
+    const reason = h.reason ?? (authError ? String(authError) : null) ?? 'No session was established.'
+    // TONE STAYS 'offline'. Rooms really are unusable without a session, the retry button really is the
+    // right next step, and the tone is what data-testid and html[data-backend-status] are keyed on
+    // (T3's E2E) · only the sentences a human reads change.
+    const isRateLimited = RATE_LIMITED.test(reason)
     return {
       tone: TONE_OFFLINE,
       canUseRooms: false,
       showBanner: true,
       isOffline: true,
-      headline: OFFLINE_HEADLINE,
-      detail: OFFLINE_DETAIL,
-      // Raw cause, rendered small · useful to us in a screenshot, ignorable to a player. Prefer the
-      // aggregator's reason (it names which transport died) over the bare auth message.
-      reason: h.reason ?? (authError ? String(authError) : null) ?? 'No session was established.',
+      isRateLimited,
+      headline: isRateLimited ? LIMIT_HEADLINE : OFFLINE_HEADLINE,
+      detail: isRateLimited ? LIMIT_DETAIL : OFFLINE_DETAIL,
+      reason,
     }
   }
 
   // Auth has not settled. Rooms stay shut · a live-looking Create Room during an unsettled session is
   // the same broken promise as during a dead one, just briefer. No banner: the spinner already says it.
   if (authLoading) {
-    return { tone: TONE_CONNECTING, canUseRooms: false, showBanner: false, isOffline: false, headline: '', detail: '', reason: null }
+    return { tone: TONE_CONNECTING, canUseRooms: false, showBanner: false, isOffline: false, isRateLimited: false, headline: '', detail: '', reason: null }
   }
 
   // A transport is retrying inside its budget. In the lobby this can only ever be 'game-sync' (auth
@@ -83,8 +105,8 @@ export function deriveBackendStatus({ authLoading, authError, user, health } = {
   // so rooms stay USABLE and this is a quiet notice, not a red wall. Disabling here would punish the
   // player for a channel that has nothing to do with creating a room.
   if (h.isDegraded) {
-    return { tone: TONE_RECONNECTING, canUseRooms: true, showBanner: true, isOffline: false, headline: RETRY_HEADLINE, detail: RETRY_DETAIL, reason: h.reason ?? null }
+    return { tone: TONE_RECONNECTING, canUseRooms: true, showBanner: true, isOffline: false, isRateLimited: false, headline: RETRY_HEADLINE, detail: RETRY_DETAIL, reason: h.reason ?? null }
   }
 
-  return { tone: TONE_OK, canUseRooms: true, showBanner: false, isOffline: false, headline: '', detail: '', reason: null }
+  return { tone: TONE_OK, canUseRooms: true, showBanner: false, isOffline: false, isRateLimited: false, headline: '', detail: '', reason: null }
 }

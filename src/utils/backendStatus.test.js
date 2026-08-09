@@ -152,3 +152,47 @@ describe('deriveBackendStatus · robustness', () => {
     }
   })
 })
+
+// ── The 429 is a queue, not an outage (T1 S30) ───────────────────────────────────────────────────
+// Anonymous sign-ins are capped at 30/hour per IP. On any shared IP · a classroom, a cafe, an office,
+// a mobile carrier NAT · the 31st new visitor that hour is refused, and until this the app told them
+// "Can't reach NeoTopia's servers". The servers are up. Waiting a few minutes actually works. The
+// difference between those two sentences is a player who waits and a player who leaves.
+describe('deriveBackendStatus · a rate-limited visitor is not told the game is broken', () => {
+  // The literal string Supabase returns for a 429 on signInAnonymously, seen live in S29 as
+  // window.__neotopia_health = { status: 'offline', source: 'auth', reason: 'Request rate limit reached' }.
+  const LIMITED = health({ status: 'offline', source: 'auth', reason: 'Request rate limit reached', isOffline: true })
+
+  it('blames the network allowance, not the servers', () => {
+    const s = deriveBackendStatus({ authLoading: false, authError: null, user: null, health: LIMITED })
+    expect(s.isRateLimited).toBe(true)
+    expect(s.headline).not.toMatch(/can't reach|cannot reach|servers/i)
+    expect(`${s.headline} ${s.detail}`, 'it must say who is affected and that waiting works')
+      .toMatch(/network/i)
+    expect(s.detail).toMatch(/few minutes|try again/i)
+  })
+
+  it('still shuts the rooms and keeps the tone every selector is keyed on', () => {
+    // A refused visitor has no session, so nothing they click can work · the copy is the only change.
+    const s = deriveBackendStatus({ authLoading: false, authError: null, user: null, health: LIMITED })
+    expect(s.canUseRooms).toBe(false)
+    expect(s.tone).toBe(TONE_OFFLINE)
+    expect(s.isOffline).toBe(true)
+    expect(s.reason).toBe('Request rate limit reached') // the raw cause survives for a screenshot
+  })
+
+  it('reads the same cause off the bare auth error, with no health snapshot wired', () => {
+    const s = deriveBackendStatus({ authLoading: false, authError: 'AuthApiError: Request rate limit reached', user: null })
+    expect(s.isRateLimited).toBe(true)
+  })
+
+  it('falls back to the outage copy for any other failure, and when nothing matches', () => {
+    // The match is on vendor text, so it WILL eventually go stale. Staleness must cost the improvement,
+    // never the correctness · an unrecognised reason has to land on exactly today's behaviour.
+    for (const reason of ['CHANNEL_ERROR', 'Failed to fetch', 'Database is paused', 'quota exhausted']) {
+      const s = deriveBackendStatus({ authLoading: false, authError: null, user: null, health: health({ status: 'offline', reason, isOffline: true }) })
+      expect(s.isRateLimited, `"${reason}" is not a rate limit`).toBe(false)
+      expect(s.headline).toMatch(/can't reach/i)
+    }
+  })
+})
