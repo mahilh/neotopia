@@ -122,7 +122,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (74 · cumulative):
+PERMANENT ANTI-REGRESS RULES (77 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -270,3 +270,34 @@ run's games costs nothing, removes the confound entirely, and makes the control 
 turned "greedy 64.3%" into "46.7% vs 64.3% on identical play, control 50.0%", which is a claim and
 not a number. Sharpens T3's S31 stamping rule: a control must share the treatment's commit AND,
 where possible, its actual data.
+
+RULE 75 (T1 S33/S34, recorded S35 · August 9 2026):
+Two lessons that were written into .claude/comms/ as "permanent rules 73 and 74" and therefore were
+not permanent at all · comms is GITIGNORED, so T2 correctly took 73/74 in the shared record while
+mine existed only on one disk. THE META-LESSON IS THE NUMBERING ITSELF: a rule is only a rule once
+it is in the file every terminal reads. Write it to CLAUDE.md in the session that earns it.
+  75a (T1 S33) · A composition proven on the COMMON path is not proven. The bot integration ran three
+  clean turns in my first live check because the bot had never scored; the deadlock lived only in the
+  rarest and most valuable action. Drive the highest-value branch, not the reachable one.
+  75b (T1 S34) · A PROBE IS A CLAIM AND HAS TO BE DOUBTED LIKE ONE. Three lied in one session, each
+  returning a plausible number rather than an error. Check that a probe measured the thing it names:
+  read back an actual value you can recognise (a token's real colour, a non-null element), not just
+  the summary statistic it computed from it.
+
+RULE 76 (T1 S35 · August 9 2026):
+A setTimeout inside a useEffect is cancelled by its own cleanup whenever a dep identity churns, so
+any effect whose timer is LONGER than the app's fastest re-render interval can never fire · silently,
+with nothing in the console. NeoTopia re-renders once a second for the turn countdown, which made
+this a general hazard rather than a one-off: it had already killed ScoreFlash's 2200ms auto-unmount
+in shipped code (a fixed, full-screen, dismiss-less overlay that therefore never left the screen once
+a player scored), and it killed the first draft of auto-end-turn before a test caught it. Handlers and
+callbacks belong in a ref; effect deps belong to VALUES. Same family as the S33 bot deadlock. And fix
+it in the component, not by memoising the caller · that makes it correct for every caller instead of
+for one careful one.
+
+RULE 77 (T1 S35 · August 9 2026):
+A test suite run on a loaded machine is a measurement of the machine. Boot reported 3 red, then 6 red
+with a DIFFERENT set including one of my own · the give-away being that the sets disagreed. Load
+average was 19 on 8 cores. Serial (--no-file-parallelism) it was 450/450. Before routing a red to a
+lane, check `uptime`: wall-clock-bounded tests lose under contention and the failure moves around,
+which is the signature. Pairs with Rule 33 (unit tests and live E2E never concurrently).
