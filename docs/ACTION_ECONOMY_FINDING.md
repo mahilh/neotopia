@@ -111,3 +111,84 @@ was built (`src/lib/botPolicy.js` · `REFERENCE_POLICY`). One game calibrates th
 checks this finding at the same time.
 
 Until then the ladder stays in code and unexposed, and `DRAW_BIAS` stays exactly where it is.
+
+---
+
+# Part 2 · what the strongest lever would cost  (T2 S34)
+
+Section 5 listed five levers with no recommendation. This part prices them. It is still not a
+recommendation · it is the cost sheet, and two of the numbers overturn what Part 1 assumed.
+
+## 7 · The cheap lever was measured, and it does not work
+
+Lever 2 (cap the hand) looked cheapest: one rule, self-limiting, restores placement as the tiebreak.
+Measured directly · greedy cluster-building against uniformly random placement, both sides on the
+same draw bias, seat-controlled, 15 seeds x both seatings at each cap:
+
+| hand cap | greedy beats random | avg final score | stalled games |
+|---|---|---|---|
+| none | 43% | 83.4 | 0 |
+| 7 | 37% | 78.2 | 0 |
+| 5 | 33% | 72.6 | 0 |
+| 3 | 50% | 61.5 | 0 |
+| 2 | 53% | 54.6 | 0 |
+
+**Placement quality never rises above noise at any cap**, while average scores deflate by a third.
+The cap costs a visibly less generous game and buys nothing. Lever 3 (pricing the draw) acts on the
+same variable and should be assumed to behave the same way until measured.
+
+## 8 · Why · the rule meant to reward placement cannot change who wins
+
+`getClusterTotal(regions)` takes regions and nothing else. It returns **one number for the whole
+board**, and `calculateFinalScore` adds that same number to every player's total. Verified in a real
+finished game: a board-global cluster bonus of **40 points, added identically to both players**.
+
+A term that is equal for everyone cannot decide anything. It inflates the scoreboard and moves nobody.
+The single mechanism in NeoTopia intended to make *where* you place matter is mathematically incapable
+of doing so, which explains every measurement in Part 1 far better than the action economy does.
+
+The reason is in the data model, not the arithmetic: a placed hex records `element` and nothing else.
+There is no seat, owner or colour on it, so the engine **cannot** attribute a token to a player.
+
+This diverges from the physical rule recorded in CLAUDE.md:
+
+> "each player gains 1 Point for each Element Token **of their color** on the biggest cluster in each
+> Region."
+
+Held weakly, and worth saying: the flat board-global reading may have been a deliberate adaptation
+precisely *because* hexes carry no ownership, and `patternMatcher.js` does flag the flat-vs-folded
+choice to Mahil in its own comment. What it does not flag is global-vs-per-player, which is the part
+that has the balance consequence.
+
+## 9 · Cost of implementing the rulebook wording
+
+| what | cost | notes |
+|---|---|---|
+| **Data model** · hex records the placing seat | small | +9 bytes/hex. A 4-player full board: **8.3 KB → 8.8 KB serialized, against the 32 KB broadcast cap** (Rule 21). Not a constraint. |
+| **Engine** · per-seat `getClusterDetail` / `getClusterTotal`, `calculateFinalScore` 3rd arg per player | medium | `src/lib/patternMatcher.js` · T2 lane |
+| **Audit** · `buildGameEndEvent` computes one shared bonus today | small | becomes per-player, `version: 1 → 2`. All 3 historical rows are 0-0 · no real history to migrate |
+| **Display** · cluster viz shows one shared "+N total" | medium | `FinalScore` · **T1's lane**, and it is the visible half |
+| **Fixtures / sync** | small | shape change reaches `seededState.json` + `seededState.guard.test.js` |
+| **Card point spread 12/18/18/8** | **zero** | cluster is a flat meta-term, not card points. **No card needs repointing.** |
+| **150-game fuzz suite** | **holds, and that is the problem** | `engineFuzz` asserts termination and invariants, never balance. It would stay green through any balance change · it is not a safety net here. A balance gate would have to be written. |
+
+## 10 · And it is necessary rather than sufficient
+
+The obvious assumption is that per-player clustering fixes it. Measured, with ownership tracked in the
+harness and scored by the rulebook's wording, 20 seeds x both seatings:
+
+| scoring rule | greedy beats random |
+|---|---|
+| current · cluster shared | 45% |
+| per-player · rulebook p9 | **53%** |
+
+It creates a genuine differential · **6.7 points** on average between the two players · and a shallow
+one-ply greedy policy still cannot convert that into wins. Eight points of movement is inside noise.
+
+Two readings, and this measurement cannot separate them: either the differential is too small to
+matter, or converting it needs multi-turn planning that no bot here does and a human might. The second
+is plausible and is exactly what one playtest would settle.
+
+**The honest summary: the cheap levers act on the wrong variable, and the correct-by-the-rulebook lever
+is necessary but not proven sufficient.** No recommendation · "do nothing" remains genuinely on the
+table, and nothing in this document has been changed in shipped code.

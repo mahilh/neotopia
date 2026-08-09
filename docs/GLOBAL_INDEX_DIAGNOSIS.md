@@ -212,3 +212,59 @@ rows left. Counting forward from an honest zero beats a reconstruction nobody ca
 the `game_end` payload's exact structure, which is T1's `buildGameEndEvent`. Read that file at the
 moment of writing the migration rather than trusting this paragraph (Rule 64) · the audit format has
 changed twice already this project.
+
+---
+
+# Addendum 3 · can a real player win and not be credited?  (T2 S34)
+
+Migration 020's first live run returned `awarded` while crediting nobody: the winner had never claimed
+a username, so there was no `player_profiles` row to increment. I split that case out as
+`awarded_no_profile` using `GET DIAGNOSTICS`. A distinct status code is a diagnostic, though, not an
+answer · the question underneath it is whether a **real player** can reach game end uncredited.
+
+**Measured answer: no. Not one has, and the path is gated rather than lucky.**
+
+| who took a seat | distinct users | of those, with NO profile row |
+|---|---|---|
+| non-harness names (Architect, yo, …) | **26** | **0** |
+| `E2E*` harness identities | 24 | 24 |
+| bot / fixture scripts (BotAlpha…, HostReal) | 14 | 12 |
+
+3,281 auth users exist against 39 profiles, but that ratio is meaningless here · it is the anon
+sign-in leak measured in `ANON_SIGNIN_BUDGET.md`, overwhelmingly identities that signed in and did
+nothing. What matters is the 64 who actually took a seat, and among those the split is total: every
+non-harness player has a profile, every harness identity does not.
+
+## Why, structurally · three chances, and the first is a hard gate
+
+1. `Lobby.jsx:475` · `if (!isClaimed || !username)` renders the claim screen instead of the lobby.
+   **The lobby is unreachable without a claimed name.**
+2. `useAuth.claimUsername` returns early on any write error (`if (error) return`) and only then sets
+   `CLAIMED_KEY`. So `isClaimed` cannot become true on a failed insert · the gate opens only after a
+   confirmed row.
+3. `useGameRoom` re-upserts the profile in both `createRoom` (:311) and `joinRoom` (:528), with
+   `ignoreDuplicates` so it can never overwrite an existing name.
+
+The harness identities are uncredited precisely because they skip step 1 · specs seed seats directly
+rather than through the claim screen. That is the harness being a harness, not a product defect.
+
+## The one path that survives, stated plainly
+
+`isClaimed` is read from **localStorage**, while the identity it refers to lives in the anon session.
+If a session is rotated or lost while localStorage survives, a **new** `user_id` enters a lobby that
+still believes a name was claimed · and that identity has no profile row. Nothing then stands between
+it and an uncredited win except the two backstop upserts, which are `await`ed **without checking their
+error**. They are called best-effort in their own comment, and they are the only remaining guard.
+
+Nobody has hit this: 26/26. It is narrow, and it is not worth a redesign. It is worth knowing that the
+last line of defence is unchecked, because the entire family of bugs this document exists to record is
+"a write whose failure looks exactly like its success".
+
+- The cheap fix is one error check on those two upserts. **They live in `useGameRoom.js`, which is
+  T3's file** · flagged to them rather than edited here.
+- `awarded_no_profile` is therefore a harness-only status today. It should stay in the function: it is
+  how we would ever find out if that changed.
+
+**Not yet observable in production at all:** `award_game_win` has no caller. T1 has the one-line call
+site (`FinalScore.jsx`, after `pushState` resolves) and until it lands, `games_won` stays 0 for
+everyone regardless of any of the above.
