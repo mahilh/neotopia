@@ -52,6 +52,22 @@
   .action-log-wrap { display: none; }
 }
 
+/* ── The instruction line gets its own row before it can crowd the wordmark (T1 S30) ──────
+   Measured collision widths: 320→43px, 375→31px, 414→23px, 600→36px, clear from 768. The old
+   absolutely-centred line ALSO clipped ("Click a factory to take an ele…") at every one of those.
+   720px is chosen above the last measured failure (600) and below the first measured clear (768),
+   so the switch happens while there is still slack rather than at the exact pixel it breaks.
+   Below it the header stacks: brand + turn on top, the full sentence beneath, wrapping freely. */
+@media (max-width: 720px) {
+  .game-header {
+    grid-template-columns: 1fr !important;
+    row-gap: 3px;
+    padding: 7px 16px !important;
+  }
+  .game-header > [aria-hidden='true'] { display: none; }
+  .game-instruction { text-align: left !important; }
+}
+
 /* Mobile layout (T1 S16) · at <=600px the 288px sidebar squeezed the board to 55px (T3 finding). Stack the
    board over the sidebar so the board takes the full width. !important overrides the inline flex row + the
    288px inline sidebar width. flex stays (not height:auto) so the board keeps filling the viewport space ·

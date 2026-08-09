@@ -148,6 +148,55 @@ export default function GameRoom() {
 
   const factory = factories.find(f => f.id === selectedFactory)
 
+  // ── THE BOARD ANSWERS THE CLICK (T1 S30) ────────────────────────────────────────────────────────
+  // Measured this session: after clicking a factory, NOTHING on the board changed except a ring on the
+  // factory itself, and the panel that did respond was 381px away at a 375px viewport (651px at 1280).
+  // The player's eye is on the board · they just clicked there · so "nothing happened" is the honest
+  // reading of the screen, and the old tutorial then sent them to click empty hexes, which do nothing.
+  // So: the moment a factory is picked, show every hex that factory can actually reach, in the regions
+  // it borders. This is a PREVIEW, drawn dashed and distinct from the solid pulsing ring that means
+  // "click me now" · promising a click that does not work is the same lie the old copy told.
+  //
+  // aimedRegion is what keeps it from being a lie: pointing at a previewed hex chooses that REGION, so
+  // the board is answerable rather than decorative. It never places anything · the commit is still the
+  // player's own click on a lit hex once the element is chosen.
+  const [aimedRegion, setAimedRegion] = useState(null)
+  const isChoosing = uiPhase === 'factorySelected' || uiPhase === 'elementSelected'
+  const reachable = useMemo(() => {
+    if (!isChoosing || selectedFactory === null) return { regions: [], targets: [] }
+    const f = factories.find(x => x.id === selectedFactory)
+    if (!f) return { regions: [], targets: [] }
+    const store = useGameStore.getState()
+    // Once aimed, narrow the preview to the one region · the picture matches the decision made so far.
+    const shown = aimedRegion != null && f.betweenRegions.includes(aimedRegion) ? [aimedRegion] : f.betweenRegions
+    const targets = shown.flatMap(rid =>
+      (store.getValidPlacements?.(selectedFactory, rid) ?? []).map(t => ({ ...t, regionId: rid })))
+    return { regions: f.betweenRegions, targets }
+    // `regions` is in the deps because the preview depends on what is already on the board.
+  }, [isChoosing, selectedFactory, factories, regions, aimedRegion])
+
+  // Aim → region, one hop. handleRegionSelect refuses until an element exists (its own guard, T2's
+  // lane), so the aim is held until that is true and then applied · the lit hexes appear on the same
+  // click that picks the element instead of costing a second trip to the panel.
+  useEffect(() => {
+    if (aimedRegion == null) return
+    if (uiPhase === 'idle' || uiPhase === 'scorePending') { setAimedRegion(null); return }
+    // Re-check the border rule at the moment of use (Rule 64): a different factory may have been picked
+    // since the aim was taken, and handleRegionSelect would happily select a region it cannot serve,
+    // leaving the player at 'regionSelected' with zero lit hexes · a worse dead end than the one fixed.
+    if (uiPhase === 'elementSelected' && reachable.regions.includes(aimedRegion)) handleRegionSelect(aimedRegion)
+  }, [aimedRegion, uiPhase, reachable.regions, handleRegionSelect])
+
+  // Below 600px the sidebar is a 240px strip UNDER the board (index.css), and it scrolls. The step that
+  // just became live is inserted at its top, so if the strip is scrolled at all the new choice appears
+  // above the fold of a panel the player is not looking at. Bring it into view when it becomes the
+  // decision. `block:'nearest'` so it never scrolls when it is already visible (the desktop case).
+  const stepPanelRef = useRef(null)
+  useEffect(() => {
+    if (!isChoosing) return
+    stepPanelRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [isChoosing, uiPhase])
+
   // Draw a card from The Offer. In a REAL authenticated room we route through the atomic RPC so
   // concurrent draws can't clobber (the bug T2 flagged · 17f5931); the card returns and also lands in
   // hand when the RPC's game_sessions.state write streams back via postgres_changes. The RPC needs the
@@ -190,7 +239,9 @@ export default function GameRoom() {
     if (!isMyTurn) return `Waiting for ${currentPlayer?.username ?? 'the other player'}`
     if (actionsLeft <= 0) return 'No actions left · end your turn'
     switch (uiPhase) {
-      case 'factorySelected': return 'Pick an element from the factory'
+      case 'factorySelected': return aimedRegion != null
+        ? `Pick an element · it goes into ${REGION_NAMES[aimedRegion]}`
+        : 'Pick an element · the dashed hexes show where it can go'
       case 'elementSelected':  return 'Choose a region to place into'
       case 'regionSelected':   return 'Click a highlighted hex to place the element'
       case 'scorePending':     return 'Pattern complete · select a glowing card to score'
@@ -250,29 +301,39 @@ export default function GameRoom() {
         />
       )}
 
-      {/* HEADER */}
-      <header style={{
-        position: 'relative',
-        height: 56, borderBottom: '1px solid rgba(255,255,255,0.06)',
-        display: 'flex', alignItems: 'center', padding: '0 20px', gap: 16, flexShrink: 0,
+      {/* HEADER
+          GRID, not an absolutely-centred overlay (T1 S30). The instruction used to be positioned at
+          left:50% with translateX(-50%) over the flow, so it OVERLAPPED the wordmark at every width up
+          to 600px (measured: 43px of collision at 320, 31px at 375, 36px at 600) and was truncated by
+          its own maxWidth:58% + nowrap at all of them. The single line whose whole job is "always tell
+          the player what to do next" was unreadable on a phone. `1fr auto 1fr` keeps it optically
+          centred on the viewport (the empty third column mirrors the first) while keeping it IN the
+          flow, so it can never sit on top of its neighbours · index.css drops it to its own row below
+          720px, where it wraps instead of clipping. */}
+      <header className="game-header" style={{
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+        minHeight: 56, borderBottom: '1px solid rgba(255,255,255,0.06)',
+        padding: '0 20px', gap: 12, flexShrink: 0,
       }}>
-        <span style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 500, letterSpacing: 3, fontSize: 13 }}>
-          NEOTOPIA
-        </span>
-        <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-          Turn {turnNumber}
-        </span>
-        {/* Persistent instruction · centered · always tells the player what to do next (colonist.io). */}
-        <div style={{
-          position: 'absolute', left: '50%', transform: 'translateX(-50%)',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+          <span style={{ color: 'rgba(255,255,255,0.9)', fontWeight: 500, letterSpacing: 3, fontSize: 13, whiteSpace: 'nowrap' }}>
+            NEOTOPIA
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 12, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            Turn {turnNumber}
+          </span>
+        </div>
+        {/* Persistent instruction · always tells the player what to do next (colonist.io). */}
+        <div data-testid="instruction" className="game-instruction" style={{
           fontSize: 13, letterSpacing: 0.3, textAlign: 'center', pointerEvents: 'none',
-          maxWidth: '58%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          minWidth: 0, overflowWrap: 'anywhere',
           color: instructionColor,
           transition: 'color 0.25s ease',
           fontWeight: instructionWeight,
         }}>
           {instruction}
         </div>
+        <div aria-hidden="true" />
         {/* Actions counter, turn status, and End Turn now live in the bottom ActionBar. */}
       </header>
 
@@ -290,12 +351,21 @@ export default function GameRoom() {
             completionCandidates={completionCandidates}
             selectedFactory={selectedFactory}
             factoriesPulse={factoriesPulse}
+            reachableTargets={reachable.targets}
+            reachableRegions={reachable.regions}
             regionScores={currentPlayer?.scores ?? []}
             onHexClick={(q, r, rid) => {
+              // Before an element is chosen the board is a preview, not a placement surface. A click on
+              // a previewed hex takes aim at its region · a click anywhere else is still inert, which is
+              // honest, because those hexes are not drawn as reachable.
+              if (isChoosing) {
+                if (reachable.targets.some(t => t.q === q && t.r === r && t.regionId === rid)) setAimedRegion(rid)
+                return
+              }
               const placed = handleHexClick(q, r, rid)
               if (placed) addLogEntry(`placed ${cap(placed.element)} in ${REGION_NAMES[placed.regionId]}`, ELEMENT_COLORS[placed.element])
             }}
-            onFactoryClick={handleFactoryClick}
+            onFactoryClick={(id) => { setAimedRegion(null); handleFactoryClick(id) }}
           />
           <ActionLog entries={actionLog} />
           {/* Sacred milestone celebration · covers the board for 2500ms when a total crosses 7/9/13/18/27/36 */}
@@ -310,7 +380,7 @@ export default function GameRoom() {
 
           {/* STEP 2: element type buttons (factory selected) */}
           {uiPhase === 'factorySelected' && factory && (
-            <div>
+            <div ref={stepPanelRef}>
               {/* Soul-metal lore reveals under each element on hover/focus (PLATO_BOOKS · Pillar 1) ·
                   grows within the flow so the sidebar's overflow never clips it (Rule 4: minHeight 44px). */}
               <style>{`
@@ -364,7 +434,7 @@ export default function GameRoom() {
 
           {/* STEP 3: region buttons (element selected) */}
           {(uiPhase === 'elementSelected' || uiPhase === 'regionSelected') && factory && (
-            <div>
+            <div ref={uiPhase === 'elementSelected' ? stepPanelRef : null}>
               <div style={sectionLabel}>Place into region</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {factory.betweenRegions.map(rid => {

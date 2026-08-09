@@ -12,6 +12,7 @@ export default function HexCell({
   isPatternMatch = false,   // green · this occupied hex is part of a COMPLETE buildable pattern
   isPartialMatch = false,   // amber · near-miss · 2+ hexes match but the pattern is not complete
   isCompletionCandidate = false, // white pulse · the SINGLE empty hex that would complete a near-miss
+  isReachablePreview = false, // dashed · "the factory you picked could reach here" · not yet placeable
   isFactory = false,        // factory hex · distinct look
   isSelected = false,       // factory the player has picked up from · brightened ring
   bonusCovered = false,     // this hex has/had a bonus token
@@ -36,6 +37,8 @@ export default function HexCell({
     ? 'rgba(255,180,50,0.14)'         // amber · near-miss · "you're close"
     : isValidTarget
     ? `${regionColor}1A`              // subtle highlight for valid placement
+    : isReachablePreview
+    ? 'rgba(255,255,255,0.09)'        // preview · a neutral spotlight, so it reads on all three biomes
     : (biomeFill ?? `${regionColor}0F`) // base: terrain biome fill per region (T2) · else 6% region tint
 
   const stroke = isFactory
@@ -66,9 +69,12 @@ export default function HexCell({
     <g
       className="hex-cell"
       data-valid={isValidTarget ? 'true' : undefined}
-      data-testid={isValidTarget ? 'hex-valid' : undefined}
+      // A preview hex is clickable (it takes aim at its region · GameRoom), so it advertises itself as
+      // clickable. The testid stays separate from hex-valid: E2E asserting "placeable now" must never
+      // match a hex that only means "reachable later" (Rule 50 · the attribute has to flip on state).
+      data-testid={isValidTarget ? 'hex-valid' : isReachablePreview ? 'hex-reachable' : undefined}
       onClick={() => onClick(q, r)}
-      style={{cursor: (isValidTarget || isFactory) ? 'pointer' : 'default'}}
+      style={{cursor: (isValidTarget || isReachablePreview || isFactory) ? 'pointer' : 'default'}}
     >
       {/* Soul-metal hover tooltip on a placed token · native SVG <title> on the hoverable group
           (the inner token <g> is pointer-events:none) · PLATO_BOOKS · Pillar 1 */}
@@ -84,6 +90,24 @@ export default function HexCell({
           transition: 'fill 0.2s ease, stroke 0.2s ease',
         }}
       />
+
+      {/* Reachable preview · dashed, breathing, deliberately NOT the solid pulsing ring below. The
+          player has picked a factory but not yet an element, so this hex cannot take a token this
+          instant · drawing it identically to a live target would repeat the exact promise the old
+          tutorial broke ("then click any empty hex"). Suppressed once the hex becomes a real target. */}
+      {isReachablePreview && !isValidTarget && !isCompletionCandidate && !element && (
+        <polygon
+          className="hex-reachable"
+          points={points}
+          fill="none"
+          // White, not the region colour: Living Earth's ring on Living Earth's biome fill is green on
+          // green and all but vanished at 375px. A neutral reads on all three biomes at one strength.
+          stroke="rgba(255,255,255,0.9)"
+          strokeWidth={2}
+          strokeDasharray="7 5"
+          strokeLinejoin="round"
+        />
+      )}
 
       {/* Valid target pulsing ring · suppressed when this hex is the completion candidate
           (the white completion pulse below is the stronger, more specific signal) */}

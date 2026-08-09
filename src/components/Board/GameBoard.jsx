@@ -33,6 +33,8 @@ export default function GameBoard({
   completionCandidates = [], // [{q,r}] empty hexes that would complete a near-miss · "place here to score"
   selectedFactory = null,   // factory id player selected for element pickup
   factoriesPulse = false,   // pulse unselected factories to invite the first action (your turn · BUG-02)
+  reachableTargets = [],    // [{q,r,regionId}] PREVIEW · where the picked factory could reach (T1 S30)
+  reachableRegions = [],    // region ids the picked factory borders · the others fade back
   regionScores = [],        // current player's per-region score · index = region id · shown under each label
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
@@ -58,6 +60,9 @@ export default function GameBoard({
   const isPatternMatch = (q, r) => patternHighlight.some(t => t.q === q && t.r === r)
   const isPartialMatch = (q, r) => partialHighlight.some(t => t.q === q && t.r === r)
   const isCompletionCandidate = (q, r) => completionCandidates.some(t => t.q === q && t.r === r)
+  const isReachable = (q, r) => reachableTargets.some(t => t.q === q && t.r === r)
+  // Only fade the other regions while a factory is actually picked · never on the resting board.
+  const dimRegion = (id) => reachableRegions.length > 0 && !reachableRegions.includes(id)
 
   return (
     <svg
@@ -83,7 +88,9 @@ export default function GameBoard({
       {REGIONS.map(reg => {
         const regionData = regions.find(r => r.id === reg.id) || {hexes: {}}
         const biome = getBiomeForRegion(reg.id) // T2's terrain palette · gives each region a distinct empty-hex base
-        return hexesInRadius(reg.cq, reg.cr, reg.radius).map(hex => {
+        return (
+        <g key={`region-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} data-region-group={reg.id}>
+        {hexesInRadius(reg.cq, reg.cr, reg.radius).map(hex => {
           const key = `${hex.q},${hex.r}`
           const element = regionData.hexes[key]?.element ?? null
           const bonusCovered = regionData.hexes[key]?.bonusCovered ?? false
@@ -92,6 +99,7 @@ export default function GameBoard({
               q={hex.q} r={hex.r}
               element={element}
               bonusCovered={bonusCovered}
+              isReachablePreview={isReachable(hex.q, hex.r)}
               isValidTarget={isValidTarget(hex.q, hex.r)}
               isPatternMatch={isPatternMatch(hex.q, hex.r)}
               isPartialMatch={isPartialMatch(hex.q, hex.r)}
@@ -101,7 +109,9 @@ export default function GameBoard({
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
           )
-        })
+        })}
+        </g>
+        )
       })}
 
       {/* Pulse clickable factories on your turn (BUG-02 · disabled under prefers-reduced-motion). */}
@@ -117,6 +127,16 @@ export default function GameBoard({
         .hex-element-in { animation: hex-appear 0.35s ease-out; transform-box: fill-box; transform-origin: center; }
         @keyframes hex-appear { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
         @media (prefers-reduced-motion: reduce) { .hex-element-in { animation: none; } }
+
+        /* Reachable-preview breath (T1 S30) · opacity only, no scale: this ring says "this is where it
+           could go", not "click me now", and the solid pulsing validTarget ring keeps that stronger
+           signal to itself. Under reduced motion it holds at a legible steady opacity, never hidden. */
+        .hex-reachable { animation: reach-breathe 2.4s ease-in-out infinite; }
+        @keyframes reach-breathe { 0%,100% { opacity: 0.42; } 50% { opacity: 0.85; } }
+        @media (prefers-reduced-motion: reduce) { .hex-reachable { animation: none; opacity: 0.7; } }
+
+        /* Regions the picked factory cannot serve step back rather than disappear (T1 S30). */
+        .region-dimmed { opacity: 0.35; transition: opacity 0.25s ease; }
       `}</style>
 
       {/* Factory hexes */}
@@ -176,7 +196,7 @@ export default function GameBoard({
         const {x, y} = hexToPixel(reg.cq, reg.cr)
         const score = regionScores[reg.id] ?? 0
         return (
-          <g key={`label-${reg.id}`} style={{userSelect:'none'}}>
+          <g key={`label-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} style={{userSelect:'none'}}>
             <text
               x={x} y={y - HEX_SIZE * 3.55}
               textAnchor="middle" dominantBaseline="central"
