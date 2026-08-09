@@ -1,18 +1,21 @@
-# OVERDRIVE! — 7-AGENT LLM COUNCIL
+# OVERDRIVE! — 6-AGENT LLM COUNCIL  (agent 7 retired T2 S31 · see below)
 # Version: 2.0 · Rating: 182/200 · Upgraded: June 25 2026
 # Codeword: OVERDRIVE! [decision or question]
 # Improvement from v1.0: ALL 7 agents now have mandatory evidence requirements.
 #   v1.0 gap: only KARPATHY required file reads. Others gave verdicts from memory = unverified.
 #   v2.0 fix: every agent has a specific evidence mandate. Unverified verdicts weighted 0.1x.
+#   v2.1 (T2 S31): agent 7 retired with the Moltbook surface · council is 6, and every count below
+#     was updated with it. A skill that says 7 in the header and lists 6 agents sends the next
+#     session looking for a seventh.
 
 ## ACTIVATION
 
-OVERDRIVE! [topic] → convene all 7 agents simultaneously → decision gate → recommendation.
-Always trigger OVERDRIVE! for: scoring mechanics · cross-terminal architecture · Moltbook strategy
+OVERDRIVE! [topic] → convene all 6 agents simultaneously → decision gate → recommendation.
+Always trigger OVERDRIVE! for: scoring mechanics · cross-terminal architecture · schema migrations
   · database schema changes · UX decisions affecting near-miss psychology · any decision with
   competing valid approaches where reasonable people would disagree.
 
-## THE 7-AGENT COUNCIL (all mandatory evidence)
+## THE 6-AGENT COUNCIL (all mandatory evidence)
 
 ### Agent 1 · BRUTUS (Devil's Advocate)
 Role: Find every reason the proposed approach fails in production.
@@ -55,20 +58,20 @@ EVIDENCE MANDATE: list CLAUDE.md anti-regress rules that apply to this decision.
   "UNVERIFIED" if no specific rules cited.
 Output: CAESAR: irreversible if [condition] · minimum commit: [what] · rule violations: [rules N,M]
 
-### Agent 7 · NEOTOPIAN (Moltbook Intelligence)
-Role: What does the agent internet know about this topic?
-EVIDENCE MANDATE: run semantic search on Moltbook. No verdict without a search result.
-  curl "https://www.moltbook.com/api/v1/search?q=[TOPIC]&limit=5" -H "Authorization: Bearer $MOLTBOOK_API_KEY"
-  If Moltbook is unavailable: state "Moltbook unreachable · verdict deferred" and weight 0.
-Output: NEOTOPIAN: [N] agents discussing this · top: [agent+post] · NeoTopia relevance: [high/med/low]
+### Agent 7 · RETIRED (was NEOTOPIAN · Moltbook Intelligence)
+Moltbook is abandoned (T2 S30/S31) and its whole surface is deleted · workflow, scripts, doc and
+both skills. This agent's evidence mandate was a curl carrying $MOLTBOOK_API_KEY, a credential that
+is exposed with no documented revoke path, so leaving the instruction here would re-teach the next
+session to use it. Do NOT reinstate it. Run OVERDRIVE with the six remaining agents; if you want a
+seventh perspective, give it an evidence mandate against a source this project actually controls.
 
 ## DECISION GATE
 
-After all 7 verdicts:
+After all 6 verdicts:
   1. Mark any verdict missing its evidence mandate as [UNVERIFIED] — weighted 0.1x in scoring.
   2. Count support for each option from verified verdicts only.
   3. BRUTUS VETO: if BRUTUS finds a fatal flaw with cited evidence, that option is eliminated.
-     BRUTUS veto can only be overridden if 5+ other agents with evidence disagree.
+     BRUTUS veto can only be overridden if 4+ other agents with evidence disagree.
   4. Tie-breaking (equal support): KARPATHY's verdict breaks ties (engineering correctness wins).
   5. If no consensus after tie-breaking: escalate to REFORGE! on the question itself.
 
@@ -88,11 +91,10 @@ OVERDRIVE! COUNCIL · [TOPIC]
 [ISABELLA] · evidence: [research doc section]
 [KARPATHY] · evidence: [file:line]
 [CAESAR] · evidence: [rule numbers]
-[NEOTOPIAN] · evidence: [search result]
 ════════════════════════════════════════
 SCORING:
-  Option A: [description] · verified support: [N/7] · confidence: [%]
-  Option B: [description] · verified support: [N/7] · confidence: [%]
+  Option A: [description] · verified support: [N/6] · confidence: [%]
+  Option B: [description] · verified support: [N/6] · confidence: [%]
   VETO: [if BRUTUS found fatal flaw with evidence]
   TIE-BREAK: [KARPATHY's verdict if tied]
 RECOMMENDATION: [option] · minimum commitment: [specific first step]
@@ -104,7 +106,6 @@ Always convene for:
   · Scoring changes (tryScoreCard, patternMatcher, final score formula)
   · Cross-terminal file ownership disputes
   · Database schema changes (any migration)
-  · Moltbook post strategy (what to reveal vs. keep private)
   · Any decision where T1, T2, T3 disagree in comms
 
 ## SELF-IMPROVEMENT LOOP

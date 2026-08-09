@@ -124,9 +124,10 @@ Gate template:
   Newly created projects don't appear in list_projects for 2-3 minutes.
   T1 S10 CONFIRMED DEPLOYED: Tutorial gate fix was live on prod (tutorial dismissed in bot run).
 
-### PATTERN 13 · Moltbook Post Trigger Discipline
-  TRIGGERS: Session 280+ · new feature live · Global Index >1000
-  FORMAT: Civilization voice · placard test · no 'check out' or 'amazing'
+### PATTERN 13 · RETIRED (was Moltbook Post Trigger Discipline)
+  Moltbook is abandoned · the workflow, both scripts, the post queue and both skills were
+  deleted (T2 S30/S31) and the API key is exposed with no revoke path. Do not post, and do
+  not reinstate this pattern.
 
 ### PATTERN 14 · Bot Script Syntax Discipline
   FIX: node --check scripts/filename.js before pushing any Node script.

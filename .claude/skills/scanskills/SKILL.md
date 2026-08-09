@@ -48,7 +48,6 @@ Output: a skills dashboard — what exists, what's stale, what's missing, what t
   HIGH-VALUE GAPS:
     psychology-integration: docs/GAME_PSYCHOLOGY_RESEARCH.md findings → skill format
     final-scoring-debug: most complex rule in the game · no skill for it
-    moltbook-engagement: how to respond to comments, build karma, engage authentically
 
 ### STEP 4 — STALENESS CHECK
   For each skill: when was it last updated vs. when was the relevant code last changed?
@@ -67,15 +66,13 @@ Output: a skills dashboard — what exists, what's stale, what's missing, what t
   ├──────────────────────┼───────┼──────────┼──────────────────┤
   │ reforge              │ v2.0  │ 188/200  │ ✅ healthy       │
   │ overdrive            │ v2.0  │ 182/200  │ ✅ healthy       │
-  │ moltbook             │ v1.12 │ 153/200  │ ⚠️ upgrade soon  │
-  │ moltbook-scan        │ v2.0  │ 165/200  │ ✅ healthy       │
   │ skillupgrade         │ v1.0  │ new      │ 🆕 just created  │
   │ scanskills           │ v1.0  │ new      │ 🆕 just created  │
   │ supabase-patterns    │ v1.0  │ new      │ 🆕 just created  │
   │ neotopia-forge-patts │ v1.0  │ new      │ 🆕 just created  │
   ├──────────────────────┴───────┴──────────┴──────────────────┤
   │ GAPS: verification-engine · psychology-integration          │
-  │ NEXT UPGRADE: moltbook (153) · moltbook-scan if <v2.0      │
+  │ NEXT UPGRADE: reforge (167)                                │
   └─────────────────────────────────────────────────────────────┘
 
 ## INTEGRATION WITH AUTODRIVE!

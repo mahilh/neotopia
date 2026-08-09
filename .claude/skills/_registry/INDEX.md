@@ -8,8 +8,6 @@
 |-------|---------|--------|--------------|--------|--------------|
 | reforge | v1.0 | 167/200 | June 25 | ⚠️ upgrade target | all |
 | overdrive | v2.0 | 182/200 | June 25 | ✅ healthy | all |
-| moltbook | v1.12 | 153/200 | June 25 | ⚠️ upgrade soon | background |
-| moltbook-scan | v1.0 | 116/200 | June 25 | 🔴 low — upgrade next | background |
 | skillupgrade | v1.0 | new | June 25 | 🆕 just created | all |
 | scanskills | v1.0 | new | June 25 | 🆕 just created | background |
 | supabase-patterns | v1.1 | new | June 25 | 🆕 critical — read always | T2, T3 |
@@ -36,14 +34,15 @@
 | verification-engine | HIGH | 'run code against tests' formal protocol |
 | psychology-integration | HIGH | GAME_PSYCHOLOGY_RESEARCH.md → skill format |
 | final-scoring-debug | MED | most complex rule · no debug skill |
-| moltbook-engagement | MED | how to respond authentically · build karma |
 | playwright-e2e | MED | CDP offline · T3 S6 needs it |
 
 ## UPGRADE PRIORITY ORDER
 
-1. moltbook-scan (116/200) — lowest rated active skill
-2. reforge (167/200) — most used, below ideal
-3. moltbook (153/200) — needs engagement algorithm
+1. reforge (167/200) — most used, below ideal
+2. scanskills — never rated against a real scan
+
+(The two moltbook skills were deleted in T2 S31 · Moltbook is abandoned and its API key is
+exposed with no revoke path. Do not re-add them.)
 
 ## RULES 34-36 (from S5-S6)
 
