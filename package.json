@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:e2e": "playwright test"
+    "test:e2e": "node scripts/with-project-env.cjs playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

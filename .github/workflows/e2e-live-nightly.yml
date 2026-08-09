@@ -39,7 +39,7 @@ jobs:
     # fit comfortably. Raised with headroom for a cold runner rather than discovered by a timeout.
     # 25 -> 40 in T2 S30 for four-player-live: it sets its own 240s per-test budget (spec :67) and
     # spaces its four sign-ins 6s apart on purpose.
-    timeout-minutes: 40
+    timeout-minutes: 55  # 40 -> 55 in T2 S32 for the three specs added below
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
@@ -74,13 +74,24 @@ jobs:
       # plus one on teardown, against a budget of 30/hour per IP (measured live · docs/ANON_SIGNIN_BUDGET.md).
       # That is affordable once a night on a dedicated runner IP and is affordable nowhere else, which is
       # the whole reason this workflow exists. The concurrency group above keeps two runs from sharing it.
-      - name: Run live-DB Flow mode + draw-UI + backend-recovery + 4-player E2E
+      # T2 S32 · three more specs that ran in NO workflow, routed here by T3. All three need a live
+      # backend, so the nightly is their home, and they join the ONE invocation so the skip-guard
+      # below covers them too.
+      #   two-human      · the ONLY proof the two-player lobby handshake works, and it gated nothing
+      #   phase-over-wire· terminal phase propagating to both tabs over postgres_changes
+      #   seat-colors-live· every seat colour the client can send is one the CHECK accepts
+      # Sign-in cost is now affordable: the per-IP ceiling went 30 -> 150 this week (T2 S31), and this
+      # job is serialized by the concurrency group above so it never shares the hour with itself.
+      - name: Run the live-DB E2E suite (Flow · draw-UI · recovery · 4-player · 2-human · phase · seat colours)
         run: >
           npx playwright test
           tests/e2e/flow-mode-live.e2e.js
           tests/e2e/draw-ui-live.e2e.js
           tests/e2e/backend-recovery-live.e2e.js
           tests/e2e/four-player-live.e2e.js
+          tests/e2e/two-human.e2e.js
+          tests/e2e/phase-over-wire.e2e.js
+          tests/e2e/seat-colors-live.e2e.js
           --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json

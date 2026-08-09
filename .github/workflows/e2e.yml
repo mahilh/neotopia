@@ -55,6 +55,19 @@ jobs:
       - name: Run the 4-player ENGINE game (offline · costs 1 teardown sign-in)
         run: npx playwright test tests/e2e/four-player-live.e2e.js --grep "ENGINE"
 
+      # T2 S32 · TWO SPECS THAT RAN IN NO WORKFLOW AT ALL, routed here by T3.
+      # Both are offline by construction (card-art seeds the store and reads /art/cards; preconditions
+      # aborts its own requests), so they belong on the blocking path rather than the nightly · they
+      # cannot touch the anon rate limit that keeps the live suites off it.
+      # preconditions.e2e.js is the pointed one: its own header describes it as merge-gating and it was
+      # gating nothing. A file that lies about its own role is the exact class we have been closing all
+      # week, and the fix is to make the claim true rather than to soften the sentence.
+      # NOTE card-art self-skips when the store seed is slow (spec :40 · deliberate anti-flake by its
+      # author). That is tolerated here, but a skip is not a pass · if it starts skipping every run,
+      # the guard is gone and nobody will be told.
+      - name: Run card-art + preconditions E2E (offline · previously in no workflow)
+        run: npx playwright test tests/e2e/card-art.e2e.js tests/e2e/preconditions.e2e.js
+
       - name: Upload report on failure
         if: failure()
         uses: actions/upload-artifact@v4
