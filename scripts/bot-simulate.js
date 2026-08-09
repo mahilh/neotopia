@@ -31,18 +31,31 @@
 
 import { chromium } from '@playwright/test'
 import { writeFileSync, mkdirSync, readFileSync } from 'fs'
+import { placementVerdicts, allPlacementVerified } from './botVerdict.js'
 
-// Load VITE_SUPABASE_* from .env.local if not already set, so dbPlacedCount (Rule 53) works when the bot is
-// run plainly as `node scripts/bot-simulate.js`. Same vars the app uses · NO secrets hardcoded. CI can pass
-// them as real env vars instead (the loader only fills what is missing · a missing file is non-fatal).
+// Load VITE_SUPABASE_* from .env.local so dbPlacedCount (Rule 53) works when the bot is run plainly as
+// `node scripts/bot-simulate.js`. Same vars the app uses · NO secrets hardcoded.
+//
+// v4.7 (T2 S30) · .env.local now WINS over an inherited value. It used to only fill what was MISSING,
+// and that is exactly how a wrong value survives: this machine's shell exports VITE_SUPABASE_URL for a
+// DIFFERENT Supabase project (AetherMind · see scripts/with-project-env.cjs, which fixes the same hazard
+// for vite and which this script was not using). With the old precedence the bot pointed its verification
+// client at the wrong project, found no room there, and reported `dbPlacedCount: null` — "unverifiable",
+// which the summary then rendered as a harmless N/A next to the optimistic proxy number. That is how a
+// report reading `placedElements: 42 · dbPlacedCount: null` sat next to a database holding zero
+// placements for six weeks. The repo's own truth wins now; CI (no .env.local) is unaffected because the
+// loader still strips nothing when the file is absent.
 try {
-  if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
-    for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
-      const m = line.match(/^\s*(VITE_SUPABASE_[A-Z_]+)\s*=\s*(.+?)\s*$/)
-      if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
+  for (const line of readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')) {
+    const m = line.match(/^\s*(VITE_SUPABASE_[A-Z_]+)\s*=\s*(.+?)\s*$/)
+    if (m) {
+      if (process.env[m[1]] && process.env[m[1]] !== m[2]) {
+        console.warn(`[env] ${m[1]} inherited from the shell DISAGREES with .env.local · using .env.local (Rule 64)`)
+      }
+      process.env[m[1]] = m[2]
     }
   }
-} catch { /* .env.local absent · dbPlacedCount returns null gracefully */ }
+} catch { /* .env.local absent (CI) · the real env vars stand · a missing file is non-fatal */ }
 
 const BASE = process.env.BOT_URL || 'http://localhost:5173'
 const NUM_GAMES = parseInt(process.env.BOT_GAMES || '3')
@@ -569,8 +582,8 @@ async function playGame(gameNum, browser) {
     const drew = moves.filter(m => m.action === 'drew-card').length
     // Rule 53: verify the persisted artifact, not the proxy. Read the real placed count from game_sessions.
     const dbPlaced = await dbPlacedCount(roomCode)
-    if (dbPlaced === null) log(`DB-verified placed: unavailable · proxy: ${placed}`)
-    else log(`DB-verified placed: ${dbPlaced} · proxy: ${placed}${dbPlaced === placed ? ' ✓ match' : ' ⚠ MISMATCH (DB wins)'}`)
+    if (dbPlaced === null) log(`⚠ DB-verified placed: UNVERIFIABLE (this is not a pass) · proxy claims: ${placed}`)
+    else log(`DB placed: ${dbPlaced} · proxy: ${placed}${dbPlaced === placed ? ' ✓ match' : ' ⚠ MISMATCH · the DB wins'}`)
     // v4.6 (Rule 53): DB-verify the persisted MODE · proves whether Flow was actually achieved end-to-end.
     const dbMode = await dbSessionMode(roomCode)
     const modeOk = dbMode != null && dbMode === modeSel.selected
@@ -595,8 +608,12 @@ async function playGame(gameNum, browser) {
 }
 
 async function main() {
-  log(`NeoTopia Bot Simulation v4.6 · ${NUM_GAMES} games · ${BASE} · BOT_MODE=${MODE}`)
-  log('v4.6: BOT_MODE flow/classic · lobby mode-select (guarded · T1 toggle pending) · DB-verified persisted mode (Rule 53)')
+  log(`NeoTopia Bot Simulation v4.7 · ${NUM_GAMES} games · ${BASE} · BOT_MODE=${MODE}`)
+  log('v4.7: the DATABASE is the headline placement number · a mismatch or an unverifiable run EXITS NON-ZERO (Rule 53/61)')
+  // Say out loud which project the verification client will read · a bot that verifies against the wrong
+  // database reports null forever and looks merely "unavailable" (T2 S30).
+  const ref = (process.env.VITE_SUPABASE_URL || '').match(/https:\/\/([a-z0-9]+)\.supabase\.co/)?.[1]
+  log(`verification target: ${ref ? `project ${ref}` : 'NO VITE_SUPABASE_URL · placement CANNOT be DB-verified'}`)
   mkdirSync('.bot-reports', { recursive: true })
 
   const browser = await chromium.launch({ headless: !HEADED, slowMo: HEADED ? 400 : 0 })
@@ -614,20 +631,23 @@ async function main() {
     summary: {
       completed: allResults.filter(r => r.completed).length,
       totalErrors: allResults.reduce((s, r) => s + r.errors, 0),
-      gamesWithPlacement: allResults.filter(r => r.placedElements > 0).length,
-      totalPlaced: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
+      // v4.7 (T2 S30): the headline placement numbers are now the DATABASE's, not the proxy's. A game only
+      // counts as "with placement" if the persisted board says so · a swallowed click cannot buy its way in.
+      gamesWithPlacement: allResults.filter(r => (r.dbPlacedCount || 0) > 0).length,
+      totalPlaced: allResults.reduce((s, r) => s + (r.dbPlacedCount || 0), 0),
       // v4.6 (Rule 53): mode truth · was Flow actually persisted, and did the lobby toggle exist this run?
       requestedMode: MODE,
       flowToggleFound: allResults.some(r => r.flowToggleFound === true),
       flowDbVerified: allResults.some(r => r.dbMode === 'flow'),
       dbModeBreakdown: allResults.reduce((acc, r) => { const m = r.dbMode || 'unknown'; acc[m] = (acc[m] || 0) + 1; return acc }, {}),
-      // Rule 53: the proxy (totalPlaced) vs the DB truth. dbVerified=true means they agree.
+      // Rule 53: the proxy vs the DB truth. v4.7 makes this PER GAME and three-valued · the old whole-run
+      // comparison could cancel a +3 in one game against a -3 in another and call the run verified, and its
+      // `dbVerified: null` ("nobody could check") printed as an unalarming N/A.
       totalPlacedProxy: allResults.reduce((s, r) => s + (r.placedElements || 0), 0),
       totalPlacedDB: allResults.some(r => r.dbPlacedCount != null)
         ? allResults.reduce((s, r) => s + (r.dbPlacedCount || 0), 0) : null,
-      dbVerified: allResults.some(r => r.dbPlacedCount != null)
-        ? allResults.reduce((s, r) => s + (r.placedElements || 0), 0) === allResults.reduce((s, r) => s + (r.dbPlacedCount || 0), 0)
-        : null,
+      placementVerdicts: placementVerdicts(allResults),   // scripts/botVerdict.js · unit-tested there
+      dbVerified: allPlacementVerified(allResults),
       totalDrew: allResults.reduce((s, r) => s + (r.drewCards || 0), 0),
       errorTypes: allResults.flatMap(r => r.errorList || [])
         .reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc }, {}),
@@ -637,9 +657,9 @@ async function main() {
   const reportPath = `.bot-reports/report-${Date.now()}.json`
   writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log('\n=== BOT SIMULATION REPORT (v4.6) ===')
+  console.log('\n=== BOT SIMULATION REPORT (v4.7) ===')
   console.log(`Games completed: ${report.summary.completed}/${NUM_GAMES}`)
-  console.log(`Elements placed: ${report.summary.totalPlaced} (proxy) · ${report.summary.totalPlacedDB ?? 'N/A'} (DB-verified) · Cards drawn: ${report.summary.totalDrew}`)
+  console.log(`Elements placed (DATABASE): ${report.summary.totalPlacedDB ?? 'UNVERIFIED'} · proxy claimed ${report.summary.totalPlacedProxy} · Cards drawn: ${report.summary.totalDrew}`)
   console.log(`Mode: requested=${MODE} · DB persisted=${JSON.stringify(report.summary.dbModeBreakdown)} · flow toggle found=${report.summary.flowToggleFound} · flow DB-verified=${report.summary.flowDbVerified}`)
   if (MODE === 'flow' && !report.summary.flowDbVerified) {
     if (report.summary.flowToggleFound) {
@@ -648,12 +668,28 @@ async function main() {
       console.warn('NOTE: BOT_MODE=flow requested but the Flow toggle was not found this run · ran Classic (honest · Rule 63 · check the lobby toggle data-testid="mode-flow").')
     }
   }
-  if (report.summary.dbVerified === false) {
-    console.warn('WARNING: proxy and DB placed counts DISAGREE · the proxy over-counts swallowed clicks · the DB wins (Rule 53)')
-  }
   console.log('Error types:', report.summary.errorTypes)
   console.log(`Report: ${reportPath}`)
   console.log('\nKEY: look for [DOM-DIAG] and [ACTION DIAG] lines above — they show why placed:0')
+
+  // v4.7 (T2 S30) · THE PROXY CAN NO LONGER REPORT A GREEN RUN THE DATABASE DOES NOT AGREE WITH.
+  // Until now an unverifiable run printed "N/A (DB-verified)" beside the optimistic proxy number and exited
+  // 0, which is how `placedElements: 42 · dbPlacedCount: null` read as a healthy run for six weeks while the
+  // production board was empty. Three-valued and per game: a MISMATCH is a lie, and an UNVERIFIABLE run is
+  // not a pass either · "I could not check" must never look like "I checked and it was fine".
+  const bad = report.summary.placementVerdicts.filter(v => v.verdict !== 'match')
+  if (bad.length) {
+    console.error('\n❌ PLACEMENT NOT VERIFIED AGAINST THE DATABASE (Rule 53 · Rule 61)')
+    for (const v of bad) {
+      console.error(v.verdict === 'mismatch'
+        ? `   game ${v.game}: proxy says ${v.proxy}, the DB says ${v.db} · THE DB WINS · the proxy is counting clicks that placed nothing`
+        : `   game ${v.game}: proxy says ${v.proxy}, the DB could not be read · UNVERIFIABLE, which is NOT a pass`)
+    }
+    console.error(`   verification client points at: ${(process.env.VITE_SUPABASE_URL || '(unset)')}`)
+    console.error('   if that is not this project, the shell is shadowing .env.local · see scripts/with-project-env.cjs')
+    process.exit(1)
+  }
+  console.log(`✅ placement DB-verified across all ${NUM_GAMES} game(s) · proxy and database agree`)
 }
 
 main().catch(err => { console.error('Bot failed:', err.message); process.exit(1) })
