@@ -28,6 +28,14 @@ const db = {
   conflictOnce: false,   // one-shot 23505 on the next room_players insert (seat race)
   constraintOnce: false, // one-shot 23514 on the next room_players insert (schema drift · CHECK violation)
   denyJoin: false,       // room_players_join RLS refuses the insert (migration 015 · 42501)
+  // THE ROOM CHANGES STATE MID-JOIN (T3 S34). joinRoom's status read is a FAST PATH, not the boundary ·
+  // the host can hit Leave or Start in the gap between our read and our write, and the server then refuses
+  // the seat with a 42501 that says nothing about why. Set this to the status the room lands in; the next
+  // room_players insert flips it and returns the refusal.
+  // Modelling the RACE rather than the outcome is what makes denialReason testable at all. Seeding a room
+  // that is ALREADY closed cannot exercise it, because the fast-path check answers first and the re-read
+  // never runs · a test written that way passes without the code under test ever executing.
+  statusOnInsert: null,
 }
 
 function rowsFor(table) {
@@ -85,6 +93,12 @@ function resolve(table, filters, op, payload, singular) {
     if (table === 'room_players') {
       // migration 015 · room_players_join requires the room to be waiting AND under capacity. A refusal
       // arrives as a Postgres permission error, NOT as a friendly application-level message.
+      if (db.statusOnInsert) {
+        const next = db.statusOnInsert
+        db.statusOnInsert = null
+        for (const r of db.rooms) r.status = next
+        return { data: null, error: { code: '42501', message: 'new row violates row-level security policy' } }
+      }
       if (db.denyJoin) {
         return { data: null, error: { code: '42501', message: 'new row violates row-level security policy' } }
       }
@@ -168,6 +182,7 @@ async function callPeek(hook, code) {
 beforeEach(() => {
   db.rooms = []; db.players = []; db.sessions = []
   db.errors = {}; db.inserts = []; db.conflictOnce = false; db.constraintOnce = false; db.denyJoin = false
+  db.statusOnInsert = null
   fromSpy.mockClear()
   __resetBackendHealth()
 })
@@ -783,22 +798,179 @@ describe('joinRoom · REJOIN · the refresh path (T3 S32 · answering T1)', () =
     expect(hook.result.current.roomPhase).not.toBe('playing')
   })
 
-  test('WHAT REJOIN DOES WITH A FINISHED ROOM · documented, because it is reachable', async () => {
-    // Not a passing-by-accident assertion · this is the one case the ordering gets WRONG, recorded here
-    // so it is a known shape rather than a surprise. leaveRoom sets the room to 'finished' when the HOST
-    // leaves but only deletes the HOST's own row, so every other player's seat outlives the room. Those
-    // players are still members, so they take the readmit branch and land in roomPhase 'lobby' · a
-    // waiting room for a game that is over, with nobody in presence and a Start button that can never
-    // enable. Reported to T1/T2 rather than fixed here: the right answer is a distinct outcome code, and
-    // adding a tenth JOIN_FAILURE lands on T1's invite screen as an unhandled branch (the same reason
-    // S28 reused SEAT_CONFLICT instead of inventing a code).
+  // The FINISHED-room case was pinned here in S32 as a known-wrong shape ("readmitted into a phantom
+  // lobby") and deliberately left unfixed, because the fix needed a code T1's invite screen could render.
+  // T1 shipped that branch in S34, so the behaviour is now correct and its coverage lives in the block
+  // below · kept as a pointer rather than deleted, because the pin is why the fix exists.
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// THE PHANTOM LOBBY · a closed room is terminal for everyone (T3 S34)
+//
+// THE BUG. leaveRoom marks the room 'finished' when the HOST leaves, but deletes only the host's own
+// room_players row. Every other seat outlives the room. Those players are still members, so they took the
+// readmit branch and landed in roomPhase 'lobby' · a waiting room for a game that was already over, with
+// nobody in presence and a Start button that could never enable. No error, no explanation, no way forward.
+//
+// WHAT 'finished' ACTUALLY MEANS, checked against production rather than inferred from the word. It has
+// exactly one writer in the client (leaveRoom, host-only) and none server-side · of the functions that
+// reference game_rooms, purge_e2e_test_data deletes and update_player_count writes player_count. So it does
+// NOT mean "the game ended": across 376 finished rooms, the number whose game_sessions row reached phase
+// 'finished' is ZERO. A game that ends naturally leaves its room on 'playing' (11 rooms are in that state
+// right now). 'finished' means the host closed the room, and there is nothing behind that door.
+//
+// >>> WHY THE COUNTERWEIGHTS BELOW ARE THE POINT OF THIS BLOCK <<<
+// The fix is a status check placed ABOVE the membership check, which is the exact shape of the S27 bug
+// (`status !== 'waiting'` told a player mid-game that their own game had already started). It is safe only
+// because it tests ONE terminal value and lets 'playing' fall through. That distinction is invisible in the
+// code and would survive any amount of review, so the tests that matter most here are the ones asserting
+// that a member of a LIVE game still gets in. Narrowing the guard to `!== 'waiting'` must turn this file
+// red, or the fix is one careless edit away from restoring the bug it was written to prevent.
+describe('joinRoom · a FINISHED room · the phantom lobby, closed (T3 S34)', () => {
+  const SEATED = { user_id: USER.id, username: 'Me', seat_number: 2, player_color: 'green' }
+
+  test('a member of a finished room is REFUSED with ROOM_FINISHED · no phantom lobby', async () => {
     seedWaitingRoom({ status: 'finished', players: [SEATED] })
     const hook = renderHook(() => useGameRoom(USER, 'Me'))
 
     const res = await callJoin(hook, 'ABC234')
 
-    expect(res).toMatchObject({ ok: true, rejoined: true, inProgress: false })
-    expect(hook.result.current.roomPhase).toBe('lobby')  // <- the phantom lobby, pinned
+    expect(res).toMatchObject({ ok: false, reason: JOIN_FAILURE.ROOM_FINISHED })
+    // The bug itself, asserted as an absence. Landing in 'lobby' was the whole defect · the player was not
+    // shown an error, they were shown a room.
+    expect(hook.result.current.roomPhase, 'a closed room must not produce a waiting room').toBe('idle')
+    expect(hook.result.current.roomId).toBeNull()
+    expect(hook.result.current.seat).toBeNull()
+    expect(res.rejoined).toBeUndefined()
     expect(db.inserts).toHaveLength(0)
+  })
+
+  test('THE COUNTERWEIGHT · a member of a PLAYING room still gets straight back in', async () => {
+    // If this ever goes red, the guard above has been widened into the S27 bug and a player who refreshed
+    // mid-game is being told their own live game has already started. This is the single most important
+    // assertion in the block: every other test here wants somebody kept OUT, and a guard that refused
+    // everyone would satisfy all of them.
+    seedWaitingRoom({ status: 'playing', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, seat: 2, rejoined: true, inProgress: true })
+    expect(res.reason).toBeUndefined()
+    expect(hook.result.current.roomPhase).toBe('playing')
+    expect(db.inserts).toHaveLength(0)
+  })
+
+  test('THE SECOND COUNTERWEIGHT · a member of a WAITING room is still readmitted', async () => {
+    // The refresh path T1's URL fix runs on every page load. A guard that swallowed 'waiting' would make
+    // every reload of a waiting room a dead end.
+    seedWaitingRoom({ status: 'waiting', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res).toMatchObject({ ok: true, seat: 2, rejoined: true, inProgress: false })
+    expect(hook.result.current.roomPhase).toBe('lobby')
+  })
+
+  test('a STRANGER gets ROOM_FINISHED too · not ALREADY_STARTED, which is a different situation', async () => {
+    // One room state, one code, whoever knocks. Before this, a stranger on a closed room was told "Game
+    // already started" · advice that points at waiting for the game to end, on a game that already has.
+    seedWaitingRoom({ status: 'finished', players: [{ user_id: 'u-other', username: 'Other', seat_number: 0 }] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res.reason).toBe(JOIN_FAILURE.ROOM_FINISHED)
+    expect(res.reason).not.toBe(JOIN_FAILURE.ALREADY_STARTED)
+  })
+
+  test('a stranger on a PLAYING room is still ALREADY_STARTED · the two codes stay distinct', async () => {
+    seedWaitingRoom({ status: 'playing', players: [{ user_id: 'u-other', username: 'Other', seat_number: 0 }] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    expect((await callJoin(hook, 'ABC234')).reason).toBe(JOIN_FAILURE.ALREADY_STARTED)
+  })
+
+  test('the two codes carry DIFFERENT copy · a distinct code with identical words fixes nothing', async () => {
+    // A tenth code that rendered the same sentence as the ninth would be a refactor wearing a bug fix's
+    // clothes. The player-visible difference is the deliverable.
+    expect(JOIN_FAILURE.ROOM_FINISHED).toBe('ROOM_FINISHED')
+    seedWaitingRoom({ status: 'finished', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res.message).toBeTruthy()
+    expect(res.message).not.toBe('Game already started')
+    // lobbyError is the fallback path: a consumer that never learns the new code still shows real words
+    // rather than a stale message or a blank line.
+    expect(hook.result.current.lobbyError).toBe(res.message)
+  })
+
+  test('a closed room is refused after ONE query · it never reaches the roster, let alone a write', async () => {
+    // Placement, asserted as behaviour rather than read off the source. The guard sits above the roster
+    // read, so a dead room costs one round trip instead of two and cannot reach any write path at all.
+    seedWaitingRoom({ status: 'finished', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+    fromSpy.mockClear()
+
+    await callJoin(hook, 'ABC234')
+
+    expect(fromSpy.mock.calls.map(c => c[0])).toEqual(['game_rooms'])
+  })
+
+  test('peekRoom reports a closed room as NOT rejoinable · even to the player still holding a seat', async () => {
+    // rejoinable means "you can get back in", not "your row is still there". joinRoom now refuses this
+    // room, so a preview promising otherwise is a value that lies (Rule 61). T1's screen checks the status
+    // ahead of this flag and was already right · this makes the flag right for the next consumer, who
+    // will not know to check the status first.
+    seedWaitingRoom({ status: 'finished', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callPeek(hook, 'ABC234')
+
+    expect(res.ok).toBe(true)                 // a preview of a closed room is still a successful preview
+    expect(res.status).toBe('finished')       // T1's invite screen branches on this · it must survive
+    expect(res.canJoin).toBe(false)
+    expect(res.rejoinable).toBe(false)
+  })
+
+  test('peekRoom still reports rejoinable on a LIVE game · the flag was narrowed, not disabled', async () => {
+    seedWaitingRoom({ status: 'playing', players: [SEATED] })
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    expect((await callPeek(hook, 'ABC234')).rejoinable).toBe(true)
+  })
+
+  test('the host closing the room MID-JOIN reads as ROOM_FINISHED, not as a permission error', async () => {
+    // The race the fast-path check cannot win: the room is 'waiting' when we read it and closed by the
+    // time we write. The server answers 42501, which says only "no". denialReason re-reads and turns that
+    // into the reason the player can act on · the same code the fast path would have produced, so the
+    // story does not depend on which door the refusal came through.
+    seedWaitingRoom({ status: 'waiting', players: [{ user_id: 'u-host', username: 'Host', seat_number: 0 }] })
+    db.statusOnInsert = 'finished'
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res.reason).toBe(JOIN_FAILURE.ROOM_FINISHED)
+    expect(res.reason).not.toBe(JOIN_FAILURE.NETWORK)        // the server replied · blaming transport would be a lie
+    expect(res.reason).not.toBe(JOIN_FAILURE.ALREADY_STARTED)
+    expect(db.players).toHaveLength(1)                        // our row never landed
+  })
+
+  test('the host STARTING the game mid-join still reads as ALREADY_STARTED', async () => {
+    // The counterweight for denialReason, driven through the same race so it actually reaches the re-read:
+    // splitting 'finished' out of "not waiting" must not swallow the case it was split from. Seeding an
+    // already-'playing' room would answer at the fast path and prove nothing about this branch.
+    seedWaitingRoom({ status: 'waiting', players: [{ user_id: 'u-host', username: 'Host', seat_number: 0 }] })
+    db.statusOnInsert = 'playing'
+    const hook = renderHook(() => useGameRoom(USER, 'Me'))
+
+    const res = await callJoin(hook, 'ABC234')
+
+    expect(res.reason).toBe(JOIN_FAILURE.ALREADY_STARTED)
+    expect(res.reason).not.toBe(JOIN_FAILURE.ROOM_FINISHED)
   })
 })

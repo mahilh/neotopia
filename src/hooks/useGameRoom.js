@@ -66,6 +66,7 @@ export const JOIN_FAILURE = Object.freeze({
   INVALID_CODE:      'INVALID_CODE',      // not 6 chars after normalising · malformed URL
   NOT_FOUND:         'NOT_FOUND',         // no room carries that code
   ALREADY_STARTED:   'ALREADY_STARTED',   // room is mid-game and this user is NOT a member of it
+  ROOM_FINISHED:     'ROOM_FINISHED',     // room is CLOSED · terminal for everyone, members included
   ROOM_FULL:         'ROOM_FULL',         // every seat taken
   SEAT_CONFLICT:     'SEAT_CONFLICT',     // lost every seat race · rare, retryable
   BUSY:              'BUSY',              // another create/join/start is in flight in this hook
@@ -81,6 +82,9 @@ const FAILURE_MESSAGE = {
   [JOIN_FAILURE.INVALID_CODE]:      'Enter a 6-character code',
   [JOIN_FAILURE.NOT_FOUND]:         'Room not found',
   [JOIN_FAILURE.ALREADY_STARTED]:   'Game already started',
+  // Deliberately parallel to the line above · these two are the pair most easily confused, and the
+  // matching shape is what makes the difference legible in the one inline <p> where both can appear.
+  [JOIN_FAILURE.ROOM_FINISHED]:     'Game already ended',
   [JOIN_FAILURE.ROOM_FULL]:         'Room is full',
   [JOIN_FAILURE.SEAT_CONFLICT]:     'Could not claim a seat',
   [JOIN_FAILURE.BUSY]:              'Already joining',
@@ -156,6 +160,11 @@ async function denialReason(roomId) {
   const { data: room } = await supabase
     .from('game_rooms').select('status, max_players, player_count').eq('id', roomId).maybeSingle()
   if (!room) return JOIN_FAILURE.NOT_FOUND
+  // 'finished' and 'playing' are both "not waiting" and want opposite advice: one is worth retrying when
+  // a seat frees up, the other never will be. Splitting them here keeps the RLS-refusal path (42501) and
+  // the fast path above telling the player the same story · one room state, one code, whichever door the
+  // refusal came through (T3 S34).
+  if (room.status === 'finished') return JOIN_FAILURE.ROOM_FINISHED
   if (room.status !== 'waiting') return JOIN_FAILURE.ALREADY_STARTED
   if ((room.player_count ?? 0) >= (room.max_players ?? 4)) return JOIN_FAILURE.ROOM_FULL
   return JOIN_FAILURE.SEAT_CONFLICT
@@ -376,7 +385,13 @@ export function useGameRoom(user, username) {
       players,
       canJoin: room.status === 'waiting' && roster.length < maxPlayers,
       // Needs a session to be answerable at all · an anonymous peek reports false rather than guessing.
-      rejoinable: !!user?.id && roster.some(r => r.user_id === user.id),
+      // A CLOSED ROOM IS NOT REJOINABLE BY ANYONE (T3 S34). Holding a seat in a finished room was still
+      // reporting `rejoinable: true`, which was simply untrue: joinRoom now refuses that room, so the
+      // preview was promising a door the join path does not open. The word means "you can get back in",
+      // not "your row is still there" (Rule 61 · verify the value, not the signature). T1's invite screen
+      // tests `status === 'finished'` ahead of this flag, so it was already correct on that screen · this
+      // makes the flag correct for the NEXT consumer, who will not know to check the status first.
+      rejoinable: room.status !== 'finished' && !!user?.id && roster.some(r => r.user_id === user.id),
     }
   }, [user?.id])
 
@@ -418,6 +433,39 @@ export function useGameRoom(user, username) {
 
       if (error) return fail(JOIN_FAILURE.NETWORK, error.message)
       if (!room) return fail(JOIN_FAILURE.NOT_FOUND)
+
+      // ── A CLOSED ROOM IS TERMINAL FOR EVERYONE, ITS OWN MEMBERS INCLUDED (T3 S34) ──────────────
+      // T3 S32 pinned this as a known-wrong shape rather than fixing it: a member of a finished room
+      // fell through to the readmit branch below and landed in roomPhase 'lobby' · a waiting room for
+      // a game that was already over, with nobody in presence and a Start button that could never
+      // enable. Shipped now that T1's invite screen has a branch for the code (S34, coordinated
+      // through comms · they wrote `JOIN_FAILURE.ROOM_FINISHED ?? 'ROOM_FINISHED'` so their half
+      // stayed inert until this line existed).
+      //
+      // ⚠ THIS IS A STATUS CHECK ABOVE THE MEMBERSHIP CHECK, WHICH IS THE SHAPE OF THE S27 BUG.
+      // It is not that bug, and the difference is the whole design. S27's bug was `status !== 'waiting'`
+      // · a check that swept up 'playing' and so told a player sitting in a live game that it had
+      // "already started". This tests ONE terminal value. 'playing' still falls through to membership
+      // and still readmits its own seat holder. Narrowing this to `!== 'waiting'` at any point in the
+      // future reintroduces S27 exactly, which is why the test beside it is a rejoin-into-a-PLAYING-room
+      // assertion and not a finished-room one · the counterweight guards the thing that must NOT break.
+      //
+      // WHY MEMBERSHIP CANNOT RESCUE A FINISHED ROOM, verified on production this session rather than
+      // reasoned about: `status='finished'` has exactly ONE writer in the whole client (leaveRoom, when
+      // the HOST leaves) and none server-side (only purge_e2e_test_data and update_player_count reference
+      // game_rooms, and neither writes status). It therefore does NOT mean "the game ended" · across 376
+      // finished rooms in production, the number whose game_sessions row reached phase 'finished' is ZERO.
+      // A game that ends NATURALLY leaves its room on 'playing' (11 such rooms right now), so a player
+      // refreshing onto their own final score takes the rejoin path below and is unaffected by this line.
+      // 'finished' means the host closed the room, and there is nothing to return to.
+      //
+      // >>> IF ANOTHER LANE EVER CLOSES THE ROOM AT GAME END, THIS LINE MUST CHANGE WITH IT. <<<
+      // That would make 'finished' mean two different things, and this refusal would start bouncing
+      // players off the final score of a game they just played. The distinguishing signal is
+      // game_sessions.phase, not the room status. Routed to comms rather than guarded speculatively:
+      // building the branch now would be defending a premise nobody holds (Rule 45 · one meaning per
+      // column, or it is a second contract).
+      if (room.status === 'finished') return fail(JOIN_FAILURE.ROOM_FINISHED)
 
       // Occupancy + seat from room_players. These client-side checks are a FAST PATH, not the boundary ·
       // migration 015 enforces waiting-and-under-capacity server-side, and claimSeat maps its 42501 back
