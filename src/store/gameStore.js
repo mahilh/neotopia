@@ -190,6 +190,15 @@ export const useGameStore = create(immer((set, get) => ({
       bonusTokens: [],
       scores: [0, 0, 0],
       scoredCardIds: [], // ids of cards this player scored · drives the FinalScore "Districts Built" record (T1 S6)
+      // Practice mode (T2 S32) · a bot seat is an ordinary seat with a policy attached. NOTHING in the
+      // store branches on these: turn order is seat-based, colours come from the same list, and every
+      // bot move goes through the same actions a human click uses. They exist so useBotTurns knows whose
+      // turn to drive and how to play it.
+      // SPREAD, NOT ALWAYS-PRESENT, and for the same reason `mode` above is: tests/seededState.guard.test.js
+      // pins the serialized shape of a normal game. Adding two keys to every player would change that shape
+      // for every non-practice game and break the guard · a practice game is never serialized to a session
+      // anyway, because practice never has one.
+      ...(p.isBot ? { isBot: true, difficulty: p.difficulty ?? 'builder' } : {}),
     }))
     state.deck = shuffledDeck
     // Pin the end-flag tile to the bottom regardless of how the caller shuffled, so
