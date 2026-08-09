@@ -57,6 +57,14 @@ harness clients spend from the same per-IP budget a real player needs.
 
 ## b · THE CEILING · real, and it is the actual risk
 
+> ### ✅ RAISED TO 150 · T2 S31 · 2026-08-09
+> Mahil read the reasoning below and authorised it. Applied via the Management API (`PATCH
+> /v1/projects/…/config/auth` → HTTP 200) and **verified by reading the config back**:
+> `rate_limit_anonymous_users = 150`. A fresh anonymous sign-in immediately afterwards
+> succeeded, so the change did not disturb first-time entry. The section below is the
+> as-measured state that produced the recommendation · kept intact rather than rewritten,
+> because the 30 is what the incident evidence was gathered against.
+
 Read live from the Management API (`/v1/projects/…/config/auth`):
 
 ```
