@@ -352,18 +352,79 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     [ph0, ph1, ph2, actionsLeft],
   )
 
+  // ── AUTO-END-TURN (T1 S35) ────────────────────────────────────────────────────────────────────
+  // "No actions left · end your turn" beside an End Turn button is a required click that
+  // communicates nothing: the game already knows the turn is over and is asking the player to agree.
+  //
+  // THE LANE, since it is not obvious: the turn-end ACTION is T2's (useGameActions.handleEndTurn),
+  // but the decision to end is T1's and always has been · gameConfig.js says so in its header, from
+  // T2 S9. This calls the existing handler and touches nothing in their lane.
+  //
+  // WHAT MAKES THIS DANGEROUS IS NOT THE TIMING. Scoring a card costs NO action · tryScoreCard
+  // deliberately spends none, because a district is the consequence of a placement rather than an
+  // action of its own. So a player whose THIRD action completes a pattern is sitting at
+  // actionsRemaining 0 with a district still to build, and ending the turn there silently destroys
+  // it. The gate is therefore not "out of actions" but "out of actions AND nothing left to do":
+  // uiPhase idle, which reset() only reaches once a pattern has been scored or there never was one.
+  //
+  // Held back while the score story is on screen. A turn that changes underneath the flash takes
+  // away the one moment that tells a player what they just did.
+  //
+  // NOTHING ELSE IS SPENDABLE AT ZERO ACTIONS, and that is load-bearing rather than incidental: the
+  // store has useBonus and 'Automation · +1 action this turn', but no control anywhere calls it, so
+  // a bonus token cannot buy an action today (they are worth 3 points each unspent, which is the
+  // only thing they currently do). IF a bonus is ever wired to a button, this gate needs a
+  // `bonusTokens.length === 0` term or it will end the turn out from under the player using it.
+  // THE DEPENDENCY LIST IS THE FEATURE, and getting it wrong killed this outright the first time.
+  // `handleEndTurn` is a NEW FUNCTION EVERY RENDER: it is a useCallback on `persist`, which is a
+  // useCallback on `sync`, and the practice transport returns a fresh object literal from every
+  // render (useLocalSession is not memoised). Listing it as a dep therefore re-runs this effect on
+  // every render · and the turn countdown ticks a state update once a SECOND, which is less than
+  // AUTO_END_MS, so the cleanup cancelled the pending end before it could ever fire. The turn would
+  // simply never have ended, in every real game, with nothing in the console. Same shape as the S33
+  // bot deadlock: a timer cancelled by its own effect re-running.
+  // So the handler is held in a ref and the deps are values only. Flagged to T3 · an unmemoised
+  // transport object is a footgun for every consumer, not just this one.
+  const AUTO_END_MS = 1100
+  const autoEndKeyRef = useRef(null)
+  const endTurnRef = useRef(handleEndTurn)
+  endTurnRef.current = handleEndTurn
+  const logRef = useRef(addLogEntry)
+  logRef.current = addLogEntry
+  const canAutoEnd =
+    phase === 'playing' && isMyTurn && actionsLeft === 0 &&
+    uiPhase === 'idle' && buildableMatches.length === 0 && !scoreFlash
+  useEffect(() => {
+    if (!canAutoEnd) return
+    // Keyed on the TURN, not on a boolean · a re-render inside the window must not queue a second
+    // end, and a seat must never be ended twice.
+    const key = `${currentSeat}:${turnNumber}`
+    if (autoEndKeyRef.current === key) return
+    const id = setTimeout(() => {
+      autoEndKeyRef.current = key
+      endTurnRef.current()
+      const st = useGameStore.getState()
+      logRef.current(`Turn ${st.turnNumber} · ${st.players.find(p => p.seat === st.currentSeat)?.username ?? ''}`, 'rgba(255,255,255,0.4)')
+    }, AUTO_END_MS)
+    return () => clearTimeout(id)
+  }, [canAutoEnd, currentSeat, turnNumber])
+
   // Persistent "what to do next" line (colonist.io pattern). The first playtest reached turn 17 with an
   // empty board because nothing ever told the players what their options were · this never lets that happen.
   const instruction = (() => {
     if (!isMyTurn) return `Waiting for ${currentPlayer?.username ?? 'the other player'}`
-    if (actionsLeft <= 0) return 'No actions left · end your turn'
+    // SCORING OUTRANKS "out of actions", and the old order had it the other way round. Because
+    // scoring costs no action, a completed pattern is still live at zero · so the line was telling a
+    // player to end their turn while a district was sitting there waiting to be built. That is the
+    // one moment in the game where the instruction line can cost real points.
+    if (uiPhase === 'scorePending') return 'Pattern complete · select a glowing card to score'
+    if (actionsLeft <= 0) return 'No actions left · ending your turn'
     switch (uiPhase) {
       case 'factorySelected': return aimedRegion != null
         ? `Pick an element · it goes into ${REGION_NAMES[aimedRegion]}`
         : 'Pick an element · the dashed hexes show where it can go'
       case 'elementSelected':  return 'Choose a region to place into'
       case 'regionSelected':   return 'Click a highlighted hex to place the element'
-      case 'scorePending':     return 'Pattern complete · select a glowing card to score'
       default:                 return 'Click a factory to take an element · or draw a card from the Offer'
     }
   })()

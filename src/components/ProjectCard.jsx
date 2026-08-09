@@ -2,7 +2,7 @@
 //   ProjectCard (default) · compact card for the Hand / The Offer sidebar lists
 //   ScoreFlash  (named)    · the 2.2s full-screen "story moment" shown after a card is scored
 // T1 owns this file.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const ELEMENT_COLORS = { energy: '#E24B4A', biofarming: '#1D9E75', technology: '#7F77DD', community: '#378ADD' }
 
@@ -20,10 +20,24 @@ const REGION_COLORS = { 'Sacred City': '#7F77DD', 'Living Earth': '#1D9E75', 'Fr
 export function ScoreFlash({ card, regionName, onDone }) {
   const [visible, setVisible] = useState(true)
 
+  // THIS OVERLAY COULD NOT DISMISS ITSELF (found T1 S35, while gating auto-end-turn on it).
+  // The effect used to list `onDone` as a dependency. GameRoom passes it as an inline arrow, so it is
+  // a new function on every parent render · and GameRoom re-renders once a SECOND for the turn
+  // countdown, which is less than the 2200ms below. The effect therefore re-ran every second and its
+  // own cleanup cancelled the timer before it could fire. Nothing set `visible` to false, nothing
+  // called onDone, and this is a position:fixed inset:0 z-index 100 overlay with no dismiss control:
+  // the first district a player built covered the board and stayed there.
+  // Nobody had hit it because production has never recorded a human placing an element, and the only
+  // players who score are bots, which never take this path.
+  // Fixed HERE rather than by memoising the caller, so the component is correct for every caller
+  // instead of for one careful one. Same bug class as the S33 bot deadlock and as the first draft of
+  // the auto-end effect: a timer cancelled by its own effect re-running on an unstable dep.
+  const doneRef = useRef(onDone)
+  doneRef.current = onDone
   useEffect(() => {
-    const t = setTimeout(() => { setVisible(false); onDone?.() }, 2200)
+    const t = setTimeout(() => { setVisible(false); doneRef.current?.() }, 2200)
     return () => clearTimeout(t)
-  }, [onDone])
+  }, [])
 
   if (!card || !visible) return null
 
