@@ -15,11 +15,19 @@
 // backendStatus.js, and pure for the same reason · the wall a player hits should be testable without
 // a browser, a websocket, or a second human.
 //
-// THE ROSTER IS PRESENCE, NOT THE DATABASE. `players` here is whatever useGameRoom returns, which is
-// usePresence's channel.presenceState() · it never reads room_players. That is load-bearing for the
-// STALLED case below: the host is always in their own presence state once the channel subscribes, so
-// an EMPTY roster cannot mean "nobody joined" · it means the channel has not synced. Distinguishing
-// those two is the difference between "invite a friend" and "your connection has not come up".
+// THE ROSTER IS PRESENCE, AND PRESENCE IS THE RIGHT SOURCE. `players` is usePresence's
+// channel.presenceState(); it never reads room_players, and that is correct rather than a gap.
+// CORRECTED (T1 S32, after T3 measured it in 6c65137 · I had this inverted and wrote that the gate
+// was "decided by a websocket rather than by the seats that exist", implying presence was the
+// unreliable one): one room, both kinds of participant · a seat claimed over the API took
+// game_rooms.player_count to 2 with 2 room_players rows and the roster still read 1, and a REAL
+// second browser took the roster to 2 with Start enabling on ready. player_count answers "is there a
+// row", presence answers "is somebody here", and only the second one can start a game. Two contracts,
+// two questions (Rule 45).
+// It is load-bearing for the STALLED case below, and that reasoning is unchanged by the correction:
+// the host is always in their OWN presence state once the channel subscribes, so an empty roster
+// cannot mean "nobody joined" · it means the channel has not synced. Distinguishing those two is the
+// difference between "invite a friend" and "your connection has not come up".
 
 /** The rule the room enforces. game_rooms.max_players caps the other end at 4. */
 export const MIN_PLAYERS = 2
