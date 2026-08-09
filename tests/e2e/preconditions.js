@@ -26,6 +26,142 @@ import { expect } from '@playwright/test'
 
 const HEALTH_ATTR = 'html[data-backend-status]'
 
+// ── DEPLOYMENT PROTECTION · the fourth layer (T3 S31) ────────────────────────────────────────────
+// The three layers above answer "the app did not boot", "the backend is unreachable" and "there is no
+// session". A fourth can produce all the same downstream symptoms and none of those sentences: the
+// deployment itself refusing to serve an automated client.
+//
+// neotopia's Vercel project has ssoProtection = all_except_custom_domains, and *.vercel.app is not a
+// custom domain, so every preview and the production alias sit behind it. An automated browser cannot
+// clear the challenge (it answers 708 and never resolves), so a spec pointed at a protected
+// deployment gets a challenge page where the app should be, NeoTopia's JS never runs, and the first
+// feature locator times out · which reads as a deleted component. That is exactly the 07-27 shape
+// this file exists for, one layer further out, and it deserves its own sentence.
+//
+// SCOPE, STATED HONESTLY: no spec in this repo points at production today (playwright.config.js
+// baseURL is http://localhost:5173, and the nightly starts its own dev server), so this has never
+// fired in CI and is not fixing a live red. It is the gate for the moment somebody points a spec at
+// a deployment · a prod smoke test, a preview-URL run, a PLAYWRIGHT_BASE_URL override.
+//
+// The real fix is a custom domain, which is not a code change. The message says so, because a
+// diagnosis that names an unfixable-in-code cause without naming the fix just relocates the confusion.
+
+const MITIGATION_HEADER = 'x-vercel-mitigated'
+
+// Body markers, in the two shapes Vercel serves. Kept as literals rather than one loose regex so a
+// future false positive can be traced to the exact string that produced it.
+const CHALLENGE_MARKERS = ['_vercel/challenge', 'request-challenge', 'vercel-challenge', 'verifying your browser']
+const SSO_MARKERS = ['vercel.com/sso-api', '_vercel_sso_nonce', 'authentication required']
+
+/**
+ * Is this response a deployment-protection wall rather than the app?
+ *
+ * PURE · takes a plain {status, headers, body} so it can be exercised with no browser and no network,
+ * which is what makes its WORDING testable. Returns null when nothing indicates protection · saying
+ * "protected" about an ordinary 403 from our own API would be a worse failure than saying nothing.
+ *
+ * @param {{status?: number, headers?: Record<string,string>, body?: string}} res
+ * @returns {?{kind: string, evidence: string}}
+ */
+export function diagnoseDeploymentProtection({ status, headers = {}, body = '' } = {}) {
+  const h = {}
+  for (const [k, v] of Object.entries(headers ?? {})) h[String(k).toLowerCase()] = String(v ?? '')
+  const text = String(body ?? '').toLowerCase()
+
+  // 1 · the explicit witness. Vercel stamps this header when it mitigates a request, and it is the
+  //     only signal here that cannot be produced by our own application code (Rule 39).
+  if (h[MITIGATION_HEADER]) {
+    return { kind: 'challenge', evidence: `${MITIGATION_HEADER}: ${h[MITIGATION_HEADER]}` }
+  }
+
+  // 2 · the challenge endpoint answers with its own non-standard status.
+  if (status === 708) return { kind: 'challenge', evidence: 'HTTP 708 · the Vercel challenge endpoint' }
+
+  // 3 · SSO / password protection: a 401 the app never issues. NeoTopia ships no serverless functions
+  //     and no server-side auth, so a 401 on a document request cannot have come from us.
+  const marker = (list) => list.find(m => text.includes(m))
+  if (status === 401) {
+    const m = marker(SSO_MARKERS)
+    return { kind: 'sso', evidence: m ? `HTTP 401 · body contains "${m}"` : 'HTTP 401 on a document request' }
+  }
+
+  // 4 · a challenge page served with an ordinary status. Body evidence is REQUIRED here · a bare 403
+  //     is far more likely to be one of our own RLS denials than a WAF.
+  if (status === 403 || status === 429) {
+    const m = marker(CHALLENGE_MARKERS)
+    if (m) return { kind: 'challenge', evidence: `HTTP ${status} · body contains "${m}"` }
+  }
+
+  return null
+}
+
+/** The sentence a human reads at 3am. Exported so the self-test can assert on it directly. */
+export function deploymentProtectionMessage({ kind, evidence }, { context = '', url = '' } = {}) {
+  const where = context ? ` (${context})` : ''
+  return (
+    `PRECONDITION${where}: BLOCKED BY VERCEL DEPLOYMENT PROTECTION · not a feature regression, and ` +
+    `not a backend outage.\n` +
+    `  target   = ${url || '(the page under test)'}\n` +
+    `  kind     = ${kind === 'sso' ? 'SSO / password protection' : 'bot challenge'}\n` +
+    `  evidence = ${evidence}\n` +
+    `The deployment answered the automated client with a wall instead of the app, so NeoTopia's JS ` +
+    `never ran and every locator this spec would have asserted next is downstream of a page that was ` +
+    `never served. An automated browser cannot clear this · the challenge never resolves for one.\n` +
+    `FIX: this is configuration, not code. Serve the spec a custom domain (ssoProtection is ` +
+    `all_except_custom_domains, and *.vercel.app is not one), or supply a protection-bypass secret ` +
+    `for automation. Do NOT go looking for a deleted component.`
+  )
+}
+
+/**
+ * Assert a navigation Response is the app and not a protection wall.
+ *
+ * This is the PREFERRED entry point, because a Response carries the status and headers that make the
+ * diagnosis certain. Use it wherever a spec keeps its goto() result:
+ *     const res = await page.goto('/lobby')
+ *     assertDeploymentReachable(res, { context: 'flow-mode' })
+ *
+ * @param {?import('@playwright/test').Response} response
+ * @param {{context?: string}} [opts]
+ */
+export function assertDeploymentReachable(response, { context = '' } = {}) {
+  if (!response) return
+  const diagnosis = diagnoseDeploymentProtection({
+    status: response.status(),
+    headers: response.headers(),
+    // Body is only consulted for the marker cases; a header/status hit short-circuits before this.
+    body: '',
+  })
+  if (diagnosis) throw new Error(deploymentProtectionMessage(diagnosis, { context, url: response.url() }))
+}
+
+/**
+ * Best-effort probe for specs that did NOT keep their navigation Response · which is all of them.
+ *
+ * Re-requests the page's own URL from inside the browser (same-origin, so every response header is
+ * readable) and diagnoses that. Deliberately total: any failure here returns null so the caller falls
+ * back to its existing diagnosis. A probe that can throw would replace a correct message with its own
+ * crash, which is the exact failure mode this whole file exists to prevent.
+ *
+ * @returns {Promise<?string>} the message, or null if this is not a protection wall
+ */
+export async function probeDeploymentProtection(page, { context = '' } = {}) {
+  try {
+    const url = page.url()
+    if (!/^https?:/i.test(url)) return null // about:blank et al · nothing to ask
+    const res = await page.evaluate(async () => {
+      const r = await fetch(location.href, { cache: 'no-store', redirect: 'manual' })
+      const headers = {}
+      r.headers.forEach((v, k) => { headers[k] = v })
+      return { status: r.status, headers, body: (await r.text()).slice(0, 4000) }
+    })
+    const diagnosis = diagnoseDeploymentProtection(res)
+    return diagnosis ? deploymentProtectionMessage(diagnosis, { context, url }) : null
+  } catch {
+    return null
+  }
+}
+
 /** Read the gray-box health snapshot · null before the app's JS has run at all. */
 export async function readHealth(page) {
   return page.evaluate(() => window.__neotopia_health ?? null)
@@ -60,6 +196,12 @@ export async function assertBackendReachable(page, { settleMs = 8_000, bootTimeo
   try {
     await expect(page.locator(HEALTH_ATTR)).toHaveAttribute('data-backend-status', /.+/, { timeout: bootTimeoutMs })
   } catch {
+    // BEFORE blaming the bundle · a deployment-protection wall produces this exact symptom (our JS
+    // never runs, so the attribute is never published) and "check the dev server" would be a wrong
+    // instruction delivered with confidence. Ask the deployment what it actually served (T3 S31).
+    const blocked = await probeDeploymentProtection(page, { context })
+    if (blocked) throw new Error(blocked)
+
     throw new Error(
       `PRECONDITION${where}: the app never booted · html[data-backend-status] was never published within ` +
       `${bootTimeoutMs}ms. This is NOT a feature regression · check the dev server, the bundle and the ` +

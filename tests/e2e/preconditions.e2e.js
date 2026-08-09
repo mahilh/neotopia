@@ -18,7 +18,10 @@
 // Run locally:  npx playwright test tests/e2e/preconditions.e2e.js
 
 import { test, expect } from '@playwright/test'
-import { assertBackendReachable, assertSessionEstablished, readHealth } from './preconditions'
+import {
+  assertBackendReachable, assertSessionEstablished, readHealth,
+  diagnoseDeploymentProtection, assertDeploymentReachable,
+} from './preconditions'
 
 test.beforeEach(() => { test.setTimeout(90_000) })
 
@@ -132,5 +135,100 @@ test.describe('the precondition gate · fires on an outage, and blames the right
       'gate never fired even with a full settle window',
     )
     expect(msg).toContain('BACKEND UNREACHABLE')
+  })
+})
+
+// ── THE FOURTH LAYER · deployment protection (T3 S31) ────────────────────────────────────────────
+// A WAF or SSO wall in front of the deployment produces the SAME downstream symptom as a broken
+// bundle — NeoTopia's JS never runs, so html[data-backend-status] is never published — and the
+// existing gate would confidently answer "check the dev server, the bundle and the console", sending
+// a reader after three things that are all fine. Same misdirection as 07-27, one layer further out.
+//
+// The wall is simulated by fulfilling EVERY request from the context, which is what a WAF actually
+// does: it blocks the origin, not one document. So these tests need no deployment, no network and no
+// anonymous sign-in, and can never be confused with a real incident.
+
+async function serveWall(context, { status, headers, body }) {
+  await context.route('**/*', route => route.fulfill({
+    status,
+    headers: { 'content-type': 'text/html; charset=utf-8', ...headers },
+    body,
+  }))
+}
+
+const CHALLENGE_HTML = '<html><head><title>Just a moment…</title></head><body>Verifying your browser…</body></html>'
+const SSO_HTML = '<html><body>Authentication Required · <a href="https://vercel.com/sso-api?url=x">continue</a></body></html>'
+
+test.describe('the precondition gate · a protected deployment is not a broken bundle', () => {
+  test('a bot challenge reports itself as DEPLOYMENT PROTECTION, not as a dead app boot', async ({ page, context }) => {
+    await serveWall(context, {
+      status: 403, headers: { 'x-vercel-mitigated': 'challenge' }, body: CHALLENGE_HTML,
+    })
+    await page.goto('/lobby')
+
+    const msg = await captureThrow(
+      () => assertBackendReachable(page, { bootTimeoutMs: 4_000, context: 'self-test' }),
+      'the gate RESOLVED behind a WAF challenge · the spec would have run on and blamed a locator',
+    )
+
+    // The sentence. Every clause below is load-bearing and was chosen because a reader acts on it.
+    expect(msg).toContain('BLOCKED BY VERCEL DEPLOYMENT PROTECTION')
+    expect(msg).toContain('not a feature regression')
+    expect(msg).toContain('not a backend outage')   // it excludes the OTHER wrong answer too
+    expect(msg).toContain('x-vercel-mitigated: challenge') // the witness, quoted verbatim (Rule 39)
+    expect(msg).toContain('custom domain')          // the actual fix · configuration, not code
+    expect(msg).toContain('self-test')
+
+    // THE REGRESSION GUARD. These are the two confident-but-wrong instructions this test exists to
+    // stop being printed: go debug your bundle, or go find the missing component.
+    expect(msg).not.toContain('never booted')
+    expect(msg).not.toContain('check the dev server')
+    expect(msg).not.toContain('data-testid')
+  })
+
+  test('SSO protection is named as SSO · a different wall gets a different sentence', async ({ page, context }) => {
+    await serveWall(context, { status: 401, headers: {}, body: SSO_HTML })
+    await page.goto('/lobby')
+
+    const msg = await captureThrow(
+      () => assertBackendReachable(page, { bootTimeoutMs: 4_000 }),
+      'the gate resolved behind an SSO wall',
+    )
+    expect(msg).toContain('BLOCKED BY VERCEL DEPLOYMENT PROTECTION')
+    expect(msg).toContain('SSO / password protection')
+    expect(msg).not.toContain('bot challenge')  // the two are told apart, not lumped together
+  })
+
+  test('a HEALTHY page is not accused · the response check is silent when the app is served', async ({ page }) => {
+    // The counterweight to both tests above, and the one that makes them mean anything: a gate that
+    // cried "protected" on every navigation would satisfy every assertion here and red the suite.
+    const res = await page.goto('/lobby')
+    expect(() => assertDeploymentReachable(res, { context: 'self-test' })).not.toThrow()
+    // …and the ordinary gate still reaches its ordinary verdict on the same page.
+    await assertBackendReachable(page, { settleMs: 0, context: 'self-test' })
+  })
+
+  test('the detector does not mistake OUR OWN 403 for a WAF', async () => {
+    // The likeliest false positive in this codebase by a wide margin. Postgres denials arrive as 403
+    // constantly (RLS, column grants · migration 017 revoked INSERT/UPDATE on player_profiles), and
+    // reporting one of those as "deployment protection" would send a reader to the Vercel dashboard
+    // to debug a database permission. A bare status is NOT evidence · body markers are required.
+    expect(diagnoseDeploymentProtection({
+      status: 403, headers: { 'content-type': 'application/json' },
+      body: '{"message":"permission denied for table player_profiles","code":"42501"}',
+    })).toBeNull()
+
+    expect(diagnoseDeploymentProtection({ status: 429, headers: {}, body: '{"msg":"Request rate limit reached"}' }))
+      .toBeNull() // the anon sign-in rate limit · a real and frequent 429 that is not a mitigation
+    expect(diagnoseDeploymentProtection({ status: 200, headers: {}, body: '<div id="root"></div>' })).toBeNull()
+    expect(diagnoseDeploymentProtection({})).toBeNull()
+
+    // And it DOES fire on the real shapes · otherwise the four nulls above are just a broken detector.
+    expect(diagnoseDeploymentProtection({ status: 403, headers: { 'X-Vercel-Mitigated': 'challenge' }, body: '' }))
+      .toMatchObject({ kind: 'challenge' })          // header match is case-insensitive
+    expect(diagnoseDeploymentProtection({ status: 708, headers: {}, body: '' }))
+      .toMatchObject({ kind: 'challenge' })          // the challenge endpoint's own status (T1, live)
+    expect(diagnoseDeploymentProtection({ status: 401, headers: {}, body: SSO_HTML }))
+      .toMatchObject({ kind: 'sso' })
   })
 })
