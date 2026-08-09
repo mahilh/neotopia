@@ -214,7 +214,10 @@ describe('engine fuzz · random legal play', () => {
       }
     }
     expect(offenders).toEqual([])
-  })
+ }, 20000) // T2 S31 · the last three siblings on the 5s default. MEASURED in isolation this session:
+            // 708ms / 2406ms / 413ms · but T1 S26 measured a 2s sibling taking 5.2-5.8s under full-suite
+            // CPU contention, and the suite has grown 137 -> 346 tests since. T3 measured ~1 in 3 flakes here.
+            // 20000 matches the two budgets already on lines 201/247 · one number for the whole file.
 })
 
 // ── Flow-mode termination · the Flow analog of the Classic fuzz above (T2 S20) ─────────────────
@@ -259,7 +262,10 @@ describe('engine fuzz · Flow mode termination (T2 S20)', () => {
       if (r.violations.length) offenders.push(`#${r.seed}:${r.violations[0]}`)
     }
     expect(offenders).toEqual([])
-  })
+ }, 20000) // T2 S31 · the last three siblings on the 5s default. MEASURED in isolation this session:
+            // 708ms / 2406ms / 413ms · but T1 S26 measured a 2s sibling taking 5.2-5.8s under full-suite
+            // CPU contention, and the suite has grown 137 -> 346 tests since. T3 measured ~1 in 3 flakes here.
+            // 20000 matches the two budgets already on lines 201/247 · one number for the whole file.
 
   // The load-bearing test: the two above prove broad termination but the natural tiles===0 trigger ends them,
   // so they pass with OR without the guard. This one reproduces the actual S18 freeze — clock on its last tile,
@@ -277,5 +283,8 @@ describe('engine fuzz · Flow mode termination (T2 S20)', () => {
     }
     expect(offenders).toEqual([])
     expect(reachedSoftlock).toBe(40) // every game genuinely reached the soft-lock state the guard must rescue
-  })
+ }, 20000) // T2 S31 · the last three siblings on the 5s default. MEASURED in isolation this session:
+            // 708ms / 2406ms / 413ms · but T1 S26 measured a 2s sibling taking 5.2-5.8s under full-suite
+            // CPU contention, and the suite has grown 137 -> 346 tests since. T3 measured ~1 in 3 flakes here.
+            // 20000 matches the two budgets already on lines 201/247 · one number for the whole file.
 })
