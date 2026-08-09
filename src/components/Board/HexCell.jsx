@@ -91,6 +91,18 @@ export default function HexCell({
         }}
       />
 
+      {/* BEVEL (T1 S34) · the single cheapest thing that turns a fill into an object. One shared
+          gradient defined once in GameBoard, in objectBoundingBox units so every hex lights from its
+          own top edge. Painted immediately after the base fill and before every state ring, so it
+          shades the CELL and never the signal drawn on it · a bevel over the pulsing valid-target
+          ring would dim the one thing that has to stay loud. pointer-events none so it cannot
+          intercept the placement click (the bot clicks this same node · force:true-safe). */}
+      {/* NOT on an occupied cell. The bevel's highlight lands exactly where the token is drawn, and an
+          occupied hex has no need of it · it already reads as an object because it has a coloured
+          stroke and an icon on it. Skipping it there is free contrast on the only cells whose
+          legibility is load-bearing. Measured: it is worth about a point of contrast ratio. */}
+      {!element && <polygon points={points} fill="url(#neo-bevel)" style={{ pointerEvents: 'none' }} />}
+
       {/* Reachable preview · dashed, breathing, deliberately NOT the solid pulsing ring below. The
           player has picked a factory but not yet an element, so this hex cannot take a token this
           instant · drawing it identically to a live target would repeat the exact promise the old

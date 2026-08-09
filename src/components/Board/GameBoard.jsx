@@ -1,6 +1,42 @@
 import { hexesInRadius, hexToPixel, REGIONS, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
 import { getBiomeForRegion } from '../../lib/terrainBiomes'
 import HexCell from './HexCell'
+import CivilizationMark from './CivilizationMark'
+
+// ── THE BOARD AS AN OBJECT, NOT THREE FILLS (T1 S34) ────────────────────────────────────────────
+// What a new visitor saw was three flat colour blobs floating on pure black. The gap against the
+// Catan reference is structural rather than stylistic: Catan has water around land, per-tile terrain
+// and visible depth, so its board is somewhere. Ours was nowhere. Everything added here is code-only
+// (no new asset weighs anything) and every piece of it is painted BEHIND the play.
+//
+// THE RULE THAT GOVERNS ALL OF IT, and the reason the last art attempt was rejected: nothing added
+// here may compete with an element token. So the additions are low-frequency and low-contrast ·
+// a soft ground, one slab per region, a one-stop bevel, and a ghosted emblem. No texture, no
+// pattern fill, no second thing for the eye to resolve at token scale.
+
+// Region slab · a hexagon containing the whole region.
+//
+// THE 30° IS THE WHOLE POINT, and I got it wrong first time. A cluster of flat-top hexes does NOT
+// form a larger hexagon in the same orientation as its members · it forms one rotated 30°. Measured
+// rather than reasoned: the region's outermost corners sit at 30°, 90°, 150°, 210°, 270° and 330°
+// (156.9 units out), and its narrowest points are at 0°, 60°, … (130 units). Drawn at 0° the slab
+// therefore did both wrong things at once · it stuck out 32 units past the flanks and simultaneously
+// sliced 17 units INTO the region's own tips, which is exactly what the first screenshot showed.
+// 166 = 156.9 + 9 of margin. At the angle facing the board centre the edge lands at ~160, leaving
+// ~100 units of clear floor for the mark's 90-unit rays.
+const PLATTER_R = 166
+const PLATTER_ROT = Math.PI / 6
+const bigHex = (cx, cy, rad) =>
+  Array.from({ length: 6 }, (_, i) => {
+    const a = PLATTER_ROT + (Math.PI / 3) * i
+    return `${(cx + rad * Math.cos(a)).toFixed(2)},${(cy + rad * Math.sin(a)).toFixed(2)}`
+  }).join(' ')
+
+// The centre of the three regions, derived rather than typed · a hard-coded 216,145.5 would silently
+// stop being the centre the moment anybody moved a region (Rule 32 · never bake a derived value).
+const REGION_CENTRES = REGIONS.map(r => hexToPixel(r.cq, r.cr))
+const BOARD_CX = REGION_CENTRES.reduce((s, p) => s + p.x, 0) / REGION_CENTRES.length
+const BOARD_CY = REGION_CENTRES.reduce((s, p) => s + p.y, 0) / REGION_CENTRES.length
 
 // Invisible factory tap-target radius (SVG user-units · Rule 4). The visible hex is HEX_SIZE (36);
 // 70 nearly doubles the TAP radius to clear 44px at the mobile scale while staying < the 72-unit gap
@@ -72,17 +108,83 @@ export default function GameBoard({
       role="img"
       aria-label="NeoTopia civilization game board with 3 regions"
     >
-      {/* Region glow backgrounds */}
+      <defs>
+        {/* One vertical bevel, reused by every hex. objectBoundingBox units mean each hex gets its own
+            span of it, so a 36-unit hex and a whole slab both light from the top for free. Light at the
+            top, nothing in the middle, shade at the bottom · the minimum that turns a flat fill into a
+            face. Kept to three stops on purpose: more stops is more detail frequency. */}
+        {/* TUNED AGAINST A MEASUREMENT, not against taste. The first values lifted every cell
+            background enough to cost the tokens ~23% of their contrast (15.1-16.0 : 1 down to
+            11.8-12.3 : 1, measured by sampling composited pixels). An occupied hex is only 13% opaque,
+            far more transparent than the 35% biome fill, so anything added underneath shows through a
+            TOKEN's cell hardest · exactly the cell that must stay readable. So the top light came down
+            and the bottom shade went up: the bevel still turns a fill into a face, and the half of it
+            that touches the token now pushes contrast up rather than down. */}
+        <linearGradient id="neo-bevel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.055)" />
+          <stop offset="46%" stopColor="rgba(255,255,255,0)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0.26)" />
+        </linearGradient>
+
+        {/* The floor the board sits on. A radial field rather than a rectangle: a rect would draw its
+            own edges into the letterbox and put a visible box around the game. This just stops the
+            board being cut out of nothing. */}
+        <radialGradient id="neo-field" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="rgba(200,148,64,0.038)" />
+          <stop offset="55%"  stopColor="rgba(120,110,150,0.020)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+        </radialGradient>
+
+        {/* Lift. Applied to the slab ONLY, never to the 57 play hexes: one shadow per region is three
+            filter passes instead of fifty-seven, and shadowing each hex separately would put a dark
+            edge around every token's cell · exactly the busy-ness this is meant to avoid.
+            The explicit filter region matters · the default (-10%/120%) clips a dy=11 blur=16 shadow
+            against a 324-unit slab, and the shadow would end in a straight cut. */}
+        <filter id="neo-lift" x="-25%" y="-25%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="11" stdDeviation="16" floodColor="#000000" floodOpacity="0.55" />
+        </filter>
+      </defs>
+
+      {/* GROUND · painted first, under everything. */}
+      <ellipse
+        cx={BOARD_CX} cy={BOARD_CY}
+        rx={520} ry={470}
+        fill="url(#neo-field)"
+        style={{ pointerEvents: 'none' }}
+      />
+
+      {/* REGION SLABS · each region becomes one object resting on that ground, rather than a loose
+          scatter of hexes. The soft ellipse glow that used to be here is kept on top of the slab: the
+          slab gives the edge and the shadow, the glow keeps the centre from looking like a flat card. */}
       {REGIONS.map(reg => {
         const {x, y} = hexToPixel(reg.cq, reg.cr)
         return (
-          <ellipse key={`glow-${reg.id}`}
-            cx={x} cy={y}
-            rx={HEX_SIZE * 3.8} ry={HEX_SIZE * 3.5}
-            fill={reg.color} opacity={0.04}
-          />
+          <g key={`slab-${reg.id}`} style={{ pointerEvents: 'none' }} data-region-slab={reg.id}>
+            <polygon
+              points={bigHex(x, y, PLATTER_R)}
+              // 4% fill, not 7%. The depth read comes from the EDGE and the SHADOW · the fill was
+              // buying almost no dimensionality and paying for it in token contrast.
+              fill={`${reg.color}0A`}
+              stroke={`${reg.color}33`}
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+              filter="url(#neo-lift)"
+            />
+            {/* Top-lit face of the slab · same one-stop bevel the hexes use, so the whole board is lit
+                from one direction and reads as a single physical thing. */}
+            <polygon points={bigHex(x, y, PLATTER_R)} fill="url(#neo-bevel)" />
+            <ellipse
+              cx={x} cy={y}
+              rx={HEX_SIZE * 3.8} ry={HEX_SIZE * 3.5}
+              fill={reg.color} opacity={0.04}
+            />
+          </g>
         )
       })}
+
+      {/* THE CENTRE · the civilization's emblem on the floor between the three regions. Painted after
+          the slabs and before the play hexes, so it can never sit on top of a token. */}
+      <CivilizationMark cx={BOARD_CX} cy={BOARD_CY} r={90} />
 
       {/* Region hexes */}
       {REGIONS.map(reg => {
