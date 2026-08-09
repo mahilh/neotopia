@@ -256,3 +256,33 @@ and this morning it could not.**
 - **Still bot-versus-bot.** The §2 caveat is unchanged.
 - **The difficulty ladder is now stale.** Apprentice 13 / builder 68 / architect 100 was measured in a world
   where placement could not matter. Re-measuring is §15.
+
+## 15 · The ladder, re-measured after ownership landed
+
+Same instrument as §2 Result C · the frozen `REFERENCE_POLICY`, 20 seeds, seat-controlled, draws excluded ·
+so these are directly comparable to the S33 column.
+
+| policy | draw bias | vs reference · BEFORE (S33) | vs reference · AFTER (S35) |
+|---|---|---|---|
+| apprentice | 0.05 | 13% | **22.5%** |
+| reference | 0.25 | 50% (control) | **50.0%** (control) |
+| builder | 0.30 | 68% | **79.5%** |
+| architect | 0.55 | 100% | **100%** |
+
+The ladder is still strictly ordered and the control still sits exactly at 50, so the instrument is intact.
+Every level moved UP against a reference that did not change, which means the reference got relatively
+weaker · placement now pays, and the reference is the one policy that places at random with no compensating
+draw bias.
+
+**Builder +11.5** is the expected result: it is the only level that grows clusters deliberately, and cluster
+growth is now worth points to the grower.
+
+**Apprentice +9.5** was not expected and is worth stating rather than smoothing over. Apprentice places at
+random exactly like the reference, so on the face of it nothing about it should have improved. The mechanism
+is that apprentice takes an available district only when it has nothing else to do, so it PLACES more often
+than the reference does · and placing more now earns cluster points even when the placements are random.
+That is a real prediction of the change rather than a rescue of it: under the old shared bonus, placing more
+earned the same number for everybody and so earned nothing.
+
+`DRAW_BIAS` is still untouched and the ladder is still `DIFFICULTY_SELECTABLE = false`. These rates recalibrate
+the scale; they do not tell us where a human sits on it, and one played game still does that job.
