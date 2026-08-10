@@ -43,23 +43,19 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
      T2 must design atomic seat-scoped draw RPC · T3 wires it after
   ✅ LANDING PAGE COUNTER: REAL · Landing.jsx reads getGlobalIndex() (sum of districts · seed 147823 fallback
      ONLY) · label "consciousness districts built" matches what the fn returns (T1 S19 Task C verified · Rule 63)
-  🔴 BONUS TOKENS DO NOT EXIST AS A FEATURE (determined T2 S37 · 2eb18eb · src/store/bonusTokens.test.js).
-     The ENGINE is correct for 3 of 4 rulebook effects (subsidy, automatization, initiative · 'permits'
-     is a real TODO needing off-map outer-space tracking). But NOTHING EVER GRANTS A TOKEN: gameStore
-     :288 reads a hex `bonusType` nothing writes, and :389 reads `region.bonusPile` declared [] at :48-50
-     with no pusher. bonusTokens is provably [] in every real game · a caller with no DATA, resting at a
-     value indistinguishable from "nobody has earned one yet". THREE things are missing, in order:
-     (1) the seed data · Mahil's, see BONUS HEX DATA below · (2) T1's ActionBar, which is exactly 320 of
-     320 at its narrowest viewport with ZERO tokens, so rendering chips pushes End Turn off screen
-     (Rule 78b) and granting tokens before that fix makes the game unwinnable at 320px · (3) a control
-     that calls useBonus (none exists · GameRoom.jsx:410). DO NOT half-wire: a bonus that fires
-     unreliably is worse than one that visibly does nothing.
-  ✅ E2E COVERAGE IS COMPLETE (T2 S37 · 6cd7ad7) · every spec in tests/e2e/ now runs in a workflow.
-     practice.e2e.js -> MERGE GATE (mints zero identities · 7 passed in CI on 2eb18eb, zero skipped) ·
-     solo-host.e2e.js -> NIGHTLY (4 anon sign-ins per run). They were the last 2 orphans, not 5 · S32
-     routed three. Audit mechanically before claiming a coverage number (Rule 79c).
-  🟡 BONUS HEX DATA: 11th request · bonus hex (q,r) per region + each region's bonusPile contents still
-     pending from Mahil · this is now the SOLE blocker on the whole bonus-token subsystem, not a nicety
+  🟢 BONUS TOKENS ARE EARNABLE (T2 S38 · c467656) · 156 tokens across 40 complete games, in 40 of 40,
+     against 0 in every game ever played before. bonusPile seeded from docs/NEOTOPIA_GAME_RULEBOOK.md
+     :115-125 (7 subsidy · 13 initiative · 18 permits per region · SOURCED, not guessed · rule 32) and
+     the granter now matches a crossing to ITS OWN threshold instead of shift()-ing the stack top, which
+     handed the second player to cross 7 the 13-token (rule 85). Measured subsidy 91 / initiative 42 /
+     permits 23 · the shape thresholds 7/13/18 predict.
+     STILL OPEN, neither guessed: (a) the HEX granter needs Mahil's bonus-hex (q,r) and is the only route
+     to the fourth token 'automatization' · (b) NOTHING CALLS useBonus, so every token earned is unspent
+     and scores its rulebook 3 points at the end. That is rulebook-correct but it is not yet a CHOICE,
+     and it adds ~12 points per game unevenly · T1 owns the control.
+     (S37 determined the subsystem was unreachable · 2eb18eb. S38 closed the score-track half.)
+  🟡 BONUS HEX DATA: 12th request · bonus hex (q,r) per region · the PILE half is now answered from the
+     rulebook (S38), so this is the last missing datum and the only route to 'automatization'
   ✅ CLUSTER VIZ: shows POINTS · per-cluster +N pts + "+N total" line · folded into player totals (T1 S19 · 442b694)
   🟡 CLEAN FLOW BOT GAME: pending (tree was dirty during S17 run) · T2 S18
   🟡 LIVE-DB UI FLOW E2E: pending · T3 S18
@@ -157,7 +153,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (83 · cumulative):
+PERMANENT ANTI-REGRESS RULES (85 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -390,6 +386,44 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 84 (T2 S38 · August 10 2026):
+A WELL-TESTED SYMBOL IS NOT A TESTED PATH. Ask what SHIPPING code calls it, not how many tests do.
+The dead-surface audit found five exported symbols with no shipping caller, and the two that matter are
+not the obvious ones:
+  84a · factoryRefill is referenced by FOUR test files, which reads as "the refill path is well covered".
+        Nothing in src/ calls it. The path that actually runs is the internal refillFactoryDraft, invoked
+        from placeElement. Nothing is broken · the clock demonstrably advances · but that coverage is
+        aimed at a public wrapper while the real path is exercised only incidentally. Test count is not
+        coverage; test count against a function nobody calls is anti-coverage, because it buys confidence
+        in the wrong place.
+  84b · I did this myself. I gated getFinalScore in clusterOwnership.test.js in S35 and presented it as
+        covering the score seam. getFinalScore has no shipping caller · FinalScore.jsx computes its own
+        total · so the seam I claimed to have covered is the one I then had to hand-edit in T1's file.
+        A comment in gameEndEvent.js asserted all three paths used the same fn, which made the wrong
+        mental model durable for three sessions.
+THE CHEAP INSTRUMENT: grep every export, subtract its own definition and all test files, and read what
+survives. It takes twenty minutes and it found the two live bugs of the previous two sessions in one
+pass · award_game_win (S35) and useBonus (S37) were both found INCIDENTALLY, which is the whole argument
+for doing it on purpose. The column that matters in the report is not "uncalled" but WHY THE RESTING
+VALUE LOOKS CORRECT: a writer that throws is fixed the same day, one resting at 0, [] or not-displayed
+survives for months. Corollary, and the reason this is not just tidying: a symbol's zero can be a FALSE
+positive · record_civilization_score reads as uncalled because it is an RPC string invoked through
+supabase.rpc. Verify every zero by hand (Rule 69). Sharpens Rule 27 (grep consumers first) with the
+observation that the consumer set has to exclude the tests.
+
+RULE 85 (T2 S38 · August 10 2026):
+A SCARCE PRIZE AWARDED BY STACK ORDER GIVES THE WRONG PRIZE THE MOMENT THERE IS A SECOND CLAIMANT.
+The bonus granter did bonusPile.shift() on any threshold crossing, which is indistinguishable from
+correct while exactly one player ever crosses anything · and nobody ever had, because the pile was
+empty. Seeding it exposed the bug instantly: the rulebook names a token PER THRESHOLD (7 Subsidy, 13
+Initiative, 18 Permits), so the second player to cross 7 in a region would have received the 13-token, a
+strictly better prize for a lower achievement. Match the award to the condition that earned it, not to
+a position in a container. Where a rulebook states a mapping, the mapping is the source and the ordering
+is the guess · and I nearly shipped the guess because it was already in the code.
+COROLLARY on representing spent things: mark `claimed`, do not remove. A shift() makes "this region has
+no 18-token left" indistinguishable from "this region never had one" · the same
+absence-looks-like-a-value shape as Rules 80 and 84, in a third costume.
 
 RULE 79 (T2 S37 · August 9 2026):
 A SPEC THAT RUNS IN NO WORKFLOW CANNOT REPORT ITS OWN ROT, and it decays in the direction of a lie.
