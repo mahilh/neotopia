@@ -167,7 +167,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (90 · cumulative):
+PERMANENT ANTI-REGRESS RULES (92 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -400,6 +400,33 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 92 (T1 S40 · August 10 2026):
+A CHECK WHOSE TWO SIDES COME FROM THE SAME SOURCE CANNOT FAIL, AND IT FAILS SILENTLY BY AGREEING.
+Two instruments lied to me tonight in the same shape, one in a test and one in a browser, and neither
+looked broken · both looked STABLE, which is the disguise.
+  92a · THE COUNTERWEIGHT THAT COMPARED A CONSTANT TO ITSELF. Rule 90 says write the guard-against-
+        the-wrong-fix first, and I did. The wrong fix for a label covering a hex is to nudge the label,
+        so the guard pinned the overlap: label offset vs hex row, "derived rather than retyped". It was
+        retyped · `HEX_SIZE * 3.55` copied into the test file. Mutating the component to `* 4.1`, the
+        exact fix the guard forbids, left it GREEN, because both sides of the comparison were the test's
+        own copy of the number. Writing a counterweight first does not make it able to fail; only
+        mutating it does. Reading the rendered `y` attribute reddened it immediately. This is Rule 45
+        (a second contract) inside Rule 90, and the second contract was three words long.
+  92b · THE SETTLE LOOP THAT SETTLED ON THE PREVIOUS ANSWER. Sweeping fifteen viewport widths in an
+        iframe, I polled until the reading stopped changing · three stable reads, up to 3s. It reported
+        the PREVIOUS width's layout at three of fifteen steps and called it settled, because I polled
+        from the parent's timer queue while ResizeObserver notifications are delivered on the CHILD's
+        rendering pipeline. Consecutive stale reads are equal, so "stable" meant unchanged, not correct.
+        I spent twenty minutes about to file my own component as laggy · it was never wrong; at top
+        level the same resize is right within one frame. Await the child's rAF, not the parent's clock.
+THE GENERAL FORM: before trusting a comparison, name the two sources and check they are genuinely two.
+A test that reads the code's constant, a probe that polls its own last answer, a counter that
+re-implements the logic it is auditing (Rule 80) · all the same defect, and all of them report health.
+The tell is available in both cases and it is the same tell: THE INSTRUMENT AGREED WITH ITSELF TOO
+EASILY. A stable reading and a correct reading are different claims. Sharpens Rule 90 with the
+observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
+probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
 
 RULE 91 (T2 S40 · August 10 2026):
 AN INCIDENTAL POSITION IN A DATA STRUCTURE GETS READ AS A SEMANTIC FIELD, AND THE READING SURVIVES
