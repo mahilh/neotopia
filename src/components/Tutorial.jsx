@@ -20,10 +20,23 @@ export const tutorialSeen = () => { try { return !!localStorage.getItem(KEY) } c
 // config change can't silently drift the onboarding copy (rule 32 · constants, not magic numbers).
 const buildSteps = (cfg, isFlow) => [
   {
+    // THIS STEP OFFERED TWO EQUAL CHOICES AND THEY ARE NOT EQUAL (fixed T1 S37 · gap 1 of
+    // docs/TUTORIAL_GAP_AUDIT.md, the highest-value line in it).
+    // Mahil's practice game: turn 3, HAND 7, all three regions on zero. He drew seven cards and built
+    // nothing · not because he misread this, but because he did exactly what it invited, three times
+    // a turn, for three turns. "Draw a card, OR move an element" reads as a preference between two
+    // equivalent moves. Mechanically they are not remotely equivalent:
+    //   · ONLY A PLACEMENT CAN EVER SCORE. A card in hand is inert until the board matches it, and
+    //     the board only changes by placing.
+    //   · and they cost wildly different effort · drawing is one click on a large illustrated card in
+    //     the sidebar, placing is four clicks across the board and a panel.
+    // So a new player reading "either is fine" will take the cheap one every time, and end up where
+    // he ended up. The copy now says which one builds the civilization and which one only prepares
+    // for it, and step 2 · the placement · is where the emphasis has always been.
     heading: 'Three actions per turn',
     body: isFlow
-      ? `Each turn you choose three times: draw a project card from the Offer, or move an element from a factory onto the board. In Flow mode the clock is just ${cfg.TURN_TIME_LIMIT} seconds per turn and every player draws at the same time.`
-      : `Each turn you choose three times. You can draw a project card from the Offer, or move an element from a factory onto the board. You have ${cfg.TURN_TIME_LIMIT} seconds per turn.`,
+      ? `Each turn you take three actions. Placing an element on the board is the one that builds: only a placement can score a district. Drawing a project card from the Offer gives you something to build LATER · it scores nothing on its own. In Flow mode you have ${cfg.TURN_TIME_LIMIT} seconds per turn and every player draws at the same time.`
+      : `Each turn you take three actions. Placing an element on the board is the one that builds: only a placement can score a district. Drawing a project card from the Offer gives you something to build LATER · it scores nothing on its own. You have ${cfg.TURN_TIME_LIMIT} seconds per turn.`,
     visual: null,
   },
   {
