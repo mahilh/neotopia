@@ -161,7 +161,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (89 · cumulative):
+PERMANENT ANTI-REGRESS RULES (90 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -394,6 +394,28 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 90 (T3 S39 · August 10 2026):
+WRITE THE COUNTERWEIGHT FIRST · IT IS THE ONE ASSERTION THAT NEVER GETS TO DEMONSTRATE IT CAN FAIL.
+Rule 86 recorded the FACT that a counterweight had shipped vacuous. This is the ORDERING that removes the
+class, and it costs nothing: author the guard-against-the-wrong-fix BEFORE the assertions it defends, so
+there is nothing else in the file for it to hide behind. Written last it is exercised least, its whole job
+is to fail in a scenario you are deliberately not creating, and only a mutation run finds it · written
+first it is the only thing there, and its vacuity is immediate.
+Applied this session to the played-endgame spec: the counterweight is a state THE HARNESS CANNOT PRODUCE
+(endGameTriggered true while phase is still 'playing' and the tile clock has reached 0 · exactly one code
+path in the codebase makes that, refillFactoryDraft on a placement that empties a factory), and it was the
+first thing in the test body, before the seeding, the play loop or the assertions.
+COROLLARY, THE SAME THOUGHT ABOUT MEASUREMENT: when a mistake recurs a third time, stop writing the fix
+down and put it in the harness. Multi-viewport measurement inherited the previous size's scrollTop three
+sessions running · a plausible 489px where the truth was 1038. It is now impossible: forEachViewport
+resizes, resets window and element scroll, settles, then measures, so no caller can get it wrong. A rule
+stated as a fact gets rediscovered; a rule expressed as a function cannot be.
+COROLLARY 2, paid for in eight live runs tonight: an instrument that cannot say WHERE it stopped has not
+measured anything. Six of those runs reported only "Test timeout of 300000ms exceeded" with no step,
+because the loop logged nothing per iteration and Playwright has NO DEFAULT ACTION TIMEOUT, so one
+un-timeouted click hung forever. A heartbeat line and an explicit timeout on every click turned five
+minutes of silence into a 20-second failure that named the state. Add both before the run, not after it.
 
 RULE 87 (T1 S39 · August 10 2026):
 A REPORTED RANGE IS A SAMPLE, NOT A BOUNDARY · MEASURE PAST BOTH ITS EDGES BEFORE TRUSTING IT.
