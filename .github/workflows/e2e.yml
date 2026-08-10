@@ -52,8 +52,18 @@ jobs:
       # 30/hour per-IP anon budget (measured live · docs/ANON_SIGNIN_BUDGET.md) — the test contributes 0.
       # Seat 3 turn order, endgame and scoring have been broken in production before; one sign-in is a
       # cheap standing guard against that returning. Runs in ~1s. (T2 S30)
-      - name: Run the 4-player ENGINE game (offline · costs 1 teardown sign-in)
-        run: npx playwright test tests/e2e/four-player-live.e2e.js --grep "ENGINE"
+      # T2 S38 · multiplayer-endgame-live.e2e.js's ENGINE test joins THIS INVOCATION rather than getting a
+      # step of its own. globalTeardown signs in once per playwright invocation, so a second step would have
+      # cost a second identity to run a test that makes no network call at all · folding it into the existing
+      # --grep keeps the whole gate at exactly 1 sign-in and adds 197ms.
+      # What it guards is Rule 73 at its root: it plays 30 complete 2-player games and requires that at least
+      # 18 give the two seats DIFFERENT cluster scores. If the cluster term ever goes board-global again · a
+      # caller passing the board total, placedBy going unstamped, a seat argument dropped in a refactor · it
+      # scores exactly 0/30 and cannot squeak past. That regression was invisible for seventeen sessions
+      # (S18-S35) and cost three sessions of measuring placement skill that could not exist. Measured 25/30
+      # locally at 26e8b55.
+      - name: Run the ENGINE games (offline · both specs · costs 1 teardown sign-in)
+        run: npx playwright test tests/e2e/four-player-live.e2e.js tests/e2e/multiplayer-endgame-live.e2e.js --grep "ENGINE"
 
       # T2 S32 · TWO SPECS THAT RAN IN NO WORKFLOW AT ALL, routed here by T3.
       # Both are offline by construction (card-art seeds the store and reads /art/cards; preconditions

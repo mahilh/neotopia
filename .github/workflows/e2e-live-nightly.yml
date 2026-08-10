@@ -90,6 +90,15 @@ jobs:
       # the real funnel and that nothing else covers · ONE person, alone, with nobody to invite, against
       # a suite whose every other spec opens a second browser context. Proven before wiring, per the rule
       # in the four-player-live note above: 2 passed in 43.8s locally, adding ~1m to a 55m budget.
+      #
+      # T2 S38 · multiplayer-endgame-live.e2e.js joins · orphaned on arrival, and T3 flagged it themselves as
+      # a fresh instance of Rule 79. Its free ENGINE half went to the MERGE GATE (folded into that workflow's
+      # existing --grep invocation, so it costs nothing); the expensive half is here. 2 anon sign-ins, one per
+      # human. It is the first thing to watch the four writes that land when a real room ends · the ledger
+      # row, games_played, award_game_win, and two DIFFERENT per-player cluster scores rendered for a human.
+      # Proven before wiring, and per Rule 82 in an ISOLATED WORKTREE on its own port rather than the shared
+      # dev server this spec's own header warns about: 1 passed in 22.7s, clusters 16 v 18, award_game_win
+      # 'awarded' then 'already_awarded' from the second seat, zero non-2xx.
       - name: Run the live-DB E2E suite (Flow · draw-UI · recovery · 4-player · 2-human · phase · seat colours)
         run: >
           npx playwright test
@@ -101,6 +110,7 @@ jobs:
           tests/e2e/phase-over-wire.e2e.js
           tests/e2e/seat-colors-live.e2e.js
           tests/e2e/solo-host.e2e.js
+          tests/e2e/multiplayer-endgame-live.e2e.js
           --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
