@@ -68,6 +68,29 @@ jobs:
       - name: Run card-art + preconditions E2E (offline · previously in no workflow)
         run: npx playwright test tests/e2e/card-art.e2e.js tests/e2e/preconditions.e2e.js
 
+      # T2 S37 · PRACTICE MODE, which ran in NO WORKFLOW AT ALL until this step.
+      # Practice is the only path a solo visitor has, three sessions of specs exist for it, and none of them
+      # executed anywhere · including the ledger proof below, which is the most serious class of bug this
+      # project has found (bots writing to the real public civilization record).
+      #
+      # ON THE GATE, not the nightly, and the arithmetic is T3's rather than a guess (spec header :12).
+      # The spec itself mints ZERO identities: GameRoom mounts a LocalBoard whose tree contains no useAuth,
+      # and test 1 measures that rather than asserting it. The RUN is what costs · global-teardown signs in
+      # once per playwright INVOCATION to call purge_e2e_test_data. This step is a third invocation, so it
+      # spends exactly 1 of the 30/hour per-IP budget (docs/ANON_SIGNIN_BUDGET.md) and the six tests
+      # contribute 0. It is also the only spec here that passes with the backend completely unreachable.
+      #
+      # ~1.8m locally, dominated by ONE test (:337) that plays a practice game to its real ending · 37 turns,
+      # 89s. That is the price of the ledger proof: you cannot assert "a finished game writes nothing" without
+      # finishing a game. Left in a separate step so the log names it when it is the slow one.
+      #
+      # WIRING THIS FOUND A STALE ANNOTATION. Test :456 carried test.fail() for a defect T1 fixed in S36
+      # (3d17d7f), so it was reporting expected-to-fail against working code and would have turned this gate
+      # red on its first push. Removed in the same commit. A spec that runs nowhere cannot report its own rot
+      # · which is the argument for this step, made by the act of adding it.
+      - name: Run practice-mode E2E (zero anon sign-ins · previously in no workflow)
+        run: npx playwright test tests/e2e/practice.e2e.js
+
       - name: Upload report on failure
         if: failure()
         uses: actions/upload-artifact@v4

@@ -437,24 +437,23 @@ test.describe('practice mode · the end of the game', () => {
     expect(back.turnNumber).toBeGreaterThanOrEqual(mid.turnNumber)
   })
 
-  // KNOWN DEFECT · owned by T1 (src/components/FinalScore.jsx + src/pages/GameRoom.jsx), routed via comms.
-  // test.fail() rather than a skip or a deleted test: it runs, it documents the bug executably, and the day
-  // the fix lands this goes RED and whoever fixed it deletes this annotation. A skip would say nothing and a
-  // deleted test would say nothing louder. (My own S35 finding: a skip is indistinguishable from a pass.)
+  // FIXED · the test.fail() annotation that used to live here is DELETED, exactly as its author instructed.
   //
-  // MEASURED: at phase 'scoring' the leave-practice button is still in the DOM, and document.elementFromPoint
-  // at its centre returns the FinalScore dialog · position:fixed, inset:0, zIndex:300, background
-  // rgba(4,4,10,0.98). A real user click times out. The only reachable control is play-again, which calls
-  // navigate('/lobby') without endPractice(), so a practice player who finishes a game is sent to the
-  // multiplayer lobby and the practice teardown never runs.
+  // The defect it documented (T3 S34): at phase 'scoring' the leave-practice button was still in the DOM,
+  // and document.elementFromPoint at its centre returned the FinalScore dialog · position:fixed, inset:0,
+  // zIndex:300, opaque. A real user click timed out. T1 fixed it in S36 (3d17d7f · the exit moved INTO the
+  // overlay rather than raising a z-index) and recorded it as Rule 78a, but left the annotation behind, so
+  // the spec has been reporting "expected to fail" against working code ever since.
   //
-  // The annotation goes INSIDE the test body, not at describe scope. `test.fail()` written as a bare
-  // statement in the describe applies to EVERY test in that block · I wrote it that way first and it
-  // silently inverted all three: a genuine failure in the endgame test was reported as expected, and the
-  // one test that passed became the only reported failure. A blanket expected-to-fail is the loudest
-  // possible version of the exact pathology this session is about, so it is worth the line of comment.
+  // Found by T2 S37 running this file for the first time in order to WIRE IT TO CI · which is the whole
+  // argument for wiring it. A spec that runs in no workflow cannot tell anybody it has gone stale, and this
+  // one was one push away from turning the merge gate red on arrival. Removing the annotation is the smaller
+  // half of the lesson; the larger half is that nothing was watching for eight commits.
+  //
+  // The annotation belonged INSIDE the test body, never at describe scope · `test.fail()` as a bare
+  // statement in a describe applies to EVERY test in the block. Kept as a note because the next person to
+  // add one here needs it.
   test('a player who finishes a practice game can leave practice', async ({ page }) => {
-    test.fail()
     await page.goto('/practice?bots=1')
     await boardReady(page)
     await page.evaluate(() => window.__neotopia_store.getState().setPhase('scoring'))

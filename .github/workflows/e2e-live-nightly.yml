@@ -82,6 +82,14 @@ jobs:
       #   seat-colors-live· every seat colour the client can send is one the CHECK accepts
       # Sign-in cost is now affordable: the per-IP ceiling went 30 -> 150 this week (T2 S31), and this
       # job is serialized by the concurrency group above so it never shares the hour with itself.
+      #
+      # T2 S37 · solo-host.e2e.js joins · the LAST spec in this repo that ran in no workflow at all
+      # (practice.e2e.js was the other, and went to the MERGE GATE instead because it mints zero
+      # identities). This one cannot go on the gate: it costs 4 anonymous sign-ins per run by its own
+      # measurement, which is exactly why the live specs live here. It models the arrival that dominates
+      # the real funnel and that nothing else covers · ONE person, alone, with nobody to invite, against
+      # a suite whose every other spec opens a second browser context. Proven before wiring, per the rule
+      # in the four-player-live note above: 2 passed in 43.8s locally, adding ~1m to a 55m budget.
       - name: Run the live-DB E2E suite (Flow · draw-UI · recovery · 4-player · 2-human · phase · seat colours)
         run: >
           npx playwright test
@@ -92,6 +100,7 @@ jobs:
           tests/e2e/two-human.e2e.js
           tests/e2e/phase-over-wire.e2e.js
           tests/e2e/seat-colors-live.e2e.js
+          tests/e2e/solo-host.e2e.js
           --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
