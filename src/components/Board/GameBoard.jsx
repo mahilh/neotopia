@@ -58,74 +58,64 @@ const FACTORY_HIT_R = 70
 // 146° off Living Earth's and 150° off Free Energy's · so a ±62° outward window has ~84° of clearance
 // on either side of the nearest one. The motifs cannot crowd a factory, and being pointer-events none
 // they could not steal its click even if they did.
-const MOTIF_ARC = (62 * Math.PI) / 180
+//
+// ── AND THEY ARE GONE AGAIN (T1 S37) ────────────────────────────────────────────────────────────
+// The drawn motifs · water ripples, dune crests, grass tufts · lived on exactly the arc the painted
+// backdrop below now occupies, so they were literally drawing coastline on top of coastline. Three
+// concentric ink arcs over a painted sea is a way of saying the same thing twice, more faintly, in
+// a worse hand. Removed rather than kept at lower opacity: they were a stand-in for terrain and the
+// terrain arrived.
+// The WASH stays. It is the only thing colouring the floor INSIDE each region, where the backdrop is
+// deliberately masked out, and without it the play area falls back to the pre-S35 neutral grey.
 
-const polar = (cx, cy, rad, a) => `${(cx + rad * Math.cos(a)).toFixed(1)},${(cy + rad * Math.sin(a)).toFixed(1)}`
-
-// A ring segment sampled as a polyline · avoids SVG arc-flag arithmetic and lets a crest wobble.
-const arcPoints = (cx, cy, rad, a0, a1, wobble = 0, cycles = 2, steps = 26) =>
-  Array.from({ length: steps + 1 }, (_, i) => {
-    const t = i / steps
-    return polar(cx, cy, rad + wobble * Math.sin(t * Math.PI * cycles), a0 + (a1 - a0) * t)
-  }).join(' ')
-
-// Grass reads as many small marks rather than a few long ones · 2 staggered rows of leaning blades.
-const tuftLines = (cx, cy, a0, a1) => {
-  const out = []
-  for (let row = 0; row < 2; row++) {
-    const rad = 190 + row * 24
-    for (let i = 0; i < 7; i++) {
-      const t = (i + (row ? 0.5 : 0)) / 7
-      const a = a0 + (a1 - a0) * t
-      const tilt = ((i + row) % 2 ? 1 : -1) * 0.22 // alternating lean · a field, not a comb
-      out.push({
-        x1: +(cx + rad * Math.cos(a)).toFixed(1), y1: +(cy + rad * Math.sin(a)).toFixed(1),
-        x2: +(cx + (rad + 13) * Math.cos(a + tilt)).toFixed(1), y2: +(cy + (rad + 13) * Math.sin(a + tilt)).toFixed(1),
-      })
-    }
-  }
-  return out
+// ── THE PAINTED WORLD (T1 S37) ──────────────────────────────────────────────────────────────────
+// MEASURED off the painting itself, not eyeballed · docs/BOARD_BACKDROP_ALIGNMENT.md carries the
+// method and the numbers. The v2 art was a mirror of this board and was refused for it; v3 fixes
+// all four faults, and a best-fit similarity over the three painted zone centroids lands at
+//
+//     scale 0.90737 board units per file px · rotation 0.191° · worst residual 9.7 units
+//
+// which is 13.5% of a hex diameter. The rotation is dropped on purpose: at this width it is a 2.8
+// unit shear at the extremes, well under the residual that is already there, and carrying it would
+// mean a transform on the image for less than a third of the error it removes.
+//
+// The file is CROPPED to the part the viewBox can actually show (the full square wasted 44% of its
+// pixels outside the board) and shipped as JPEG. 2.7 MB PNG -> 372 KB, and none of that saving is a
+// quality trade · it is pixels that were never drawn plus a format that suits a photograph.
+const BACKDROP = {
+  href: '/art/board/board_terrain.jpg',
+  fileW: 922,
+  fileH: 964,
+  // The painted triangle's centroid IN FILE PIXELS · this is the anchor, because it is the one point
+  // whose board counterpart is known exactly (BOARD_CX/BOARD_CY, derived from the regions themselves).
+  anchorX: 460.667,
+  anchorY: 401.667,
+  scale: 0.90737,
+  // Where the painting is hidden so that it can never touch a token. The hole is the DISTRICT'S OWN
+  // SHAPE · the same pointy-top hexagon as the slab · softened by a blur, not a radial gradient.
+  // FIRST ATTEMPT WAS A CIRCLE FADING OVER 78 UNITS AND THE SCREENSHOT KILLED IT: three black discs
+  // punched into a painted world, with each region sitting at the bottom of a shadow pit. The shape
+  // has to belong to the board, and the falloff has to read as the platform's own shadow rather than
+  // as a hole in the picture.
+  // THE HOLE, and both numbers were argued down by evidence rather than chosen.
+  // Solid to 162, fully open by 198. The first version faded over 78 units and the screenshot showed
+  // three black discs punched into a painted world, each region at the bottom of a shadow pit. The
+  // second was a blurred hexagon matching the district's own shape, which looked right and cost too
+  // much: `feGaussianBlur` inside a `mask` applied to a full-board `<image>` is a slow raster path,
+  // and it pushed a page screenshot past a five-second timeout it had comfortably met before. A
+  // gradient is nearly free and a 36-unit ramp reads as a rim rather than a halo.
+  // 162 is the floor, not a preference: the furthest hex CORNER sits 156.9 from its region centre, so
+  // anything under that puts painted ground beneath a token. BoardTerrain computes that figure from
+  // the geometry and fails if the ramp ever starts inside it.
+  holeSolid: 162,
+  holeFade: 198,
 }
-
-// One motif per terrain, drawn on the outward arc of its region. Deterministic by construction · no
-// Math.random anywhere (rule 32), so two clients render the identical board and a screenshot diff is
-// meaningful. Nothing here animates: every moving thing on this board is a game signal, and scenery
-// that also moves spends the channel those signals rely on.
-function TerrainMotif({ terrain, cx, cy }) {
-  const t = TERRAIN[terrain]
-  if (!t) return null
-  const mid = Math.atan2(cy - BOARD_CY, cx - BOARD_CX) // heading away from the middle of the board
-  const a0 = mid - MOTIF_ARC
-  const a1 = mid + MOTIF_ARC
-  const common = { fill: 'none', stroke: t.ink, strokeLinecap: 'round' }
-  const span = (f0, f1) => [a0 + (a1 - a0) * f0, a0 + (a1 - a0) * f1]
-  // Per-terrain, because equal alpha is not equal presence: sand ink is the lightest of the three and
-  // 14 small grass strokes read far quieter than 3 long arcs at the same opacity.
-  const OPACITY = { water: 0.17, desert: 0.15, grass: 0.24 }[terrain]
-
-  return (
-    <g data-terrain-motif={terrain} style={{ pointerEvents: 'none' }} opacity={OPACITY}>
-      {terrain === 'water' && [186, 209, 232].map((rad, i) => (
-        // Ripples spread as complete rings, so these span the whole window · the dash pattern is what
-        // keeps them from reading as a fence.
-        <polyline key={rad} {...common} points={arcPoints(cx, cy, rad, a0, a1)}
-          strokeWidth={i === 1 ? 2.4 : 1.8}
-          strokeDasharray={['17 14', '9 16', '24 13'][i]} strokeDashoffset={i * 9} />
-      ))}
-      {terrain === 'desert' && [[184, 0, 0.62], [209, 0.28, 0.95], [234, 0.52, 1]].map(([rad, f0, f1], i) => (
-        // Dune crests, and the STAGGER is what makes them dunes rather than more ripples. Drawn as
-        // three full concentric arcs they were the same shape as the water motif in a different
-        // colour, which is a way of saying nothing twice. A dune is a long unbroken crest that starts
-        // and stops somewhere, so each one takes its own slice of the window and overlaps its
-        // neighbour, and the solid stroke plus a deeper wobble keeps them separate from the ripples.
-        <polyline key={rad} {...common} points={arcPoints(cx, cy, rad, ...span(f0, f1), 9 - i * 2, 1.5)}
-          strokeWidth={i === 0 ? 2.8 : 2.1} />
-      ))}
-      {terrain === 'grass' && tuftLines(cx, cy, a0, a1).map((l, i) => (
-        <line key={i} {...common} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} strokeWidth={2.3} />
-      ))}
-    </g>
-  )
+// Derived, never typed: move a region and the anchor follows the board (rule 32).
+const BACKDROP_BOX = {
+  x: BOARD_CX - BACKDROP.scale * BACKDROP.anchorX,
+  y: BOARD_CY - BACKDROP.scale * BACKDROP.anchorY,
+  w: BACKDROP.fileW * BACKDROP.scale,
+  h: BACKDROP.fileH * BACKDROP.scale,
 }
 
 export default function GameBoard({
@@ -195,17 +185,58 @@ export default function GameBoard({
           <stop offset="100%" stopColor="rgba(0,0,0,0.26)" />
         </linearGradient>
 
-        {/* The floor the board sits on. A radial field rather than a rectangle: a rect would draw its
-            own edges into the letterbox and put a visible box around the game. This just stops the
-            board being cut out of nothing.
-            NEUTRAL SINCE S35. It used to warm to gold at the centre, which was there to seat the
-            emblem. With the emblem gone a gold glow in the middle is a highlight on nothing, and it
-            would fight the three terrain washes for the same space. */}
-        <radialGradient id="neo-field" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="rgba(150,158,178,0.030)" />
-          <stop offset="55%"  stopColor="rgba(120,126,150,0.017)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+        {/* THE HOLE THE PAINTING IS NOT ALLOWED INTO · one per region, and this is the entire reason
+            gate 3 passes rather than needing to be tuned.
+            An occupied hex is only 13% opaque and its token is drawn in the element's own mid-tone
+            colour, so whatever sits underneath a cell is most of what a token is read AGAINST. The
+            painted plateaus are pale · sand is 225,183,111 · and technology purple on sand computes
+            to 2.0 : 1 against a 3 : 1 floor for non-text. There is no opacity at which a pale floor
+            under a mid-tone token is legible; that is arithmetic, not taste, and it is the same wall
+            the S24/S25 art attempt hit. So the play area keeps the dark ground it already had and
+            the painting supplies the WORLD AROUND it. */}
+        <radialGradient id="neo-backdrop-hole" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#000" stopOpacity="1" />
+          <stop offset={`${((BACKDROP.holeSolid / BACKDROP.holeFade) * 100).toFixed(1)}%`} stopColor="#000" stopOpacity="1" />
+          <stop offset="100%" stopColor="#000" stopOpacity="0" />
         </radialGradient>
+        {/* THE WORLD IS AN ISLAND, which is also how it is painted. The delivered crop reaches the
+            viewBox with four units to spare, so the painting's own vignette is outside the drawing
+            area entirely and the landscape met the SVG's bounding box as a straight line · a painted
+            rectangle sitting on the page, which is exactly the "cut out of nothing" look the old
+            neo-field existed to prevent.
+            A DARK RECTANGLE ON TOP DOES NOT FIX A RECTANGLE. That was the first attempt and the
+            screenshot showed why: to blacken the middle of each edge the gradient has to be pulled in
+            so far that it also swallows the coastline, and to keep the coast it has to be let out far
+            enough to leave the edge visible. There is no setting that does both, because the board is
+            nearly square and its corners are 1.4x further out than its edges.
+            So the shape changes instead of the darkness: the admitting shape is a feathered ELLIPSE,
+            not a rect, and the world simply ends in water on every side. */}
+        {/* The feather is DELIBERATELY NARROW · the outer 16%, about 66 units. The viewBox has almost
+            no spare room: its padding is 90 units and the three districts reach nearly to the edge,
+            so a generous fade does not read as a coastline, it reads as the top of the board being
+            sliced off. Measured against the render at 74%: the water and grass districts sit at 0.72
+            of the ellipse, i.e. inside the fade, and the land above them went. This puts the ramp
+            entirely outside them and lets it reach zero exactly at the viewBox boundary, so there is
+            no edge left to see. */}
+        <radialGradient id="neo-island" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"  stopColor="#fff" stopOpacity="1" />
+          <stop offset="84%" stopColor="#fff" stopOpacity="1" />
+          <stop offset="94%" stopColor="#fff" stopOpacity="0.5" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id="neo-backdrop-mask" maskUnits="userSpaceOnUse"
+              x={BACKDROP_BOX.x} y={BACKDROP_BOX.y} width={BACKDROP_BOX.w} height={BACKDROP_BOX.h}>
+          {/* white shows, black hides · the island admits the painting, the three districts take it back */}
+          <ellipse
+            cx={minX + width / 2} cy={minY + height / 2}
+            rx={width / 2} ry={height / 2}
+            fill="url(#neo-island)"
+          />
+          {REGIONS.map(reg => {
+            const { x, y } = hexToPixel(reg.cq, reg.cr)
+            return <circle key={`hole-${reg.id}`} cx={x} cy={y} r={BACKDROP.holeFade} fill="url(#neo-backdrop-hole)" />
+          })}
+        </mask>
 
         {/* TERRAIN WASH · one per terrain. This is what makes the FLOOR read as water, grass and
             desert rather than the regions being three coloured stickers on a neutral table. Each is
@@ -238,24 +269,30 @@ export default function GameBoard({
         </filter>
       </defs>
 
-      {/* GROUND · painted first, under everything. */}
-      <ellipse
+      {/* GROUND · painted first, under everything.
+          The neo-field radial that used to be here is gone: it existed to stop the board being cut
+          out of nothing, and a painted world does that job properly. Keeping it would also have lifted
+          every cell background slightly, which is paid for in token contrast. */}
+      <image
         data-board-ground=""
-        cx={BOARD_CX} cy={BOARD_CY}
-        rx={520} ry={470}
-        fill="url(#neo-field)"
+        data-board-backdrop=""
+        href={BACKDROP.href}
+        x={BACKDROP_BOX.x} y={BACKDROP_BOX.y}
+        width={BACKDROP_BOX.w} height={BACKDROP_BOX.h}
+        preserveAspectRatio="none"
+        mask="url(#neo-backdrop-mask)"
         style={{ pointerEvents: 'none' }}
       />
-
-      {/* TERRAIN · the floor around each region takes that region's terrain, then the motif is drawn
-          on the outward arc where no token can ever sit. Painted before the slabs, so the slab edge
-          reads as the shoreline where the terrain meets the built district. */}
+      {/* TERRAIN WASH · the floor INSIDE each region, which is the one place the backdrop is masked
+          out. Painted before the slabs, so the slab edge reads as the shoreline where the terrain
+          meets the built district. Its profile still peaks at 72% of 240 (=173), just outside the
+          slab · which now also puts its strongest part exactly where the mask is handing back over
+          to the painting, so the two meet in the same band instead of fighting for the middle. */}
       {REGIONS.map(reg => {
         const { x, y } = hexToPixel(reg.cq, reg.cr)
         return (
           <g key={`terrain-${reg.id}`} data-board-ground="" style={{ pointerEvents: 'none' }}>
             <circle data-terrain-wash={reg.terrain} cx={x} cy={y} r={240} fill={`url(#neo-wash-${reg.terrain})`} />
-            <TerrainMotif terrain={reg.terrain} cx={x} cy={y} />
           </g>
         )
       })}
