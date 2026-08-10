@@ -70,6 +70,7 @@
 
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { forEachViewport } from './seedHelpers'
 
 // Read the storage key from its declaration rather than restating it. Importing useLocalSession here would
 // drag React into Playwright's Node loader; a second copy of the string would be a second contract, which is
@@ -573,44 +574,40 @@ test.describe('practice mode · the end of the game', () => {
     }
 
     // RUN IT AT 320 AS WELL, which is Rule 78's own instruction and is where every margin in this layout is
-    // worst: the tallest content (1749px), the furthest fall (1038px below the fold), and the most gestures
-    // (3 of 3 allowed). A gate that only ever ran at the default 1280x720 would report the easiest case in
-    // the table above and call it covered.
-    const original = page.viewportSize()
-    const results = {}
-    for (const [label, size] of Object.entries({ default: original, '320x568': { width: 320, height: 568 } })) {
-      await page.setViewportSize(size)
-      // RESET THE SCROLL, and this line is load-bearing rather than tidy. Without it the second viewport
-      // inherits the first pass's scrollTop, so "how far below the fold is it ON ARRIVAL" is measured from
-      // a dialog somebody already scrolled: 320x568 reported 489px and 2 gestures instead of its true 1038px
-      // and 3. The number was plausible, wrong, and named a thing it had not measured (Rule 75b).
-      await page.evaluate(() => { const d = document.querySelector('[role="dialog"]'); if (d) d.scrollTop = 0 })
-      await page.waitForTimeout(250) // the dialog re-lays out · measure the settled position, not mid-reflow
-      results[label] = await reachByScrolling()
-      const { onArrival, reach, gestures } = results[label]
-
+    // worst: the tallest content (1749px), the furthest fall (1038px below the fold), and the most gestures.
+    // A gate that only ever ran at the default 1280x720 would report the easiest case in the table above and
+    // call it covered.
+    //
+    // THROUGH forEachViewport, which resets scroll BY CONSTRUCTION (T3 S39 · seedHelpers). The first version
+    // of this loop resized in place and inherited the previous pass's scrollTop, so the 320 reading came from
+    // a dialog somebody had already scrolled · 489px and 2 gestures instead of the true 1038px and 3. That was
+    // the third occurrence of one mistake in three sessions, which makes it a missing harness step rather than
+    // a slip · so the reset now lives in the helper where no caller has to remember it.
+    const measured = await forEachViewport(page, [
+      { width: 1280, height: 720 },
+      { width: 320, height: 568 },
+    ], async (pg, size) => {
+      const { onArrival, reach, gestures } = await reachByScrolling()
+      const label = `${size.width}x${size.height}`
       expect(reach.hitsSelf, `at ${label} the exit is painted over · elementFromPoint at its centre returned ` +
         `${reach.hitLabel} after ${gestures} scroll gesture(s) (rect ${JSON.stringify(reach.rect)})`).toBe(true)
       expect(reach.inViewport, `at ${label} the exit never came on screen · ${MAX_GESTURES} gestures of ` +
-        `${WHEEL_PX}px left it at ${JSON.stringify(reach.rect)} in viewport ${JSON.stringify(reach.viewport)} ` +
-        `· it started ${onArrival.belowFold}px below the fold`).toBe(true)
-      // The COST of reaching it, gated rather than merely logged · 1 at the default and 3 at 320 today.
-      // The bound is 5 rather than 3, and the reason is what this gate is FOR. It exists to catch the way
-      // out drifting substantially further from the player who needs it, not to freeze the score screen's
-      // height: at 3-of-3 a single extra line of copy would red the merge gate over a design judgement.
-      // 5 is the measured worst case plus one full 568px screen of headroom · a normal addition passes,
-      // and "two screens further down" (which is what the guard is really about) does not. The exact
-      // number is logged every run, so drift is visible long before the bound is hit.
+        `${WHEEL_PX}px left it at ${JSON.stringify(reach.rect)} · it started ${onArrival.belowFold}px below ` +
+        'the fold').toBe(true)
+      // The COST of reaching it, gated rather than merely logged. The bound is 5 rather than the measured 3
+      // because this gate exists to catch the way out drifting SUBSTANTIALLY further from the player who
+      // needs it, not to freeze the score screen's height: at 3-of-3 a single extra line of copy would red
+      // the merge gate over a design judgement. 5 is the worst case plus one full 568px screen.
       expect(gestures, `at ${label} it took ${gestures} scroll gestures to reach the way out of a finished ` +
-        'practice game · measured 1 at the default and 3 at 320x568').toBeLessThanOrEqual(5)
-      console.log(`[practice] exit @ ${size.width}x${size.height} · started ${onArrival.belowFold}px below ` +
-        `the fold · reachable after ${gestures} wheel gesture(s) · hit=${reach.hitLabel}`)
-    }
-    await page.setViewportSize(original) // the click below is asserted at the documented viewport
-    await page.waitForTimeout(250)
+        'practice game · measured 1 at 1280x720 and 2 at 320x568').toBeLessThanOrEqual(5)
+      console.log(`[practice] exit @ ${label} · started ${onArrival.belowFold}px below the fold · reachable ` +
+        `after ${gestures} wheel gesture(s) · hit=${reach.hitLabel}`)
+      return onArrival
+    })
+
     // NOT ONE viewport shows a CTA on arrival · asserted, so the day one does this line has to be updated
     // deliberately rather than the finding quietly evaporating.
-    expect(results.default.onArrival.inViewport || results['320x568'].onArrival.inViewport,
+    expect(measured.some(m => m.result.inViewport),
       'a CTA is now on screen when the civilization record appears · that is an improvement, and the ' +
       'measurement table in the comment above is now stale · update it').toBe(false)
 
