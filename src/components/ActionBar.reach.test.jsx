@@ -49,6 +49,23 @@ describe('the bonus tokens cost one chip, not four', () => {
     expect(chip.getAttribute('aria-label')).toMatch(/1 bonus token/i)
   })
 
+  it('caps the dots at four so the chip has a MAXIMUM width · nine is reachable', () => {
+    // T2 S38 made bonus tokens earnable: three thresholds per region, three regions, first-come. So
+    // one player can hold NINE, not four. The count is exact and the dots are capped, which is what
+    // keeps the chip's width bounded · measured at 70.5px for both 4 and 9 on a 320px phone. Without
+    // the cap the chip would grow with the count and this whole change would leak back into the row.
+    const NINE = ['subsidy', 'initiative', 'permits', 'subsidy', 'initiative', 'permits', 'subsidy', 'initiative', 'permits']
+    render(<ActionBar bonusTokens={NINE} />)
+    const chip = screen.getByTestId('bonus-chip')
+    expect(chip.querySelectorAll('span > span')).toHaveLength(4)
+    expect(chip.textContent, 'the COUNT must stay exact even though the dots are capped').toContain('9')
+    expect(chip.getAttribute('data-bonus-count')).toBe('9')
+
+    fireEvent.click(chip)
+    // Every one of them still has to be listed · the cap is a display bound, not a data bound.
+    expect(screen.getByTestId('bonus-detail').children).toHaveLength(9)
+  })
+
   it('shows one dot per token so WHICH you hold survives the compression', () => {
     render(<ActionBar bonusTokens={['automatization', 'subsidy']} />)
     const dots = [...screen.getByTestId('bonus-chip').querySelectorAll('span > span')]
