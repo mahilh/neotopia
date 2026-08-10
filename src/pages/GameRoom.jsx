@@ -114,7 +114,12 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // exploration therefore stays on this file's own local-init path below, which already worked and is
   // live. (Written to comms for T3: MIN_BOTS=0 would let both cases share one transport and give free
   // exploration refresh-survival for free. Their constant, their call · not mine to change.)
-  const local = useLocalSession(practice && practiceBots >= 1, { bots: practiceBots })
+  // `rearming` is the one commit in which the local transport is deliberately switched OFF so that it
+  // will deal a NEW table on the next one · see restartPractice below. useLocalSession documents itself
+  // as "inert in every observable way while active is false", and its own init effect resets its
+  // one-game latch on the way down, so this uses the hook exactly as written rather than reaching into it.
+  const [rearming, setRearming] = useState(false)
+  const local = useLocalSession(practice && practiceBots >= 1 && !rearming, { bots: practiceBots })
 
   // One handle for both worlds. Every consumer below takes this, never `sync` directly, so a practice
   // game persists to its tab and a real game persists to Postgres through identical call sites.
@@ -145,6 +150,37 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     clearSaved()
     onExitPractice?.()
   }, [endPractice, onExitPractice])
+
+  // ── PLAYING AGAIN, WITHOUT LEAVING (T1 S36) ───────────────────────────────────────────────────────
+  // "Start New Civilization" on the end screen sent a PRACTICE player to '/lobby' · the multiplayer
+  // screen, which needs the anonymous sign-in that practice mode exists to survive without, and which
+  // never ran the teardown. In practice that button now means what it says to the person reading it:
+  // another practice game, same opponents, right here.
+  //
+  // NO leavingRef here · that latch exists to stop the solo-init effect dealing a board on the way out,
+  // and this is the opposite intention. Both paths back to a fresh table are already built and neither
+  // is mine to duplicate:
+  //   · zero opponents · endPractice drops the store to 'lobby' and the local-init effect below watches
+  //     `phase`, so it re-arms on its own. `rearming` is a no-op there (the transport is already off).
+  //   · one or more · the transport owns that table, and its init effect keys on `active`, not on the
+  //     store. Switching it off for exactly one commit is what makes it deal again.
+  // endPractice already clears the snapshot itself, so the clearSaved in the effect below is a SECOND
+  // one, and it is deliberate rather than copied: the persistence subscription stays live until React
+  // commits the unsubscribe, so any store write landing in that window is saved · and endPractice's
+  // blank slate has a non-empty players array, which is precisely what readSaved() will happily restore
+  // instead of dealing. The write I have in mind is a bot move timer that was already in flight when
+  // the game ended. STATED AS UNPROVEN: removing this second clear leaves every test in
+  // GameRoom.practiceexit green, because the driver is mocked out there and nothing else writes. It
+  // costs one storage call to close a window I can reason about but have not reproduced.
+  const restartPractice = useCallback(() => {
+    endPractice?.()
+    setRearming(true)
+  }, [endPractice])
+  useEffect(() => {
+    if (!rearming) return
+    clearSaved()
+    setRearming(false)
+  }, [rearming])
 
   // Atomic seat-scoped draw (T3 S22 · migration 011 · draw_card_for_seat). The whole-state snapshot
   // (pushState) lets two simultaneous draws clobber each other (17f5931 · last-write-wins · a draw is
@@ -431,6 +467,10 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // Pulse the factories to invite the first action · only on your turn, with actions left, before a pick.
   const factoriesPulse = isMyTurn && actionsLeft > 0 && selectedFactory === null
 
+  // The header's own exit, which is the right home for it while there is a board to leave. Once the
+  // game ends the FinalScore overlay owns the screen and carries the exit itself.
+  const headerExit = practice && phase !== 'scoring'
+
   // Instruction-bar theming (T1 S13) · echo the SELECTED element's colour while the player chooses where
   // to place, confirming what they just picked · scorePending stays green · only themes on your own turn.
   const instructionColor =
@@ -468,8 +508,14 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       {/* FINAL SCORE · the civilization record · overlays everything once the game ends (phase 'scoring') */}
       {/* mySeat lets FinalScore record THIS client's own districts to the real Global Index (no cross-client over-count). */}
       {/* `practice` is load-bearing, not decorative · see FinalScore's recordCivilizationContribution. */}
+      {/* The practice exit and the practice restart are handed DOWN, because this overlay covers the
+          header that used to carry them (T1 S36 · T3's measurement) · FinalScore.jsx CTA block. */}
       {phase === 'scoring' && (
-        <FinalScore players={players} mySeat={mySeat} sync={transport} roomId={roomId} regions={regions} practice={practice} />
+        <FinalScore
+          players={players} mySeat={mySeat} sync={transport} roomId={roomId} regions={regions} practice={practice}
+          onLeavePractice={practice ? leavePractice : null}
+          onPlayAgain={practice ? restartPractice : null}
+        />
       )}
 
       {/* FIRST-GAME TUTORIAL · once ever per browser · shows for BOTH players the moment the game starts
@@ -534,8 +580,11 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         {/* Third column mirrors the first so the instruction stays optically centred · `1fr auto 1fr`
             sizes the outer columns equally whatever is in them, so putting a control here costs the
             centring nothing. Empty (and hidden from the a11y tree) outside practice. */}
-        <div aria-hidden={practice ? undefined : 'true'} style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {practice && (
+        {/* At 'scoring' this control moves INTO the FinalScore overlay, which is fixed/inset-0/z-300 and
+            paints over this header · leaving it here would keep a second `leave-practice` in the
+            document that no player can click, which is worse than one that moved. One at a time. */}
+        <div aria-hidden={headerExit ? undefined : 'true'} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {headerExit && (
             <button
               data-testid="leave-practice"
               onClick={leavePractice}

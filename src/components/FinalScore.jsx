@@ -74,7 +74,16 @@ function usePrefersReducedMotion() {
 // practice · a local game against bots. It is a REAL game of NeoTopia by every rule, and it is shown in
 // full here on purpose · the score screen is the payoff, and hiding it would make practice feel like a
 // demo. What it must never be is COUNTED. Nothing below that writes is allowed to run for it. (T1 S33)
-export default function FinalScore({ players = [], mySeat = null, sync = null, roomId = null, regions = [], practice = false }) {
+//
+// onLeavePractice / onPlayAgain · THE EXIT LIVES IN HERE NOW, and only in practice (T1 S36). This dialog
+// is position:fixed inset:0 zIndex 300 and opaque, so it paints over GameRoom's whole header · including
+// the "Leave practice" control, which stayed in the DOM and kept passing a visibility check while being
+// unclickable by a human. Both default to a plain navigation so a caller that forgets them still leaves
+// the player somewhere real, but only GameRoom's handlers run the practice teardown.
+export default function FinalScore({
+  players = [], mySeat = null, sync = null, roomId = null, regions = [], practice = false,
+  onLeavePractice = null, onPlayAgain = null,
+}) {
   const [revealed, setRevealed] = useState(false)
   const [liveIndex, setLiveIndex] = useState(null) // real DB aggregate · null until fetched
   const didFetchRef = useRef(false)                // getGlobalIndex fires exactly once
@@ -290,6 +299,12 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
   const winner = finalScores[0]
   // This client's final score (solo: mySeat null → the lone player, i.e. the winner) · the contribution.
   const localScore = (finalScores.find(p => p.seat === mySeat) ?? winner).total
+
+  // Practice CTAs. The fallbacks are '/' (the landing page), never '/lobby': a caller that forgets to
+  // hand these over should still leave a practice player somewhere they can definitely use, and the
+  // lobby is the one screen that requires the sign-in this mode exists to do without.
+  const leave = onLeavePractice ?? (() => navigate('/'))
+  const playAgain = onPlayAgain ?? leave
 
   return (
     <div
@@ -535,18 +550,48 @@ export default function FinalScore({ players = [], mySeat = null, sync = null, r
         )}
       </div>
 
-      {/* CTA · civilization language, not game language · lobby now lives at '/lobby' (Landing is '/') */}
-      <button
-        data-testid="play-again-btn"
-        onClick={() => navigate('/lobby')}
-        style={{
-          height: 56, flexShrink: 0, padding: '0 48px', borderRadius: 12, border: '1px solid rgba(200,148,64,0.35)',
-          background: 'rgba(200,148,64,0.06)', color: 'rgba(200,148,64,0.85)',
-          fontSize: 12, letterSpacing: 4, cursor: 'pointer', textTransform: 'uppercase', transition: 'all 0.2s',
-        }}
-      >
-        Start New Civilization
-      </button>
+      {/* ── THE WAY OUT · and in practice it has to live INSIDE this dialog ─────────────────────────
+          MEASURED by T3 (S35), not read: at phase 'scoring' the "Leave practice" button in GameRoom's
+          header is still in the DOM and still passes a visibility check, and
+          `document.elementFromPoint` at its centre returns THIS element. A real click (no force)
+          times out. So at the one moment a practice player is most likely to want out, the only
+          control they could actually reach was the one below · which sent them to the MULTIPLAYER
+          lobby, a screen that needs the sign-in practice mode exists to survive without, and never
+          ran endPractice(), leaving the finished game in the store and in sessionStorage behind them.
+
+          Same class as the ScoreFlash bug found in the same session: a full-viewport overlay
+          swallowing the control underneath it. The fix is not to raise the button's z-index · it is
+          to put the exit where the player is actually looking. There is exactly ONE `leave-practice`
+          in the document at any time (GameRoom drops its header copy at 'scoring'), so the testid
+          keeps meaning "the way out", wherever the way out currently lives. */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0 }}>
+        <button
+          data-testid="play-again-btn"
+          onClick={practice ? playAgain : () => navigate('/lobby')}
+          style={{
+            height: 56, flexShrink: 0, padding: '0 48px', borderRadius: 12, border: '1px solid rgba(200,148,64,0.35)',
+            background: 'rgba(200,148,64,0.06)', color: 'rgba(200,148,64,0.85)',
+            fontSize: 12, letterSpacing: 4, cursor: 'pointer', textTransform: 'uppercase', transition: 'all 0.2s',
+          }}
+        >
+          {/* In practice "again" means another practice game, not the lobby · a visitor who is here
+              because anonymous sign-in is rate limited cannot use the lobby at all. */}
+          {practice ? 'Play Again' : 'Start New Civilization'}
+        </button>
+        {practice && (
+          <button
+            data-testid="leave-practice"
+            onClick={leave}
+            style={{
+              height: 56, flexShrink: 0, padding: '0 32px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)',
+              background: 'transparent', color: 'rgba(255,255,255,0.55)',
+              fontSize: 12, letterSpacing: 4, cursor: 'pointer', textTransform: 'uppercase', transition: 'all 0.2s',
+            }}
+          >
+            Leave Practice
+          </button>
+        )}
+      </div>
 
       {/* Closing line · the same footer wording the landing page ends on, so the loop reads as one voice */}
       <div style={{ marginTop: 30, fontSize: 11, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', flexShrink: 0 }}>
