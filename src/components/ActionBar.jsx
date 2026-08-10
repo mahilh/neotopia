@@ -126,7 +126,13 @@ export default function ActionBar({
         </span>
       </div>
 
-      {/* RIGHT · bonus tokens + End Turn */}
+      {/* RIGHT · bonus tokens + End Turn
+          NOT the home for a rules button, and that was measured rather than reasoned (T1 S36). At a
+          320px viewport with no bonus tokens · the state every player is in today · this bar is
+          exactly 320 of 320 wide, with End Turn's right edge at 300. It has no room at all. Adding a
+          44px control here put End Turn's right edge at 337, i.e. 17px OFF THE SCREEN, which is the
+          same defect as the practice exit fixed in this very session: a control present in the DOM
+          that a player cannot reach. The route back to the rules lives in the header instead. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {bonusTokens.length > 0 && (
           <div style={{ display: 'flex', gap: 6 }}>

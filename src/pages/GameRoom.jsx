@@ -471,6 +471,16 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // game ends the FinalScore overlay owns the screen and carries the exit itself.
   const headerExit = practice && phase !== 'scoring'
 
+  // THE ROUTE BACK INTO THE RULES (T1 S36 · gap 9 of docs/TUTORIAL_GAP_AUDIT.md). Until now
+  // setShowTutorial had exactly ONE caller · the tutorial's own dismiss handler · so a player who hit
+  // Skip, or who read it on turn 1 and needed it on turn 4, had no way back to the rules from
+  // anywhere inside the game. Every other gap in that audit therefore had to land in one pass, on
+  // turn 1, before the player had any context to hang it on.
+  // Gated on the same phase as the Tutorial's own mount, so the button can never promise an overlay
+  // that will not appear · and hidden while it IS open, because the tutorial is z-500 over the whole
+  // viewport and a control painted underneath one of those is the bug this session is named after.
+  const showRules = phase === 'playing' && !showTutorial
+
   // Instruction-bar theming (T1 S13) · echo the SELECTED element's colour while the player chooses where
   // to place, confirming what they just picked · scorePending stays green · only themes on your own turn.
   const instructionColor =
@@ -580,10 +590,38 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         {/* Third column mirrors the first so the instruction stays optically centred · `1fr auto 1fr`
             sizes the outer columns equally whatever is in them, so putting a control here costs the
             centring nothing. Empty (and hidden from the a11y tree) outside practice. */}
-        {/* At 'scoring' this control moves INTO the FinalScore overlay, which is fixed/inset-0/z-300 and
+        {/* At 'scoring' the exit moves INTO the FinalScore overlay, which is fixed/inset-0/z-300 and
             paints over this header · leaving it here would keep a second `leave-practice` in the
-            document that no player can click, which is worse than one that moved. One at a time. */}
-        <div aria-hidden={headerExit ? undefined : 'true'} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            document that no player can click, which is worse than one that moved. One at a time.
+
+            THE RULES BUTTON LIVES HERE, and the position was measured (T1 S36 · gap 9 of
+            docs/TUTORIAL_GAP_AUDIT.md). The bottom ActionBar is the obvious home for it and it is
+            the wrong one: at a 320px viewport that bar is already exactly 320 of 320 wide with no
+            bonus tokens held, so a 44px control there pushed End Turn 17px off the right edge · a
+            control present and unreachable, which is the defect this same session fixed in the
+            practice exit. This column is `1fr` in a `1fr auto 1fr` grid and holds NOTHING in a real
+            game, so the button is free here. Top-right is also where a person looks for help. */}
+        <div
+          aria-hidden={showRules || headerExit ? undefined : 'true'}
+          style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}
+        >
+          {showRules && (
+            <button
+              data-testid="open-rules"
+              onClick={() => setShowTutorial(true)}
+              aria-label="How to play · reopen the rules"
+              title="How to play"
+              style={{
+                width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: 8,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid rgba(255,255,255,0.14)', background: 'transparent',
+                color: 'rgba(255,255,255,0.5)', fontSize: 16, lineHeight: 1, cursor: 'pointer',
+                transition: 'color 0.2s, border-color 0.2s',
+              }}
+            >
+              ?
+            </button>
+          )}
           {headerExit && (
             <button
               data-testid="leave-practice"
