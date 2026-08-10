@@ -138,7 +138,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (81 · cumulative):
+PERMANENT ANTI-REGRESS RULES (82 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -394,6 +394,27 @@ grepped for "test files" while vitest prints "Test Files" and had been silently 
 Corollary: teeth-check a counter by breaking its INPUT, not by reading its output once · and if the check
 re-implements the logic instead of calling it, that is a second contract (Rule 45) and needs a drift guard
 until the real refactor lands.
+
+RULE 82 (T3 S37 · August 9 2026):
+A PROBE THAT ANSWERS INSTANTLY HAS NOT ANSWERED A QUESTION ABOUT WAITING · AND THE SPEED IS THE TELL.
+Instrumenting a lobby-loop timeout I reached for `locator.isVisible({ timeout: 25_000 })`. isVisible() is a
+POINT-IN-TIME check and ignores the timeout option entirely, so the guard fired microseconds after the click,
+reported "the joiner never reached the waiting room", and was measuring nothing but its own impatience ·
+while looking exactly like the product failure it had been built to diagnose. Use expect(locator)
+.toBeVisible({ timeout }), which retries. Generalised: when a probe returns much faster than the thing it
+claims to have waited for, that gap IS the finding · compare the probe's own wall-clock against the timeout
+it says it honoured and disbelieve any probe that beat it. Descendant of Rule 75b (a probe is a claim),
+sharpened with the dimension that a probe can lie by being FAST rather than by returning a plausible number.
+COROLLARY, and the more expensive half: three separate runs this session looked like three different product
+bugs · a winner who was never credited, a lobby that would not join, a room code that never rendered · and
+ALL THREE WERE ENVIRONMENT. Two were another lane hot-reloading components into the dev server I was driving
+(the S35 hazard, again); one was React's DEVELOPMENT double-invoke killing an async retry loop whose effect
+burns its one-shot latch before the loop and cancels it in cleanup. The instrument that settled every one was
+the same: CHANGE EXACTLY ONE THING, ON THE SAME COMMIT, IN A TREE NOBODY ELSE CAN TOUCH · `git worktree add
+--detach <path> <sha>` with symlinked node_modules and its own port. Rule 74 already says a control needs the
+same commit; S35 said use a worktree for live measurement. They are one habit, and the cost of not having it
+is filing your own environment as a product defect · which this project has now nearly done four sessions
+running. Pairs with Rule 57 and Rule 77.
 
 RULE 77 (T1 S35 · August 9 2026):
 A test suite run on a loaded machine is a measurement of the machine. Boot reported 3 red, then 6 red
