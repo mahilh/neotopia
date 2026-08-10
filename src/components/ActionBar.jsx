@@ -33,13 +33,38 @@ export default function ActionBar({
     ? playerName
     : isMyTurn ? 'Your turn' : `Waiting for ${playerName}`
 
+  // ── THE BAR MAY NEVER PUSH End Turn OFF THE SCREEN (T1 S37 · Rule 78b, fixed at the source) ──────
+  // MEASURED, and it was never a comfortable fit: at a 320px viewport holding ZERO bonus tokens this
+  // bar is exactly 320 of 320 wide, with End Turn's right edge at 300. It has no slack at all.
+  // Holding four tokens takes it to 587, putting End Turn 267px off the right edge of the phone.
+  // That is not a cosmetic defect. It is an UNWINNABLE GAME: a player who cannot reach End Turn
+  // cannot play, and auto-end only covers the case where they have no actions left.
+  // It has never happened because nothing in the product can grant a bonus token yet · T2 S37
+  // established that both granters read data nothing ever seeds. It goes live the day the bonus-hex
+  // data lands, so it is fixed BEFORE that rather than after.
+  // WRAPPING, not shrinking the tokens away: with tokens the right group drops to a second row and
+  // everything stays visible and reachable. Nothing is hidden and nothing is truncated.
+  const wrapping = bonusTokens.length > 0
+
   return (
     <footer style={{
       flexShrink: 0, minHeight: 64,
       borderTop: '1px solid rgba(255,255,255,0.06)',
       background: 'rgba(255,255,255,0.015)',
-      display: 'flex', alignItems: 'center', gap: 16,
-      padding: '0 20px',
+      display: 'flex', alignItems: 'center',
+      // WRAPPING IS CONDITIONAL, and the measurement is why. At 320 these three groups want 440px
+      // against a 292px content box · they have always overflowed, and flex has always handled it by
+      // SHRINKING them, which is why End Turn sat at 300 and on screen. Turning wrap on
+      // unconditionally replaced that shrink with a wrap: the no-token bar went from 64px to 89 and
+      // took 25px of board from every phone in use today, to solve a case no player can reach yet.
+      // So the bar keeps its exact current behaviour until a token exists, and only then wraps ·
+      // which is the one situation where shrinking is not enough and End Turn goes off the screen.
+      // columnGap/rowGap rather than `gap` + `rowGap`: React warns that mixing a shorthand with a
+      // longhand for the same value during a rerender can silently drop one of them.
+      columnGap: wrapping ? 12 : 16,
+      rowGap: 8,
+      flexWrap: wrapping ? 'wrap' : 'nowrap',
+      padding: wrapping ? '6px 14px' : '0 20px',
     }}>
       {/* Turn-dot pulse when it IS your turn · the clearest human "act now" signal (reduced-motion safe). */}
       <style>{`
@@ -133,9 +158,12 @@ export default function ActionBar({
           44px control here put End Turn's right edge at 337, i.e. 17px OFF THE SCREEN, which is the
           same defect as the practice exit fixed in this very session: a control present in the DOM
           that a player cannot reach. The route back to the rules lives in the header instead. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {/* The right group wraps INTERNALLY too, and that is not belt-and-braces. Four tokens plus End
+          Turn is about 380 units on its own, so wrapping this group as a single unit onto a second
+          row would still overflow a 320px phone · the fix has to go all the way down to the strip. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {bonusTokens.length > 0 && (
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {bonusTokens.map((type, i) => {
               const meta = BONUS_META[type] ?? { label: type, hint: type, color: '#888' }
               return (
