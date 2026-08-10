@@ -11,10 +11,16 @@
 //     localStorage-guarded one-shot that fires recordCivilizationContribution · see comms T2→T1/T3 S8).
 //   · decide WHEN to fire — that is the consumer's job.
 //
-// The final `total` is computed with the SAME engine fn the store (getFinalScore) and FinalScore.jsx
-// use · calculateFinalScore = best + 2nd + worst*3 + unusedBonus*3 + clusterBonus · so the audit record
-// can never disagree with the number the player saw on screen. (The forge's payload referenced a
-// non-existent `p.total`; the real total only exists via this engine call.)
+// The final `total` is computed with the SAME engine fn FinalScore.jsx uses · calculateFinalScore =
+// best + 2nd + worst*3 + unusedBonus*3 + clusterBonus · so the audit record can never disagree with the
+// number the player saw on screen. (The forge's payload referenced a non-existent `p.total`; the real
+// total only exists via this engine call.)
+//   CORRECTED T2 S38. This sentence used to name `getFinalScore` (the store selector) as a third user of
+//   that fn, which read as "three call sites, one implementation, therefore they agree". The dead-surface
+//   audit found getFinalScore has NO shipping caller at all · FinalScore.jsx computes its own total via
+//   recordFor. Only two paths exist and both call calculateFinalScore directly, so the guarantee above
+//   still holds · but it held for a different reason than this comment claimed, and a comment that
+//   overstates which code is on the path is how a seam gets edited without anyone checking the other end.
 //
 // CLUSTER BONUS (board game rule p9): PER PLAYER since T2 S35. It was board-global from S18 until then ·
 // one number added identically to everybody, which inflated every total equally and could not change a
