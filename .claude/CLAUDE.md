@@ -157,7 +157,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (82 · cumulative):
+PERMANENT ANTI-REGRESS RULES (83 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -423,6 +423,30 @@ grepped for "test files" while vitest prints "Test Files" and had been silently 
 Corollary: teeth-check a counter by breaking its INPUT, not by reading its output once · and if the check
 re-implements the logic instead of calling it, that is a second contract (Rule 45) and needs a drift guard
 until the real refactor lands.
+
+RULE 83 (T1 S38 · August 10 2026):
+"IT FITS" IS NOT A MEASUREMENT. WHEN A LAYOUT ABSORBS AN OVER-SUBSCRIPTION, ASK WHAT PAID FOR IT.
+The action bar's three groups want ~448px inside a 292px content box at 320. I measured it in S36,
+S37 and S38, wrote "it fits" every time, and was checking the wrong thing every time: I looked at
+End Turn, the control I was worried about, saw it on screen, and stopped. Flex had been closing the
+156px gap by shrinking the only thing in the row that CAN shrink · the status text · so at 320 AND at
+375 the span reading "Your turn" / "Waiting for Alice" rendered at 0.0px. The turn-ownership signal
+has been absent from every multiplayer game on a phone, in shipped code, behind three green reports.
+THE GENERAL FORM, which is not about CSS: a system that copes with an over-subscription has not
+absorbed it, it has CHARGED it to something. Flex charges the most compressible element; a cache
+charges the coldest entry; a retry budget charges the slowest caller. Find the payer by name before
+calling the thing healthy · and note that the payer is by construction the component least able to
+complain, which is why nobody reports it.
+THE FIX FOLLOWS FROM THAT: reduce demand rather than arbitrate the remainder. 133px came off by
+dropping a word and a progress bar that were each a second rendering of information already on
+screen, and the deficit stopped existing. Fighting over who gets the 292 would have moved the
+casualty, not removed it.
+COROLLARY on the Rule 78 probe, which produced a false negative this session: "the topmost element
+at the centre has my testid" fails for any control with children · the bonus chip's own row of
+colour dots sits under its centre at four tokens and nowhere else, so one button read as reachable
+at 1 and 2 and unreachable at 4. The check is `el === top || el.contains(top)`.
+Sharpens Rule 81 (a number you reasoned to is a claim) with its sibling: a number you MEASURED is
+still only an answer to the question you asked.
 
 RULE 82 (T3 S37 · August 9 2026):
 A PROBE THAT ANSWERS INSTANTLY HAS NOT ANSWERED A QUESTION ABOUT WAITING · AND THE SPEED IS THE TELL.
