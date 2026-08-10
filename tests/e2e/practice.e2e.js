@@ -506,8 +506,25 @@ test.describe('practice mode · the end of the game', () => {
     // The first version of this asserted the rect must lie inside the viewport, straight off Rule 78. It
     // RED, and the number is worth writing down: at 1280x720 the exit sits at y=1087, which is 423px BELOW
     // the fold, and elementFromPoint at its centre returns `nothing` because the point is off the screen.
-    // Measured at four sizes · below-fold 343 (1440x800), 423 (1280x720), 889 (375x667), 1038 (320x568) ·
-    // and play-again is on the same row, so NO CTA is on screen when the record appears, at any size tried.
+    //
+    // RE-MEASURED AT HEAD ACROSS SEVEN VIEWPORTS (T3 S38), because T1 shipped three commits touching the
+    // board and the action bar since the first reading and a premise has a shelf life (Rule 28):
+    //
+    //   viewport     dialog content   leave-practice below fold   play-again below fold   wheel gestures
+    //   1440x900               1270                         243                     243                1
+    //   1440x800               1270                         343                     343                1
+    //   1280x720               1270                         423                     423                1
+    //    768x1024              1270                         119                     119                1
+    //    390x844               1679                         692                     622                2
+    //    375x667               1699                         889                     819                2
+    //    320x568               1749                        1038                     968                3
+    //
+    // NOT ONE of the seven has a CTA on screen when the record appears. The best case is a tablet at 119px
+    // below the fold; the worst is a small phone at over three screens of content with the way out at the
+    // bottom. AND THE VISIBLE SCROLLBAR IS 0px WIDE AT EVERY SIZE (macOS overlay scrollbars stay hidden
+    // until you already scroll), so there is no passive affordance at all · what the player can read without
+    // moving simply stops, mid score-row: at 375 the last three readable things are "Free Energy", "0",
+    // "0 + 0 + (0 × 3) = 0", and at 320 they are "0", "Living Earth", "0".
     //
     // It is still REACHABLE, and that distinction is the whole point of measuring instead of asserting. The
     // dialog is `overflow-y: auto` over 1270-1749px of content, and one ordinary mouse wheel brings the
@@ -535,34 +552,67 @@ test.describe('practice mode · the end of the game', () => {
         viewport: { w: window.innerWidth, h: window.innerHeight },
       }
     }
-    const onArrival = await exit.evaluate(probe)
-
     const WHEEL_PX = 500
     const MAX_GESTURES = 8 // 4000px · roughly three times the tallest overflow measured (1181px at 320x568)
-    let reach = onArrival
-    let gestures = 0
-    const box = await exit.boundingBox().catch(() => null)
-    while (!(reach.hitsSelf && reach.inViewport) && gestures < MAX_GESTURES) {
-      // Wheel over the middle of the dialog · the same place a player's pointer already is.
-      await page.mouse.move(onArrival.viewport.w / 2, onArrival.viewport.h / 2)
-      await page.mouse.wheel(0, WHEEL_PX)
-      gestures++
-      await page.waitForTimeout(150)
-      reach = await exit.evaluate(probe)
+
+    // Wheel until the control is genuinely reachable, and report what it cost. A wheel rather than
+    // scrollIntoViewIfNeeded: the framework's helper would scroll FOR the player and answer a question no
+    // human asks. The number of gestures IS the measurement.
+    async function reachByScrolling() {
+      const onArrival = await exit.evaluate(probe)
+      let reach = onArrival
+      let gestures = 0
+      while (!(reach.hitsSelf && reach.inViewport) && gestures < MAX_GESTURES) {
+        await page.mouse.move(onArrival.viewport.w / 2, onArrival.viewport.h / 2)
+        await page.mouse.wheel(0, WHEEL_PX)
+        gestures++
+        await page.waitForTimeout(150)
+        reach = await exit.evaluate(probe)
+      }
+      return { onArrival, reach, gestures }
     }
 
-    expect(reach.hitsSelf, `the exit is painted over · elementFromPoint at its centre returned ${reach.hitLabel} ` +
-      `after ${gestures} scroll gesture(s) (rect ${JSON.stringify(reach.rect)})`).toBe(true)
-    expect(reach.inViewport, `the exit never came on screen · ${MAX_GESTURES} scroll gestures of ${WHEEL_PX}px ` +
-      `left it at ${JSON.stringify(reach.rect)} in viewport ${JSON.stringify(reach.viewport)} · it started ` +
-      `${onArrival.belowFold}px below the fold`).toBe(true)
-    // The cost of reaching it, recorded rather than merely passed. 1 today. If this climbs, the score screen
-    // has grown and the way out has drifted further from the player who needs it most.
-    expect(gestures, `it took ${gestures} scroll gestures to reach the way out of a finished practice game`)
-      .toBeLessThanOrEqual(3)
-    console.log(`[practice] exit · started ${onArrival.belowFold}px below the fold at ` +
-      `${onArrival.viewport.w}x${onArrival.viewport.h} · reachable after ${gestures} wheel gesture(s) · ` +
-      `hit=${reach.hitLabel} rect=${JSON.stringify(reach.rect)} (unscrolled box ${JSON.stringify(box)})`)
+    // RUN IT AT 320 AS WELL, which is Rule 78's own instruction and is where every margin in this layout is
+    // worst: the tallest content (1749px), the furthest fall (1038px below the fold), and the most gestures
+    // (3 of 3 allowed). A gate that only ever ran at the default 1280x720 would report the easiest case in
+    // the table above and call it covered.
+    const original = page.viewportSize()
+    const results = {}
+    for (const [label, size] of Object.entries({ default: original, '320x568': { width: 320, height: 568 } })) {
+      await page.setViewportSize(size)
+      // RESET THE SCROLL, and this line is load-bearing rather than tidy. Without it the second viewport
+      // inherits the first pass's scrollTop, so "how far below the fold is it ON ARRIVAL" is measured from
+      // a dialog somebody already scrolled: 320x568 reported 489px and 2 gestures instead of its true 1038px
+      // and 3. The number was plausible, wrong, and named a thing it had not measured (Rule 75b).
+      await page.evaluate(() => { const d = document.querySelector('[role="dialog"]'); if (d) d.scrollTop = 0 })
+      await page.waitForTimeout(250) // the dialog re-lays out · measure the settled position, not mid-reflow
+      results[label] = await reachByScrolling()
+      const { onArrival, reach, gestures } = results[label]
+
+      expect(reach.hitsSelf, `at ${label} the exit is painted over · elementFromPoint at its centre returned ` +
+        `${reach.hitLabel} after ${gestures} scroll gesture(s) (rect ${JSON.stringify(reach.rect)})`).toBe(true)
+      expect(reach.inViewport, `at ${label} the exit never came on screen · ${MAX_GESTURES} gestures of ` +
+        `${WHEEL_PX}px left it at ${JSON.stringify(reach.rect)} in viewport ${JSON.stringify(reach.viewport)} ` +
+        `· it started ${onArrival.belowFold}px below the fold`).toBe(true)
+      // The COST of reaching it, gated rather than merely logged · 1 at the default and 3 at 320 today.
+      // The bound is 5 rather than 3, and the reason is what this gate is FOR. It exists to catch the way
+      // out drifting substantially further from the player who needs it, not to freeze the score screen's
+      // height: at 3-of-3 a single extra line of copy would red the merge gate over a design judgement.
+      // 5 is the measured worst case plus one full 568px screen of headroom · a normal addition passes,
+      // and "two screens further down" (which is what the guard is really about) does not. The exact
+      // number is logged every run, so drift is visible long before the bound is hit.
+      expect(gestures, `at ${label} it took ${gestures} scroll gestures to reach the way out of a finished ` +
+        'practice game · measured 1 at the default and 3 at 320x568').toBeLessThanOrEqual(5)
+      console.log(`[practice] exit @ ${size.width}x${size.height} · started ${onArrival.belowFold}px below ` +
+        `the fold · reachable after ${gestures} wheel gesture(s) · hit=${reach.hitLabel}`)
+    }
+    await page.setViewportSize(original) // the click below is asserted at the documented viewport
+    await page.waitForTimeout(250)
+    // NOT ONE viewport shows a CTA on arrival · asserted, so the day one does this line has to be updated
+    // deliberately rather than the finding quietly evaporating.
+    expect(results.default.onArrival.inViewport || results['320x568'].onArrival.inViewport,
+      'a CTA is now on screen when the civilization record appears · that is an improvement, and the ' +
+      'measurement table in the comment above is now stale · update it').toBe(false)
 
     // No force: the question is whether a PLAYER can reach it, and force:true would answer a different one.
     await exit.click({ timeout: 5_000 })
