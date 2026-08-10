@@ -49,10 +49,18 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
      the granter now matches a crossing to ITS OWN threshold instead of shift()-ing the stack top, which
      handed the second player to cross 7 the 13-token (rule 85). Measured subsidy 91 / initiative 42 /
      permits 23 · the shape thresholds 7/13/18 predict.
+     BALANCE MEASURED (T2 S39 · 57be1f7 · docs/BONUS_TOKEN_BALANCE.md) · 360 seeds, 3 disjoint blocks,
+     scored two ways on IDENTICAL games (bots never read tokens, so the control is exact not statistical).
+     Tokens favour the WEAKER player: apprentice -2.4, builder -3.0, architect -0.8, 9/9 cells negative,
+     control 50.0/50.0 with paired flips 26/26 of 52. McNemar within-matchup: builder p=0.0065.
+     Mechanism: builder earns +1.68 pts of mean token edge against 7.44 pts of spread · signal/noise
+     0.23, and noise helps the underdog. INSIDE the 10-point tripwire, so no rebalance recommended.
+     RE-RUN THIS when a control for useBonus ships · every token measured was UNSPENT, and a spendable
+     token is a decision, which rewards skill rather than diluting it. The sign may invert.
      STILL OPEN, neither guessed: (a) the HEX granter needs Mahil's bonus-hex (q,r) and is the only route
-     to the fourth token 'automatization' · (b) NOTHING CALLS useBonus, so every token earned is unspent
-     and scores its rulebook 3 points at the end. That is rulebook-correct but it is not yet a CHOICE,
-     and it adds ~12 points per game unevenly · T1 owns the control.
+     to the fourth token 'automatization' · see docs/BONUS_HEX_DATA_REQUEST.md, every coordinate
+     enumerated · (b) NOTHING CALLS useBonus, so every token earned is unspent and scores its rulebook
+     3 points at the end. That is rulebook-correct but it is not yet a CHOICE · T1 owns the control.
      (S37 determined the subsystem was unreachable · 2eb18eb. S38 closed the score-track half.)
   🟡 BONUS HEX DATA: 12th request · bonus hex (q,r) per region · the PILE half is now answered from the
      rulebook (S38), so this is the last missing datum and the only route to 'automatization'
@@ -153,7 +161,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (87 · cumulative):
+PERMANENT ANTI-REGRESS RULES (89 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -409,6 +417,40 @@ this overlay from criticism. Because it could not steal a click it was assumed h
 it actually produced was cells that stayed CLICKABLE WHILE INVISIBLE · a player placing into and
 scoring hexes they cannot see. That is Rule 78 inverted: reachable but not perceivable, and the
 property that made it safe is what made it deniable.
+
+RULE 88 (T2 S39 · August 10 2026):
+A SATURATED METRIC CANNOT DETECT A REGRESSION, AND AVERAGING ACROSS SATURATED CELLS HIDES ONE.
+I built a guard asserting that bonus tokens must not move any ladder win rate by more than 10 points,
+then mutated the term from 3 points to 12 · a fourfold overpowering · and the guard PASSED. Apprentice
+sits near 10% and architect near 98%; both are pinned against a bound and can barely register a delta
+at all, so the mutation produced -8.0 / -17.6 / +0.0 for a mean of 8.5, comfortably under the wire.
+I had noticed the ceiling early, said so out loud, and then failed to carry it into the design.
+  88a · Before trusting a metric, ask what its RANGE is at the operating point. A rate near 0 or 100
+        has almost no room to move and contributes a structural zero to any average built from it.
+  88b · Prefer a statistic that cannot saturate. The fix was tokenPointShare · the term as a fraction
+        of the score it is added to · measured at 0.105-0.137 everywhere, 0.45 under the mutation and
+        0.0 when the term is switched off. Magnitude detects re-weighting; win rate detects only what
+        the ladder has headroom to express.
+  88c · SIZE THE GATE FROM DATA BEFORE CHOOSING ITS THRESHOLD. The per-rung delta ranged to -10.2
+        across eight 25-seed blocks · a 10-point wire would have gone red on working code once in eight
+        runs. A gate that flakes trains people to ignore it (Rule 84's failure mode inverted). Measure
+        the spread across disjoint blocks, then set the bound, then say which assertion is sharp and
+        which is a coarse backstop.
+Pairs with Rule 81 (compute the constraint, do not reason it) and Rule 73 (ask whether a term is even
+capable of mattering) · here the question was whether the INSTRUMENT was capable of noticing.
+
+RULE 89 (T2 S39 · August 10 2026):
+A UNIT TEST IS NOT A CONSUMER; A CI-GATED E2E SPEC IS. My S38 dead-surface audit scanned src/ api/
+scripts/ and dismissed everything under tests/ · and got two of five findings wrong in the direction
+that would have caused damage. factoryRefill and getFinalScore have no product caller and are both
+driven by specs that gate merges today, so "dead, delete it" would have broken the gate. The right
+classification has three buckets, not two: PRODUCT means the app uses it; CI-E2E means it is
+TEST-SUPPORT API and must be kept and labelled; UNIT means only that it is exercised. A hand pass also
+MISSED two symbols entirely, which is the argument for making the audit a script
+(scripts/audit-dead-surface.sh) rather than an act of attention.
+COROLLARY, and it happened on the first run: the script reported two symbols as used because its own
+header comment named them as examples and it was grepping itself. A tool that scans the repo must
+exclude itself · Rule 75b, in the one costume where the probe and the subject are the same file.
 
 RULE 84 (T2 S38 · August 10 2026):
 A WELL-TESTED SYMBOL IS NOT A TESTED PATH. Ask what SHIPPING code calls it, not how many tests do.
