@@ -105,4 +105,28 @@ numbers at all.
 Every token measured here was **unspent**, because nothing calls `useBonus`. The whole finding is about
 a flat 3-points-each term. The day a control ships, tokens become a *decision*, and a decision is
 exactly the kind of term that rewards skill rather than diluting it · the sign could invert. **This
-measurement must be re-run then**, and the standing guard will not tell anyone to do it.
+measurement must be re-run then.**
+
+## The guard now watches its own premise (T2 S40)
+
+The line above used to end *"and the standing guard will not tell anyone to do it."* That was true and
+it was the weakest part of this document: the guard asserts the term's **magnitude**
+(`tokenPointShare`), and magnitude is exactly what does *not* change when a 3-point token becomes a
+3-point token you had to choose. It would have stayed green on the precise day its own conclusion
+expired · a gate watching a number rather than watching its assumptions.
+
+`bonusBalance.test.js` now asserts the two premises directly, and both fail *loudly with instructions*
+rather than quietly with a diff:
+
+| premise | why it matters | how it breaks |
+|---|---|---|
+| **A** · no product code invokes `useBonus` | tokens are unspent, so the measured term is a flat constant | T1 ships the control · **expected**, and the failure message says re-run rather than revert |
+| **B** · no bot decision code reads bonus state | seeding changes scoring only, so the control is **exact** (Rule 74) | silently · it changes no number, it downgrades one-game-scored-twice into two different games, and nothing else in the repo would ever say so |
+
+B is the dangerous one. A is the one that will actually fire.
+
+**Teeth verified by mutation, not by a passing run** (Rule 86): a real `useBonus(0, 'subsidy')` added to
+product code fails A by filename; one `bonus` mention appended to `botPolicy.js` fails B; and making the
+detector return `false` · maximal toothlessness · is caught by the counterweight, which drives the same
+pure function against a whole real product file rather than a tidy snippet, so an over-greedy
+comment-stripper cannot make the guard vacuous without going red where it is visible.

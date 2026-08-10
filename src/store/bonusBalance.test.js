@@ -1,4 +1,6 @@
 import { test, expect } from 'vitest'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { useGameStore, PRODUCTION_TILES } from './gameStore'
 import { PROJECT_CARDS } from '../lib/projectCards'
 import { chooseBotAction, makeRng, DIFFICULTIES, REFERENCE_POLICY } from '../lib/botPolicy'
@@ -15,6 +17,123 @@ import { calculateFinalScore, getClusterTotal } from '../lib/patternMatcher'
 //
 // unusedBonusCount is the 2nd arg of calculateFinalScore and is worth 3 points each, so "unseeded" is
 // exactly `calculateFinalScore(scores, 0, cluster)`. Nothing is simulated or approximated.
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// T2 S40 · THE GUARD THAT WATCHES ITS OWN ASSUMPTION
+//
+// Everything below this block measures a term worth a FLAT 3 POINTS EACH, because every token in the
+// 360 games was UNSPENT · nothing calls useBonus. That is not a detail of the measurement, it is the
+// measurement's premise, and the premise is the part with an expiry date. The day a control ships,
+// a token stops being a constant and becomes a DECISION, and a decision is exactly the kind of term
+// that rewards skill instead of diluting it. The finding below is "tokens help the weaker player"
+// and its whole mechanism is signal-to-noise 0.23 · variance four times the mean edge. Spending
+// converts variance into choice. THE SIGN CAN INVERT.
+//
+// The standing guard could not notice that. It watches the term's MAGNITUDE (tokenPointShare), which
+// is unchanged by making the term spendable · a 3-point token is 3 points whether you chose it or
+// not. So it would have stayed green on the exact day its own conclusion stopped being valid: a gate
+// watching a number instead of watching its assumptions.
+//
+// This is the assumption, asserted. It is expected to FAIL the day T1 wires a control, and failing is
+// the correct behaviour · the message says what to do rather than what broke.
+//
+// Two premises, not one, and they fail in different directions:
+//   A · no PRODUCT code invokes useBonus  → tokens are unspent → the measured term is a flat constant
+//   B · no BOT decision code reads tokens → seeding cannot change a decision → the control is EXACT
+//       rather than statistical, which is the strongest property this experiment has (Rule 74).
+// B breaking is the more dangerous of the two, because it does not change any number · it silently
+// downgrades a same-game control into two different games, and nothing else would ever say so.
+
+// join(cwd,'src') rather than import.meta.url · Vite rewrites the latter under vitest and it resolved
+// to a bare '/src'. The counterweight's file-count floor is what caught that, on the first run.
+const SRC_ROOT = join(process.cwd(), 'src') + '/'
+const BOT_DECISION_FILES = ['lib/botPolicy.js', 'hooks/useBotTurns.js']
+
+// The definition itself is not a call. Everything else that survives comment-stripping is.
+const DEFINITION = /^\s*useBonus:\s*\(/
+
+// Comment-strip then look for the identifier. Kept as a PURE FUNCTION of (name, source) so the
+// positive control below can drive THIS code path rather than a second copy of it (Rule 45 · a
+// re-implemented check is a second contract, and it is the copy that stays right).
+function invokesUseBonus(source) {
+  const stripped = source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map(l => (DEFINITION.test(l) ? '' : l.replace(/(^|[^:])\/\/.*$/, '$1')))
+    .join('\n')
+  return /\buseBonus\b/.test(stripped)
+}
+
+function productSources(dir = SRC_ROOT, out = []) {
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e)
+    if (statSync(p).isDirectory()) { productSources(p, out); continue }
+    if (!/\.jsx?$/.test(e) || /\.test\.|\.spec\./.test(e)) continue
+    out.push([p.slice(SRC_ROOT.length), readFileSync(p, 'utf8')])
+  }
+  return out
+}
+
+// COUNTERWEIGHT FIRST (Rule 90). This assertion's only job is to fail in a scenario I am deliberately
+// not creating, so it is the one line in the file that never gets to demonstrate it can · which is
+// precisely the shape of the vacuous guard Rule 86 was written about. Written first, there is nothing
+// else here for it to hide behind.
+//
+// The specific way the guard below could go quietly toothless is the comment-stripper: strip too much
+// (an over-greedy block-comment regex, a `//` inside a string or a URL swallowing the rest of a real
+// line) and every file reads as clean forever, green and meaningless. So the positive control does not
+// use a tidy synthetic snippet · it takes a REAL product file, whole, comments, JSX, URLs and all, and
+// appends one call. If the stripper mangles real source, this goes red here instead of lying there.
+test('the premise check has teeth · a real product file with one added call is detected', () => {
+  const files = productSources()
+  expect(files.length, 'the scanner walked no files · a guard over an empty set is not a guard')
+    .toBeGreaterThan(20)
+
+  const pick = (suffix) => {
+    const hit = files.find(([n]) => n.endsWith(suffix))
+    expect(hit, `${suffix} was not among the ${files.length} files walked · the scan root is wrong, ` +
+      'and a guard pointed at the wrong tree passes forever').toBeTruthy()
+    return hit[1]
+  }
+
+  const real = pick('pages/GameRoom.jsx')
+  expect(invokesUseBonus(real), 'GameRoom.jsx is the file most likely to gain the control first, and ' +
+    'it must read as clean today or the guard is already broken').toBe(false)
+  expect(invokesUseBonus(real + '\n  const spend = () => useBonus(seat, type)\n'),
+    'the stripper eats real source · this guard would be green no matter what shipped').toBe(true)
+
+  // And the definition is not a call · without this the guard is red from birth and gets deleted.
+  expect(/^\s*useBonus:\s*\(/m.test(pick('store/gameStore.js')),
+    'useBonus is gone · this whole file needs revisiting').toBe(true)
+})
+
+test('PREMISE · bonus tokens are still unspent and the bots are still token-blind', () => {
+  const callers = productSources().filter(([, s]) => invokesUseBonus(s)).map(([n]) => n)
+  expect(callers, [
+    '',
+    `PRODUCT CODE NOW CALLS useBonus (${callers.join(', ')}).`,
+    '',
+    'This is not a regression · it is the feature landing, and this guard exists to catch the day it',
+    'does. But it invalidates docs/BONUS_TOKEN_BALANCE.md, which measured a term worth a flat 3 points',
+    'each because every token was unspent. A spendable token is a DECISION, and the measured effect',
+    '(tokens help the weaker player, -0.8 to -3.0 pts) rests entirely on the term being NOISE ·',
+    'signal-to-noise 0.23. Choice converts noise into skill. THE SIGN MAY INVERT.',
+    '',
+    'RE-RUN, then update the doc and this test:',
+    '  BALANCE_SEEDS=120 SEED_OFFSET=0|120|240 BALANCE_OUT=/tmp/bal.jsonl \\',
+    '    npx vitest run src/store/bonusBalance.test.js --no-file-parallelism',
+    '',
+  ].join('\n')).toEqual([])
+
+  // PREMISE B · the exactness of the control, which breaks silently and changes no number.
+  for (const f of BOT_DECISION_FILES) {
+    const src = readFileSync(join(SRC_ROOT, f), 'utf8')
+    expect(/bonus/i.test(src), `${f} now reads bonus state, so seeding the pile can change a DECISION ` +
+      'and not merely a score. The same-games control in this file is no longer exact · it is two ' +
+      'different games, and every "identical play" claim in docs/BONUS_TOKEN_BALANCE.md must go.')
+      .toBe(false)
+  }
+})
 
 const api = () => useGameStore.getState()
 const shuffled = (arr, rng) => {
