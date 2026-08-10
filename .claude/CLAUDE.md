@@ -249,6 +249,16 @@ DRIVE SKILLS SYSTEM (permanent · June 29 2026):
   Session log: node scripts/sync-drive-skills.cjs --log-session <name> <shipped> <score>
   EVERY SESSION CLOSE RUNS --all AND --log-session. NO EXCEPTIONS.
 
+CLOSING RECOMMENDATION (standing · Mahil, August 9 2026 · applies to EVERY terminal, EVERY session):
+  End every session with a NEXT BEST STEP for your own lane:
+    1. what you would do next
+    2. WHY it is the highest-value thing available to YOU SPECIFICALLY (not to the project in general)
+    3. one concrete way the work you just did could be improved
+  Base it on what you MEASURED this session, not on the brief · a recommendation resting on an
+  unmeasured impression is the thing Rule 81 is about.
+  "Nothing" is a permitted answer and must be DEFENDED. Under-claiming is a different inaccuracy,
+  not humility · the same failure as a counter resting at a plausible zero (Rule 80).
+
 RULE 70 (T1 S21 · June 29 2026):
 A forge can report a feature as missing when it exists but is too subtle to perceive.
 Always verify rendered output (screenshot + DOM measurement), not just code presence.
