@@ -340,7 +340,7 @@ export default function FinalScore({
         background: 'rgba(4,4,10,0.98)',
         opacity: revealed ? 1 : 0, transition: 'opacity 0.8s ease',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        padding: '60px 24px 80px',
+        padding: '60px 24px 0',
       }}
     >
       <style>{`@keyframes fs-card-reveal { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }`}</style>
@@ -589,7 +589,42 @@ export default function FinalScore({
           to put the exit where the player is actually looking. There is exactly ONE `leave-practice`
           in the document at any time (GameRoom drops its header copy at 'scoring'), so the testid
           keeps meaning "the way out", wherever the way out currently lives. */}
-      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0 }}>
+      {/* Closing line · the same footer wording the landing page ends on, so the loop reads as one
+          voice. It sits ABOVE the sticky row now · a footer underneath a permanently-visible bar is
+          a footer nobody ever sees. */}
+      <div style={{ marginTop: 8, marginBottom: 4, fontSize: 11, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', flexShrink: 0 }}>
+        NeoTopia · Building the civilization · 2055
+      </div>
+
+      {/* ── AND IT HAS TO BE ON SCREEN WHEN THE SCREEN ARRIVES (T1 S39 · T3 measured it) ───────────
+          Seven viewports, not one of them showed a CTA on arrival:
+
+              1440x900   243px below the fold      390x844   692px below
+              1280x720   423px below               375x667   889px below
+               768x1024  119px below · the best    320x568  1038px BELOW
+
+          It was never unreachable · this dialog scrolls, and one to three wheel gestures land a real
+          click · so it is neither Rule 78a (covered) nor 78b (pushed off a row). It is the third
+          case: below the fold in a scrollable container. What makes it a defect rather than a normal
+          long page is that the MACOS OVERLAY SCROLLBAR IS 0px WIDE UNTIL YOU ARE ALREADY SCROLLING,
+          so there is no passive affordance at all · the content just stops mid score-row. At 320 the
+          last three things a player can read without moving are "0", "Living Earth", "0".
+          On a phone that is roughly two screens of scrolling before ANY next action exists, on the
+          one screen practice mode was built to pay off. Same family as the tutorial step-1 framing:
+          the interface not answering "what now".
+          STICKY, NOT MOVED TO THE TOP. The reveal order is the point of this screen · the score is
+          the payoff and the CTA is what you do after it. Sticking the row to the bottom of the
+          scrollport answers "what now" on arrival without putting "Start New Civilization" above the
+          civilization. The buttons are the same nodes with the same testids; only where they sit
+          changed. */}
+      <div style={{
+        position: 'sticky', bottom: 0, zIndex: 2,
+        display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0,
+        width: '100%', padding: '18px 0 20px',
+        // Fades the record out underneath rather than cutting it, so the sticky row reads as part of
+        // the screen instead of a bar dropped on top of it.
+        background: 'linear-gradient(to top, rgba(4,4,10,0.99) 55%, rgba(4,4,10,0))',
+      }}>
         <button
           data-testid="play-again-btn"
           onClick={practice ? playAgain : () => navigate('/lobby')}
@@ -618,10 +653,6 @@ export default function FinalScore({
         )}
       </div>
 
-      {/* Closing line · the same footer wording the landing page ends on, so the loop reads as one voice */}
-      <div style={{ marginTop: 30, fontSize: 11, letterSpacing: 3, color: 'rgba(255,255,255,0.2)', textTransform: 'uppercase', flexShrink: 0 }}>
-        NeoTopia · Building the civilization · 2055
-      </div>
     </div>
   )
 }
