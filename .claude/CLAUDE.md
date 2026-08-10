@@ -93,6 +93,25 @@ SIMULTANEOUS DRAW ARCHITECTURE (T3 S17 finding):
   Fix: atomic seat-scoped draw RPC at Supabase level (T2 designs · T3 wires).
   DO NOT add case 'draw_card': to useGameSync — wrong architecture (Rule 62).
 
+MULTIPLAYER ENDGAME PROOF · WHAT IT DOES AND DOES NOT PROVE (T3 S37/S38):
+  tests/e2e/multiplayer-endgame-live.e2e.js · gate runs its ENGINE test, nightly runs the two live ones.
+  THE COMPROMISE, stated because the next session will otherwise re-litigate it: a NATURAL 56-card game
+  end is infeasible through the UI · hundreds of turns at four clicks per placement · and two-human.e2e.js
+  has said so since S7. So the ending is played by the REAL ENGINE (src/store/gameStore driven directly,
+  not reimplemented) to its own 'scoring', and that finished state reaches the browsers through the REAL
+  wire: ONE game_sessions.state UPDATE by a real member, picked up by both clients' postgres_changes
+  subscription and applied by syncFromServer. Nothing is service-role and nothing is dispatched into a tab.
+  PROVES · the genuine lobby loop, two real anon identities, a real room + session, FinalScore rendering
+    from a synced TERMINAL state, per-player cluster scores that DIFFER on screen and match the engine,
+    record_civilization_score, games_played, award_game_win/games_won credited exactly once to the right
+    player, the exact set of RPCs a finished game may send, and placedBy surviving the real round trip
+    (T2 unit-tested that; nothing had watched it cross the network until S37).
+  DOES NOT PROVE · that the endgame TRIGGER fires in a live synced room. refillFactoryDraft →
+    endGameTriggered → endGameRoundsRemaining 2→1→0 → phase 'scoring' is proven by the engine offline
+    (four-player-live) and in a real browser against bots (practice.e2e.js, ~90-115s to a natural end),
+    but the composition of the two · a real multiplayer room reaching its own ending through play · has
+    never run. That is the honest remaining gap, not a claim this file makes.
+
 CRITICAL PATTERNS:
   sessionPhaseColumn: maps store 'scoring'→'finished'
   Tutorial gate: {showTutorial && phase==='playing'} — NOT isMyTurn
