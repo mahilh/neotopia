@@ -435,9 +435,16 @@ export default function GameBoard({
                 <g key={`${factory.id}-${i}-${el.type}`}>
                   <circle cx={ox} cy={oy} r={HEX_SIZE*0.28}
                     fill={ELEMENT_COLORS[el.type]} opacity={0.9} />
+                  {/* The count sits ON the factory's own hex, so this text IS the topmost node at
+                      all three factory centres · measured. It happens to be harmless today because
+                      it is inside the <g> that carries onFactoryClick, so the click bubbles to the
+                      right handler anyway. That is luck rather than design: it depends on a wrapper
+                      three levels up, and the same text one refactor outside that group becomes the
+                      region-label bug. Same rule as the district names · no <text> on this board is
+                      a hit target. */}
                   <text x={ox} y={oy} textAnchor="middle"
                     dominantBaseline="central" fontSize={10} fill="white"
-                    style={{userSelect:'none'}}>
+                    style={{userSelect:'none', pointerEvents:'none'}}>
                     {el.count}
                   </text>
                 </g>
@@ -454,12 +461,34 @@ export default function GameBoard({
           is why three abstract names sat on three flat colours.
           The district name keeps `reg.color` rather than the terrain ink, so a player can still tie
           "Sacred City" to the purple its score and its target rings are drawn in. */}
+      {/* ── A LABEL IS NOT A CONTROL, AND THIS ONE WAS EATING PLACEMENTS (T1 S40) ─────────────────
+          T3 measured 13 of 97 legal hexes across a solo game as unreachable AT THEIR OWN CENTRE,
+          with document.elementFromPoint returning an SVG <text> all 13 times, and twice the only
+          legal placement in the game was one of those · the turn could not progress at all.
+          force:true does not rescue it: force skips the actionability WAIT, not hit-testing, so a
+          bot and a player are in exactly the same position.
+          WHICH text, measured rather than guessed (Rule 81) · every label box against every hex
+          centre, in user units:
+            terrain  "Water"        y -175.4..-145.0   covers 0 · nearest centre 20.3 below it
+            name     "Sacred City"  y -139.6..-116.0   COVERS 1 · the hex row at y -124.7 is dead
+                                                       centre, 8.7 units inside each edge
+            score    "0"            y -111.9.. -76.8   covers 0 · nearest centre 44.1 across, and
+                                                       it would take a SIX-digit region score to
+                                                       grow far enough to reach it
+          So it is the district name, one hex per region · three positions on the whole board. And
+          because the blocked set is a property of the LAYOUT rather than of legality, T3's 13
+          blocked offers are these same three positions coming up again on different turns.
+          THE FIX IS STRUCTURAL RATHER THAN GEOMETRIC. Nudging the name up 20 units would clear it
+          today and re-break silently the moment a font, a size or a longer district name changes ·
+          that is a tolerance, and Rule 81 says prefer an identity. None of these three lines has a
+          handler; they are decoration. So none of them is hit-testable at all, and then no label
+          can ever take a click from a cell again, at any size. */}
       {REGIONS.map(reg => {
         const {x, y} = hexToPixel(reg.cq, reg.cr)
         const score = regionScores[reg.id] ?? 0
         const t = TERRAIN[reg.terrain]
         return (
-          <g key={`label-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} style={{userSelect:'none'}}>
+          <g key={`label-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} style={{userSelect:'none', pointerEvents:'none'}}>
             {/* SIZED FROM THE PHONE, NOT FROM THE FILE. These are SVG user units and the board is
                 HEIGHT-constrained at 375px: measured, the whole board renders at 0.3263 of user
                 units there, so the old 13/9.5/18 came out at 5.0px, 3.5px and 6.5px. A 3.5px
