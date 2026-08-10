@@ -99,6 +99,57 @@ do
   fi
 done
 
+# 6 · THE END-TO-END CASE · run the REAL relay and read its REAL footer.
+# Everything above this line tests a COPY of the counter logic. That was the honest gap at the end of
+# S37 and it is the whole reason this section exists: a suite that re-implements the thing it guards
+# would stay green while relay.sh emitted garbage · a gate testing a replica, which is a hair's breadth
+# from the pathology the counters themselves had (a plausible answer produced without measuring).
+# The drift guard in section 5 is a proxy for this. THIS is the measurement.
+#
+# It costs ~90s because relay.sh runs the full serial suite and a build, so it is skippable for quick
+# iteration · but it defaults ON, because a check that has to be opted into is a check that does not run.
+if [ "${RELAY_TEETH_FAST:-0}" = "1" ]; then
+  echo "  TEETH SKIP end-to-end relay run (RELAY_TEETH_FAST=1) · this is the only case that measures"
+else
+  echo "  ... running the real relay (~90s) ..."
+  OUT=$(bash .claude/relay.sh 2>&1)
+  FOOT_A=$(echo "$OUT" | grep -E '^Stage: ' | tail -1)
+  FOOT_B=$(echo "$OUT" | grep -E '^Tests: ' | tail -1)
+
+  if [ -z "$FOOT_A" ] || [ -z "$FOOT_B" ]; then
+    echo "  TEETH FAIL relay produced no footer at all"; fail=$((fail+1))
+  else
+    # Independently recompute, from the same live source the relay reads, and require agreement.
+    # Recomputing here rather than trusting the footer is the point · two derivations of one fact.
+    WANT_RULES=$(grep -oE "^(  [0-9]+\.|RULE [0-9]+ )" .claude/CLAUDE.md | grep -oE '[0-9]+' | sort -n -u | wc -l | tr -d ' ')
+    WANT_MIG=$(find scripts/migrations -name '*.sql' | wc -l | tr -d ' ')
+    WANT_ART=$(find public/art/cards -maxdepth 1 -name 'card_*.png' | wc -l | tr -d ' ')
+    GOT_RULES=$(echo "$FOOT_A" | sed -n 's/.*Rules: \([^ |]*\).*/\1/p')
+    GOT_MIG=$(echo "$FOOT_A"  | sed -n 's/.*Migrations: \([^ |]*\).*/\1/p')
+    GOT_ART=$(echo "$FOOT_A"  | sed -n 's/.*Art: \([0-9]*\)\/56.*/\1/p')
+    GOT_TESTS=$(echo "$FOOT_B" | sed -n 's/.*Tests: \([^ |]*\).*/\1/p')
+    GOT_FILES=$(echo "$FOOT_B" | sed -n 's/.*Files: \([^ |]*\).*/\1/p')
+    check "e2e · footer Rules matches live source"      "$WANT_RULES" "$GOT_RULES"
+    check "e2e · footer Migrations matches live source" "$WANT_MIG"   "$GOT_MIG"
+    check "e2e · footer Art matches live source"        "$WANT_ART"   "$GOT_ART"
+
+    # NO FIELD MAY BE BLANK OR UNMEASURED. Files was silently blank for every session before S37 and
+    # nobody saw it, because a missing number reads as formatting rather than as a failure to measure.
+    for pair in "Rules=$GOT_RULES" "Migrations=$GOT_MIG" "Art=$GOT_ART" "Tests=$GOT_TESTS" "Files=$GOT_FILES"; do
+      name=${pair%%=*}; val=${pair#*=}
+      if [ -z "$val" ] || [ "$val" = "UNMEASURED" ]; then
+        echo "  TEETH FAIL e2e · footer field $name is '${val:-<blank>}' · not a reading"; fail=$((fail+1))
+      else
+        echo "  TEETH OK   e2e · footer $name = $val"; pass=$((pass+1))
+      fi
+    done
+
+    # And the counts must be plausible integers rather than prose that happened to survive the sed.
+    case "$GOT_TESTS" in (*[!0-9]*|'') echo "  TEETH FAIL e2e · Tests '$GOT_TESTS' is not a number"; fail=$((fail+1));;
+                         (*) echo "  TEETH OK   e2e · Tests is numeric ($GOT_TESTS)"; pass=$((pass+1));; esac
+  fi
+fi
+
 echo
 echo "TEETH: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] || exit 1
