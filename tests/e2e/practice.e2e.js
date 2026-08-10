@@ -508,11 +508,9 @@ test.describe('practice mode · the end of the game', () => {
     // RED, and the number is worth writing down: at 1280x720 the exit sits at y=1087, which is 423px BELOW
     // the fold, and elementFromPoint at its centre returns `nothing` because the point is off the screen.
     //
-    // RE-MEASURED AT HEAD ACROSS SEVEN VIEWPORTS (T3 S38), because T1 shipped three commits touching the
-    // board and the action bar since the first reading and a premise has a shelf life (Rule 28):
-    //
-    // ⚠ HISTORICAL · this is the PRE-FIX state. T1 fixed it in 9659009 (S39) after I routed it; the CTA is
-    // now on screen on arrival at every size measured, 0 gestures. Kept because it is why the fix happened.
+    // ⚠ THE TABLE BELOW IS HISTORY, NOT A CURRENT CLAIM. It is the PRE-FIX state (T3 S38, seven viewports).
+    // T1 fixed it in 9659009 after I routed it. Kept because it is why the fix happened, and because the
+    // size of the numbers is the argument for the assertion that replaced it:
     //
     //   viewport     dialog content   leave-practice below fold   play-again below fold   wheel gestures
     //   1440x900               1270                         243                     243                1
@@ -523,19 +521,45 @@ test.describe('practice mode · the end of the game', () => {
     //    375x667               1699                         889                     819                2
     //    320x568               1749                        1038                     968                3
     //
-    // NOT ONE of the seven has a CTA on screen when the record appears. The best case is a tablet at 119px
-    // below the fold; the worst is a small phone at over three screens of content with the way out at the
+    // NOT ONE of the seven had a CTA on screen when the record appeared. The best case was a tablet at 119px
+    // below the fold; the worst a small phone at over three screens of content with the way out at the
     // bottom. AND THE VISIBLE SCROLLBAR IS 0px WIDE AT EVERY SIZE (macOS overlay scrollbars stay hidden
-    // until you already scroll), so there is no passive affordance at all · what the player can read without
-    // moving simply stops, mid score-row: at 375 the last three readable things are "Free Energy", "0",
-    // "0 + 0 + (0 × 3) = 0", and at 320 they are "0", "Living Earth", "0".
+    // until you already scroll), so there was no passive affordance at all · what the player could read
+    // without moving simply stopped, mid score-row: at 320 the last three readable things were "0",
+    // "Living Earth", "0".
     //
-    // It is still REACHABLE, and that distinction is the whole point of measuring instead of asserting. The
-    // dialog is `overflow-y: auto` over 1270-1749px of content, and one ordinary mouse wheel brings the
-    // button into view, after which elementFromPoint returns the button itself and a real click lands. So
-    // the honest gate is not "in the viewport on arrival" · that would fail every scrollable dialog ever
-    // written · it is "an ordinary scroll gesture gets a player there", with the cost of getting there
-    // bounded so a future change cannot quietly push it two screens further down.
+    // ── T3 S40 · MAHIL HAS RULED, SO THIS IS A CONTRACT NOW AND IT IS ASSERTED ────────────────────────────
+    // S38 measured the defect. S39 I turned the measurement into an assertion that NOT ONE viewport shows a
+    // CTA on arrival · and T1 fixed the product between the commit my worktree was pinned to and the commit
+    // CI ran, so my gate asserted the BUG and RED the merge gate. My first written explanation was that a
+    // Linux runner lays the dialog out shorter through font metrics. Plausible, wrong, and one `git log`
+    // from being caught. The narrow lesson is not "check things": it is NEVER ASSERT A FINDING YOU HAVE
+    // ROUTED TO ANOTHER LANE. A finding is a measurement of today, and the whole point of routing it is that
+    // somebody is about to make it false. Gate the invariant underneath it instead.
+    // So S39 left this REPORTED, not gated, because I did not know what the contract was.
+    // Mahil has now ruled that it IS one: a player who finishes a game must see what to do next without
+    // scrolling. That makes the positive assertion the correct gate, and it protects T1's fix from a
+    // silent regression, which the logged version could not do.
+    //
+    // RE-MEASURED AT HEAD, 87 VIEWPORT COMBINATIONS · every width just outside every breakpoint in src
+    // (479/600/720/1024) crossed with heights 568/720/900, because a two-point reading is a sample and not
+    // a boundary (Rule 87 · the S39 note said "measured at both 1280x720 and 320x568", which is exactly the
+    // sample size that hid the 620px peak in the action-log finding):
+    //
+    //   on screen on arrival ............ 87 of 87        elementFromPoint hits the button . 87 of 87
+    //   below the fold on arrival ....... 0 of 87         margin below the button .......... 20px, at ALL 87
+    //
+    // THE MARGIN IS INVARIANT, AND THAT IS THE POINT · it does not drift with width, height or content
+    // length because the CTA row is `position: sticky; bottom: 0` with `padding: 18px 0 20px`
+    // (FinalScore.jsx:620-627). The 20px IS the bottom padding. So this assertion cannot be broken by a
+    // Linux runner's font metrics, which is the failure I actually shipped last session · the guarantee is
+    // STRUCTURAL and can be proven by identity rather than defended as a tolerance (Rule 81's better half).
+    // A regression that un-pins that row does not shave the margin, it drops the button 243-1038px down the
+    // page, which is a range this probe measures with room to spare (Rule 88 · the metric is not saturated).
+    //
+    // The dialog is still `overflow-y: auto` over 1270-1749px of content, so the gesture bound below is
+    // still a real and separate guard: it catches the way out drifting back DOWN the page in the state
+    // where a player has begun scrolling. Left at 5 exactly as it was · T1 confirmed they did not touch it.
     //
     // A wheel, not scrollIntoViewIfNeeded: the framework's helper would scroll for the player and answer a
     // question no human asks. The number of gestures IS the measurement.
@@ -590,8 +614,30 @@ test.describe('practice mode · the end of the game', () => {
       { width: 1280, height: 720 },
       { width: 320, height: 568 },
     ], async (pg, size) => {
-      const { onArrival, reach, gestures } = await reachByScrolling()
       const label = `${size.width}x${size.height}`
+
+      // ── COUNTERWEIGHT · WRITTEN FIRST, BEFORE ANYTHING IT DEFENDS (Rule 90) ───────────────────────────
+      // "The CTA is on screen on arrival" has a cheap wrong satisfier, and it is not a bad fix somebody
+      // would make on purpose · it is the record simply getting SHORT enough to fit. The moment it does,
+      // the sticky row is doing no work at all, every assertion below still passes, and what survives is a
+      // guarantee nobody meant: the screen fits today, on this content, by luck. That is the Rule 86 shape ·
+      // an assertion structurally unable to fail, reporting itself as PRESENT and thereby retiring the worry.
+      // So the FIRST thing asserted here is that the screen genuinely OVERFLOWS its scrollport, which makes
+      // "on arrival" an achievement of the layout rather than an accident of content length.
+      // MEASURED at HEAD, and the scrollport is the DIALOG itself, not the document · documentElement's
+      // scrollHeight equals its clientHeight at every size, so the page never scrolls and the dialog does:
+      //     320x568  overflows by 1053px    ·    1280x720  by 421px    ·    1440x900  by 241px
+      // Gated at > 0 rather than at a measured floor on purpose: the bound has to mean "the sticky row is
+      // load-bearing", not "the record is this tall", or it becomes a second contract on somebody else's
+      // design (Rule 45). 241px of headroom at the tightest size measured.
+      const overflow = await pg.getByRole('dialog', { name: /final civilization record/i }).evaluate(
+        (el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight, by: el.scrollHeight - el.clientHeight }))
+      expect(overflow.by, `at ${label} the final-score screen does NOT overflow its scrollport ` +
+        `(${overflow.scrollHeight} of ${overflow.clientHeight}px), so "the CTA is on screen on arrival" is ` +
+        'true for free and this test proves nothing about the sticky row · either the record collapsed or ' +
+        'the dialog stopped being the scrollport').toBeGreaterThan(0)
+
+      const { onArrival, reach, gestures } = await reachByScrolling()
       expect(reach.hitsSelf, `at ${label} the exit is painted over · elementFromPoint at its centre returned ` +
         `${reach.hitLabel} after ${gestures} scroll gesture(s) (rect ${JSON.stringify(reach.rect)})`).toBe(true)
       expect(reach.inViewport, `at ${label} the exit never came on screen · ${MAX_GESTURES} gestures of ` +
@@ -602,29 +648,27 @@ test.describe('practice mode · the end of the game', () => {
       // needs it, not to freeze the score screen's height: at 3-of-3 a single extra line of copy would red
       // the merge gate over a design judgement. 5 is the worst case plus one full 568px screen.
       expect(gestures, `at ${label} it took ${gestures} scroll gestures to reach the way out of a finished ` +
-        'practice game · measured 1 at 1280x720 and 2 at 320x568').toBeLessThanOrEqual(5)
-      console.log(`[practice] exit @ ${label} · started ${onArrival.belowFold}px below the fold · reachable ` +
-        `after ${gestures} wheel gesture(s) · hit=${reach.hitLabel}`)
+        'practice game · measured 1 at 1280x720 and 2 at 320x568 BEFORE the fix, 0 at both after it')
+        .toBeLessThanOrEqual(5)
+
+      // ── THE CONTRACT ITSELF · a player who finishes a game sees what to do next without scrolling ──────
+      // onArrival, not `reach` · reach is measured AFTER the wheel loop and would be true even if the
+      // player had to scroll for it, which is the whole distinction this screen is about.
+      expect(onArrival.inViewport, `at ${label} NEITHER call to action is on screen when the final record ` +
+        `arrives · leave-practice starts ${onArrival.belowFold}px below the fold at ${JSON.stringify(onArrival.rect)}. ` +
+        'A player who has just finished a game is being shown a dead end and a 0px-wide overlay scrollbar. ' +
+        'The CTA row is position:sticky bottom:0 (FinalScore.jsx:620) · if this red, that is what broke.')
+        .toBe(true)
+      console.log(`[practice] exit @ ${label} · on arrival ${onArrival.belowFold <= 0
+        ? `ON SCREEN with ${-onArrival.belowFold}px of margin` : `${onArrival.belowFold}px BELOW the fold`} · ` +
+        `dialog overflows by ${overflow.by}px · reachable after ${gestures} wheel gesture(s) · hit=${reach.hitLabel}`)
       return onArrival
     })
 
-    // NOT ONE viewport shows a CTA on arrival · asserted, so the day one does this line has to be updated
-    // deliberately rather than the finding quietly evaporating.
-    // REPORTED, NOT GATED · and the reason is the best possible one: T1 FIXED IT (9659009, this session).
-    //
-    // THIS LINE WAS AN ASSERTION AND IT RED THE MERGE GATE. My first explanation was that the dialog's
-    // height depends on font metrics and a Linux runner lays it out shorter · plausible, and WRONG. What
-    // actually happened is that the defect I measured in S38 and routed to T1 was fixed between the commit
-    // my worktree was pinned to and the commit CI ran, so the CTA is now on screen on arrival and my
-    // assertion was asserting the BUG. Worth keeping as a note because I nearly shipped the plausible
-    // explanation instead of checking the log · the same failure this whole session is about.
-    //
-    // MEASURED AFTER THE FIX: on screen at BOTH 1280x720 and 320x568, 0 gestures, 20px of margin. The
-    // table above is the PRE-FIX state and is kept as history, not as a current claim.
-    // Gated on gesture cost only. That bound is a real regression guard in either state · it catches the
-    // way out drifting back down the page · and it does not encode a design decision that just changed.
+    // The summary line, so a CI log reads as a measurement and not just as a green tick (Rule 79d · a green
+    // workflow is not proof the spec executed; a number in the log is).
     console.log('[practice] CTA on arrival · ' + measured.map(m =>
-      `${m.size.width}x${m.size.height}:${m.result.inViewport ? 'on-screen' : `${m.result.belowFold}px below`}`)
+      `${m.size.width}x${m.size.height}:${m.result.inViewport ? `on-screen(+${-m.result.belowFold}px)` : `${m.result.belowFold}px below`}`)
       .join(' · '))
 
     // No force: the question is whether a PLAYER can reach it, and force:true would answer a different one.
