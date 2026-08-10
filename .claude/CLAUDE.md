@@ -43,7 +43,23 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
      T2 must design atomic seat-scoped draw RPC · T3 wires it after
   ✅ LANDING PAGE COUNTER: REAL · Landing.jsx reads getGlobalIndex() (sum of districts · seed 147823 fallback
      ONLY) · label "consciousness districts built" matches what the fn returns (T1 S19 Task C verified · Rule 63)
-  🟡 BONUS HEX DATA: 10th request · bonus hex (q,r) per region still pending from Mahil
+  🔴 BONUS TOKENS DO NOT EXIST AS A FEATURE (determined T2 S37 · 2eb18eb · src/store/bonusTokens.test.js).
+     The ENGINE is correct for 3 of 4 rulebook effects (subsidy, automatization, initiative · 'permits'
+     is a real TODO needing off-map outer-space tracking). But NOTHING EVER GRANTS A TOKEN: gameStore
+     :288 reads a hex `bonusType` nothing writes, and :389 reads `region.bonusPile` declared [] at :48-50
+     with no pusher. bonusTokens is provably [] in every real game · a caller with no DATA, resting at a
+     value indistinguishable from "nobody has earned one yet". THREE things are missing, in order:
+     (1) the seed data · Mahil's, see BONUS HEX DATA below · (2) T1's ActionBar, which is exactly 320 of
+     320 at its narrowest viewport with ZERO tokens, so rendering chips pushes End Turn off screen
+     (Rule 78b) and granting tokens before that fix makes the game unwinnable at 320px · (3) a control
+     that calls useBonus (none exists · GameRoom.jsx:410). DO NOT half-wire: a bonus that fires
+     unreliably is worse than one that visibly does nothing.
+  ✅ E2E COVERAGE IS COMPLETE (T2 S37 · 6cd7ad7) · every spec in tests/e2e/ now runs in a workflow.
+     practice.e2e.js -> MERGE GATE (mints zero identities · 7 passed in CI on 2eb18eb, zero skipped) ·
+     solo-host.e2e.js -> NIGHTLY (4 anon sign-ins per run). They were the last 2 orphans, not 5 · S32
+     routed three. Audit mechanically before claiming a coverage number (Rule 79c).
+  🟡 BONUS HEX DATA: 11th request · bonus hex (q,r) per region + each region's bonusPile contents still
+     pending from Mahil · this is now the SOLE blocker on the whole bonus-token subsystem, not a nicety
   ✅ CLUSTER VIZ: shows POINTS · per-cluster +N pts + "+N total" line · folded into player totals (T1 S19 · 442b694)
   🟡 CLEAN FLOW BOT GAME: pending (tree was dirty during S17 run) · T2 S18
   🟡 LIVE-DB UI FLOW E2E: pending · T3 S18
@@ -122,7 +138,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (78 · cumulative):
+PERMANENT ANTI-REGRESS RULES (80 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -315,6 +331,39 @@ put the reachability check in the browser and keep the DECISION in the unit test
 not in the footer; exactly one exit exists at a time). Sharpens Rule 55 (the render is the witness)
 with the control dimension, and Rule 4 (44px) with the observation that a correct size at an
 unreachable position is still a control the player does not have.
+
+RULE 79 (T2 S37 · August 9 2026):
+A SPEC THAT RUNS IN NO WORKFLOW CANNOT REPORT ITS OWN ROT, and it decays in the direction of a lie.
+practice.e2e.js · three sessions of work, including the ledger proof that bots never write to the real
+public civilization record · ran nowhere. Running it in order to wire it found test.fail() still attached
+to a defect T1 had fixed eight commits earlier, so it had been asserting expected-to-fail against working
+code, and wiring it blind would have turned the merge gate red on arrival. The staleness was not the
+interesting part: NOTHING WAS WATCHING, so nothing could have said so. Corollaries, all paid for tonight:
+  79a · Run a spec locally BEFORE adding it to a workflow. The nightly's own header already said this and
+        it is the reason the gate went green on the first push instead of red.
+  79b · Route by COST, not by convenience. practice mints zero identities so it belongs on the merge gate;
+        solo-host costs 4 anon sign-ins so it belongs on the nightly. Same audit, opposite destinations.
+  79c · The coverage number is not how many specs exist, it is how many RUN. Audit mechanically (every
+        spec grepped against every workflow), because the orphans are invisible by construction.
+  79d · A green workflow is not proof the spec executed · read the log for the test lines. A skip is not
+        a pass, which is what the nightly's skip-guard exists to say.
+Sharpens Rule 63 (gate only what's true) and Rule 67 (gate at the commit boundary) with the question that
+precedes both: is this gate connected to anything at all?
+
+RULE 80 (T2 S37 · August 9 2026):
+A COUNTER THAT CANNOT MEASURE MUST SAY SO, NEVER RESOLVE TO A NUMBER. The relay reported Rules 69 against
+78, Migrations 0 against 20, and Files blank · four symptoms, one root cause: every counter degraded to a
+plausible value when its input was missing, so a failure to read was indistinguishable from a reading.
+The migrations counter is the pure case · it pointed at a directory that does not exist and `2>/dev/null`
+swallowed the error that would have said so. "Handles an empty dir gracefully" and "hides a wrong path"
+were the same line of code. Distinguish NO DIRECTORY from NO FILES, and emit UNMEASURED for the first.
+This is the family of award_game_win at 0 rows, card art at 0/56 for fifteen sessions, and games_played:
+a value resting at something that looks correct. The relay is the worst place for it, because every
+terminal reads it at close and believes it. Parse machine-readable output, never prose · FILE_COUNT
+grepped for "test files" while vitest prints "Test Files" and had been silently blank forever.
+Corollary: teeth-check a counter by breaking its INPUT, not by reading its output once · and if the check
+re-implements the logic instead of calling it, that is a second contract (Rule 45) and needs a drift guard
+until the real refactor lands.
 
 RULE 77 (T1 S35 · August 9 2026):
 A test suite run on a loaded machine is a measurement of the machine. Boot reported 3 red, then 6 red
