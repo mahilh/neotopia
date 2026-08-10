@@ -511,6 +511,9 @@ test.describe('practice mode · the end of the game', () => {
     // RE-MEASURED AT HEAD ACROSS SEVEN VIEWPORTS (T3 S38), because T1 shipped three commits touching the
     // board and the action bar since the first reading and a premise has a shelf life (Rule 28):
     //
+    // ⚠ HISTORICAL · this is the PRE-FIX state. T1 fixed it in 9659009 (S39) after I routed it; the CTA is
+    // now on screen on arrival at every size measured, 0 gestures. Kept because it is why the fix happened.
+    //
     //   viewport     dialog content   leave-practice below fold   play-again below fold   wheel gestures
     //   1440x900               1270                         243                     243                1
     //   1440x800               1270                         343                     343                1
@@ -607,9 +610,22 @@ test.describe('practice mode · the end of the game', () => {
 
     // NOT ONE viewport shows a CTA on arrival · asserted, so the day one does this line has to be updated
     // deliberately rather than the finding quietly evaporating.
-    expect(measured.some(m => m.result.inViewport),
-      'a CTA is now on screen when the civilization record appears · that is an improvement, and the ' +
-      'measurement table in the comment above is now stale · update it').toBe(false)
+    // REPORTED, NOT GATED · and the reason is the best possible one: T1 FIXED IT (9659009, this session).
+    //
+    // THIS LINE WAS AN ASSERTION AND IT RED THE MERGE GATE. My first explanation was that the dialog's
+    // height depends on font metrics and a Linux runner lays it out shorter · plausible, and WRONG. What
+    // actually happened is that the defect I measured in S38 and routed to T1 was fixed between the commit
+    // my worktree was pinned to and the commit CI ran, so the CTA is now on screen on arrival and my
+    // assertion was asserting the BUG. Worth keeping as a note because I nearly shipped the plausible
+    // explanation instead of checking the log · the same failure this whole session is about.
+    //
+    // MEASURED AFTER THE FIX: on screen at BOTH 1280x720 and 320x568, 0 gestures, 20px of margin. The
+    // table above is the PRE-FIX state and is kept as history, not as a current claim.
+    // Gated on gesture cost only. That bound is a real regression guard in either state · it catches the
+    // way out drifting back down the page · and it does not encode a design decision that just changed.
+    console.log('[practice] CTA on arrival · ' + measured.map(m =>
+      `${m.size.width}x${m.size.height}:${m.result.inViewport ? 'on-screen' : `${m.result.belowFold}px below`}`)
+      .join(' · '))
 
     // No force: the question is whether a PLAYER can reach it, and force:true would answer a different one.
     await exit.click({ timeout: 5_000 })
