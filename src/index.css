@@ -47,7 +47,15 @@
   opacity: 0.3;
 }
 
-/* Action log hidden on narrow mobile · the board needs the full width there (T1 S15). */
+/* Action log hidden on narrow mobile · the board needs the full width there (T1 S15).
+   THIS IS NOW THE NET, NOT THE MECHANISM (T1 S40). The component measures both letterboxes and
+   renders only into space the board provably is not using, so at every width below 480 it already
+   resolves to mode="none" on its own (measured: 320 has 22.4px of bottom band against the 28 a line
+   needs, and 33.3px of side band against 136). This rule stays because the measurement has one
+   unmeasurable case · an environment with no layout at all, where the component falls back to the
+   full side column · and on a 320px phone that fallback would be the original defect. A breakpoint
+   that duplicates a measurement is what Rule 87 is about; a breakpoint that catches the measurement
+   failing is not. */
 @media (max-width: 479px) {
   .action-log-wrap { display: none; }
 }
