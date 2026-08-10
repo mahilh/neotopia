@@ -98,6 +98,50 @@ describe('what each token DOES is reachable, not hidden in a title attribute', (
     fireEvent.click(screen.getByTestId('bonus-chip'))
     expect(screen.queryByTestId('bonus-detail'), 'a panel that cannot be dismissed covers the board').toBeNull()
   })
+
+  it('closes on Escape', () => {
+    // It is 296 x 281 on a 320px phone · half the screen · and when it shipped the chip was its only
+    // exit. That is the ScoreFlash shape from S35: a large overlay betting the player finds the one
+    // control that opened it.
+    render(<ActionBar bonusTokens={['permits', 'subsidy']} />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    expect(screen.getByTestId('bonus-detail')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('bonus-detail')).toBeNull()
+  })
+
+  it('closes when the player touches anything else', () => {
+    render(<ActionBar bonusTokens={['permits']} />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByTestId('bonus-detail'), 'tapping away must dismiss it').toBeNull()
+  })
+
+  it('does NOT close on a click inside itself · reading it is not dismissing it', () => {
+    // FALSE CASE for the outside-click handler: written carelessly it eats its own panel, so the
+    // effects a player opened it to read vanish the moment they touch one.
+    render(<ActionBar bonusTokens={['permits', 'subsidy']} />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    fireEvent.pointerDown(screen.getByTestId('bonus-detail'))
+    expect(screen.getByTestId('bonus-detail')).toBeTruthy()
+  })
+
+  it('keeps working across re-renders · the listeners must not read a stale `open`', () => {
+    // WHAT THIS ACTUALLY CATCHES, corrected after mutation-testing it. I first wrote this claiming
+    // the ref was what survived a once-a-second re-render, and that claim is FALSE: binding the
+    // listeners with [tokensOpen] in the deps also works, because React re-subscribes on the change.
+    // Both implementations pass, so an assertion phrased against that difference is vacuous.
+    // The bug the ref does prevent is the OTHER shape, and it is the one somebody reaches for when
+    // they notice the listeners re-subscribing: empty deps AND a direct read of `tokensOpen`. That
+    // captures `false` forever and Escape silently stops working. Mutating to exactly that reddens
+    // this test and the two above it · so the teeth are real, they are just not where I said.
+    const view = render(<ActionBar bonusTokens={['permits']} actionsRemaining={3} />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    for (let i = 0; i < 3; i++) view.rerender(<ActionBar bonusTokens={['permits']} actionsRemaining={3 - i} />)
+    expect(screen.getByTestId('bonus-detail'), 'the panel should still be open').toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('bonus-detail'), 'Escape stopped working · a listener read a stale open').toBeNull()
+  })
 })
 
 describe('the row gets its space back', () => {

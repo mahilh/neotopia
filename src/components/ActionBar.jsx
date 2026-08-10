@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 // NeoTopia · fixed bottom action bar for the game screen.
 // T1 owns this file. Mobile-first · 44px touch targets · tabular-nums on all counts.
@@ -55,6 +55,44 @@ export default function ActionBar({
   // into a panel that opens ON TAP · where it can say what each token actually does, instead of
   // hiding it in a `title` attribute no touch device has ever shown anyone.
   const [tokensOpen, setTokensOpen] = useState(false)
+
+  // ── AND IT HAS TO BE DISMISSIBLE BY MORE THAN THE ONE CONTROL THAT OPENED IT (T1 S39) ───────────
+  // Measured: 296 x 281 at a 320px phone · half the height of a 568px screen · and when I shipped it
+  // the only way out was a second tap on the chip. That is the ScoreFlash shape (S35): a large
+  // overlay with exactly one exit. It is much milder here (the toggle genuinely works, and the panel
+  // does not cover the board) but it is the same bet, that the player finds the one control.
+  // Escape, and a click anywhere else, both close it.
+  //
+  // THE OPEN FLAG IS READ THROUGH A REF, and the reason is narrower than Rule 76 makes it sound ·
+  // stated precisely because I mutation-tested the claim and my first version of it was wrong.
+  // Listing [tokensOpen] in the deps is ALSO correct: React re-subscribes on the change and the
+  // handler is never stale. What the ref buys is that the listeners attach exactly once instead of
+  // swapping on every toggle · and, more usefully, it makes the empty dep array SAFE. Empty deps
+  // with a direct read of `tokensOpen` is the shape somebody reaches for when they notice the
+  // re-subscribing, and it captures `false` forever: Escape then silently stops working, with
+  // nothing in the console. Mutating to exactly that reddens three tests in ActionBar.reach.
+  const panelRef = useRef(null)
+  const chipRef = useRef(null)
+  const openRef = useRef(tokensOpen)
+  openRef.current = tokensOpen
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && openRef.current) setTokensOpen(false) }
+    const onDown = (e) => {
+      if (!openRef.current) return
+      // The chip is excluded so its own onClick keeps toggling rather than being closed here first
+      // and reopened by the click · which would make the chip look dead.
+      if (chipRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return
+      setTokensOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    // `pointerdown`, not `click`: a click that starts on the board and ends elsewhere should still
+    // dismiss, and pointerdown fires before the board's own handlers get the event.
+    document.addEventListener('pointerdown', onDown, true)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointerdown', onDown, true)
+    }
+  }, [])
 
   return (
     <footer className="action-bar" style={{
@@ -176,6 +214,7 @@ export default function ActionBar({
         {bonusTokens.length > 0 && (
           <div style={{ flexShrink: 0 }}>
             <button
+              ref={chipRef}
               data-testid="bonus-chip"
               data-bonus-count={bonusTokens.length}
               aria-expanded={tokensOpen}
@@ -205,6 +244,7 @@ export default function ActionBar({
 
             {tokensOpen && (
               <div
+                ref={panelRef}
                 data-testid="bonus-detail"
                 role="group"
                 aria-label="Bonus tokens"
