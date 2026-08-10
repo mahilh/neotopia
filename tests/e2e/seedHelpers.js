@@ -151,3 +151,127 @@ export async function readPlacedCount({ url, key, roomId }) {
     return count
   } catch { return null }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// THE TWO-HUMAN LOBBY LOOP · ONE implementation (T3 S39)
+//
+// WHY IT MOVED HERE. Three specs had grown their own copy of this sequence, all descended from
+// two-human.e2e.js (S7), and all of them select the start control by ROLE AND NAME and then assert only
+// that it is VISIBLE. The button is `data-testid="start-btn"` with `disabled={!canStart}` (Lobby.jsx:629),
+// so a copy that waits for VISIBLE clicks a DISABLED button, nothing happens, and the spec fails 20s later
+// at waitForURL with "Timeout exceeded" · which describes a rate limit, an RLS refusal and a genuine
+// product bug identically. That cost a live run (2 anon identities) before the cause was read off the
+// markup rather than guessed at. Same class as Rule 78 (visible is not reachable) and of the harness bug
+// found in the same session where a draw was counted from a click that never committed.
+//
+// So this waits for ENABLED, uses the real testids, and verifies the navigation actually happened · and it
+// is one function, so the next spec cannot inherit the old shape by copying a neighbour.
+//
+// NOT retro-fitted to two-human.e2e.js or multiplayer-endgame-live.e2e.js in the same session: both are
+// wired into CI and green, and rewriting a file somebody is watching land is how a green gate turns red for
+// a reason nobody can find. Routed in comms with this exact note instead.
+const NAME_INPUT = 'Builder name (max 20)'
+
+async function gotoLobby(page, expect) {
+  await page.goto('/')
+  const input = page.getByPlaceholder(NAME_INPUT)
+  const enterCiv = page.getByRole('button', { name: /enter the civilization/i })
+  await expect(input.or(enterCiv).first()).toBeVisible({ timeout: 15_000 })
+  if (await enterCiv.isVisible()) {
+    await enterCiv.click()
+    await expect(input).toBeVisible({ timeout: 15_000 })
+  }
+}
+
+/**
+ * Drive two real browser pages through create → join → ready → start, entirely through the UI.
+ * `expect` is passed in so this module stays importable by vitest (which does not have Playwright's expect).
+ * Returns { code, roomId }. Throws with the offending SCREEN, never a bare locator timeout.
+ */
+export async function runTwoHumanLobby(p1, p2, { expect, hostName, joinerName, boardSelector = BOARD }) {
+  await gotoLobby(p1, expect)
+  await p1.getByPlaceholder(NAME_INPUT).fill(hostName)
+  await p1.getByRole('button', { name: /enter neotopia/i }).click()
+  await p1.getByRole('button', { name: 'Create Room' }).click({ timeout: 15_000 })
+
+  const codeEl = p1.locator('[style*="monospace"]').first()
+  await expect(codeEl).toBeVisible({ timeout: 15_000 })
+  const code = (await codeEl.textContent())?.trim() ?? ''
+  expect(code, `room code "${code}" is not 6 chars A-Z0-9`).toMatch(/^[A-Z0-9]{6}$/)
+
+  await gotoLobby(p2, expect)
+  await p2.getByPlaceholder(NAME_INPUT).fill(joinerName)
+  await p2.getByRole('button', { name: /enter neotopia/i }).click()
+  await p2.getByRole('button', { name: 'Join Room' }).click({ timeout: 15_000 })
+  await p2.getByPlaceholder('ABC234').fill(code)
+  await p2.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15_000 })
+
+  const ready = p2.getByTestId('ready-btn')
+  try {
+    await expect(ready).toBeVisible({ timeout: 25_000 })
+  } catch {
+    throw new Error(`the joiner never reached the waiting room after joining "${code}" · screen: ` +
+      await p2.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 500)))
+  }
+  await ready.click({ timeout: 10_000 })
+
+  // ENABLED, not visible. This is the line the copies were missing.
+  const start = p1.getByTestId('start-btn')
+  await expect(start, 'the Start control never appeared for the host').toBeVisible({ timeout: 15_000 })
+  try {
+    await expect(start).toBeEnabled({ timeout: 30_000 }) // presence convergence · the genuinely slow step
+  } catch {
+    throw new Error('Start Game never became enabled · presence did not converge. host screen: ' +
+      await p1.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 400)))
+  }
+  await start.click()
+
+  try {
+    await p1.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 25_000 })
+    await p2.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 25_000 })
+  } catch {
+    throw new Error('a player never reached the board after Start. host: ' +
+      await p1.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 200)) + ' | joiner: ' +
+      await p2.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 200)))
+  }
+  await expect(p1.locator(boardSelector)).toBeVisible({ timeout: 20_000 })
+  await expect(p2.locator(boardSelector)).toBeVisible({ timeout: 20_000 })
+
+  return { code, roomId: new URL(p1.url()).pathname.split('/').pop() }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// MULTI-VIEWPORT MEASUREMENT · scroll reset BY CONSTRUCTION (T3 S39 · P3)
+//
+// Measuring the same page at several sizes contaminated itself three sessions running: resizing to 320 after
+// a pass at 1280 inherited that pass's scrollTop, so "how far below the fold ON ARRIVAL" was read from a
+// container somebody had already scrolled · 489px instead of the true 1038px. Plausible, wrong, and naming
+// something it had not measured. Three occurrences of one mistake is a missing harness step, not a slip.
+//
+// So the reset is not a line a caller has to remember: this helper resets the window AND every scrollable
+// element on the page between viewports, then lets layout settle, then calls the measurement. A caller
+// cannot inherit scroll from the previous size because there is no code path in which it survives.
+export async function forEachViewport(page, sizes, measure, { settleMs = 250 } = {}) {
+  const original = page.viewportSize()
+  const out = []
+  try {
+    for (const size of sizes) {
+      await page.setViewportSize({ width: size.width, height: size.height })
+      await page.evaluate(() => {
+        window.scrollTo(0, 0)
+        for (const el of document.querySelectorAll('*')) {
+          if (el.scrollTop) el.scrollTop = 0
+          if (el.scrollLeft) el.scrollLeft = 0
+        }
+      })
+      await page.waitForTimeout(settleMs) // measure the settled layout, not mid-reflow
+      out.push({ size, result: await measure(page, size) })
+    }
+  } finally {
+    if (original) {
+      await page.setViewportSize(original)
+      await page.waitForTimeout(settleMs)
+    }
+  }
+  return out
+}
