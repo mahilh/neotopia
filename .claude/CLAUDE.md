@@ -122,7 +122,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (77 · cumulative):
+PERMANENT ANTI-REGRESS RULES (78 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -294,6 +294,27 @@ a player scored), and it killed the first draft of auto-end-turn before a test c
 callbacks belong in a ref; effect deps belong to VALUES. Same family as the S33 bot deadlock. And fix
 it in the component, not by memoising the caller · that makes it correct for every caller instead of
 for one careful one.
+
+RULE 78 (T1 S36 · August 9 2026):
+A VISIBILITY CHECK IS NOT A REACHABILITY CHECK, and the difference is the whole bug. Twice in one
+session a control was in the DOM, not hidden, not disabled, correctly sized, and impossible for a
+player to click · and a standard isVisible()/toBeVisible() passed both times.
+  78a · COVERED. The practice "Leave" button sat under FinalScore (position:fixed, inset:0, zIndex
+  300, opaque). T3 caught it because a real Playwright click TIMED OUT and elementFromPoint at the
+  button's centre returned the dialog. Same shape as S35's ScoreFlash: a full-viewport overlay
+  swallowing whatever is beneath it. When an overlay owns the screen, the control has to MOVE INTO
+  it · raising a z-index just moves the argument.
+  78b · PUSHED OFF. Fixing 78a did not stop me committing 78b an hour later: a 44px rules button
+  added to the bottom ActionBar put End Turn's right edge at 337 in a 320px viewport. The bar was
+  already at exactly 320 of 320, so it had no room at all and nothing said so · flex just overflowed.
+THE PROBE THAT CATCHES BOTH, and it is two lines: at the control's centre, assert
+document.elementFromPoint returns the control itself, AND assert its rect lies inside the viewport.
+Run it at 320 as well as 375 · 320 is where "exactly fits" becomes "off the screen".
+COROLLARY: jsdom has no layout, so it can hold neither claim. Do not write a test that pretends to ·
+put the reachability check in the browser and keep the DECISION in the unit test (this control is
+not in the footer; exactly one exit exists at a time). Sharpens Rule 55 (the render is the witness)
+with the control dimension, and Rule 4 (44px) with the observation that a correct size at an
+unreachable position is still a control the player does not have.
 
 RULE 77 (T1 S35 · August 9 2026):
 A test suite run on a loaded machine is a measurement of the machine. Boot reported 3 red, then 6 red

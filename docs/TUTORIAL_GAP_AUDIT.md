@@ -2,6 +2,9 @@
 
 T1 S35 · August 9 2026 · **reported, not fixed** (forge instruction)
 
+> **Status · T1 S36:** gap 9 (no route back into the rules) is **closed** · `537487a`. The other
+> eight are open and unchanged. Ordering below is by cost, not by what was fixed.
+
 ## The screenshot this starts from
 
 Mahil, playing practice: **Turn 3 · HAND 7 · all three regions scoring 0.** He drew seven
@@ -98,7 +101,7 @@ The mode chip shows "12 tiles" / "9 tiles". Nothing says a production tile is co
 factory empties, or that running out of them ends the game. The player is shown a countdown
 without being told it is one.
 
-### 9 · Structural · there is no way back in
+### 9 · Structural · there is no way back in ~~· CLOSED T1 S36 (`537487a`)~~
 
 `setShowTutorial` is called from exactly one place: the tutorial's own dismiss handler. Once
 `neotopia_tutorial_v1` is set there is **no route back to the rules from inside the game** —
@@ -106,6 +109,13 @@ no help button, no rules panel, nothing in the action bar. Everything above ther
 land in one pass, on turn 1, before the player has any context to hang it on. That is a lot
 to ask of three dialogs, and it is the reason gaps 3–6 cannot simply be appended as steps 4,
 5, 6 and 7.
+
+**Fixed in T1 S36.** A 44px `?` in the header's right column re-opens the tutorial at any point
+during play. It does not clear the "seen" flag, and it does not render while the overlay is up.
+The other eight gaps below are unchanged and still open. Note for whoever takes them: the natural
+home for a rules control is the bottom action bar, and there is **no room there** — measured at a
+320px viewport it is exactly 320 of 320 wide with no bonus tokens held, so anything added to it
+pushes End Turn off the screen.
 
 ## Recommendation (for whoever picks this up · not done here)
 
