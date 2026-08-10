@@ -153,7 +153,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (85 · cumulative):
+PERMANENT ANTI-REGRESS RULES (86 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -457,6 +457,28 @@ grepped for "test files" while vitest prints "Test Files" and had been silently 
 Corollary: teeth-check a counter by breaking its INPUT, not by reading its output once · and if the check
 re-implements the logic instead of calling it, that is a second contract (Rule 45) and needs a drift guard
 until the real refactor lands.
+
+RULE 86 (T3 S38 · August 10 2026):
+THE TEST MOST LIKELY TO BE VACUOUS IS THE ONE YOU WROTE TO PREVENT THE WRONG FIX.
+Pinning sessionId stability, I added a counterweight so nobody could satisfy every stability assertion the
+cheap way · by deleting the cleanup that nulls it on room change, which would let one game's FinalScore
+write its ledger row against the previous game's session. The counterweight COULD NOT FAIL. It unmounted
+the hook and asserted that a FRESH renderHook read null · a new instance with its own useState(null), so it
+read null whether the cleanup ran or not. Deleting `setSession(null)` left it green. Fixed by keeping the
+SAME instance and changing the room underneath it.
+WHY THIS CLASS AND NOT ANOTHER: a counterweight is written last, exercised least, and its entire job is to
+fail in a scenario you are deliberately not creating · so it is the one assertion in the file that never
+gets to demonstrate it can. And a guard against the wrong fix that reports itself as PRESENT is worse than
+no guard: it retires the worry. The only instrument that finds it is mutation testing, and it finds it
+immediately · this cost one run and would otherwise have shipped as a green line nobody reread.
+COROLLARY, from the same session and the same family: an ordering that makes two measurements share state
+turns the second one into a plausible lie. Measuring the score screen at 320 straight after 1280 inherited
+the first pass's scrollTop, so "how far below the fold ON ARRIVAL" was read from a dialog somebody had
+already scrolled · 489px and 2 gestures instead of the true 1038px and 3. Reset the shared state between
+measurements, then check the two instruments AGREE (the in-test number now matches the standalone probe
+exactly). Sharpens Rule 63 (write the test that tells the truth) and Rule 82 (a probe can lie by being
+fast) with the dimension that a test can lie by being STRUCTURALLY UNABLE TO FAIL · and pairs with Rule 79d,
+which is the same thought one level up: a green workflow is not proof the spec executed.
 
 RULE 83 (T1 S38 · August 10 2026):
 "IT FITS" IS NOT A MEASUREMENT. WHEN A LAYOUT ABSORBS AN OVER-SUBSCRIPTION, ASK WHAT PAID FOR IT.
