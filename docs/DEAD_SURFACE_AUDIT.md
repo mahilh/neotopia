@@ -1,5 +1,47 @@
 # DEAD SURFACE AUDIT · every exported symbol with no shipping caller
 **T2 S38 · August 9 2026 · HEAD 26e8b55**
+**CORRECTED T2 S39 · two of five findings were wrong · see "The correction" below**
+
+> **Run it yourself:** `bash scripts/audit-dead-surface.sh`. S38 did this by hand and got two wrong.
+
+## The correction (T2 S39)
+
+**S38 scanned only `src/ api/ scripts/` and treated everything under `tests/` as noise. That is wrong
+in one specific way, and it produced two false findings.** A unit test calling a function proves
+nothing about whether the function is wanted · but **an E2E spec that runs in CI is a real consumer**,
+and deleting the symbol breaks the merge gate.
+
+| symbol | S38 said | actually |
+|---|---|---|
+| `factoryRefill` | dead · "coverage aimed at the wrong function" | **TEST-SUPPORT.** Driven by `flow-mode.e2e.js:123`, which runs on the merge gate. That spec's own comment notes `factoryRefill → refillFactoryDraft` is *the same code path* a factory-empty triggers, so testing it does exercise the real logic. **The S38 claim was overstated** · what is true is only that no *product* code calls it. |
+| `getFinalScore` | dead | **TEST-SUPPORT.** Consumed by `four-player-live.e2e.js:217` (merge gate) and `multiplayer-endgame-live.e2e.js:137` (nightly). |
+| `getLargestCluster` | dead | **Genuinely dead · DELETED in S39.** Nothing referenced it, not even a unit test. |
+| `getMyProfileStats` | dead | Driven by one CI spec, but still **never rendered to a user**. The user-facing gap stands. |
+| `useBonus` | dead | Still uncalled by product code. Blocked on T1's control, not abandoned. |
+
+**Two symbols S38 missed entirely**, found by the scripted version:
+- `getBiomeForRegion` (`src/lib/terrainBiomes.js:52`) · **zero references of any kind**, and its own file
+  comment asserts "T1 imports getBiomeForRegion(regionId) in the board layer." That consumer does not
+  exist. Likely orphaned when the painted board landed in S38. **T1's call** · not deleted.
+- `DIFFICULTY_SELECTABLE` (`botPolicy.js:28`) · **stays, and its unusedness is its meaning.** It is a
+  feature flag exported as `false` and pinned by a test. Same family as `BOT_OPPONENTS_READY`.
+
+And the tool bit me the way the S38 method bit me: on its first run it reported `factoryRefill` and
+`getFinalScore` as *used*, because **its own header comment names them as examples** and it was grepping
+itself. A plausible wrong answer from a probe · Rule 75b. Fixed by excluding the script from its own scan.
+
+## Verdicts, current
+
+| symbol | verdict |
+|---|---|
+| `useBonus` | KEEP · engine proven, blocked on T1's control |
+| `getMyProfileStats` | KEEP · escalate to T1 to render; data has been real since S38 |
+| `factoryRefill` | KEEP · test-support API on the merge gate |
+| `getFinalScore` | KEEP · consumed by two CI specs |
+| `DIFFICULTY_SELECTABLE` | KEEP · a decision pin; unused by design |
+| `getBiomeForRegion` | T1's call · comment claims a consumer that does not exist |
+| `getLargestCluster` | **DELETED** |
+
 
 ## Why this pass exists
 

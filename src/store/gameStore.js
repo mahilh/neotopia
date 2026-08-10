@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
-import { findBuildableCards, findLargestCluster, getClusterDetail as computeClusterDetail, getClusterTotal as computeClusterTotal, calculateFinalScore } from '../lib/patternMatcher'
+import { findBuildableCards, getClusterDetail as computeClusterDetail, getClusterTotal as computeClusterTotal, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
 import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig } from './gameConfig'
 
@@ -617,12 +617,14 @@ export const useGameStore = create(immer((set, get) => ({
     })
   },
 
-  // Computed: largest same-element cluster in a region (final-scoring helper).
-  getLargestCluster: (regionId, elementType) => {
-    const region = get().regions.find(r => r.id === regionId)
-    if (!region) return 0
-    return findLargestCluster(region.hexes, elementType)
-  },
+  // getLargestCluster was here and is DELETED (T2 S39 · dead-surface audit). Nothing called it: not
+  // product code, not a CI-gated E2E spec, not even a unit test · only its own definition and a comment
+  // in patternMatcher describing it. The engine function it wrapped, findLargestCluster, is still there
+  // and IS used · by getClusterDetail inside patternMatcher, which is where the one BFS lives (rule 10).
+  // Its import here went with it: deleting the wrapper left the import orphaned, which the test suite
+  // and the build both happily accepted. Removing a correct wrapper is
+  // safe precisely because the thing it wrapped is the one on the path. Re-add in one line if a caller
+  // ever appears · that is cheaper than leaving surface that has to be re-audited every few sessions.
 
   // Computed: per-region per-element cluster breakdown for the FinalScore visualization (T2 S17 · Task B).
   // Reads the SHARED board (regions · element-only, no per-hex placer → clusters are board-global) and
