@@ -153,7 +153,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (86 · cumulative):
+PERMANENT ANTI-REGRESS RULES (87 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -386,6 +386,29 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 87 (T1 S39 · August 10 2026):
+A REPORTED RANGE IS A SAMPLE, NOT A BOUNDARY · MEASURE PAST BOTH ITS EDGES BEFORE TRUSTING IT.
+The action-log overlap was carried for three sessions, by me, as a "480-600px" problem. It was
+480 to ~1200, and the WORST CASE SAT 20 PIXELS OUTSIDE THE BAND I WAS HANDED: at 620 it covered 31
+of the 57 play cells · 54% of the board · against 12 at the widest point anyone had looked at. The
+band was not wrong through carelessness; it was the honest report of one screenshot at one width,
+and a screenshot cannot know where a curve peaks. Ranges arrive attached to the observation that
+produced them, and the observation is almost never the extremum.
+WHY THE PEAK HID THERE, which is the transferable part: 620 is twenty pixels past the 600px
+breakpoint where the sidebar becomes a column again, so the board collapses while a fixed-width
+overlay goes on claiming the same 176px. DISCONTINUITIES ARE WHERE MAXIMA LIVE. Whatever the
+reported band is, the first widths to check are just outside it and just past every breakpoint in
+between · not the middle, which is where a uniform sample would put its effort.
+COROLLARY, the technique that made this affordable: one same-origin IFRAME whose width you sweep
+in a loop, measuring inside it. Thirteen viewport resizes become one call, the app lays out for
+real, and re-measuring after the fix is the same loop again. Cheap enumeration is what turns "I
+believe this is a 480-600 problem" into a table.
+AND THE SECOND-ORDER FINDING, worth as much as the first: `pointerEvents: none` had been protecting
+this overlay from criticism. Because it could not steal a click it was assumed harmless, when what
+it actually produced was cells that stayed CLICKABLE WHILE INVISIBLE · a player placing into and
+scoring hexes they cannot see. That is Rule 78 inverted: reachable but not perceivable, and the
+property that made it safe is what made it deniable.
 
 RULE 84 (T2 S38 · August 10 2026):
 A WELL-TESTED SYMBOL IS NOT A TESTED PATH. Ask what SHIPPING code calls it, not how many tests do.
