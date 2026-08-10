@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 // NeoTopia · fixed bottom action bar for the game screen.
 // T1 owns this file. Mobile-first · 44px touch targets · tabular-nums on all counts.
 // Left: whose turn it is · Center: 3 action dots (filled = used) · Right: bonus tokens + End Turn.
@@ -33,38 +35,43 @@ export default function ActionBar({
     ? playerName
     : isMyTurn ? 'Your turn' : `Waiting for ${playerName}`
 
-  // ── THE BAR MAY NEVER PUSH End Turn OFF THE SCREEN (T1 S37 · Rule 78b, fixed at the source) ──────
-  // MEASURED, and it was never a comfortable fit: at a 320px viewport holding ZERO bonus tokens this
-  // bar is exactly 320 of 320 wide, with End Turn's right edge at 300. It has no slack at all.
-  // Holding four tokens takes it to 587, putting End Turn 267px off the right edge of the phone.
-  // That is not a cosmetic defect. It is an UNWINNABLE GAME: a player who cannot reach End Turn
-  // cannot play, and auto-end only covers the case where they have no actions left.
-  // It has never happened because nothing in the product can grant a bonus token yet · T2 S37
-  // established that both granters read data nothing ever seeds. It goes live the day the bonus-hex
-  // data lands, so it is fixed BEFORE that rather than after.
-  // WRAPPING, not shrinking the tokens away: with tokens the right group drops to a second row and
-  // everything stays visible and reachable. Nothing is hidden and nothing is truncated.
-  const wrapping = bonusTokens.length > 0
+  // ── THIS BAR IS OVER-SUBSCRIBED, AND EVERY FIX HERE IS ABOUT WHO PAYS FOR THAT ──────────────────
+  // Its three groups want ~448px inside a 292px content box at 320. That is not "full", it is 156px
+  // short, and flex has always closed the gap by shrinking whatever can shrink.
+  //
+  // S37 · End Turn was the casualty once bonus tokens existed: four labelled pills put its right
+  //       edge 267px off the side of a phone. A player who cannot reach End Turn cannot play, and
+  //       auto-end-turn only rescues them once they have no actions left. Fixed by wrapping.
+  // S38 · but wrapping is paid for in HEIGHT: 64 -> 119 -> 183px as tokens arrive, so the full set
+  //       cost 119px of a 335px board on the smallest screen the game supports.
+  //       AND the deeper one, found by measuring instead of asking whether it fit: at 320 AND at
+  //       375, holding NO tokens, the status span rendered at 0.0px. "Waiting for Alice" · the
+  //       turn-ownership signal in a real room · has been absorbing the entire deficit and
+  //       disappearing, in shipped code, while I reported three sessions running that the bar fits.
+  //
+  // So: give the row its space back (index.css drops the "Actions" word and the timer's progress bar
+  // below 480px · ~133px, both decoration whose information survives elsewhere), and stop spending
+  // 266px on four pills. ONE CHIP says how many and which, by colour, in ~63px, and the detail moves
+  // into a panel that opens ON TAP · where it can say what each token actually does, instead of
+  // hiding it in a `title` attribute no touch device has ever shown anyone.
+  const [tokensOpen, setTokensOpen] = useState(false)
 
   return (
-    <footer style={{
-      flexShrink: 0, minHeight: 64,
+    <footer className="action-bar" style={{
+      flexShrink: 0, minHeight: 64, position: 'relative',
       borderTop: '1px solid rgba(255,255,255,0.06)',
       background: 'rgba(255,255,255,0.015)',
       display: 'flex', alignItems: 'center',
-      // WRAPPING IS CONDITIONAL, and the measurement is why. At 320 these three groups want 440px
-      // against a 292px content box · they have always overflowed, and flex has always handled it by
-      // SHRINKING them, which is why End Turn sat at 300 and on screen. Turning wrap on
-      // unconditionally replaced that shrink with a wrap: the no-token bar went from 64px to 89 and
-      // took 25px of board from every phone in use today, to solve a case no player can reach yet.
-      // So the bar keeps its exact current behaviour until a token exists, and only then wraps ·
-      // which is the one situation where shrinking is not enough and End Turn goes off the screen.
+      // Wrap is UNCONDITIONAL again, and that is the point. S37 had to gate it on holding a token,
+      // because turning it on for everyone replaced flex's shrink with a wrap and cost 25px of board
+      // on every phone. With the chip and the 133px returned to the row it never triggers at any
+      // supported width, so the safety net can be on permanently without ever being paid for · it is
+      // now what would happen INSTEAD of losing End Turn, rather than what happens.
       // columnGap/rowGap rather than `gap` + `rowGap`: React warns that mixing a shorthand with a
       // longhand for the same value during a rerender can silently drop one of them.
-      columnGap: wrapping ? 12 : 16,
-      rowGap: 8,
-      flexWrap: wrapping ? 'wrap' : 'nowrap',
-      padding: wrapping ? '6px 14px' : '0 20px',
+      columnGap: 16, rowGap: 8,
+      flexWrap: 'wrap',
+      padding: '0 20px',
     }}>
       {/* Turn-dot pulse when it IS your turn · the clearest human "act now" signal (reduced-motion safe). */}
       <style>{`
@@ -113,7 +120,9 @@ export default function ActionBar({
             }}>
               {Math.ceil(turnTimeRemaining)}s
             </span>
-            <div style={{ width: 52, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+            {/* The bar, not the number · hidden below 480px, where its 52px was being paid for out
+                of the player's name. The seconds beside it carry the same reading. */}
+            <div className="ab-timer-bar" style={{ width: 52, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
               <div style={{
                 height: '100%',
                 width: `${Math.max(0, Math.min(100, (turnTimeRemaining / turnTimeLimit) * 100))}%`,
@@ -127,7 +136,9 @@ export default function ActionBar({
 
       {/* CENTER · action dots (filled = used) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 auto' }}>
-        <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}>
+        {/* Hidden below 480px · the three dots and the number beside them say "actions" without
+            spending 67px of a 292px row on the word. */}
+        <span className="ab-actions-label" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}>
           Actions
         </span>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -163,25 +174,74 @@ export default function ActionBar({
           row would still overflow a 320px phone · the fix has to go all the way down to the strip. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
         {bonusTokens.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {bonusTokens.map((type, i) => {
-              const meta = BONUS_META[type] ?? { label: type, hint: type, color: '#888' }
-              return (
-                <span key={`${type}-${i}`} title={meta.hint} style={{
-                  height: 24, padding: '0 8px', borderRadius: 12,
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  background: `${meta.color}1A`, border: `1px solid ${meta.color}55`,
-                  color: meta.color, fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
-                  whiteSpace: 'nowrap',
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color }} />
-                  {meta.label}
-                </span>
-              )
-            })}
+          <div style={{ flexShrink: 0 }}>
+            <button
+              data-testid="bonus-chip"
+              data-bonus-count={bonusTokens.length}
+              aria-expanded={tokensOpen}
+              aria-label={`${bonusTokens.length} bonus ${bonusTokens.length === 1 ? 'token' : 'tokens'} · show what they do`}
+              onClick={() => setTokensOpen(o => !o)}
+              style={{
+                height: 44, minHeight: 44, padding: '0 10px', borderRadius: 10, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                border: `1px solid ${tokensOpen ? 'rgba(200,148,64,0.55)' : 'rgba(200,148,64,0.3)'}`,
+                background: tokensOpen ? 'rgba(200,148,64,0.12)' : 'rgba(200,148,64,0.06)',
+                color: 'rgba(200,148,64,0.95)', fontSize: 13, fontWeight: 600,
+                fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+              }}
+            >
+              {/* One dot per token, in its own colour · WHICH tokens you hold, at a glance, in the
+                  width a single label used to take. Capped at four because four is the whole set. */}
+              <span style={{ display: 'inline-flex', gap: 3 }}>
+                {bonusTokens.slice(0, 4).map((type, i) => (
+                  <span key={`${type}-${i}`} style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: (BONUS_META[type] ?? { color: '#888' }).color,
+                  }} />
+                ))}
+              </span>
+              {bonusTokens.length}
+            </button>
+
+            {tokensOpen && (
+              <div
+                data-testid="bonus-detail"
+                role="group"
+                aria-label="Bonus tokens"
+                style={{
+                  // ANCHORED TO THE BAR, NOT TO THE CHIP, and that is a measured correction. Pinned
+                  // to the chip with right:0 it was fine while the chip sat on the right · but once
+                  // the row wraps at 320 the chip starts at the LEFT of its own row, and the panel
+                  // ran from x=-159 to x=90: two thirds of it off the side of the phone. The footer
+                  // is always exactly as wide as the viewport, so anchoring here cannot escape it.
+                  position: 'absolute', bottom: 'calc(100% + 8px)', right: 12, zIndex: 40,
+                  width: 'max-content', maxWidth: 'calc(100vw - 24px)',
+                  padding: '10px 12px', borderRadius: 12,
+                  background: 'rgba(13,13,24,0.98)', border: '1px solid rgba(255,255,255,0.12)',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.55)',
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                }}
+              >
+                {bonusTokens.map((type, i) => {
+                  const meta = BONUS_META[type] ?? { label: type, hint: type, color: '#888' }
+                  return (
+                    <div key={`${type}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+                      <span style={{ color: meta.color, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, flexShrink: 0 }}>
+                        {meta.label}
+                      </span>
+                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, lineHeight: 1.45 }}>
+                        {meta.hint}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
         <button
+          className="ab-end-turn"
           data-testid="end-turn-btn"
           onClick={onEndTurn}
           disabled={!canEndTurn}

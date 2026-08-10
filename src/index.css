@@ -52,6 +52,33 @@
   .action-log-wrap { display: none; }
 }
 
+/* ── THE ACTION BAR IS OVER-SUBSCRIBED, AND THE PLAYER'S NAME WAS PAYING FOR IT (T1 S38) ────────
+   MEASURED in the browser at 320 AND at 375, on shipped code, with zero bonus tokens:
+       left group  17.4px wide, clipped   ·  the status span itself 0.0px
+       "Waiting for Alice" / "Your turn"  ·  RENDERED AT ZERO WIDTH, at both phone sizes
+   The bar's three groups want ~448px inside a 292px content box. Flex resolves that by shrinking,
+   and the status text is the only thing in the row that CAN shrink · the timer, the dots and the
+   button are all fixed · so it absorbed the entire 156px deficit on its own and disappeared. In a
+   real room that line is the turn-ownership signal, so multiplayer has been running without it.
+   I have measured this bar three sessions running and reported "it fits" every time, because End
+   Turn was on screen and I never asked what paid for it. (Rule 81.)
+   THE FIX IS TO REMOVE DEMAND, not to fight over the remainder. Two things go below 480px, both
+   decoration whose information survives elsewhere: the word "Actions" (the three dots and the
+   number next to them say it) and the timer's progress bar (the seconds count is the reading; the
+   bar is a second rendering of the same number). Together ~133px, which is the deficit. */
+@media (max-width: 479px) {
+  .ab-actions-label { display: none; }
+  .ab-timer-bar { display: none; }
+  /* Dropping those two got the row from 448 to 312.8 against a 280px box · MEASURED, and still 33
+     short, which is a two-row bar. The last 33 come out of chrome rather than content: the side
+     padding, the gaps between the groups, and End Turn's generous 22px inner padding, none of which
+     is information. !important because these are inline styles on the component (the same override
+     the game-header rules above use). At 4 tokens the row still wraps and that is the right answer ·
+     73px instead of S37's 183px, and nothing hidden. */
+  .action-bar { padding: 0 12px !important; column-gap: 10px !important; }
+  .ab-end-turn { padding: 0 14px !important; }
+}
+
 /* ── The instruction line gets its own row before it can crowd the wordmark (T1 S30) ──────
    Measured collision widths: 320→43px, 375→31px, 414→23px, 600→36px, clear from 768. The old
    absolutely-centred line ALSO clipped ("Click a factory to take an ele…") at every one of those.
