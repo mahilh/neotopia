@@ -57,6 +57,12 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
      0.23, and noise helps the underdog. INSIDE the 10-point tripwire, so no rebalance recommended.
      RE-RUN THIS when a control for useBonus ships · every token measured was UNSPENT, and a spendable
      token is a decision, which rewards skill rather than diluting it. The sign may invert.
+     ✅ AND THE GUARD NOW SAYS SO ITSELF (T2 S40 · 29ba6f0) · bonusBalance.test.js asserts its own two
+     premises, not just its number: (A) no product code invokes useBonus, so the measured term is a flat
+     constant · this fires the day T1 ships the control, and the failure message says RE-RUN rather than
+     revert; (B) no bot decision code reads bonus state, so seeding changes scoring only and the control
+     is EXACT. B is the dangerous one · it breaks silently, changes no number, and downgrades
+     one-game-scored-twice into two different games. Teeth proven by 3 mutations, not by a passing run.
      STILL OPEN, neither guessed: (a) the HEX granter needs Mahil's bonus-hex (q,r) and is the only route
      to the fourth token 'automatization' · see docs/BONUS_HEX_DATA_REQUEST.md, every coordinate
      enumerated · (b) NOTHING CALLS useBonus, so every token earned is unspent and scores its rulebook
@@ -394,6 +400,28 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 91 (T2 S40 · August 10 2026):
+AN INCIDENTAL POSITION IN A DATA STRUCTURE GETS READ AS A SEMANTIC FIELD, AND THE READING SURVIVES
+BECAUSE IT IS RIGHT ABOUT HALF THE TIME. A card rename pass arrived with four element corrections
+derived from `pattern[0].type` · treated throughout as "the card's element". It is not a field. It is
+whatever tile happens to sit at (q:0, r:0), the pattern's origin, and the engine assigns it no meaning
+at all. Computed against the whole pattern it disagrees with or ties the majority element on 24 OF 56
+CARDS. Two of the four "corrections" were therefore shaky and one was simply wrong in a new direction:
+card_55 was moved off biofarming (correct, it is not biofarming) onto technology (also not · the card
+is community 2, everything else 1). card_48 is a perfect 1/1/1/1 four-way tie on a card whose own
+description reads "Where all four forces agree", so naming it for its origin hex contradicts its text.
+WHY IT SURVIVED, and this is the transferable half: a positional proxy is not random, it is CORRELATED ·
+anchor and majority agreed on 32 of 56, so every spot-check anybody ever ran confirmed it. A proxy that
+was wrong every time would have been caught the first day. Ask whether the thing you are reading is a
+DECLARED field or a position you have interpreted, and if it is a position, compute the real quantity
+over the whole structure once · it cost one node -e here and the disagreement rate was the answer.
+COROLLARY, paid for in the same document: I then attributed four description lines to card ids by
+reading line numbers against the nearest heading I remembered, and got THREE OF FOUR WRONG (card_25 not
+24, card_34 not 30, card_50 not 51) · which would have sent someone editing three innocent cards. Walk
+the file and track the enclosing record. Rule 81 in the cheapest possible costume: the check was four
+lines of node and I nearly shipped the recollection instead. Sharpens Rule 73 (ask whether a term can
+even matter) with its sibling · ask whether a key means what its name suggests.
 
 RULE 90 (T3 S39 · August 10 2026):
 WRITE THE COUNTERWEIGHT FIRST · IT IS THE ONE ASSERTION THAT NEVER GETS TO DEMONSTRATE IT CAN FAIL.
