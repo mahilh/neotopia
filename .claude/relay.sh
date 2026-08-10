@@ -139,9 +139,9 @@ printf "\n-- ANTI-REGRESS RULE COUNT -------------------------------------\n"
 # would keep reporting 69 no matter how many more were added, because every new rule uses the second
 # form. A counter that is frozen at a plausible number is worse than one that is obviously broken.
 # Count the union of both forms as a SET of numbers, so a duplicate cannot inflate it.
-RULE_COUNT=$(grep -oE "^ *(RULE )?[0-9]+[.( ]" .claude/CLAUDE.md 2>/dev/null \
+RULE_COUNT=$(grep -oE "^(  [0-9]+\.|RULE [0-9]+ )" .claude/CLAUDE.md 2>/dev/null \
   | grep -oE '[0-9]+' | sort -n -u | wc -l | tr -d ' ')
-RULE_MAX=$(grep -oE "^ *(RULE )?[0-9]+[.( ]" .claude/CLAUDE.md 2>/dev/null \
+RULE_MAX=$(grep -oE "^(  [0-9]+\.|RULE [0-9]+ )" .claude/CLAUDE.md 2>/dev/null \
   | grep -oE '[0-9]+' | sort -n | tail -1)
 [ -z "$RULE_COUNT" ] || [ "$RULE_COUNT" = "0" ] && RULE_COUNT="UNMEASURED"
 echo "${RULE_COUNT} permanent rules in CLAUDE.md (highest number: ${RULE_MAX:-none})"

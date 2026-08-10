@@ -13,16 +13,33 @@ check() { # name expected actual
   else echo "  TEETH FAIL $1 -> got '$3', wanted '$2'"; fail=$((fail+1)); fi
 }
 
-# 1 · RULES · the old regex frozen at 69, and a CLAUDE.md that is gone entirely.
-cp .claude/CLAUDE.md "$W/rules-ok.md"
-grep -v '^RULE ' .claude/CLAUDE.md > "$W/rules-headers-lost.md"   # simulate the OLD list-only reading
-rc() { grep -oE "^ *(RULE )?[0-9]+[.( ]" "$1" 2>/dev/null | grep -oE '[0-9]+' | sort -n -u | wc -l | tr -d ' '; }
-rm_() { grep -oE "^ *(RULE )?[0-9]+[.( ]" "$1" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1; }
-check "rules · intact"            "78"  "$(rc "$W/rules-ok.md")"
-check "rules · headers deleted"   "69"  "$(rc "$W/rules-headers-lost.md")"
-# and the gap detector must FIRE on that mutant (count 69 != max 69? no · max also drops).
-# The sharper mutant: delete rule 50 from the middle so count and max disagree.
-grep -v '^  50\. ' .claude/CLAUDE.md > "$W/rules-gap.md"
+# 1 · RULES · both formats, a frozen reader, a gap, and prose that merely looks numeric.
+# FIXTURE, not a copy of the live CLAUDE.md. The first draft copied the real file and pinned "78";
+# adding two rules an hour later broke the test for a reason that had nothing to do with the counter.
+# A gate that goes red when the thing it watches legitimately changes trains people to ignore it.
+rc() { grep -oE "^(  [0-9]+\.|RULE [0-9]+ )" "$1" 2>/dev/null | grep -oE '[0-9]+' | sort -n -u | wc -l | tr -d ' '; }
+rm_() { grep -oE "^(  [0-9]+\.|RULE [0-9]+ )" "$1" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1; }
+{ printf '  1.  first rule\n  2.  second rule\n  3.  third rule\n'
+  printf 'RULE 4 (T2 S37 · a block-header rule)\n'
+  printf 'RULE 5 (T2 S37 · another one)\n'
+} > "$W/rules-ok.md"
+check "rules · both formats counted"  "5"  "$(rc "$W/rules-ok.md")"
+check "rules · highest is 5"          "5"  "$(rm_ "$W/rules-ok.md")"
+
+# THE HISTORICAL BUG: a reader that knows only the indented list form freezes at 3 and never sees
+# rules 4 and 5, which is exactly how the relay sat at 69 while CLAUDE.md carried 78.
+old_rc() { grep -c '^  [0-9][0-9]*\.' "$1" 2>/dev/null || echo 0; }
+check "rules · OLD reader is blind to headers" "3" "$(old_rc "$W/rules-ok.md")"
+
+# PROSE THAT LOOKS LIKE A RULE NUMBER. My own first fix matched "^ *[0-9]+[.( ]", so an indented line
+# beginning "320 at its narrowest viewport" counted as rule 320 and the max jumped to 320. The gap
+# detector caught it, which is the only reason it is not shipped · pinned here so it cannot come back.
+{ cat "$W/rules-ok.md"; printf '     320 at its narrowest viewport with zero tokens\n     2055 (the year)\n'; } > "$W/rules-prose.md"
+check "rules · prose is not a rule"   "5"  "$(rc "$W/rules-prose.md")"
+check "rules · prose does not raise the max" "5" "$(rm_ "$W/rules-prose.md")"
+
+# A GAP: delete rule 2 so the count and the highest number disagree.
+grep -v '^  2\.' "$W/rules-ok.md" > "$W/rules-gap.md"
 G_C=$(rc "$W/rules-gap.md"); G_M=$(rm_ "$W/rules-gap.md")
 if [ "$G_C" != "$G_M" ]; then echo "  TEETH OK   rules · gap detector fires ($G_C != $G_M)"; pass=$((pass+1));
 else echo "  TEETH FAIL rules · gap detector silent"; fail=$((fail+1)); fi
@@ -72,7 +89,7 @@ for pat in \
   'outputFile.json' \
   'numPassedTests' \
   'scripts/migrations migrations supabase/migrations' \
-  'RULE )?\[0-9\]+' \
+  "RULE [0-9]+ " \
   'public/art/cards does not exist'
 do
   if grep -qF -- "$(printf '%s' "$pat" | sed 's/\\//g')" "$R" 2>/dev/null || grep -qE -- "$pat" "$R" 2>/dev/null; then
