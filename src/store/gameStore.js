@@ -42,12 +42,33 @@ export function shuffleArray(arr) {
 
 // Region centers in the global axial frame (per CLAUDE.md). The first element placed
 // in an empty region must land on its center; later ones must touch an existing element.
-// bonusPile = this region's stack of bonus tokens awarded when the score marker crosses a
-// threshold (top = index 0). Seeded EMPTY · fill from rulebook data in initGame once it exists.
+// bonusPile = the bonus tokens this region awards when a player's score marker crosses a threshold.
+// SEEDED FROM THE RULEBOOK (T2 S38 · docs/NEOTOPIA_GAME_RULEBOOK.md:115-125), which names a specific
+// token per threshold rather than a shuffled stack:
+//     7  Soul Crystal (carnelian)  · Government Subsidy   → 'subsidy'
+//     13 Heart Crystal (rose quartz) · Private Initiative → 'initiative'
+//     18 Amethyst Crown           · New Building Permits  → 'permits'
+// It sat EMPTY from S15 to S38, which is why no player has ever held a bonus token: the granter in
+// scoreCard was correct and had nothing to give. This is real data from the repo's own rulebook, not
+// invented · rule 32 forbids baking guessed game data and this is not guessed.
+//
+// The FOURTH type, 'automatization', is NOT a score-track reward. It comes from the bonus HEXES printed
+// on the board, and their (q,r) coordinates are the item still outstanding from Mahil. That layer stays
+// unwired rather than approximated.
+//
+// `claimed` rather than removal, so the pile stays a stable-length record of what a region offers and
+// what has gone · a shift() would make "this region has no 18-token left" indistinguishable from
+// "this region never had one". Plain JSON, so it survives the broadcast round trip (rule 22).
+const createRegionBonusPile = () => [
+  { threshold: 7, type: 'subsidy', claimed: false },
+  { threshold: 13, type: 'initiative', claimed: false },
+  { threshold: 18, type: 'permits', claimed: false },
+]
+
 const createInitialRegions = () => [
-  { id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: [] },
-  { id: 1, name: 'Living Earth', center: { q: 8, r: -4 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: [] },
-  { id: 2, name: 'Free Energy', center: { q: 4, r: 5 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: [] },
+  { id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: createRegionBonusPile() },
+  { id: 1, name: 'Living Earth', center: { q: 8, r: -4 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: createRegionBonusPile() },
+  { id: 2, name: 'Free Energy', center: { q: 4, r: 5 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: createRegionBonusPile() },
 ]
 
 // Six axial neighbor directions (flat-top), shared by placement-adjacency checks.
@@ -382,12 +403,30 @@ export const useGameStore = create(immer((set, get) => ({
       p.scoredCardIds.push(cardId)
       r.lastBuiltIllustration = card.illustration
 
-      // Bonus earn: each score-track threshold newly crossed awards the TOP of this region's
-      // bonus pile (rulebook: deterministic top-of-pile · NOT random). Pile is empty until
-      // initGame seeds it from rulebook data, so this is a no-op until that data lands.
+      // Bonus earn (T2 S38 · this granter had never run, because the pile was always empty).
+      //
+      // AWARD BY THRESHOLD, NOT BY STACK TOP. The old code did `bonusPile.shift()` on any crossing,
+      // which is only correct while exactly one player ever crosses anything. The rulebook
+      // (docs/NEOTOPIA_GAME_RULEBOOK.md:115-125) maps each threshold to a SPECIFIC token · 7 Government
+      // Subsidy, 13 Private Initiative, 18 New Building Permits · so with a stack, the second player to
+      // cross 7 in a region would have been handed the 13-token. Matching the crossing to its own entry
+      // is following the source; the stack was the guess.
+      //
+      // Each entry is claimable ONCE per region, which preserves the scarcity the shift() implied: the
+      // first player to reach 7 in Sacred City takes its Subsidy and nobody else can.
+      // OPEN QUESTION FOR MAHIL, deliberately not guessed: whether the physical game has one token per
+      // threshold per region (what this does) or one per threshold PER PLAYER. Flagged in comms · the
+      // difference only shows up in a game where two players both cross the same threshold in one region.
+      //
+      // A single card can cross two thresholds at once (5 -> 15 takes both 7 and 13). That is intended
+      // and the loop already handled it.
       for (const t of SCORE_THRESHOLDS) {
-        if (prevScore < t && p.scores[regionId] >= t && r.bonusPile?.length > 0) {
-          p.bonusTokens.push(r.bonusPile.shift())
+        if (prevScore < t && p.scores[regionId] >= t) {
+          const i = r.bonusPile?.findIndex(b => b.threshold === t && !b.claimed) ?? -1
+          if (i >= 0) {
+            r.bonusPile[i].claimed = true
+            p.bonusTokens.push(r.bonusPile[i].type)
+          }
         }
       }
 

@@ -402,33 +402,47 @@ describe('bonus earn paths (cover-hex + score-threshold)', () => {
     expect(s.players[0].bonusTokens).toEqual(['subsidy'])
   })
 
-  test('tryScoreCard awards the top bonus-pile token when the score crosses a threshold (7)', () => {
+  // REWRITTEN T2 S38. Both tests below pinned the OLD contract: a bonusPile of plain strings, awarded
+  // by shift() so any crossing took whatever was on top. The pile is now seeded from the rulebook as
+  // {threshold, type, claimed} and a crossing is matched to ITS OWN threshold · because with a stack the
+  // second player to cross 7 in a region receives the 13-token, a strictly better prize for a lower
+  // achievement. These are updated to the new truth rather than the engine reverted to keep them green.
+  test('tryScoreCard awards the token belonging to the threshold that was crossed (7 -> subsidy)', () => {
     useGameStore.setState({
       currentSeat: 0,
       bonusUsedThisTurn: false,
       players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [solarGarden], bonusTokens: [], scores: [6, 0, 0] }],
-      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {}, bonusPile: ['automatization'] }],
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {},
+        bonusPile: [{ threshold: 7, type: 'subsidy', claimed: false }, { threshold: 13, type: 'initiative', claimed: false }] }],
     })
     expect(useGameStore.getState().tryScoreCard(0, 'card_01', 0, '1,0')).toBe(true)
     const s = useGameStore.getState()
     expect(s.players[0].scores[0]).toBe(8) // 6 + 2 · crosses 7
-    expect(s.players[0].bonusTokens).toEqual(['automatization'])
-    expect(s.regions[0].bonusPile).toEqual([]) // top token consumed
+    expect(s.players[0].bonusTokens).toEqual(['subsidy'])
+    expect(s.regions[0].bonusPile[0].claimed, 'the 7 entry is spent').toBe(true)
+    expect(s.regions[0].bonusPile[1].claimed, 'the 13 entry is untouched').toBe(false)
   })
 
-  test('crossing two thresholds (7 and 13) in one score awards two tokens, in pile order', () => {
-    const bigCard = line2pt('mega', 7) // synthetic 7pt card · jumps the marker past both 7 and 13
+  test('a synthetic 7pt card crossing 7 AND 13 takes exactly those two tokens, not the top two', () => {
+    // Kept as a synthetic card ON PURPOSE, and it is worth saying why: the real deck tops out at 5
+    // points and the cheapest double crossing needs 7, so this cannot happen in a shipped game today
+    // (proven in bonusTokens.test.js). The granter's loop handles it anyway, and this pins that the
+    // handling is correct if a bigger card or a re-spaced score track ever makes it reachable.
+    const bigCard = line2pt('mega', 7)
     useGameStore.setState({
       currentSeat: 0,
       bonusUsedThisTurn: false,
       players: [{ seat: 0, userId: 'u', username: 'P', color: 'blue', hand: [bigCard], bonusTokens: [], scores: [6, 0, 0] }],
-      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {}, bonusPile: ['subsidy', 'permits', 'initiative'] }],
+      regions: [{ id: 0, name: 'SC', center: { q: 0, r: 0 }, hexes: { '0,0': { element: 'energy' }, '1,0': { element: 'energy' } }, lastBuiltIllustration: null, scores: {},
+        bonusPile: [{ threshold: 7, type: 'subsidy', claimed: false }, { threshold: 13, type: 'initiative', claimed: false }, { threshold: 18, type: 'permits', claimed: false }] }],
     })
     expect(useGameStore.getState().tryScoreCard(0, 'mega', 0, '1,0')).toBe(true)
     const s = useGameStore.getState()
     expect(s.players[0].scores[0]).toBe(13) // 6 + 7 · crosses 7 AND 13 (not 18)
-    expect(s.players[0].bonusTokens).toEqual(['subsidy', 'permits']) // top two, in order
-    expect(s.regions[0].bonusPile).toEqual(['initiative'])
+    // The OLD contract said 'subsidy','permits' here · the top two of a stack, one of which belongs to
+    // a threshold this score never reached. That is the bug, written down.
+    expect(s.players[0].bonusTokens).toEqual(['subsidy', 'initiative'])
+    expect(s.regions[0].bonusPile.map(b => b.claimed)).toEqual([true, true, false])
   })
 })
 
