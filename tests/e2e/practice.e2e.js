@@ -597,12 +597,16 @@ test.describe('practice mode · the end of the game', () => {
   // same opponents. The board is played forward first so that "a new table" is distinguishable from "the same
   // one resumed" · a fresh deal is at turn 1 on an empty board, and this one will not be.
   test('"Play Again" on a practice score screen deals another practice game · not the multiplayer lobby', async ({ page }) => {
-    test.setTimeout(150_000)
+    // Budgeted for a CI runner, not for this laptop. The board reaches the target in ~15s locally; the gate
+    // T2 wired this into (e2e.yml) runs on a 2-core GitHub runner where every bot turn and every one of the
+    // human's three offer clicks costs more, and a budget set from a local measurement is the classic way to
+    // hand somebody else a flaky gate.
+    test.setTimeout(200_000)
     await page.goto('/practice?bots=1')
     await boardReady(page)
 
     const { snapshot: mid } = await playUntil(page, s => s.placed >= 4 && s.turnNumber >= 3, {
-      budgetMs: 75_000,
+      budgetMs: 120_000,
       label: 'a board far enough along that a fresh deal is unmistakable',
     })
 
