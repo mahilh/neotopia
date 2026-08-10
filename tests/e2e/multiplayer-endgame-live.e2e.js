@@ -27,8 +27,10 @@
 //   is infeasible in a browser E2E · two-human.e2e.js has said so since S7. The engine plays them instead,
 //   which is the same code, and the browsers render and RECORD the result, which is the part under test.
 //
-// COST · 2 anonymous sign-ins (one per human) + 1 for the suite's globalTeardown. Nightly-class, never the
-// merge gate. The ENGINE test above it costs nothing and runs anywhere.
+// COST · 2 anonymous sign-ins per LIVE test, and there are two of them, so 4 per run + 1 for the suite's
+// globalTeardown. Nightly-class, never the merge gate. The ENGINE test costs nothing and runs anywhere.
+// It was 2 until S38, when the single live test was split in half · see the note on stageFinishedRoom for
+// why paying for a second staged room is the right trade rather than a wasteful one.
 // Run locally:  npm run test:e2e -- multiplayer-endgame-live
 //
 // ⚠ RUN IT AGAINST A DEV SERVER NOBODY ELSE IS EDITING. On the shared localhost:5173 this failed four times
@@ -224,6 +226,29 @@ const readScoreLines = (page) => page.evaluate(() => {
 
 const sortedNums = (a) => [...a].sort((x, y) => x - y)
 
+// The live game_sessions id for a room · read through the app's own authenticated client, own room.
+const readSessionId = (page, roomId) => page.evaluate(async (rid) => {
+  const m = await import('/src/lib/supabase.js')
+  const { data } = await m.supabase.from('game_sessions').select('id').eq('room_id', rid).maybeSingle()
+  return data?.id ?? null
+}, roomId)
+
+// Does the game_end audit row exist yet? award_game_win recomputes the winner FROM that row, so a seat that
+// asks before it lands gets 'no_game_end' and credits nobody. Being able to ask this question directly is
+// what lets the win be asserted without racing · see the note on the win test.
+const readGameEndRows = (page, sessionId) => page.evaluate(async (sid) => {
+  const m = await import('/src/lib/supabase.js')
+  const { data, error } = await m.supabase
+    .from('game_events').select('id').eq('session_id', sid).eq('event_type', 'game_end').limit(5)
+  return { rows: data?.length ?? 0, error: error?.message ?? null }
+}, sessionId)
+
+// Ask for the win credit through the app's OWN exported function, from this page's own session.
+const callAwardGameWin = (page, sessionId) => page.evaluate(async (sid) => {
+  const m = await import('/src/lib/supabase.js')
+  return m.awardGameWin(sid)
+}, sessionId)
+
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════
 test.describe('the end of a real multiplayer game · the four writes nobody has watched', () => {
 
@@ -270,154 +295,178 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
   })
 
   // ── THE EXPENSIVE ONE ──────────────────────────────────────────────────────────────────────────────────
+  // ── THE SHARED STAGE ────────────────────────────────────────────────────────────────────────────────────
+  // Two real humans, a real room, a complete engine game delivered over the real wire, both score screens up.
+  //
+  // WHY A HELPER AND NOT ONE BIG TEST (T3 S38). The previous version of this file did all of it plus TWO
+  // independent claims in a single test, and the page reload in the middle served both of them: it measured
+  // the Global Index double-count AND it remounted FinalScore so the win credit was deterministic. Two claims
+  // riding one gesture. The moment somebody gives increment_neotopia_index an idempotency key the first claim
+  // inverts while the second still silently depends on the reload happening, and the next reader has to
+  // reconstruct which claim the line was for. That is the second-contract shape (Rule 45) in a test file.
+  // The honest cost of splitting is a second pair of anonymous sign-ins per nightly run · 4 rather than 2,
+  // against a 150/hour ceiling · and that is the correct price for two claims that can fail independently.
+  async function stageFinishedRoom(browser) {
+    const ctx1 = await browser.newContext()
+    const ctx2 = await browser.newContext()
+    const p1 = await ctx1.newPage() // host · seat 0 · writes the game_end audit row
+    const p2 = await ctx2.newPage() // joiner · seat 1
+    const pages = { host: p1, joiner: p2 }
+
+    // Watch BOTH tabs for the whole game. The console lines are the ones FinalScore emits under Rule 61 ·
+    // they carry the live sessionId and the award STATUS, which is the difference between a credited win
+    // and a success string over a zero-row write.
+    const logs = { host: [], joiner: [] }
+    const rpcs = { host: [], joiner: [] }
+    // EVERY non-2xx from Supabase, for the whole run. Three consecutive runs of this spec once failed at
+    // three DIFFERENT points in the lobby loop, and a Playwright locator timeout describes all three
+    // identically ("element not found"), which is the least informative true statement available. The
+    // backend's own refusals distinguish a rate limit from an RLS rejection from a genuine product bug.
+    const httpErrors = { host: [], joiner: [] }
+    for (const [who, page] of Object.entries(pages)) {
+      page.on('console', (m) => {
+        const t = m.text()
+        if (/\[NeoTopia\]/.test(t)) logs[who].push(t)
+      })
+      // RESPONSES, not requests. "The RPC fired" and "the RPC succeeded" are different claims, and a run of
+      // this spec once showed both counters flat with every call present · which a request-only listener
+      // reports as "everything fired", the most misleading possible summary.
+      page.on('response', (r) => {
+        const m = /\/rest\/v1\/rpc\/([a-z_]+)/.exec(r.url())
+        if (m) rpcs[who].push(`${m[1]}:${r.status()}`)
+        if (r.status() >= 400 && /supabase\.co/.test(r.url())) {
+          httpErrors[who].push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}${new URL(r.url()).search}`)
+        }
+      })
+    }
+
+    const stage = {
+      p1, p2, pages, logs, rpcs, httpErrors,
+      roomId: null, hostSession: null, sessionId: null, game: null, uids: null, before: null,
+      async dispose() {
+        console.log('[mp-endgame] http errors', JSON.stringify(httpErrors))
+        await ctx1.close()
+        await ctx2.close()
+        // The room is BROWSER-owned, so it is deleted as the host with the host's own session · no service
+        // role. One statement cascades away room_players + game_sessions + game_events (migration 005).
+        await deleteRoomAsHost(stage.hostSession, stage.roomId)
+      },
+    }
+
+    // ── [1] THE REAL LOBBY LOOP ──────────────────────────────────────────────────────────────────────────
+    await claimName(p1, uniqueName('E2EMH'))
+    await p1.getByRole('button', { name: 'Create Room' }).click({ timeout: 15_000 })
+    const code = await readRoomCode(p1)
+
+    await claimName(p2, uniqueName('E2EMG'))
+    await p2.getByRole('button', { name: 'Join Room' }).click({ timeout: 15_000 })
+    await p2.getByPlaceholder('ABC234').fill(code)
+    await p2.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15_000 })
+
+    // expect().toBeVisible(), NOT locator.isVisible(): isVisible is a POINT-IN-TIME check that ignores the
+    // timeout option entirely, so the first draft of this guard answered microseconds after the click and
+    // reported the product had failed. A probe that returns instantly to a question about waiting has not
+    // answered it (Rule 82).
+    const ready = p2.getByRole('button', { name: /click when ready/i })
+    try {
+      await expect(ready).toBeVisible({ timeout: 25_000 })
+    } catch {
+      const screen = await p2.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 500))
+      throw new Error(`the joiner never reached the waiting room after joining "${code}" · screen: ${screen}`)
+    }
+    await ready.click({ timeout: 10_000 })
+
+    const startBtn = p1.getByRole('button', { name: /^start game$/i })
+    await expect(startBtn, 'presence never converged · the host could not start').toBeVisible({ timeout: 30_000 })
+    await startBtn.click()
+
+    await p1.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 20_000 })
+    await p2.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 20_000 })
+    await expect(p1.locator(BOARD)).toBeVisible({ timeout: 20_000 })
+    await expect(p2.locator(BOARD)).toBeVisible({ timeout: 20_000 })
+    stage.roomId = new URL(p1.url()).pathname.split('/').pop()
+    stage.hostSession = await p1.evaluate(() => localStorage.getItem('neotopia-auth'))
+
+    const uids = { host: await authUid(p1), joiner: await authUid(p2) }
+    expect(uids.host, 'the host has no persisted anon identity').toBeTruthy()
+    expect(uids.joiner, 'the joiner has no persisted anon identity').toBeTruthy()
+    expect(uids.host).not.toBe(uids.joiner)
+    stage.uids = uids
+
+    // ── [2] THE BASELINE, READ BEFORE ANYTHING CAN MOVE IT ───────────────────────────────────────────────
+    // Two brand-new anonymous humans. If these are not 0/0 the increments below prove nothing, so the
+    // baseline is asserted rather than merely recorded.
+    const before = { host: await readMyStats(p1), joiner: await readMyStats(p2) }
+    console.log('[mp-endgame] baseline', JSON.stringify(before))
+    for (const who of ['host', 'joiner']) {
+      expect(before[who], `${who} has no player_profiles row · claimUsername did not run`).toBeTruthy()
+      expect(before[who].gamesPlayed, `${who} is not a fresh identity`).toBe(0)
+      expect(before[who].gamesWon, `${who} is not a fresh identity`).toBe(0)
+    }
+    stage.before = before
+
+    // ── [3] PLAY THE WHOLE GAME WITH THE REAL ENGINE, KEYED TO THESE TWO REAL IDENTITIES ─────────────────
+    // Bounded retry for a game whose cluster scores differ AND whose seat 0 built something · the engine
+    // test above proves both are the overwhelmingly common case, so this guards against an unlucky draw,
+    // it does not go searching for a lucky fixture.
+    let game = null
+    for (let attempt = 0; attempt < 6 && !game; attempt++) {
+      const g = playCompleteTwoPlayerGame([
+        { userId: uids.host, username: 'Host' },
+        { userId: uids.joiner, username: 'Joiner' },
+      ])
+      const hostBuilt = (g.state.players[0].scoredCardIds?.length ?? 0) > 0
+      if (g.phase === 'scoring' && g.clusters[0] !== g.clusters[1] && hostBuilt) game = g
+    }
+    expect(game, 'six finished games in a row failed the fixture conditions · either the cluster term has ' +
+      'gone board-global again or the engine is not reaching scoring').toBeTruthy()
+    console.log(`[mp-endgame] engine game · turns ${game.turns} · placed ${game.totalPlacements} ` +
+      `· districts ${game.totalBuilt} · clusters ${JSON.stringify(game.clusters)} ` +
+      `· totals ${JSON.stringify(game.totals)}`)
+    stage.game = game
+
+    // ── [4] DELIVER IT THROUGH THE REAL WIRE ─────────────────────────────────────────────────────────────
+    // One UPDATE by a real member, using the app's OWN authenticated client, with the same column mapping
+    // useGameSync.pushState uses · including 'scoring' → 'finished', because the column's CHECK rejects the
+    // store's terminal phase outright and an un-mapped write 400s the whole row. The jsonb `state` still
+    // carries the true store phase, which is what syncFromServer reads.
+    const writeErr = await p1.evaluate(async ({ roomId, state }) => {
+      const m = await import('/src/lib/supabase.js')
+      const { error } = await m.supabase.from('game_sessions').update({
+        state,
+        current_seat: state.currentSeat,
+        turn_number: state.turnNumber,
+        actions_remaining: state.actionsRemaining,
+        production_tiles_remaining: state.productionTilesRemaining,
+        phase: 'finished',
+      }).eq('room_id', roomId)
+      return error ? `${error.code ?? ''} ${error.message}` : null
+    }, { roomId: stage.roomId, state: game.state })
+    expect(writeErr, 'the finished state could not be written to game_sessions').toBeNull()
+
+    // Both tabs must arrive at the record on their OWN, from the subscription · nothing is dispatched into
+    // them. That is the claim: the terminal phase reached two real clients over the wire.
+    for (const [who, page] of Object.entries(pages)) {
+      await expect(page.getByRole('dialog', { name: /final civilization record/i }),
+        `${who} never rendered the civilization record after the finished state landed`)
+        .toBeVisible({ timeout: 30_000 })
+    }
+
+    stage.sessionId = await readSessionId(p1, stage.roomId)
+    expect(stage.sessionId, 'no game_sessions row is readable for this room').toBeTruthy()
+    return stage
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════
   test('two real humans finish a real room · the ledger, the win, and two different cluster scores on screen',
     async ({ browser }) => {
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(240_000)
 
-      const ctx1 = await browser.newContext()
-      const ctx2 = await browser.newContext()
-      const p1 = await ctx1.newPage() // host · seat 0 · writes the game_end audit row
-      const p2 = await ctx2.newPage() // joiner · seat 1
-      const pages = { host: p1, joiner: p2 }
-
-      // Watch BOTH tabs for the whole game. The console lines are the ones FinalScore emits under Rule 61 ·
-      // they carry the live sessionId and the award STATUS, which is the difference between a credited win
-      // and a success string over a zero-row write.
-      const logs = { host: [], joiner: [] }
-      const rpcs = { host: [], joiner: [] }
-      // EVERY non-2xx from Supabase, for the whole run. Three consecutive runs of this spec failed at three
-      // DIFFERENT points in the lobby loop · a room code that never rendered, a join that never advanced ·
-      // and a Playwright locator timeout describes all three identically ("element not found"), which is
-      // the least informative true statement available. The backend's own refusals distinguish a rate limit
-      // from an RLS rejection from a genuine product bug, and they cost nothing to collect.
-      const httpErrors = { host: [], joiner: [] }
-      for (const [who, page] of Object.entries(pages)) {
-        page.on('console', (m) => {
-          const t = m.text()
-          if (/\[NeoTopia\]/.test(t)) logs[who].push(t)
-        })
-        // RESPONSES, not requests. "The RPC fired" and "the RPC succeeded" are different claims, and a
-        // run of this spec once showed both counters flat with every call present · which a request-only
-        // listener reports as "everything fired", the most misleading possible summary. The status is what
-        // separates a write that landed from one the server refused.
-        page.on('response', (r) => {
-          const m = /\/rest\/v1\/rpc\/([a-z_]+)/.exec(r.url())
-          if (m) rpcs[who].push(`${m[1]}:${r.status()}`)
-          if (r.status() >= 400 && /supabase\.co/.test(r.url())) {
-            httpErrors[who].push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}${new URL(r.url()).search}`)
-          }
-        })
-      }
-
-      let roomId = null
-      let hostSession = null
+      const s = await stageFinishedRoom(browser)
+      const { p1, p2, game, logs, rpcs } = s
       try {
-        // ── [1] THE REAL LOBBY LOOP ────────────────────────────────────────────────────────────────────
-        await claimName(p1, uniqueName('E2EMH'))
-        await p1.getByRole('button', { name: 'Create Room' }).click({ timeout: 15_000 })
-        const code = await readRoomCode(p1)
-
-        await claimName(p2, uniqueName('E2EMG'))
-        await p2.getByRole('button', { name: 'Join Room' }).click({ timeout: 15_000 })
-        await p2.getByPlaceholder('ABC234').fill(code)
-        await p2.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15_000 })
-
-        // INSTRUMENTED, because the bare click timed out once here and a Playwright timeout on a locator
-        // says only "the button never appeared" · which is equally consistent with a rate-limited sign-in,
-        // a rejected room code, a name collision, and a genuine product bug in the join path. The screen
-        // itself distinguishes them, and it costs two anonymous identities to get back to this moment, so
-        // the diagnostic is captured rather than re-earned. (Rule 57 · tell a harness race from a defect.)
-        // expect().toBeVisible(), NOT locator.isVisible(): isVisible is a POINT-IN-TIME check that ignores
-        // the timeout option entirely, so the first draft of this guard answered microseconds after the
-        // click, reported "the joiner never reached the waiting room", and was measuring nothing but its
-        // own impatience. A probe that returns instantly to a question about waiting has not answered it.
-        const ready = p2.getByRole('button', { name: /click when ready/i })
-        try {
-          await expect(ready).toBeVisible({ timeout: 25_000 })
-        } catch {
-          const screen = await p2.evaluate(() => document.body.innerText.replace(/\s+/g, ' ').slice(0, 500))
-          throw new Error(`the joiner never reached the waiting room after joining "${code}" · screen: ${screen}`)
-        }
-        await ready.click({ timeout: 10_000 })
-
-        const startBtn = p1.getByRole('button', { name: /^start game$/i })
-        await expect(startBtn, 'presence never converged · the host could not start')
-          .toBeVisible({ timeout: 30_000 })
-        await startBtn.click()
-
-        await p1.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 20_000 })
-        await p2.waitForURL(/\/game\/[0-9a-f-]+/i, { timeout: 20_000 })
-        await expect(p1.locator(BOARD)).toBeVisible({ timeout: 20_000 })
-        await expect(p2.locator(BOARD)).toBeVisible({ timeout: 20_000 })
-        roomId = new URL(p1.url()).pathname.split('/').pop()
-        hostSession = await p1.evaluate(() => localStorage.getItem('neotopia-auth'))
-
-        const uids = { host: await authUid(p1), joiner: await authUid(p2) }
-        expect(uids.host, 'the host has no persisted anon identity').toBeTruthy()
-        expect(uids.joiner, 'the joiner has no persisted anon identity').toBeTruthy()
-        expect(uids.host).not.toBe(uids.joiner)
-
-        // ── [2] THE BASELINE, READ BEFORE ANYTHING CAN MOVE IT ─────────────────────────────────────────
-        // Two brand-new anonymous humans. If these are not 0/0 the increments below prove nothing, so the
-        // baseline is asserted rather than merely recorded.
-        const before = { host: await readMyStats(p1), joiner: await readMyStats(p2) }
-        console.log('[mp-endgame] baseline', JSON.stringify(before))
-        for (const who of ['host', 'joiner']) {
-          expect(before[who], `${who} has no player_profiles row · claimUsername did not run`).toBeTruthy()
-          expect(before[who].gamesPlayed, `${who} is not a fresh identity`).toBe(0)
-          expect(before[who].gamesWon, `${who} is not a fresh identity`).toBe(0)
-        }
-
-        // ── [3] PLAY THE WHOLE GAME WITH THE REAL ENGINE, KEYED TO THESE TWO REAL IDENTITIES ───────────
-        // Bounded retry for a game whose cluster scores differ · the engine test above proves that is the
-        // overwhelmingly common case, so this is a guard against an unlucky tie, not a search for a lucky
-        // fixture. If every attempt tied, the test says so rather than quietly proving something weaker.
-        let game = null
-        for (let attempt = 0; attempt < 6 && !game; attempt++) {
-          const g = playCompleteTwoPlayerGame([
-            { userId: uids.host, username: 'Host' },
-            { userId: uids.joiner, username: 'Joiner' },
-          ])
-          // Seat 0 must also have BUILT something · the refresh measurement in step [6] is about that
-          // player's district contribution, and a host with zero districts would make it vacuously true.
-          const hostBuilt = (g.state.players[0].scoredCardIds?.length ?? 0) > 0
-          if (g.phase === 'scoring' && g.clusters[0] !== g.clusters[1] && hostBuilt) game = g
-        }
-        expect(game, 'six finished games in a row gave the two seats equal cluster scores · either the term ' +
-          'has gone board-global again or the engine is not reaching scoring').toBeTruthy()
-        console.log(`[mp-endgame] engine game · turns ${game.turns} · placed ${game.totalPlacements} ` +
-          `· districts ${game.totalBuilt} · clusters ${JSON.stringify(game.clusters)} ` +
-          `· totals ${JSON.stringify(game.totals)}`)
-
-        // ── [4] DELIVER IT THROUGH THE REAL WIRE ───────────────────────────────────────────────────────
-        // One UPDATE by a real member, using the app's OWN authenticated client, with the same column
-        // mapping useGameSync.pushState uses · including 'scoring' → 'finished', because the column's CHECK
-        // rejects the store's terminal phase outright and an un-mapped write 400s the whole row. The jsonb
-        // `state` still carries the true store phase, which is what syncFromServer reads.
-        const writeErr = await p1.evaluate(async ({ roomId, state }) => {
-          const m = await import('/src/lib/supabase.js')
-          const { error } = await m.supabase.from('game_sessions').update({
-            state,
-            current_seat: state.currentSeat,
-            turn_number: state.turnNumber,
-            actions_remaining: state.actionsRemaining,
-            production_tiles_remaining: state.productionTilesRemaining,
-            phase: 'finished',
-          }).eq('room_id', roomId)
-          return error ? `${error.code ?? ''} ${error.message}` : null
-        }, { roomId, state: game.state })
-        expect(writeErr, 'the finished state could not be written to game_sessions').toBeNull()
-
-        // Both tabs must arrive at the record on their OWN, from the subscription · nothing is dispatched
-        // into them. That is the claim: the terminal phase reached two real clients over the wire.
-        for (const [who, page] of Object.entries(pages)) {
-          await expect(page.getByRole('dialog', { name: /final civilization record/i }),
-            `${who} never rendered the civilization record after the finished state landed`)
-            .toBeVisible({ timeout: 30_000 })
-        }
-
-        // ── [5] TWO DIFFERENT CLUSTER SCORES, ON A REAL SCREEN, FOR THE FIRST TIME ──────────────────────
+        // ── [5] TWO DIFFERENT CLUSTER SCORES, ON A REAL SCREEN ─────────────────────────────────────────
         const lines = { host: await readScoreLines(p1), joiner: await readScoreLines(p2) }
         console.log('[mp-endgame] host screen   ', JSON.stringify(lines.host.map(l => l.text)))
         console.log('[mp-endgame] joiner screen ', JSON.stringify(lines.joiner.map(l => l.text)))
@@ -439,75 +488,20 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
         // And both humans are looking at the same civilization.
         expect(sortedNums(lines.host.map(l => l.total))).toEqual(sortedNums(lines.joiner.map(l => l.total)))
 
-        // ── [6] THE REFRESH · AND WHY IT SITS HERE, BEFORE THE COUNTERS ARE JUDGED ─────────────────────
-        // A player reloading their own final score is a real thing a real person does, and it is also the
-        // recovery path FinalScore's award effect documents for itself ("the extra callers are the recovery
-        // path for the lowest seat closing its tab"). Two separate things are measured through it.
-        //
-        // THE FIRST IS A BUG, WITH A NUMBER. increment_neotopia_index (migration 004) is a BARE increment ·
-        // it clamps one call to [0,56] and carries no idempotency key at all. Every other write on this
-        // screen has one: record_civilization_score is UNIQUE(session_id, player_id) ON CONFLICT DO NOTHING,
-        // award_game_win is keyed on game_wins.session_id, and the game_end audit row was given an explicit
-        // per-room localStorage guard precisely so a reload during 'scoring' stays idempotent. The district
-        // contribution · the one feeding the civilization's headline number · is the only one whose guard is
-        // a useRef, and a reload destroys those. MEASURED LIVE: neotopia_index 3 -> 6 across one refresh by
-        // a player with 3 districts. Refresh twice and it triples.
-        //
-        // THE SECOND IS NOT A BUG, and finding that out is why this took two experiments. In development
-        // both seats call award_game_win exactly once, get 'no_game_end' because the audit row has not
-        // landed yet, and NEVER RETRY · so games_won stays 0 and nobody is credited. That looks exactly like
-        // a serious product defect and it is not one. The award effect burns its one-shot ref BEFORE the
-        // async retry loop and cancels the loop in its cleanup, so React's DEVELOPMENT double-invoke
-        // (mount → cleanup → mount) kills the retry on the first cleanup, every time. Proved by changing
-        // exactly one thing on the same commit in an isolated worktree · <StrictMode> removed from main.jsx,
-        // nothing else · and the same spec then logged "attempt 2 · awarded" and credited the win (Rule 74:
-        // one variable, same commit). React's StrictMode is a no-op in a production build, so the retry loop
-        // is live for real players. The FRAGILITY is still worth knowing (Rule 76's family: a latch burned
-        // before a loop that its own cleanup cancels means any single dep churn disables the retry forever ·
-        // it survives today only because sessionId and mySeat are stable primitives at 'scoring').
-        //
-        // So the reload happens first and the counters are judged after it: it is a legitimate user action,
-        // it exercises the product's own documented recovery, and it makes this spec state the truth in
-        // both environments rather than reporting the dev harness as a product failure.
-        const idxBefore = await readMyIndex(p1)
-        const rpcsBeforeReload = rpcs.host.length
-        await p1.reload({ waitUntil: 'domcontentloaded' })
-        await expect(p1.getByRole('dialog', { name: /final civilization record/i }),
-          'the score screen did not survive a refresh').toBeVisible({ timeout: 30_000 })
-        await p1.waitForTimeout(3_000) // the writes are fire-and-forget · give them room to land
-        const idxAfter = await readMyIndex(p1)
-        console.log(`[mp-endgame] REFRESH · neotopia_index ${idxBefore} -> ${idxAfter} ` +
-          `(delta ${idxAfter - idxBefore}) · host rpcs after reload ` +
-          JSON.stringify(rpcs.host.slice(rpcsBeforeReload)))
-
-        // CHARACTERISATION, not approval. hostDistricts is what the player actually contributed once; the
-        // delta across a refresh SHOULD be 0 and is not. Asserted rather than logged so it cannot drift
-        // unnoticed in either direction · the day somebody gives this write an idempotency key, this line
-        // goes red, and the fix is to change the expected value to 0. The fixture guarantees the host built
-        // something, so the claim is never vacuously true.
-        const hostDistricts = game.state.players[0].scoredCardIds?.length ?? 0
-        expect(hostDistricts, 'the fixture must give seat 0 at least one district or this proves nothing')
-          .toBeGreaterThan(0)
-        expect(idxAfter - idxBefore,
-          `refreshing the final score changed this player's Global Index contribution by ` +
-          `${idxAfter - idxBefore} · it should be 0, and it is their district count (${hostDistricts}) ` +
-          'because increment_neotopia_index has no idempotency key and its client guard is a useRef')
-          .toBe(hostDistricts)
-
-        // ── [7] THE LEDGER, THE WIN, AND THE TWO COUNTERS ──────────────────────────────────────────────
+        // ── [6] THE LEDGER · deterministic, no recovery needed ─────────────────────────────────────────
+        // record_civilization_score fires once per seat on mount and needs no retry, so games_played is a
+        // clean read. Migration 019 increments it SERVER-SIDE inside that write, which makes this counter
+        // downstream proof that the ledger row actually landed rather than a second thing to hope for.
         const after = {}
-        let polled = 0
         try {
           await expect.poll(async () => {
             after.host = await readMyStats(p1)
             after.joiner = await readMyStats(p2)
-            polled = (after.host?.gamesPlayed ?? 0) + (after.joiner?.gamesPlayed ?? 0) +
-                     (after.host?.gamesWon ?? 0) + (after.joiner?.gamesWon ?? 0)
-            return polled
+            return (after.host?.gamesPlayed ?? 0) + (after.joiner?.gamesPlayed ?? 0)
           }, {
             timeout: 45_000,
-            message: 'games_played / games_won never moved for either player after a finished multiplayer game',
-          }).toBeGreaterThanOrEqual(3) // 1 + 1 played, and exactly one win
+            message: 'games_played never moved for either player after a finished multiplayer game',
+          }).toBe(2)
         } finally {
           // ALWAYS, even on the failing path. A run of this once timed out here with the wire dump sitting
           // BELOW the assertion, so the one piece of evidence that would have explained it was never
@@ -525,8 +519,8 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
           expect(called(who, 'award_game_win').length,
             `${who} never called award_game_win · the RPC that sat with no caller for two sessions has one, ` +
             'and it has to fire from every seat').toBeGreaterThan(0)
-          // Every write the score screen makes must have been ACCEPTED. A 2xx here is the difference
-          // between "the client tried" and "the civilization's record actually changed".
+          // Every write the score screen makes must have been ACCEPTED. A 2xx here is the difference between
+          // "the client tried" and "the civilization's record actually changed".
           for (const call of rpcs[who]) {
             const [name, status] = call.split(':')
             expect(Number(status) < 400, `${who}'s ${name} was refused with HTTP ${status} · the write the ` +
@@ -541,11 +535,6 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
         // proof uses in reverse. There a finished game must send NOTHING; here it must send exactly these
         // four and nothing else, so a future change that starts writing something new to a real player's
         // permanent record has to come through this line and say what it is.
-        //   get_global_neotopia_index · READ · the counter on the record (and on the landing page)
-        //   increment_neotopia_index  · WRITE · recordCivilizationContribution · this seat's own district
-        //     count only, which is why BOTH seats firing it is correct rather than a double count
-        //   record_civilization_score · WRITE · the per-player ledger row · games_played rides on it
-        //   award_game_win            · WRITE · the win credit, idempotent per session
         const EXPECTED_RPCS = new Set([
           'get_global_neotopia_index', 'increment_neotopia_index', 'record_civilization_score', 'award_game_win',
         ])
@@ -558,46 +547,114 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
             `${who} never recorded its own districts to the Global Index`).toBeGreaterThan(0)
         }
 
-        // EXACTLY ONE WIN between them. Both seats ask, and asking twice must not credit twice · game_wins
-        // is keyed on session_id with ON CONFLICT DO NOTHING, and that idempotency is the whole reason the
-        // second caller is safe to have. This is the honest reading of "the same result from every seat":
-        // not the same status STRING (the first gets 'awarded', the second 'already_awarded') but the same
-        // outcome, credited once, to the same player.
-        const wins = after.host.gamesWon + after.joiner.gamesWon
+        // ── [7] THE WIN · asserted WITHOUT a page reload, and that is the point of the split ────────────
+        // The old version got here by refreshing a tab, which remounts FinalScore with fresh refs and fires
+        // a second award attempt. That worked, and it made the win credit depend on an action belonging to
+        // a different claim entirely.
+        //
+        // The reason a reload was doing any work is worth stating precisely, because it is NOT a product
+        // bug. FinalScore's award effect burns its one-shot ref BEFORE the async retry loop and cancels
+        // that loop in its cleanup, so React's DEVELOPMENT double-invoke (mount → cleanup → mount) kills
+        // the retry on the first cleanup. Both seats then ask exactly once, both can get 'no_game_end'
+        // because the lowest seat's audit row has not landed yet, and nobody is credited. Proved to be the
+        // double-invoke by removing <StrictMode> from main.jsx on the same commit in an isolated worktree,
+        // after which the same spec logged "attempt 2 · awarded" (Rule 74). StrictMode is a no-op in a
+        // production build, so real players have the retry · and src/hooks/useGameSync.sessionstability
+        // .test.js now pins the two deps that effect would otherwise churn on.
+        //
+        // So the win is asserted against the CONTRACT rather than against the race: wait until the audit row
+        // the RPC reads actually exists, then ask from BOTH seats. "Fires from every seat with the same
+        // result" is exactly that question, and it is deterministic in every environment.
+        await expect.poll(async () => (await readGameEndRows(p1, s.sessionId)).rows, {
+          timeout: 30_000,
+          message: 'the game_end audit row never appeared · the lowest seat never wrote it, so award_game_win ' +
+            'has nothing to recompute a winner from',
+        }).toBeGreaterThan(0)
+
+        const statuses = {
+          host: await callAwardGameWin(p1, s.sessionId),
+          joiner: await callAwardGameWin(p2, s.sessionId),
+        }
+        console.log('[mp-endgame] award from every seat', JSON.stringify(statuses))
+        for (const who of ['host', 'joiner']) {
+          expect(statuses[who], `${who}'s award_game_win still returned 'no_game_end' AFTER the audit row was ` +
+            'confirmed present · the RPC cannot see a row that demonstrably exists').not.toBe('no_game_end')
+          expect(statuses[who], `${who}'s award_game_win returned null · the call failed outright`).toBeTruthy()
+        }
+
+        const finalStats = { host: await readMyStats(p1), joiner: await readMyStats(p2) }
+        console.log('[mp-endgame] final stats', JSON.stringify(finalStats))
+
+        // EXACTLY ONE WIN between them, however many seats asked. game_wins is keyed on session_id with ON
+        // CONFLICT DO NOTHING, and that idempotency is the whole reason a second caller is safe to have.
+        // This is the honest reading of "the same result from every seat": not the same status STRING (the
+        // first gets 'awarded', the rest 'already_awarded') but the same outcome, credited once.
+        const wins = finalStats.host.gamesWon + finalStats.joiner.gamesWon
         expect(wins, `games_won moved by ${wins} across the two players · exactly one win exists in a ` +
           'finished 2-player game, and a 2 would mean award_game_win is not idempotent').toBe(1)
 
-        // The winner on screen must be the player the server credited. FinalScore sorts by total, so the
-        // engine's higher total names the seat, and seat 0 is the host by construction of the roster above.
+        // And to the right player. FinalScore sorts by total; the engine's higher total names the seat, and
+        // seat 0 is the host by construction of the roster.
         const winningSeat = game.totals[0] > game.totals[1] ? 0 : game.totals[1] > game.totals[0] ? 1 : null
         if (winningSeat !== null) {
           const expectedWinner = winningSeat === 0 ? 'host' : 'joiner'
-          expect(after[expectedWinner].gamesWon,
+          expect(finalStats[expectedWinner].gamesWon,
             `the engine's winner is seat ${winningSeat} (${expectedWinner}) but the credit went elsewhere · ` +
-            `host ${after.host.gamesWon}, joiner ${after.joiner.gamesWon}`).toBe(1)
+            `host ${finalStats.host.gamesWon}, joiner ${finalStats.joiner.gamesWon}`).toBe(1)
         }
-
-        // AT LEAST ONE SEAT REACHED A TERMINAL STATUS. Deliberately not per-seat, and the first draft of
-        // this WAS per-seat and red on a passing game · a correction worth keeping. FinalScore's own comment
-        // is explicit: a seat that asks before the lowest seat's audit row lands gets 'no_game_end' and
-        // writes nothing, which is HARMLESS · the failure mode is every seat asking early and nobody
-        // retrying. So the contract is "somebody credited the win", and the DB assertion above is what
-        // actually pins it. Both seats are still required to have ASKED (the rpcs check above).
-        const allAwards = [...logs.host, ...logs.joiner].filter(l => l.includes('award_game_win:'))
-        expect(allAwards.length, 'neither seat logged an award_game_win status').toBeGreaterThan(0)
-        expect(allAwards.some(l => !/no_game_end/.test(l)),
-          `every award_game_win call from both seats returned 'no_game_end' · nobody was credited: ` +
-          JSON.stringify(allAwards)).toBe(true)
-
       } finally {
-        // Printed on EVERY path, pass or fail. On a pass it is two empty arrays and costs a line; on a
-        // fail it is usually the whole answer.
-        console.log('[mp-endgame] http errors', JSON.stringify(httpErrors))
-        await ctx1.close()
-        await ctx2.close()
-        // The room is BROWSER-owned, so it is deleted as the host with the host's own session · no service
-        // role. One statement cascades away room_players + game_sessions + game_events (migration 005).
-        await deleteRoomAsHost(hostSession, roomId)
+        await s.dispose()
+      }
+    })
+
+  // ══════════════════════════════════════════════════════════════════════════════════════════════════════
+  test('refreshing the final score doubles this player\'s contribution to the Global Index',
+    async ({ browser }) => {
+      test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
+      test.setTimeout(240_000)
+
+      // ITS OWN TEST, because it is its own claim and it can fail on its own (T3 S38 · P2).
+      //
+      // increment_neotopia_index (migration 004) is a BARE increment · it clamps ONE call to [0,56] and
+      // carries no idempotency key at all. Its only guard is didRecordRef, a useRef inside FinalScore, and a
+      // page reload destroys those. Every other write on that screen is protected, which is what makes this
+      // an oversight rather than a design choice: record_civilization_score is UNIQUE(session_id, player_id)
+      // ON CONFLICT DO NOTHING, award_game_win is keyed on game_wins.session_id, and the game_end audit row
+      // was given an explicit per-room localStorage guard PRECISELY so a reload during 'scoring' stays
+      // idempotent. The district contribution · the one feeding the civilization's headline number · is the
+      // one that was missed.
+      //
+      // MEASURED: 3 → 6, 3 → 6, 2 → 4 across three live runs. The delta is always exactly the player's
+      // district count. Refresh twice and it triples.
+      //
+      // CHARACTERISATION, NOT APPROVAL. The expected value below is the BUG. The day somebody gives that
+      // write a session key (server-side, so it cannot be forged) or the same localStorage guard the audit
+      // row already has, this test goes red and the fix is to change the expectation to 0. It is asserted
+      // rather than logged so it cannot drift unnoticed in either direction.
+      const s = await stageFinishedRoom(browser)
+      const { p1, game, rpcs } = s
+      try {
+        const idxBefore = await readMyIndex(p1)
+        const rpcsBeforeReload = rpcs.host.length
+        await p1.reload({ waitUntil: 'domcontentloaded' })
+        await expect(p1.getByRole('dialog', { name: /final civilization record/i }),
+          'the score screen did not survive a refresh').toBeVisible({ timeout: 30_000 })
+        await p1.waitForTimeout(3_000) // the writes are fire-and-forget · give them room to land
+        const idxAfter = await readMyIndex(p1)
+        console.log(`[mp-endgame] REFRESH · neotopia_index ${idxBefore} -> ${idxAfter} ` +
+          `(delta ${idxAfter - idxBefore}) · host rpcs after reload ` +
+          JSON.stringify(rpcs.host.slice(rpcsBeforeReload)))
+
+        const hostDistricts = game.state.players[0].scoredCardIds?.length ?? 0
+        expect(hostDistricts, 'the fixture must give seat 0 at least one district or this proves nothing')
+          .toBeGreaterThan(0)
+        expect(idxAfter - idxBefore,
+          `refreshing the final score changed this player's Global Index contribution by ` +
+          `${idxAfter - idxBefore} · it should be 0, and it is their district count (${hostDistricts}) ` +
+          'because increment_neotopia_index has no idempotency key and its client guard is a useRef')
+          .toBe(hostDistricts)
+      } finally {
+        await s.dispose()
       }
     })
 })
