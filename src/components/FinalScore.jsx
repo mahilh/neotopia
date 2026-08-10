@@ -182,12 +182,37 @@ export default function FinalScore({
   // and takes its player from auth.uid(), so for any RETURNING visitor · precisely the people who
   // practise · the write would have succeeded. Bots would have built the real NeoTopia. (Rule 65: two
   // lanes each shipped a correct half, and the bug lives in the composition.)
+  //
+  // AND THE RELOAD, which is the bug T3 measured live in S37 (neotopia_index 3 -> 6, 3 -> 6, 2 -> 4 ·
+  // the delta always exactly the player's district count, and refreshing twice triples it).
+  // `increment_neotopia_index` is a BARE increment: it clamps one call to [0,56] and carries no
+  // idempotency key at all, so its only protection was `didRecordRef` · a useRef, which a page reload
+  // destroys. Refreshing your own score screen is an ordinary thing to do, and it inflates the
+  // civilization's headline number, the one the Landing page leads with.
+  // Every other write on this screen already survives a reload: record_civilization_score is
+  // UNIQUE(session_id, player_id) ON CONFLICT DO NOTHING, award_game_win is keyed on
+  // game_wins.session_id, and the game_end audit row below was given an explicit per-room
+  // localStorage guard FOR EXACTLY THIS CASE. This one was the outlier.
+  // Keyed on the SESSION rather than the room, because the session is what one game is · a room that
+  // hosts a second game must be able to contribute again. Seat is in the key too, so two people
+  // sharing a browser are not one contributor.
+  // STATED PLAINLY: this closes the reload, not the class. A different browser re-entering the same
+  // finished session still double-counts, because a client-side guard cannot be authoritative about
+  // a server-side counter. The durable fix is an idempotency key on the RPC itself, which lives in
+  // migrations/ and is T2's · routed to them in comms rather than half-built here.
+  const contribGuardKey = (sync?.sessionId || roomId) && mySeat != null
+    ? `neotopia_index_${sync?.sessionId || roomId}_${mySeat}`
+    : null
   useEffect(() => {
     if (practice) return
     if (didRecordRef.current || mySeat == null || myDistricts <= 0) return
+    try {
+      if (contribGuardKey && localStorage.getItem(contribGuardKey)) { didRecordRef.current = true; return }
+    } catch { /* storage blocked · fall through to the ref, which is what we had before */ }
     didRecordRef.current = true
+    try { if (contribGuardKey) localStorage.setItem(contribGuardKey, String(myDistricts)) } catch {}
     recordCivilizationContribution(myDistricts).catch(() => {})
-  }, [practice, mySeat, myDistricts])
+  }, [practice, mySeat, myDistricts, contribGuardKey])
 
   // Record THIS client's per-game detailed civilization scores into the Global Index LEDGER (migration 009 ·
   // record_civilization_score · server sets player_id=auth.uid() · UNIQUE(session_id,player_id) ON CONFLICT DO
