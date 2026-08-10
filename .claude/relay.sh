@@ -35,19 +35,36 @@ printf "\n-- THIS SESSION CHANGES (diff from HEAD~1) ----------------------\n"
 git diff --stat HEAD~1 HEAD 2>/dev/null | tail -10
 
 printf "\n-- TESTS (vitest) ----------------------------------------------\n"
-TEST_OUT=$(npx vitest run 2>&1)
+# v3.2 (T2 S37) · COUNT FROM THE MACHINE-READABLE REPORT, AND RUN SERIAL.
+# Two separate bugs lived here. (1) FILE_COUNT grepped for "test files"; vitest v4 prints "Test Files",
+# so it matched nothing and the footer has been printing "Files: " BLANK, silently, for every session.
+# (2) the run was parallel, and Rule 77 says a suite run on a loaded machine measures the machine · the
+# relay is the thing every terminal reads at close, so it is the last place that should report a number
+# that moves with load. --no-file-parallelism costs ~30s and buys a figure that means something.
+# Parsing prose was the root cause of both; --reporter=json is a contract rather than a sentence.
+TEST_OUT=$(npx vitest run --no-file-parallelism --reporter=json --reporter=default \
+  --outputFile.json=/tmp/neotopia-relay-vitest.json 2>&1)
 echo "$TEST_OUT" | tail -8
 FAILING=$(echo "$TEST_OUT" | grep -E " FAIL | × " | grep -v "Tests" | head -10)
 if [ -n "$FAILING" ]; then
   printf "\n  FAILING TESTS:\n"
   echo "$FAILING" | while read line; do echo "  ! $line"; done
 fi
-# v3.1 FIX: get TOTAL test count, not file count
-# vitest outputs: "Tests  111 passed (17)" or "111 tests passed"
-PASS_COUNT=$(echo "$TEST_OUT" | grep -oE '[0-9]+ passed' | tail -1)
-FAIL_COUNT=$(echo "$TEST_OUT" | grep -oE '[0-9]+ failed' | tail -1)
-FILE_COUNT=$(echo "$TEST_OUT" | grep -oE '[0-9]+ test files' | head -1)
-echo "Summary: Tests=$PASS_COUNT | Files=$FILE_COUNT | Failed=$FAIL_COUNT"
+# A counter that cannot measure must SAY SO rather than resolve to a number. "0" and "" are both
+# indistinguishable from a true reading, which is this project's signature bug (a writer resting at a
+# plausible value) wearing a shell-script costume.
+read -r PASS_COUNT FAIL_COUNT FILE_COUNT <<EOF
+$(node -e '
+  const fs = require("fs");
+  try {
+    const r = JSON.parse(fs.readFileSync("/tmp/neotopia-relay-vitest.json", "utf8"));
+    const t = r.testResults || [];
+    console.log(r.numPassedTests, r.numFailedTests, t.length);
+  } catch (e) { console.log("UNMEASURED UNMEASURED UNMEASURED"); }
+' 2>/dev/null || echo "UNMEASURED UNMEASURED UNMEASURED")
+EOF
+echo "Summary: Tests=$PASS_COUNT passed | Files=$FILE_COUNT | Failed=$FAIL_COUNT  (serial · Rule 77)"
+[ "$PASS_COUNT" = "UNMEASURED" ] && echo "  !! vitest produced no JSON report · the counts below are NOT a reading"
 
 printf "\n-- BUILD -------------------------------------------------------\n"
 BUILD_OUT=$(npm run build 2>&1)
@@ -71,8 +88,18 @@ else
 fi
 
 printf "\n-- ART STATUS --------------------------------------------------\n"
-ART_COUNT=$(ls public/art/cards/card_*.png 2>/dev/null | wc -l | tr -d ' ')
-echo "${ART_COUNT}/56 card art files"
+# v3.2 (T2 S37) · this one currently reads CORRECTLY (20), and is hardened anyway because it is the
+# counter with the worst history: it reported 0/56 for about fifteen sessions while 20 PNGs sat in this
+# exact directory, and the deck was planned around a number that was never true. The `2>/dev/null` is
+# the same swallow that hid the migrations path · a missing directory and an empty one are different
+# facts and only one of them is "no art has been made yet".
+if [ ! -d public/art/cards ]; then
+  ART_COUNT="UNMEASURED"
+  echo "!! public/art/cards does not exist · this is NOT the same as 0/56"
+else
+  ART_COUNT=$(find public/art/cards -maxdepth 1 -name 'card_*.png' | wc -l | tr -d ' ')
+  echo "${ART_COUNT}/56 card art files"
+fi
 if [ "$ART_COUNT" -gt 0 ] 2>/dev/null; then
   echo "Cards with art:"
   ls public/art/cards/card_*.png 2>/dev/null | xargs -I{} basename {} .png | tr '\n' ' '
@@ -86,14 +113,42 @@ done
 echo
 
 printf "\n-- MIGRATION STATUS --------------------------------------------\n"
-# v3.1 FIX: use find instead of ls glob (handles empty dir gracefully)
-MIG_COUNT=$(find migrations/ -name "*.sql" 2>/dev/null | wc -l | tr -d ' ')
-echo "${MIG_COUNT} migration files:"
-find migrations/ -name "*.sql" 2>/dev/null | sort | xargs -I{} basename {} | head -15
+# v3.2 (T2 S37) · IT WAS LOOKING IN A DIRECTORY THAT DOES NOT EXIST.
+# The migrations live in scripts/migrations/, not migrations/. `find migrations/ ... 2>/dev/null`
+# suppressed the "No such file or directory" that would have said so and piped nothing into wc, so the
+# relay has reported "Migrations: 0" against 20 real .sql files. The 2>/dev/null was the bug: "handles
+# an empty dir gracefully" and "hides a wrong path" are the same line of code.
+# Resolve the path instead of assuming it, and distinguish NO DIRECTORY from NO FILES.
+MIG_DIR=""
+for d in scripts/migrations migrations supabase/migrations; do
+  [ -d "$d" ] && MIG_DIR="$d" && break
+done
+if [ -z "$MIG_DIR" ]; then
+  MIG_COUNT="UNMEASURED"
+  echo "!! no migrations directory found (looked in scripts/migrations, migrations, supabase/migrations)"
+else
+  MIG_COUNT=$(find "$MIG_DIR" -name "*.sql" | wc -l | tr -d ' ')
+  echo "${MIG_COUNT} migration files in ${MIG_DIR}:"
+  find "$MIG_DIR" -name "*.sql" | sort | xargs -I{} basename {} | head -25
+fi
 
 printf "\n-- ANTI-REGRESS RULE COUNT -------------------------------------\n"
-RULE_COUNT=$(grep -c '^  [0-9][0-9]*\.' .claude/CLAUDE.md 2>/dev/null || echo 0)
-echo "${RULE_COUNT} permanent rules in CLAUDE.md"
+# v3.2 (T2 S37) · IT ONLY KNEW ONE OF THE TWO FORMATS A RULE IS WRITTEN IN.
+# Rules 1-69 are indented list items ("  12. ..."); rules 70+ are block headers ("RULE 78 (T1 S36 ...)").
+# The old grep matched the first form only, so it has reported 69 while CLAUDE.md carried 78 · and it
+# would keep reporting 69 no matter how many more were added, because every new rule uses the second
+# form. A counter that is frozen at a plausible number is worse than one that is obviously broken.
+# Count the union of both forms as a SET of numbers, so a duplicate cannot inflate it.
+RULE_COUNT=$(grep -oE "^ *(RULE )?[0-9]+[.( ]" .claude/CLAUDE.md 2>/dev/null \
+  | grep -oE '[0-9]+' | sort -n -u | wc -l | tr -d ' ')
+RULE_MAX=$(grep -oE "^ *(RULE )?[0-9]+[.( ]" .claude/CLAUDE.md 2>/dev/null \
+  | grep -oE '[0-9]+' | sort -n | tail -1)
+[ -z "$RULE_COUNT" ] || [ "$RULE_COUNT" = "0" ] && RULE_COUNT="UNMEASURED"
+echo "${RULE_COUNT} permanent rules in CLAUDE.md (highest number: ${RULE_MAX:-none})"
+# A gap or a reused number means the list disagrees with itself · surface it rather than average it away.
+if [ "$RULE_COUNT" != "UNMEASURED" ] && [ -n "$RULE_MAX" ] && [ "$RULE_COUNT" != "$RULE_MAX" ]; then
+  echo "  !! count ${RULE_COUNT} != highest ${RULE_MAX} · the rule numbering has a gap or a duplicate"
+fi
 
 printf "\n-- ANTI-REGRESS VIOLATION SCAN ---------------------------------\n"
 VIOLS=$(grep -rn "git add -A\|window.confirm\|Math.random()" src/ scripts/ 2>/dev/null | grep -v "node_modules" | head -5)
