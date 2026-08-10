@@ -149,7 +149,34 @@ Positions as fractions of the image, taken straight from the live viewBox
   is wrong.
 - Zone circumradius **18.9% of image width** (156.9 of 828).
 - Compass rose radius **under 9% of image width**, or it reaches the factory tap circles.
-- Deliver as PNG at 1440 wide; the JPEG conversion is a build step, not the artist's job.
+- **Deliver as PNG at 1800 px square.** The JPEG conversion is a build step, not the artist's job.
+
+## v4 · the one line that changes, and why (T1 S38 · Mahil's call)
+
+v3 shipped at **1254 px square**, which was chosen for the phone and is soft on the display this is
+mostly going to be seen on. The measurement, both halves of it this time:
+
+```
+visible span supplies          913 source px
+phone   375 viewport, dpr3     needs  960   ->  matched
+desktop 1440 viewport, dpr2    needs 1430   ->  1.57x UPSCALE
+```
+
+I reported that as "already the phone's match" and moved on, which is the flattering half of a
+number I had all of. At **1800 px square** the visible span supplies ~1310 px, closing the desktop
+gap, and the delivered JPEG lands at roughly **500-600 KB** against v3's 372 KB. Mahil's decision:
+take the bytes, because this is being built to be seen on a desktop.
+
+**Everything else in the spec above is unchanged** · same three zone centres as percentages, apex
+DOWN, flat-top lattice, same cluster and cell radii. v3 got all of that right; only the resolution
+moves. Aspect stays square (v3 delivered 1254 x 1254 against a stated 0.956 and the ~4% difference
+cost nothing, because the crop step trims to the board's viewBox anyway).
+
+Wiring a v4 is then: crop to the board's visible span, JPEG q80, drop it in as
+`public/art/board/board_terrain.jpg`, and re-run the three gates. The placement constants in
+`GameBoard.jsx` are derived from the painted zone centroids in FILE PIXELS, so they need
+re-measuring for the new size · `tests/board-probe.mjs` and the zone-centroid method in this
+document are what that is for.
 
 ## Housekeeping done in the same pass
 
