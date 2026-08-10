@@ -138,7 +138,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (80 · cumulative):
+PERMANENT ANTI-REGRESS RULES (81 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -331,6 +331,36 @@ put the reachability check in the browser and keep the DECISION in the unit test
 not in the footer; exactly one exit exists at a time). Sharpens Rule 55 (the render is the witness)
 with the control dimension, and Rule 4 (44px) with the observation that a correct size at an
 unreachable position is still a control the player does not have.
+
+RULE 81 (T1 S37 · August 9 2026):
+A NUMBER YOU REASONED TO IS A CLAIM. COMPUTE THE CONSTRAINT IN THE TEST, NOT IN YOUR HEAD.
+Three times in one session a specific, plausible, carefully-argued figure was simply wrong, and every
+one of them would have shipped as a comment explaining it:
+  81a · I sized the backdrop mask so it would cover the play area "out to the region's inradius,
+        135.9". The corners of the outer hexes stick past that. The test computed the real figure at
+        144.0 and reddened · the hole had been two units too small at six places, which is a painted
+        plateau under a token. The fix was not a better estimate, it was making the test derive the
+        number from hexToPixel so it cannot be got wrong by hand.
+  81b · "The action bar is exactly 320 of 320 at its narrowest, so it fits." It does not fit: its
+        three groups want 440 against a 292 content box, and flex had been SHRINKING them all along.
+        Not knowing which mechanism was absorbing the overflow is what made my first fix a
+        regression · turning on flex-wrap replaced the shrink with a wrap and cost 25px of board on
+        every phone in use, to solve a case no player can reach yet.
+  81c · The brief read a rotation of "roughly 20-30 degrees" and an off-centre hub off the artwork by
+        eye. Measured: 0.191 degrees, and the hub within 3px of the centroid. Acting on either would
+        have rotated a correctly-aligned image · an eyeball reading of an image is a hypothesis, and
+        the confident ones are the expensive ones.
+COROLLARY, because a probe can point at the right coordinates and still measure nothing: an SVG
+serialised with only a viewBox has an intrinsic size of its own choosing · this board reported
+143x150 · so drawImage into a full-size canvas upscales that 12x and every sampled pixel is a smeared
+average. Nothing errors. Stamp explicit width/height on the clone before serialising, and keep a
+read-back that would notice: a token pixel 150 away from its own palette colour is not a token.
+WHERE IT LEADS, and this is the better half: when a visual guarantee can be made STRUCTURAL, prove it
+by identity instead of defending a tolerance. Masking the painting out of the play area let gate 3 be
+"206,625 pixels across all 57 hexes, max channel difference 0, and the control differs" rather than a
+contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
+75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
+number came from a counter that could not measure rather than from a person who could not.
 
 RULE 79 (T2 S37 · August 9 2026):
 A SPEC THAT RUNS IN NO WORKFLOW CANNOT REPORT ITS OWN ROT, and it decays in the direction of a lie.
