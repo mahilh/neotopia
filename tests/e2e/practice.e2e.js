@@ -69,6 +69,19 @@
 // like a broken product (Rule 53 · model your own harness against the real UI flow before routing a bug).
 
 import { test, expect } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+
+// Read the storage key from its declaration rather than restating it. Importing useLocalSession here would
+// drag React into Playwright's Node loader; a second copy of the string would be a second contract, which is
+// the shape (Rule 45) that broke practice persistence once already · a spec asserting 'the snapshot is gone'
+// against a key the app stopped using would pass forever while proving nothing. Same technique
+// four-player-live.e2e.js uses for SEAT_COLORS, and it fails loudly if the declaration changes shape.
+const PRACTICE_STORAGE_KEY = (() => {
+  const src = readFileSync(new URL('../../src/hooks/useLocalSession.js', import.meta.url), 'utf8')
+  const m = src.match(/PRACTICE_STORAGE_KEY\s*=\s*['"]([^'"]+)['"]/)
+  if (!m) throw new Error('could not read PRACTICE_STORAGE_KEY from src/hooks/useLocalSession.js · fix the pattern, do not hardcode the key')
+  return m[1]
+})()
 
 const DISTRICT_BUDGET_MS = 60_000
 const BOT_STALL_MS = 8_000
@@ -453,14 +466,167 @@ test.describe('practice mode · the end of the game', () => {
   // The annotation belonged INSIDE the test body, never at describe scope · `test.fail()` as a bare
   // statement in a describe applies to EVERY test in the block. Kept as a note because the next person to
   // add one here needs it.
-  test('a player who finishes a practice game can leave practice', async ({ page }) => {
+  //
+  // ── T3 S37 · AND NOW IT HAS TO PASS FOR THE RIGHT REASON ──────────────────────────────────────────────
+  // (One correction to the paragraph above, since this is the file of record: the defect was measured in
+  // S35, not S34. S34 was the entry/bot-turn spec this block was built on top of.)
+  //
+  // Deleting the annotation restores a GREEN test, and a green test here was never the goal · the assertion
+  // that was under it could pass against a button that is merely clickable. Two halves, and they fail for
+  // different reasons:
+  //   REACHABLE · elementFromPoint at the control's centre must return the control, and its rect must lie
+  //     inside the viewport (Rule 78 · both halves of it, since the same session produced a control COVERED
+  //     by an overlay and a control PUSHED OFF the screen, and toBeVisible passed for both). The click
+  //     carries no `force`, because force:true answers a different question than "can a player do this".
+  //   AND IT ACTUALLY TEARS DOWN · `practice-badge` hidden cannot tell a teardown from a bare navigation,
+  //     and a bare navigation is precisely what the OLD reachable control did: play-again went to '/lobby'
+  //     and left the finished game in the store AND in sessionStorage behind it. So the teardown is judged
+  //     on what endPractice() actually changes · the store dropped to 'lobby' with the bot seats gone, and
+  //     the snapshot removed from storage. A button that navigated without tearing down is half a fix, and
+  //     half a fix is the exact shape of the bug T1 found on the other button.
+  test('a player who finishes a practice game can leave practice · reachably, and it really tears down', async ({ page }) => {
     await page.goto('/practice?bots=1')
     await boardReady(page)
+
+    // Hold our own handle on the store BEFORE the exit runs. GameRoom deletes window.__neotopia_store in its
+    // unmount cleanup (GameRoom.jsx:292) and leaving navigates to '/', so the seam this spec reads through is
+    // gone at exactly the moment the teardown becomes observable. The zustand store is a module singleton
+    // that outlives the component · this keeps a reference to the SAME instance, it does not make a second.
+    await page.evaluate(() => { window.__t3_store = window.__neotopia_store })
     await page.evaluate(() => window.__neotopia_store.getState().setPhase('scoring'))
     await expect(page.getByRole('dialog', { name: /final civilization record/i })).toBeVisible()
 
+    // EXACTLY ONE way out at a time. A second copy would put an unclickable one back in the document · the
+    // original bug wearing a different hat · and getByTestId would report that as a strict-mode violation
+    // rather than as the thing that is wrong, so the count is asserted directly and says so.
+    const exit = page.getByTestId('leave-practice')
+    expect(await exit.count(), 'exactly one leave-practice may exist · a second copy is an unreachable one').toBe(1)
+
+    // ── REACHABILITY, AND A THIRD CASE RULE 78 DID NOT COVER ─────────────────────────────────────────────
+    // The first version of this asserted the rect must lie inside the viewport, straight off Rule 78. It
+    // RED, and the number is worth writing down: at 1280x720 the exit sits at y=1087, which is 423px BELOW
+    // the fold, and elementFromPoint at its centre returns `nothing` because the point is off the screen.
+    // Measured at four sizes · below-fold 343 (1440x800), 423 (1280x720), 889 (375x667), 1038 (320x568) ·
+    // and play-again is on the same row, so NO CTA is on screen when the record appears, at any size tried.
+    //
+    // It is still REACHABLE, and that distinction is the whole point of measuring instead of asserting. The
+    // dialog is `overflow-y: auto` over 1270-1749px of content, and one ordinary mouse wheel brings the
+    // button into view, after which elementFromPoint returns the button itself and a real click lands. So
+    // the honest gate is not "in the viewport on arrival" · that would fail every scrollable dialog ever
+    // written · it is "an ordinary scroll gesture gets a player there", with the cost of getting there
+    // bounded so a future change cannot quietly push it two screens further down.
+    //
+    // A wheel, not scrollIntoViewIfNeeded: the framework's helper would scroll for the player and answer a
+    // question no human asks. The number of gestures IS the measurement.
+    const probe = (el) => {
+      const r = el.getBoundingClientRect()
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+      const label = (n) => !n ? 'nothing' : [
+        n.tagName.toLowerCase(),
+        n.getAttribute('data-testid') ? `[${n.getAttribute('data-testid')}]` : '',
+        n.getAttribute('role') ? `(role=${n.getAttribute('role')})` : '',
+      ].join('')
+      return {
+        hitsSelf: !!hit && (hit === el || el.contains(hit)),
+        hitLabel: label(hit),
+        inViewport: r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth && r.bottom <= window.innerHeight,
+        belowFold: Math.round(r.bottom - window.innerHeight),
+        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+        viewport: { w: window.innerWidth, h: window.innerHeight },
+      }
+    }
+    const onArrival = await exit.evaluate(probe)
+
+    const WHEEL_PX = 500
+    const MAX_GESTURES = 8 // 4000px · roughly three times the tallest overflow measured (1181px at 320x568)
+    let reach = onArrival
+    let gestures = 0
+    const box = await exit.boundingBox().catch(() => null)
+    while (!(reach.hitsSelf && reach.inViewport) && gestures < MAX_GESTURES) {
+      // Wheel over the middle of the dialog · the same place a player's pointer already is.
+      await page.mouse.move(onArrival.viewport.w / 2, onArrival.viewport.h / 2)
+      await page.mouse.wheel(0, WHEEL_PX)
+      gestures++
+      await page.waitForTimeout(150)
+      reach = await exit.evaluate(probe)
+    }
+
+    expect(reach.hitsSelf, `the exit is painted over · elementFromPoint at its centre returned ${reach.hitLabel} ` +
+      `after ${gestures} scroll gesture(s) (rect ${JSON.stringify(reach.rect)})`).toBe(true)
+    expect(reach.inViewport, `the exit never came on screen · ${MAX_GESTURES} scroll gestures of ${WHEEL_PX}px ` +
+      `left it at ${JSON.stringify(reach.rect)} in viewport ${JSON.stringify(reach.viewport)} · it started ` +
+      `${onArrival.belowFold}px below the fold`).toBe(true)
+    // The cost of reaching it, recorded rather than merely passed. 1 today. If this climbs, the score screen
+    // has grown and the way out has drifted further from the player who needs it most.
+    expect(gestures, `it took ${gestures} scroll gestures to reach the way out of a finished practice game`)
+      .toBeLessThanOrEqual(3)
+    console.log(`[practice] exit · started ${onArrival.belowFold}px below the fold at ` +
+      `${onArrival.viewport.w}x${onArrival.viewport.h} · reachable after ${gestures} wheel gesture(s) · ` +
+      `hit=${reach.hitLabel} rect=${JSON.stringify(reach.rect)} (unscrolled box ${JSON.stringify(box)})`)
+
     // No force: the question is whether a PLAYER can reach it, and force:true would answer a different one.
-    await page.getByTestId('leave-practice').click({ timeout: 5_000 })
+    await exit.click({ timeout: 5_000 })
     await expect(page.getByTestId('practice-badge')).toBeHidden()
+
+    // ── THE HALF A NAVIGATION CANNOT FAKE ────────────────────────────────────────────────────────────────
+    const after = await page.evaluate((key) => {
+      const s = window.__t3_store.getState()
+      return {
+        phase: s.phase,
+        seats: s.players.length,
+        bots: s.players.filter(p => p.isBot).length,
+        saved: sessionStorage.getItem(key),
+        seamCleanedUp: typeof window.__neotopia_store === 'undefined',
+      }
+    }, PRACTICE_STORAGE_KEY)
+    expect(after.phase, 'endPractice() did not run · the store is still holding the finished game').toBe('lobby')
+    expect(after.bots, 'endPractice() did not run · the bot seats are still at the table').toBe(0)
+    expect(after.seats, 'a teardown leaves the lone human in the store').toBe(1)
+    expect(after.saved, `the finished practice game is still in sessionStorage under '${PRACTICE_STORAGE_KEY}' · ` +
+      'nothing cleared it, so it is waiting for the next visit').toBeNull()
+    console.log(`[practice] teardown · phase=${after.phase} seats=${after.seats} bots=${after.bots} ` +
+      `saved=${after.saved} seam-cleanup=${after.seamCleanedUp}`)
+  })
+
+  // THE OTHER HALF, and T1 was right that it was the worse one: "Start New Civilization" on a PRACTICE score
+  // screen called navigate('/lobby'). The lobby needs the anonymous sign-in that practice mode exists to
+  // survive without, so the player most likely to be sitting there · rate limited, or simply unwilling to
+  // sign in · was being sent to the one screen they cannot use, and no teardown ran on the way either.
+  //
+  // Asserting the POSITIVE claim rather than the absence of a navigation: another practice game, right here,
+  // same opponents. The board is played forward first so that "a new table" is distinguishable from "the same
+  // one resumed" · a fresh deal is at turn 1 on an empty board, and this one will not be.
+  test('"Play Again" on a practice score screen deals another practice game · not the multiplayer lobby', async ({ page }) => {
+    test.setTimeout(150_000)
+    await page.goto('/practice?bots=1')
+    await boardReady(page)
+
+    const { snapshot: mid } = await playUntil(page, s => s.placed >= 4 && s.turnNumber >= 3, {
+      budgetMs: 75_000,
+      label: 'a board far enough along that a fresh deal is unmistakable',
+    })
+
+    await page.evaluate(() => window.__neotopia_store.getState().setPhase('scoring'))
+    await expect(page.getByRole('dialog', { name: /final civilization record/i })).toBeVisible()
+    await page.getByTestId('play-again-btn').click({ timeout: 5_000 })
+
+    await expect.poll(() => read(page).then(s => s?.phase), {
+      timeout: 15_000,
+      message: 'Play Again did not deal another practice game',
+    }).toBe('playing')
+    // The assertion the bug would have failed · '/lobby' is the wrong side of the sign-in.
+    expect(new URL(page.url()).pathname, 'a practice player was navigated away from /practice').toBe('/practice')
+
+    const fresh = await read(page)
+    expect(fresh.players.filter(p => p.isBot), 'the new table must have the opponents the player asked for')
+      .toHaveLength(1)
+    // A NEW table, not the old one resumed. Read immediately after the phase flip, when the bots have had at
+    // most a few hundred ms · and `mid` is deliberately far enough along (>= 4 elements, >= turn 3) that this
+    // cannot be a timing coincidence.
+    expect(fresh.turnNumber, `Play Again resumed the finished game · turn ${fresh.turnNumber} against ${mid.turnNumber}`)
+      .toBeLessThan(mid.turnNumber)
+    expect(fresh.placed, `Play Again resumed the finished board · ${fresh.placed} elements against ${mid.placed}`)
+      .toBeLessThan(mid.placed)
+    console.log(`[practice] play again · turn ${mid.turnNumber}→${fresh.turnNumber} · placed ${mid.placed}→${fresh.placed}`)
   })
 })
