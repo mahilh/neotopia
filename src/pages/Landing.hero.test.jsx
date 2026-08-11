@@ -38,18 +38,21 @@ const parse = (css) => {
 const BG = [10, 10, 15] // #0a0a0f
 
 describe('the wordmark is the game', () => {
-  it('spells NEOTOPIA in four element pairs', () => {
+  it('spells NEOTOPIA in TWO parts, split on meaning', () => {
+    // S45 shipped four element pairs and it was rejected: four hues at similar saturation reads as a
+    // playful web app, and "it teaches the four elements" only lands for somebody who already knows
+    // there are four. NEO / TOPIA · the old thing lit, and the bright new place.
     mount()
     const marks = [...screen.getByTestId('wordmark').querySelectorAll('[data-wordmark-pair]')]
-    expect(marks.map(m => m.getAttribute('data-wordmark-pair'))).toEqual(['NE', 'OT', 'OP', 'IA'])
+    expect(marks.map(m => m.getAttribute('data-wordmark-pair'))).toEqual(['NEO', 'TOPIA'])
     expect(marks.map(m => m.textContent).join(''), 'the name must still read as the name').toBe('NEOTOPIA')
-    expect(new Set(marks.map(m => m.style.color)).size, 'four elements, four colours').toBe(4)
+    expect(new Set(marks.map(m => m.style.color)).size, 'two parts, two colours · not four').toBe(2)
   })
 
   it('every pair is legible on the page background', () => {
-    // MEASURED, not chosen. The brief's community blue #2244AA is 2.33:1 · below AA (4.5) and below
-    // AA-LARGE (3.0) as well, so at 52px the word would end in two letters a low-vision reader loses
-    // entirely. It ships lifted along its own hue to 4.51:1, and the deviation is flagged.
+    // MEASURED, not chosen · bone 16.25:1 and amber 7.30:1 on #0a0a0f. The S45 four-colour version
+    // needed a deviation from the brief to clear this at all (its community blue was 2.33:1, failing
+    // AA and AA-large both); two colours chosen for meaning clear it with room to spare.
     mount()
     for (const m of screen.getByTestId('wordmark').querySelectorAll('[data-wordmark-pair]')) {
       const r = contrast(parse(m.style.color), BG)
@@ -77,10 +80,23 @@ describe('the wordmark is the game', () => {
 })
 
 describe('the hero states what the game IS', () => {
-  it('leads with the weakest-district rule · the only surprising true thing', () => {
+  it('leads with the rivalry, and puts the constraint in the subhead where it belongs', () => {
+    // S45's "Your weakest district decides whether your world survives" was rejected and rightly: a
+    // constraint is not a hook, and it told the player what punishes them before what they get to
+    // do. The fantasy is entrepreneurs in 2055 building the best-functioning world against rivals
+    // doing the same · the constraint survives, one line lower.
     mount()
     expect(screen.getByRole('heading', { level: 1 }).textContent)
-      .toMatch(/weakest district decides whether your world survives/i)
+      .toMatch(/Four builders\. One world\. Only one of you builds it right\./)
+    expect(document.body.textContent, 'the constraint moves to the subhead, it does not vanish')
+      .toMatch(/Three regions\. Four elements\. Neglect nothing\./)
+  })
+
+  it('avoids the two words the council rejected', () => {
+    mount()
+    const text = document.body.textContent
+    expect(text, 'connotation').not.toMatch(/billionaire/i)
+    expect(text, 'brochure-word').not.toMatch(/sustainable/i)
   })
 
   it('drops the definition-by-absence and the six claims before the first button', () => {

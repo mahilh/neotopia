@@ -31,21 +31,32 @@ const BG = '#0a0a0f'
 // explicit table for that reason · importing the board palette would silently "fix" a deliberate
 // choice the next time somebody tidies (Rule 45: a second contract, stated as one).
 //
-// ONE COLOUR DEVIATES FROM THE BRIEF, AND IT IS MEASURED RATHER THAN PREFERRED. Against #0a0a0f:
-//     NE #CC5522  4.60:1  AA        OT #1D9E75  5.83:1  AA        OP #7F77DD  5.25:1  AA
-//     IA #2244AA  2.33:1  FAIL      · below AA (4.5) and below AA-LARGE (3.0) as well
-// Three of the four were chosen well and the fourth is unreadable · at 52px it is a dark blue on a
-// near-black field, so the word would end in two letters a low-vision reader loses entirely.
-// #376DFF is the SAME HUE lifted 1.605x, the smallest multiple that clears 4.5:1, measured at
-// 4.51:1. Hue and saturation are untouched; only lightness moves, and only as far as it must.
-// Flagged to Mahil rather than done quietly: if the darker blue is wanted for brand reasons, the
-// honest fallback is #2952CE at 3.01:1, which is legal for large text only and would forbid ever
-// using this wordmark at body size.
+// TWO COLOURS, SPLIT ON MEANING RATHER THAN ON LETTER COUNT (T1 S47). The four-element version I
+// shipped in S45 was rejected and the reasoning is better than mine was: four hues at similar
+// saturation reads as "playful web app", and my argument that it teaches the four elements only
+// lands for somebody who ALREADY KNOWS there are four. A wordmark cannot teach a taxonomy to
+// someone meeting it for the first time; it can only say what kind of thing this is.
+//     NEO    #F2E8D5  bone warm-white  16.25:1  · reads as a material rather than a hue · "the old
+//                                                 thing lit"
+//     TOPIA  #C89440  amber gold        7.30:1  · "the bright new place"
+// Same font, same tracking, same size · colour only, as instructed.
+//
+// THE AMBER CONFLICT IS REAL AND I AM KEEPING AMBER. rgba(200,148,64) IS #C89440, and it already
+// tints the "Practice alone" button forty lines below · so the brand hue and a secondary CTA share
+// a colour in one viewport. The offered escape was #40E0D0 teal (12.03:1, no conflict), and I am
+// not taking it: teal appears NOWHERE else in this product, so it would add a FIFTH hue to a page
+// whose whole correction was that four were too many. Amber is already the game's reward colour ·
+// the score flash, the milestone, cluster points, a scored line in the action log · so TOPIA in
+// amber says "this is the thing you are playing for" in a language the rest of the product already
+// speaks. Two uses of one hue beats two hues.
+// MEASURED, so it is a judgement with a number under it rather than a preference: at 320 and 1440
+// the wordmark and that button are both in the hero, and the button carries amber at 0.4 alpha on
+// its border and 0.1 on its fill against a SOLID 52px wordmark. Recommendation recorded in comms:
+// if they still compete for Mahil, the right move is to neutralise the BUTTON, not to introduce a
+// fifth hue for the brand · but that is his call and I have not made it.
 const WORDMARK = [
-  ['NE', '#CC5522'], // energy
-  ['OT', '#1D9E75'], // biofarming
-  ['OP', '#7F77DD'], // technology
-  ['IA', '#376DFF'], // community · brief said #2244AA (2.33:1) · lifted to clear AA. See above.
+  ['NEO', '#F2E8D5'],   // bone warm-white · the old thing lit
+  ['TOPIA', '#C89440'], // amber gold · the bright new place
 ]
 const sectionLabel = {
   fontSize: 12, letterSpacing: 4, color: 'rgba(255,255,255,0.5)', // WCAG AA (~5.3:1 on #0a0a0f) · 12px min (UX scan)
@@ -99,11 +110,10 @@ export default function Landing() {
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '64px 24px',
       }}>
-        {/* ── THE WORDMARK IS THE GAME (T1 S45) ─────────────────────────────────────────────────
-            Eight letters, four elements, two each · NE energy, OT biofarming, OP technology, IA
-            community. The same four colours the board is played in, so the name teaches the palette
-            before the tutorial has to. Font and tracking are UNCHANGED on Mahil's instruction and he
-            is right; this is colour only.
+        {/* ── THE WORDMARK (T1 S45, recoloured S47) ──────────────────────────────────────────────
+            NEO / TOPIA in two colours, split on MEANING · see the WORDMARK table above for why the
+            four-element version was wrong and why amber stays despite the button. Font, tracking and
+            size are unchanged on Mahil's instruction; this has only ever been colour.
             AND IT WAS A SUBTITLE OF ITS OWN DATE. NEOTOPIA rendered at 13px against a 56px tagline ·
             one pixel larger than the kicker above it. A brand that is smaller than every other
             element on its own hero is not a brand, it is a caption. It leads now, and the "2055"
@@ -125,7 +135,7 @@ export default function Landing() {
           fontSize: 'clamp(22px, 4vw, 40px)', fontWeight: 200, letterSpacing: -0.5,
           color: 'rgba(255,255,255,0.95)', lineHeight: 1.2, maxWidth: 780, margin: '0 0 20px',
         }}>
-          Your weakest district decides whether your world survives.
+          Four builders. One world. Only one of you builds it right.
         </h1>
         {/* Replaces "Pure strategy · No dice", which described the game by what it LACKS · nobody
             ever wanted a game because it had no dice. The positive form of that claim already
