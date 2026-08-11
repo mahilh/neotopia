@@ -502,6 +502,21 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   //   · a placement · a factory holding at least one element AND a region it borders with at least
   //     one legal hex. Asked of getValidPlacements rather than reasoned about, because centre-first
   //     and adjacency are the engine's rules and a second copy of them here would drift (Rule 45).
+  //
+  // AND THE COST IS MEASURED, NOT ASSUMED (T1 S45). I shipped this in S44 having deleted the words
+  // "obviously cheap" from this comment without replacing them with a number, which is the same
+  // reasoning Rule 81 forbids · it just looks humbler. `regions` and `factories` change identity on
+  // every placement and this component re-renders once a second for the turn clock, so the honest
+  // worry was a per-second sweep on the smallest device.
+  // MEASURED at 320x568 against the live engine, worst case (54 tokens down, every factory stocked
+  // so the `stock === 0` short-circuit never fires), 200 runs:
+  //     6 engine calls per sweep · median 0.10ms · p95 0.30ms · max 0.70ms
+  //     p95 is 1.8% OF A 60fps FRAME · roughly 50x of headroom
+  // So the gate I proposed (only sweep at actionsLeft > 0 && uiPhase === 'idle') is NOT warranted:
+  // it would add a second condition to the predicate three surfaces now share, to save 0.3ms.
+  // Caveat stated rather than hidden: that is a desktop JS engine at a phone VIEWPORT, not a phone
+  // CPU. Even at 10x slower it is 3ms, inside a frame · but if this file ever gets a real device
+  // budget, this is the line to re-measure rather than re-reason.
   const legalPlacements = useMemo(() => {
     if (!isMyTurn || phase !== 'playing' || actionsLeft <= 0) return { total: 0, byRegion: {}, byFactory: {} }
     const store = useGameStore.getState()

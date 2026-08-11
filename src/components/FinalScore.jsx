@@ -109,6 +109,24 @@ export default function FinalScore({
     () => (typeof patternMatcher.getClusterDetail === 'function' ? patternMatcher.getClusterDetail(regions) : []),
     [regions],
   )
+  // ── WHOSE CLUSTER POINTS ARE THESE (T1 S45) ──────────────────────────────────────────────────
+  // The handover T2 left in the comment below, taken. Since S35 the engine awards each player only
+  // the tokens THEY placed, so this panel and the formula line above it were describing two
+  // different quantities with the same word: the rows summed the whole board (say 40) while each
+  // player's own line read "+24 cluster", and nothing on screen connected the two. A player with a
+  // different number from their opponent had no way to learn that PLACEMENT is what earned it ·
+  // which is the entire point of the mechanic, and the reason it measured as noise until S35.
+  // getClusterDetail already takes a seat and returns the same rows with `bonus` counting only that
+  // seat's tokens, so this is the engine's own split rather than a second arithmetic here (Rule 45).
+  const clusterBySeat = useMemo(() => {
+    if (typeof patternMatcher.getClusterDetail !== 'function') return {}
+    const out = {}
+    for (const p of players) {
+      if (typeof p?.seat !== 'number') continue
+      out[p.seat] = patternMatcher.getClusterDetail(regions, p.seat)
+    }
+    return out
+  }, [regions, players])
   // The board's TOTAL cluster points · the sum of the per-cluster rows shown below, i.e. every token on every
   // biggest cluster. This is a civilization figure for the display only: since T2 S35 the engine scores each
   // player just their OWN tokens, so per-seat bonuses sum to AT MOST this number (less when a cluster holds
@@ -429,15 +447,27 @@ export default function FinalScore({
                 {/* Unused bonus tokens · each worth x3 at game end (psychology: never waste a token) */}
                 {player.unusedBonus > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>unused tokens × 3</span>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>unused tokens × 3</span>
                     <span style={{ fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>
                       +{player.unusedBonus * 3}
                     </span>
                   </div>
                 )}
 
-                {/* Score formula · the real engine formula, exactly */}
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)', letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums' }}>
+                {/* ── THE FORMULA SHIPPED AND WAS INVISIBLE (T1 S45) ────────────────────────────
+                    I reported last session that the scoring formula "does not exist in the shipped
+                    product", from a bundle grep for `×3`. It renders `× 3`, WITH A SPACE, so my
+                    search matched nothing and I called a built feature missing · and the brief
+                    repeated the finding using the same string, which is not an independent check
+                    (Rule 92: two sides of one source). It has been here since S27.
+                    WHAT IS ACTUALLY WRONG IS THAT NOBODY CAN READ IT. Measured: white at alpha 0.20
+                    on this dialog's rgb(4,4,10) is CONTRAST 1.70:1, against the 4.5:1 AA needs for
+                    11px text · off by a factor of 2.6. The line carrying the game's entire strategic
+                    argument was drawn at the threshold of visibility. 0.5 measures 5.34:1 and 12px
+                    stops it being the smallest thing on a screen full of 36px numbers.
+                    Rule 70, exactly: a feature can exist and be too subtle to perceive, and the
+                    report that it is missing is the symptom of that rather than a contradiction. */}
+                <div data-testid="score-formula" style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.05)', letterSpacing: 0.3, fontVariantNumeric: 'tabular-nums' }}>
                   {player.best} + {player.second} + ({player.worst} × 3)
                   {player.unusedBonus > 0 ? ` + (${player.unusedBonus} × 3)` : ''}
                   {player.clusterBonus > 0 ? ` + ${player.clusterBonus} cluster` : ''} = {player.total}
@@ -495,11 +525,24 @@ export default function FinalScore({
           <div style={{ fontSize: 9, letterSpacing: 4, color: 'rgba(255,255,255,0.25)', marginBottom: 4, textTransform: 'uppercase', textAlign: 'center' }}>
             Element Clusters
           </div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 16, lineHeight: 1.6 }}>
             the largest connected group of each element, in each region · 1 point per token, to whoever placed it
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {clusterDetail.map((c, i) => (
+            {clusterDetail.map((c, i) => {
+              // Only players who actually earned something on THIS cluster · a row listing everyone
+              // with a 0 beside their name is noise, and it is the common case with three seats.
+              const seatSplit = players
+                .map(p => ({
+                  seat: p.seat,
+                  name: (p.username ?? 'Rival').slice(0, 8),
+                  mine: mySeat != null && p.seat === mySeat,
+                  bonus: (clusterBySeat[p.seat] ?? []).find(
+                    r => r.regionId === c.regionId && r.element === c.element,
+                  )?.bonus ?? 0,
+                }))
+                .filter(s => s.bonus > 0)
+              return (
               <div key={`${c.regionId}-${c.element}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: ELEMENT_COLORS[c.element] ?? '#888', flexShrink: 0 }} />
                 <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 13, fontWeight: 500 }}>
@@ -510,13 +553,31 @@ export default function FinalScore({
                   <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
                     {c.count} connected
                   </span>
+                  {/* WHO GOT THE POINTS, per cluster. The row used to end here with the board total, so a
+                      2-player game showed "+7 pts" on a cluster that paid 5 to one player and 2 to the
+                      other. The split is the whole lesson of the mechanic · it is the only place the
+                      screen can say "you earned these by placing them". */}
+                  {seatSplit.length > 1 && (
+                    <span data-testid="cluster-split" style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      {seatSplit.map(s => (
+                        <span key={s.seat} style={{
+                          fontSize: 11, fontVariantNumeric: 'tabular-nums',
+                          color: s.mine ? 'rgba(200,148,64,0.95)' : 'rgba(255,255,255,0.32)',
+                          fontWeight: s.mine ? 700 : 500,
+                        }}>
+                          {s.mine ? 'you' : s.name} {s.bonus}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                   {/* bonus === count by the rule · the guard renders 0 pts if T2's `bonus` field is ever absent (Rule 65) */}
                   <span style={{ color: 'rgba(200,148,64,0.9)', fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 46, textAlign: 'right' }}>
                     +{c.bonus ?? 0} pts
                   </span>
                 </span>
               </div>
-            ))}
+              )
+            })}
           </div>
           {/* Board total · what every cluster on the board is worth in aggregate. Since T2 S35 this is SPLIT
               between the players by who placed each token, so it is NOT any one player's cluster score · the
