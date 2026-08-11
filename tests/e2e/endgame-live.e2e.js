@@ -45,6 +45,25 @@
 // COST · 2 anonymous sign-ins. Nightly-class, never the merge gate. The ENGINE test costs nothing.
 // Run locally:  npm run test:e2e -- endgame-live
 // ⚠ Run it against a dev server nobody else is editing · see multiplayer-endgame-live's header (Rule 82).
+//
+// RUNS-NOWHERE: no workflow has ever invoked this file · routed to T2, comms/t3-s50-endgame-live-wiring.md
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// AND IT READ AS WIRED THE WHOLE TIME, WHICH IS THE PART WORTH RECORDING (T3 S50). The spec-runner audit in
+// preconditions.e2e.js asked `workflowText.includes('endgame-live.e2e.js')` · and that string is a SUFFIX OF
+// `multiplayer-endgame-live.e2e.js`, which IS wired, twice. So this file has been an orphan since it landed
+// in S39 while the gate built to find orphans reported it green for seven consecutive sessions. Nothing was
+// wrong with the citation, the spec, or the workflow; the instrument could not tell two filenames apart.
+// Found by MUTATING that gate on purpose rather than rereading it: deleting multiplayer-endgame-live's two
+// run lines reddened with TWO names, and only one of them had been touched.
+//
+// PREMISE-CHECKED BEFORE ROUTING (Rule 79a · run a spec locally BEFORE asking anyone to wire it, because
+// practice.e2e.js was stale on arrival and would have reddened the gate for three lanes):
+//   ENGINE half · GREEN at HEAD, 63ms, 10/10 deals reached the armed state, ZERO identities.
+//   LIVE half   · 2 anon sign-ins, unchanged. Nightly-class by cost (Rule 79b), not by preference.
+// The declaration above is what keeps the merge gate green for the other two lanes while T2 owns the
+// one-line change (Rule 103b · a red gate on someone else's file is a tripwire aimed at a colleague).
+// DELETE THIS DECLARATION IN THE SAME COMMIT THAT WIRES THE FILE · a stale RUNS-NOWHERE: is exactly the
+// class of lie this whole audit exists to stop.
 
 import { test, expect } from '@playwright/test'
 import { loadEnv, uniqueName, deleteRoomAsHost } from './seedHelpers'

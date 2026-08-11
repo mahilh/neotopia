@@ -248,45 +248,216 @@ test.describe('the precondition gate · a protected deployment is not a broken b
 // IT DOES NOT DEMAND THAT EVERY SPEC BE WIRED, and that restraint is deliberate · a new spec is legitimately
 // unwired for a session or two while the lane that owns the workflow picks it up, and a gate that reds on
 // that would be a tripwire aimed at a colleague (the mistake I made in S39 and removed in S42). What it
-// demands is that the file SAY SO: either a workflow runs it, or its header declares the RUNS-NOWHERE
-// marker (name + colon) with a reason. The honest state is always available; the silent one is not.
-// ⚠ THE COLON IS OMITTED FROM THIS PROSE ON PURPOSE (T3 S49). The escape hatch is a plain substring, so a
-// sentence ABOUT the marker satisfies it · this file and postgres-writeorder both did, and a spec could
-// therefore be un-wired and still read as declared, purely because its header discusses the mechanism.
-// Same class as the self-scan defect below: an instrument matching text that describes the instrument.
+// demands is that the file SAY SO: either a workflow RUNS it, or its header DECLARES the RUNS-NOWHERE:
+// marker with a reason. The honest state is always available; the silent one is not.
+//
+// ⚠ BOTH HALVES OF THIS GATE WERE PLAIN SUBSTRING MATCHES UNTIL T3 S50, AND BOTH WERE SATISFIED BY PROSE
+// ABOUT THE THING RATHER THAN THE THING. That is one defect wearing two costumes, and it survived six
+// sessions because the gate was green every single run · it had never once been made to fail on purpose.
+//   THE ESCAPE HATCH · `/RUNS-NOWHERE:/` matched anywhere in 4000 characters, so a sentence DISCUSSING the
+//     marker excused the file. This header and postgres-writeorder's both did. S49 worked around it by
+//     omitting the colon from the prose, which is a note that a future editor could not know to obey.
+//     Now the declaration must START a line (after its comment prefix) and carry a reason, so the only way
+//     left to fool it is to write an actual declaration · at which point the false accept IS the true form.
+//   THE WIRING CHECK · `wfText.includes(spec)` was a substring over all eight workflows CONCATENATED, so a
+//     spec named only in a `#` comment read as wired. Not hypothetical: multiplayer-endgame-live.e2e.js is
+//     named in two comments (e2e.yml:83, e2e-live-nightly.yml:94) as well as two run lines, so deleting
+//     both invocations would have left this gate green on prose explaining why the spec matters. Now a
+//     mention that survives only in comments is reported as its own failure kind, which names the mechanism
+//     rather than saying "orphan" and leaving the reader to find the comment.
+//   AND A THIRD COSTUME, WHICH THE MUTATION RUN FOUND AND NO AMOUNT OF REREADING WOULD HAVE · `includes()`
+//     has no word boundary, and "endgame-live.e2e.js" IS A SUBSTRING OF "multiplayer-endgame-live.e2e.js".
+//     So endgame-live.e2e.js · 653 lines, the spec that plays a real multiplayer room to its own ending,
+//     the composition CLAUDE.md names as the honest remaining gap · has been in NO WORKFLOW since S39 and
+//     read as wired for every one of the seven sessions this gate has existed. The gate built to find specs
+//     that run nowhere was hiding one, and it was hiding it from ITSELF. A filename is now matched only
+//     where it is not preceded by another filename character, so `/` still wires and `-` no longer does.
+//
+// The classifier is a PURE FUNCTION so the two directions can both be proven (Rule 99a): the real repo goes
+// through it (the funnel · Rule 99b), and the teeth block below drives the SAME function over synthetic
+// corpora with known answers · including the two holes above, which is what stops them being reintroduced by
+// someone who reads `includes()` as obviously correct. It is obviously correct. It was also wrong twice.
+// RESIDUAL, stated rather than implied: a spec named on a run line inside a job that never fires (`if:
+// false`, a workflow nobody dispatches) still reads as wired. This gate answers "does a workflow invoke
+// it", not "did it execute" · Rule 79d owns the second question and reads the log for the test lines.
 import { readdirSync, readFileSync } from 'node:fs'
+
+// A YAML `#` comment, or a shell `#` comment inside a `run: |` block · both are text that does not invoke.
+const IS_COMMENT_LINE = /^\s*#/
+// The declaration must OPEN a line and carry a reason after the colon. `// RUNS-NOWHERE: nobody owns this`
+// declares; "...its header declares the RUNS-NOWHERE: marker" does not.
+const DECLARATION = /^[ \t]*(?:\/\/|#|\*)[ \t]*RUNS-NOWHERE:[ \t]*\S/m
+
+// A filename matches only where it is not preceded by another filename character · `/` and whitespace wire
+// it, `-` and letters do not. Without this, any spec whose name is a suffix of a longer spec's name is
+// wired by its neighbour (endgame-live.e2e.js was, for seven sessions · see the header).
+const mentions = (text, name) =>
+  new RegExp(`(?<![A-Za-z0-9_.\\-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(text)
+
+/**
+ * Classify every spec as wired / declared / comment-only / orphaned.
+ *
+ * @param {{name: string, header: string}[]} specs
+ * @param {{name: string, text: string}[]} workflows
+ * @returns {{wired: string[], declared: string[], commentOnly: string[], orphans: string[],
+ *            runLines: number, commentLines: number}}
+ */
+export function auditSpecWiring(specs, workflows) {
+  const run = []
+  const comments = []
+  for (const wf of workflows) {
+    for (const line of wf.text.split('\n')) (IS_COMMENT_LINE.test(line) ? comments : run).push(line)
+  }
+  const runText = run.join('\n')
+  const commentText = comments.join('\n')
+
+  const out = { wired: [], declared: [], commentOnly: [], orphans: [], runLines: run.length, commentLines: comments.length }
+  for (const spec of specs) {
+    if (mentions(runText, spec.name)) { out.wired.push(spec.name); continue }
+    // A declaration outranks a comment mention: a file that says it runs nowhere is being honest even if a
+    // workflow still discusses it.
+    if (DECLARATION.test(spec.header)) { out.declared.push(spec.name); continue }
+    ;(mentions(commentText, spec.name) ? out.commentOnly : out.orphans).push(spec.name)
+  }
+  return out
+}
 
 test.describe('every E2E spec names the workflow that runs it, or says it runs nowhere (T3 S43)', () => {
   test('no spec is silently orphaned', async () => {
     const specDir = new URL('.', import.meta.url)
     const wfDir = new URL('../../.github/workflows/', import.meta.url)
 
-    const specs = readdirSync(specDir).filter(f => f.endsWith('.e2e.js'))
-    const workflows = readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f))
+    const specFiles = readdirSync(specDir).filter(f => f.endsWith('.e2e.js'))
+    const wfFiles = readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f))
     // COUNTERWEIGHT FIRST (Rule 90): if either list came back empty, every spec below would read as
     // "wired" or the loop would not run at all, and this gate would pass while auditing nothing. That is
     // the exact shape of the thing it was built to catch, one level up.
-    expect(specs.length, 'no E2E specs were found · this gate is auditing an empty set').toBeGreaterThan(10)
-    expect(workflows.length, 'no workflow files were found · every spec would look orphaned, or none would')
+    expect(specFiles.length, 'no E2E specs were found · this gate is auditing an empty set').toBeGreaterThan(10)
+    expect(wfFiles.length, 'no workflow files were found · every spec would look orphaned, or none would')
       .toBeGreaterThan(0)
 
-    const wfText = workflows.map(w => readFileSync(new URL(w, wfDir), 'utf8')).join('\n')
-    const orphans = []
-    for (const spec of specs) {
-      if (wfText.includes(spec)) continue
-      const header = readFileSync(new URL(spec, specDir), 'utf8').slice(0, 4000)
-      if (/RUNS-NOWHERE:/.test(header)) continue
-      orphans.push(spec)
-    }
+    const specs = specFiles.map(name => ({
+      name, header: readFileSync(new URL(name, specDir), 'utf8').slice(0, 4000),
+    }))
+    const workflows = wfFiles.map(name => ({ name, text: readFileSync(new URL(name, wfDir), 'utf8') }))
+    const audit = auditSpecWiring(specs, workflows)
 
-    expect(orphans, `${orphans.length} E2E spec(s) are in no workflow and do not say so: ` +
-      `${orphans.join(', ')}. A spec that runs nowhere cannot report its own rot · it decays silently and ` +
-      'in the direction of a lie (Rule 79), and any comment citing it as proof is a claim rather than ' +
-      'evidence (Rule 97). Either wire it, or put a line in its header starting RUNS-NOWHERE: saying why ' +
+    // SECOND COUNTERWEIGHT, and it is the one that guards the S50 fix rather than the S43 gate: the
+    // comment/run split must be NON-DEGENERATE. Mutate IS_COMMENT_LINE to match nothing and commentLines
+    // is 0 · the old substring behaviour, silently restored. Mutate it to match everything and runLines is
+    // 0 · every spec becomes comment-only. Both directions red here, and neither is measured by the same
+    // predicate twice over (Rule 92a): these are counts of the real corpus, checked against the fact that
+    // eight workflow files necessarily contain both kinds of line.
+    expect(audit.runLines, 'no non-comment lines in any workflow · the comment filter is eating everything')
+      .toBeGreaterThan(50)
+    expect(audit.commentLines, 'no comment lines found in eight workflow files · the comment filter is ' +
+      'matching nothing, so this gate has silently reverted to the pre-S50 substring behaviour that let a ' +
+      'spec named only in prose read as wired').toBeGreaterThan(10)
+
+    expect(audit.commentOnly, `${audit.commentOnly.length} E2E spec(s) are named ONLY in workflow ` +
+      `COMMENTS and are invoked by nothing: ${audit.commentOnly.join(', ')}. A comment explaining why a ` +
+      'spec matters is not a runner · this is the exact failure the gate was blind to until S50.')
+      .toEqual([])
+
+    expect(audit.orphans, `${audit.orphans.length} E2E spec(s) are in no workflow and do not say so: ` +
+      `${audit.orphans.join(', ')}. A spec that runs nowhere cannot report its own rot · it decays silently ` +
+      'and in the direction of a lie (Rule 79), and any comment citing it as proof is a claim rather than ' +
+      'evidence (Rule 97). Either wire it, or open a line in its header with RUNS-NOWHERE: followed by why ' +
       'and who owns wiring it.').toEqual([])
 
     console.log(`[preconditions] spec-runner audit · ${specs.length} specs across ${workflows.length} ` +
-      'workflows · 0 silent orphans')
+      `workflows · ${audit.wired.length} wired · ${audit.declared.length} declared · 0 silent orphans ` +
+      `· ${audit.runLines} run lines / ${audit.commentLines} comment lines`)
+  })
+
+  // ── TEETH · THE GATE MADE TO FAIL ON PURPOSE, IN BOTH DIRECTIONS (T3 S50) ─────────────────────────────
+  // My own closing critique in S49: "my instruments have been earning trust from age rather than from being
+  // exercised." This gate was six sessions old, green every run, and had two substring holes in it. A
+  // mutation run proves a gate once, on the day someone runs it; these fixtures prove it on every run, and
+  // they are the reason the holes cannot come back silently. Each case is a corpus with a known answer.
+  const spec = (name, header = '// nothing to declare') => ({ name, header })
+  const wf = (name, text) => ({ name, text })
+
+  test('teeth · a run line wires, a comment does not, and prose does not declare', async () => {
+    const workflows = [wf('ci.yml', [
+      'jobs:',
+      '  # a.e2e.js is deliberately excluded from the fast gate · it costs four sign-ins',
+      '    run: npx playwright test tests/e2e/b.e2e.js',
+      '      # tests/e2e/c.e2e.js used to run here',
+    ].join('\n'))]
+
+    const audit = auditSpecWiring([
+      spec('b.e2e.js'),                                                   // named on a run line
+      spec('a.e2e.js'),                                                   // named ONLY in a YAML comment
+      spec('c.e2e.js'),                                                   // named ONLY in a shell comment
+      spec('d.e2e.js'),                                                   // named nowhere at all
+      spec('e.e2e.js', '// RUNS-NOWHERE: T2 owns wiring this · S51'),     // a real declaration
+      spec('f.e2e.js', '// its header declares the RUNS-NOWHERE: marker'), // PROSE about the marker
+      spec('g.e2e.js', '// RUNS-NOWHERE:'),                               // marker with no reason
+    ], workflows)
+
+    expect(audit.wired, 'a spec named on a non-comment line is wired').toEqual(['b.e2e.js'])
+    // THE S50 HOLE, both costumes. Before the fix a.e2e.js and c.e2e.js read as WIRED (substring over the
+    // concatenated text) and f.e2e.js read as DECLARED (substring over the header).
+    expect(audit.commentOnly, 'a spec named only inside # comments is NOT wired · YAML or shell')
+      .toEqual(['a.e2e.js', 'c.e2e.js'])
+    expect(audit.declared, 'only a line that OPENS with the marker and carries a reason declares')
+      .toEqual(['e.e2e.js'])
+    expect(audit.orphans, 'prose about the marker, and a marker with no reason, are not declarations')
+      .toEqual(['d.e2e.js', 'f.e2e.js', 'g.e2e.js'])
+  })
+
+  test('teeth · a spec is not wired by a longer spec that contains its name', async () => {
+    // THE THIRD COSTUME, and the one that was live. This exact pair sat in the repo for seven sessions:
+    // "endgame-live.e2e.js" is a suffix of "multiplayer-endgame-live.e2e.js", so the shorter name matched
+    // the longer one's run line and read as wired while nothing invoked it. Pinned as a fixture rather than
+    // trusted to the real corpus, because the real corpus stops containing the collision the day either
+    // file is renamed · and then the boundary check is unproven again with nothing going red.
+    const audit = auditSpecWiring(
+      [spec('endgame-live.e2e.js'), spec('multiplayer-endgame-live.e2e.js')],
+      [wf('nightly.yml', '          tests/e2e/multiplayer-endgame-live.e2e.js\n')],
+    )
+    expect(audit.wired, 'only the file actually named is wired').toEqual(['multiplayer-endgame-live.e2e.js'])
+    expect(audit.orphans, 'the shorter name must NOT ride on its neighbour').toEqual(['endgame-live.e2e.js'])
+
+    // And the boundary must not over-tighten: a path separator, a line start and whitespace all still wire.
+    const paths = auditSpecWiring(
+      [spec('a.e2e.js'), spec('b.e2e.js'), spec('c.e2e.js')],
+      [wf('w.yml', 'run: playwright test tests/e2e/a.e2e.js b.e2e.js\nc.e2e.js\n')],
+    )
+    expect(paths.orphans, 'slash, space and line-start are all legitimate boundaries (Rule 94a · a gate ' +
+      'that condemns working wiring gets switched off)').toEqual([])
+  })
+
+  test('teeth · the negative direction · a normal corpus reports nothing (Rule 99a)', async () => {
+    // The half that is easy to skip and is exactly half the proof: a detector that cries wolf on working
+    // input is worse than no detector (Rule 94a · a gate read as noise gets switched off).
+    const audit = auditSpecWiring(
+      [spec('x.e2e.js'), spec('y.e2e.js'), spec('z.e2e.js', '  //   RUNS-NOWHERE: nightly-only, T2 S51')],
+      [wf('a.yml', '    run: npx playwright test tests/e2e/x.e2e.js\n'),
+       wf('b.yml', '      run: >\n        npx playwright test\n        tests/e2e/y.e2e.js\n')],
+    )
+    expect(audit.orphans).toEqual([])
+    expect(audit.commentOnly).toEqual([])
+    expect(audit.wired).toEqual(['x.e2e.js', 'y.e2e.js'])   // incl. the nightly's folded `run: >` block
+    expect(audit.declared).toEqual(['z.e2e.js'])            // leading whitespace and spacing are tolerated
+  })
+
+  test('teeth · a declaration outranks a comment mention, and an empty corpus is degenerate', async () => {
+    const both = auditSpecWiring(
+      [spec('h.e2e.js', '// RUNS-NOWHERE: engine-only · nothing invokes it yet')],
+      [wf('a.yml', '  # h.e2e.js is coming to the nightly next session')],
+    )
+    expect(both.declared, 'an honest file stays honest even while a workflow discusses it').toEqual(['h.e2e.js'])
+    expect(both.commentOnly).toEqual([])
+
+    // Degenerate corpora: the real gate's two counterweights above are what catch these, and this is the
+    // evidence they are reachable rather than decorative.
+    const noComments = auditSpecWiring([spec('i.e2e.js')], [wf('a.yml', 'run: playwright test i.e2e.js')])
+    expect(noComments.commentLines, 'a corpus with no comment lines · the real gate reds on this').toBe(0)
+    const allComments = auditSpecWiring([spec('i.e2e.js')], [wf('a.yml', '# run: playwright test i.e2e.js')])
+    expect(allComments.runLines, 'a corpus with no run lines · the real gate reds on this').toBe(0)
+    expect(allComments.commentOnly, 'and every spec falls through to comment-only').toEqual(['i.e2e.js'])
   })
 })
 
