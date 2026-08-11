@@ -44,6 +44,28 @@ export const read = (page) => page.evaluate(SNAPSHOT)
  * CLAUDE.md ("Bot: ALL steps force:true") and proven against the DB in S12. Every other click here is a
  * normal one, so reachability is still being tested everywhere it can be.
  */
+
+// ── A FREE REPRODUCER FOR THE *LIVE* FAILURES IS NOT AVAILABLE, AND HERE IS THE MEASUREMENT (T3 S47) ──────
+// I closed S46 recommending one: "Playwright can route-delay Supabase requests on the free practice board ·
+// that turns 'the driver is flaky in live rooms' into something you can reproduce for ZERO identities."
+// THAT CANNOT WORK, and one 7-second probe says why:
+//     practice board · supabase requests during load: 0 · during play: 0 · []
+// Practice makes NO network calls at all · that is the whole point of the mode (it exists for a player who
+// arrives while anonymous sign-in is rate limited). There is nothing to delay, so route-delay reproduces
+// nothing. I recommended it from the shape of the problem without checking the page I proposed to run it
+// on · Rule 105, on my own closing note, one session later.
+//
+// WHAT IS AND IS NOT REPRODUCIBLE FOR FREE, stated so nobody rebuilds the wrong instrument:
+//   REPRODUCIBLE · render-timing failures (the factory/element/region step races). Practice renders the
+//     same components, and CPU throttling widens the window · that is the S46 instrument, and it was
+//     inconclusive rather than absent: fixed 100/100/100 and control 100/100/100 across three runs each.
+//   NOT REPRODUCIBLE · anything in the network path · postgres_changes delivery, RPC latency, a write
+//     refused by the state_version predicate. Those need a room, and a room needs identities.
+// THE TEMPTING WRONG FIX is a stubbed Supabase with injected latency so practice can pretend to be a room.
+// That is a fake backend, it diverges from the real one the first time either moves, and a harness that
+// models the system rather than mirroring it is how three sessions of "product bug" turned out to be
+// environment (Rule 36). Not built on purpose.
+
 export async function spendOneAction(page, { expect }) {
   // THE ENGINE IS THE JUDGE, NOT THIS HARNESS · and the first version of this function forgot that, which
   // cost a five-minute live run. It returned 'draw' as soon as a card-offer was VISIBLE, and card-offer is
