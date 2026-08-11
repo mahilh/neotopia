@@ -190,8 +190,26 @@ describe('adversarial fuzz · the endings random play cannot reach', () => {
       'button is not cosmetic, and my engine fix does not subsume it').toBe('hung')
   })
 
+  // SEED COUNT, SIZED FROM MEASURED SPREAD (Rule 88c · P3, and I owed this to my own S45 gate).
+  // S45 used five seeds because five was fast, which is exactly the mistake I had written a rule about.
+  // MEASURED, and the measurement was taken before this comment was allowed to stand: 4 policies x 6
+  // disjoint blocks x 10 seeds = 240 games. Result: 240 'scoring', 0 hung, 0 capped, and every one of
+  // the 24 blocks scored 0 bad outcomes. VARIANCE IS EXACTLY ZERO.
+  // That changes what "sizing from spread" even means here, and the distinction is the useful part:
+  // this assertion is not estimating a RATE, it is checking a DETERMINISTIC property (does a policy
+  // finish), and a property with no spread cannot be averaged down · extra seeds buy coverage of new
+  // boards, not precision. Contrast the spendable-token gate in spendableBalance.test.js, where the
+  // outcome IS a rate and 25 vs 60 seeds made no difference for the OPPOSITE reason: per-game variance
+  // dominates, so precision there costs an order of magnitude more games rather than a factor of two.
+  // Same rule (88c · size from data), opposite conclusions, and neither was knowable without measuring.
+  // So the count is set by coverage and runtime: 12 seeds per policy keeps the file near 2s.
+  // If this EVER reports a non-zero hang or cap, the honest response is more seeds and a real rate
+  // estimate · not a wider bound. A zero that has never been non-zero is the weakest kind of green
+  // (Rule 80), which is why the reachability and maxHand assertions below carry the actual evidence.
+  const SEEDS_PER_POLICY = [11, 22, 33, 44, 55, 66, 77, 88, 99, 111, 122, 133]
+
   test.each(Object.keys(POLICIES))('policy %s terminates from the same seeds', (policy) => {
-    const results = [11, 22, 33, 44, 55].map(seed => playWithPolicy(policy, seed))
+    const results = SEEDS_PER_POLICY.map(seed => playWithPolicy(policy, seed))
     const bad = results.filter(r => r.outcome !== 'scoring')
     expect(bad.map(b => `${b.outcome} @${b.turns} ${JSON.stringify(b.state)}`),
       `${policy} failed to reach scoring · a policy that cannot finish is the S44 class again`)
