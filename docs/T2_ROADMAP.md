@@ -47,7 +47,17 @@ everything above is reported and gated on the **earn gap** instead.
 
 ---
 
-## 2 · THE ONE QUESTION THAT DECIDES IT
+## 2 · THE ONE QUESTION THAT DECIDES IT — ✅ ANSWERED S48
+
+> **REDUNDANT.** The architect's ~5-token surplus is **a third of its entire winning margin** and it
+> changes the outcome of **0 games in 320**, across 4 disjoint blocks, on an *exact* control. Where the
+> skew does bite it goes the *other* way: the shipped rule costs the builder ~4 points of win rate.
+> **Recommendation: change nothing. Thresholds stay at 7/13/18.** Full table and the mechanism in
+> `docs/BONUS_TOKEN_BALANCE.md`; the experiment is `src/store/flatGrantBalance.test.js` and it now runs
+> its *reported* block size on every commit rather than a sixth of it.
+>
+> The question and the pre-commit are kept below exactly as written, because a pre-commit that gets
+> edited after the result is not a pre-commit.
 
 **Is the 23× earn gap redundant with skill, or compounding it?**
 
@@ -87,24 +97,56 @@ are both saturated, which is the same trap that hid this for two sessions.
 | **Card art / deck** | complete | 56/56 PNGs, 56 cards, 0 duplicate names |
 | **Migration 014** | 🔴 **NOT APPLIED**, as instructed | verified live: **0 rate-limit policies** in prod (the 3 rate-limit functions are 013's primitive, which is correct) |
 
-### 🔴 One thing I found tonight that contradicts what we believed
+### ✅ RESOLVED S48 — and my S47 sentence below was wrong
 
-**`player_profiles.games_played` and `.games_won` are `0` for all 41 profiles** — against **63**
-civilization scores recorded and **24** `game_wins` ledger rows.
+> **What I wrote in S47:** *"`games_played` and `.games_won` are 0 for all 41 profiles… So the ledger
+> moves and the denormalised columns do not."* Kept visible, because the correction is only useful
+> next to the claim it replaces.
 
-So the **ledger moves and the denormalised columns do not.** I did not debug it (this was a save-and-plan
-session) but the lead is one line: `games_played` is referenced by exactly one function,
-`record_civilization_score`, and there is **no trigger on `game_wins`**. This is the same
-absence-looks-like-a-value shape as `award_game_win` sitting at 0 rows for two sessions. **It is the
-first thing I would look at after the flat-grant experiment**, and it matters because a player's profile
-is the only place their history is visible to them.
+**The write is not broken. It lands, and then the row holding it is deleted.**
+
+`award_game_win` returns `'awarded'` **only** when `GET DIAGNOSTICS row_count > 0` — a distinction added
+precisely because its first version lied about this. A proven live run recorded in
+`.github/workflows/e2e-live-nightly.yml` logged `award_game_win 'awarded'`. **So the counter incremented.**
+Then `globalTeardown` ran `purge_e2e_test_data`, which deletes every profile matching
+`E2E% / BotAlpha% / BotBeta%` with no status and no age filter, and took the row with it.
+
+```
+ledger rows 63 · rows whose player has NO profile  63   ← all
+game_wins   24 · wins whose winner has NO profile  24   ← all
+profiles matching 'E2E%'                            0   ← the purge has taken every one
+```
+
+**And for humans the zero is correct.** Only 3 of 63 ledger rows are non-E2E; all three are from
+June 28, all score 0, two are named `BotAlpha`/`BotBeta` and the third is literally `Anonymous` — which
+is `record_civilization_score`'s own fallback for a caller with no profile. All three **predate
+migration 019**, the first writer `games_played` ever had. No human with a claimed username has ever
+finished a recorded multiplayer game, so `0` is the truth.
+
+**The real defect is one turn past the family we keep finding.** This path has a writer, a caller, a
+reader, and a status string that distinguishes a real credit from a zero-row write — and **no possible
+observer**, because our own teardown destroys the only witness between the run and any query. Not a
+writer with no caller (`award_game_win`, S35). Not a render with no gate (card art, S42). **A caller
+with no observable**, which is worse, because every individual piece is correct and tested.
+
+**Fix written, not applied:** `scripts/migrations/023_purge_reports_what_it_destroys.sql` has the purge
+report the two sums it is about to erase, so the increment becomes visible in the nightly log without
+the row surviving. **Needs your approval** — it edits a function that deletes production rows.
+*Deliberately not* exempting counted profiles from the purge: the table would then grow without bound,
+and T3's Rule 109 makes the same point about the room clause from the other side.
 
 ---
 
 ## 4 · OPEN IN MY LANE, RANKED
 
-1. **The flat-grant experiment** (§2). Decides the threshold question. Everything else can wait behind it.
-2. **`games_played` / `games_won` read 0** (§3). Real data exists; nothing surfaces it.
+*(S48: items 1 and 2 are done. Struck through rather than deleted, so a reader who half-remembers the
+old list meets the outcome instead of a silent edit.)*
+
+1. ~~**The flat-grant experiment** (§2).~~ **DONE S48.** Answer: the earn skew is **redundant** with
+   skill — a third of the architect's margin, and it flips **0 of 320 games**. Thresholds stay at
+   7/13/18. See §2 and `docs/BONUS_TOKEN_BALANCE.md`.
+2. ~~**`games_played` / `games_won` read 0** (§3).~~ **DIAGNOSED S48**, and my framing of it was wrong —
+   the write lands and the teardown deletes the row. Migration 023 written, **awaiting approval**.
 3. **Bonus tokens are one-quarter shipped.** Only **subsidy** is spendable today.
    - `initiative` — needs T1's placement sub-flow (choose element + hex with no factory constraint)
    - `permits` — needs outer-ring/off-map tracking that does not exist
