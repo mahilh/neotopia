@@ -167,7 +167,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (93 · cumulative):
+PERMANENT ANTI-REGRESS RULES (94 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -430,6 +430,33 @@ TEST process. The test env and the BROWSER env are two different contracts and o
 A 2.9-second free pre-flight (does the served app resolve the right project, and can it reach it) now
 answers that before any identity is spent. Sharpens Rule 82 with the dimension it was missing: isolate
 first, yes · but also PROVE THE ISOLATED THING WORKS before you pay for a measurement inside it.
+
+RULE 94 (T1 S41 · August 11 2026):
+DE-DUPLICATING A CHECK REMOVES A SECOND CONTRACT AND A SECOND WITNESS. ONLY ONE OF THOSE IS A WIN.
+T3 and I had independently written the same Rule 78 reachability check, which is the second-contract
+shape we have both criticised (Rule 45), and Mahil ruled one implementation. That ruling is right and
+it has a cost nobody states when they say DRY: two wrong-in-different-ways copies still disagree, and
+a disagreement is a signal. One shared copy that is wrong is wrong in both lanes AT ONCE, silently,
+with both gates green · the failure becomes perfectly correlated at the exact moment it becomes
+invisible. So the consolidated thing has to be defended harder than either copy ever was, not the
+same amount. Concretely, what I did because of this and would not have bothered with for a private
+helper: the vacuity counterweight written first (an unmatched selector returns ok:FALSE, because zero
+blocked out of zero checked is the one bug that would green both lanes forever), a test that rebuilds
+the function from its own source with the module scope stripped (it crosses into a page as TEXT, so a
+free variable passes every test here and throws only in the browser it exists to drive), a test that
+the options stay serialisable, and four mutations each redding exactly one assertion.
+  94a · A FALSE POSITIVE IS NOT THE SAFE ERROR. I nearly shrugged at the ancestor defect on the
+        grounds that over-reporting is conservative. It is not: three factory cells report an SVG
+        <text> on top and are perfectly fine, because it sits inside the <g> that owns the handler.
+        A gate that reports three failures on a working board gets read as noise and then switched
+        off, and the day it is right nobody is listening (Rule 88c's failure mode arriving by a
+        different road). Prove the false-positive case LIVE, not only in a unit test · one call with
+        handlerGroups [] shows the probe condemning a board that works.
+  94b · WHEN YOU HAVE RE-DERIVED SOMETHING FOUR TIMES, THE COUNT IS THE FINDING. I did not commit
+        this in S38 when I committed its sibling, because it improves my velocity rather than the
+        game. Then it was wrong on the fourth writing, and the correction lived only in a transcript.
+Pairs with Rule 90's corollary (put the thrice-made mistake in the harness) and answers the question
+it leaves open · what the harness owes you once more than one caller depends on it.
 
 RULE 92 (T1 S40 · August 10 2026):
 A CHECK WHOSE TWO SIDES COME FROM THE SAME SOURCE CANNOT FAIL, AND IT FAILS SILENTLY BY AGREEING.
