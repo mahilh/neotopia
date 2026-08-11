@@ -67,8 +67,16 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
      control 50.0/50.0 with paired flips 26/26 of 52. McNemar within-matchup: builder p=0.0065.
      Mechanism: builder earns +1.68 pts of mean token edge against 7.44 pts of spread · signal/noise
      0.23, and noise helps the underdog. INSIDE the 10-point tripwire, so no rebalance recommended.
-     RE-RUN THIS when a control for useBonus ships · every token measured was UNSPENT, and a spendable
-     token is a decision, which rewards skill rather than diluting it. The sign may invert.
+     🔴 THE SIGN INVERTED · MEASURED (T2 S46 · 9b3040d · docs/BONUS_TOKEN_BALANCE.md). A SPENDABLE
+     token is worth about +7.7 points of win rate TO THE PLAYER WHO SPENDS IT · identical policies,
+     one seat cashes subsidy on sight. 7 disjoint blocks, 560 games, ALL SEVEN above 50 (25-seed:
+     59.6/58.0/60.0/51.0 · 60-seed: 54.2/58.1/63.0), control exactly 50.0 in 7/7 and both-spend
+     symmetric in 7/7. So an UNSPENT token is noise that helps the underdog; a SPENDABLE one is a
+     decision that rewards skill, and it is ~2.5x larger. Inside the 10-point tripwire (mean +7.7) so
+     no stop-work · but blocks reach +13 and it is the largest single-decision term measured here.
+     The S39 control was EXACT; this one is paired-seed STATISTICAL, because a bot that spends makes
+     different games. That loss is permanent and is a property of the feature no longer being inert.
+     Scope: subsidy only · the one type a human can spend today.
      ✅ AND THE GUARD NOW SAYS SO ITSELF (T2 S40 · 29ba6f0) · bonusBalance.test.js asserts its own two
      premises, not just its number: (A) no product code invokes useBonus, so the measured term is a flat
      constant · this fires the day T1 ships the control, and the failure message says RE-RUN rather than
@@ -668,6 +676,33 @@ The tell is available in both cases and it is the same tell: THE INSTRUMENT AGRE
 EASILY. A stable reading and a correct reading are different claims. Sharpens Rule 90 with the
 observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
 probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
+
+RULE 104 (T2 S46 · August 11 2026):
+A LATCH KEYED ON STATE CANNOT SEE A TURN IN WHICH NOTHING CHANGES · AND THAT IS EXACTLY THE TURN THAT
+NEEDS IT. The soft-lock survived three correct fixes (T1's button, my terminal condition, T3's proof)
+and died here. useBotTurns latches on seatSignature to stop React StrictMode double-invoking, and on a
+deadlocked board EVERY component of that key is a constant: the seat cycles back to its old value,
+actions reset to 3, the phase is still 'playing', and a player who cannot act neither draws nor scores.
+So when the turn returned to a bot the key was byte-identical, the effect read it as a repeat, and the
+seat froze forever · stalling the two-round endgame burn, which is driven by seats ENDING TURNS.
+Adding turnNumber · the only component that always advances · costs the latch nothing, because within
+a turn it is constant and the double-invoke protection is unchanged.
+  104a · IT WAS NOT A LEGALITY BUG, and the forge was right that a fourth legality predicate would have
+         been the wrong fix. chooseBotAction ALREADY returned endTurn with no options, and the driver
+         ALREADY had a refusal safety net. The bot was never choosing wrongly · IT WAS NEVER BEING
+         ASKED. When a component with correct logic does nothing, check whether it is being INVOKED
+         before you check what it decides.
+  104b · A DE-DUPLICATION KEY IS A CLAIM ABOUT WHAT PROGRESS LOOKS LIKE. Any cache, latch, memo or
+         change-detector keyed on "did anything I track change" is blind precisely when the system is
+         stuck, which is when you most need it to fire. Include the monotone quantity (a turn, a tick,
+         a sequence) so the key can always distinguish "nothing happened" from "we are somewhere new".
+COROLLARY on sizing a gate, which contradicted itself twice in one session and both were right: the
+adversarial fuzz's terminate-check has EXACTLY ZERO variance (240 games, 24 blocks, 0 bad), because it
+tests a DETERMINISTIC property · so extra seeds buy coverage, never precision. The spendable-token gate
+is a RATE, and 25 vs 60 seeds moved nothing because per-game variance dominates · so precision there
+costs an order of magnitude, not a factor of two. Same Rule 88c, opposite conclusions, and neither was
+knowable without measuring. AND I WROTE THE 240-GAME CLAIM INTO THE FILE BEFORE RUNNING IT · caught it,
+ran it, and it happened to be true. A measurement asserted from expectation is a guess with a number.
 
 RULE 102 (T2 S45 · August 11 2026):
 A FUZZER'S PLAY POLICY DECIDES WHICH STATES EXIST, SO ITS COVERAGE IS A PROPERTY OF THE POLICY AND NOT
