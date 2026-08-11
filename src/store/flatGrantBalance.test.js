@@ -1,8 +1,6 @@
 import { test, expect } from 'vitest'
-import { useGameStore, PRODUCTION_TILES } from './gameStore'
-import { PROJECT_CARDS } from '../lib/projectCards'
-import { chooseBotAction, makeRng, REFERENCE_POLICY, DIFFICULTIES } from '../lib/botPolicy'
-import { calculateFinalScore, getClusterTotal } from '../lib/patternMatcher'
+import { REFERENCE_POLICY, DIFFICULTIES } from '../lib/botPolicy'
+import { ladderRow, makeReporter } from './ladderHarness'
 
 // T2 S48 · IS THE 23x EARN GAP REDUNDANT WITH SKILL, OR COMPOUNDING IT?
 //
@@ -43,157 +41,11 @@ import { calculateFinalScore, getClusterTotal } from '../lib/patternMatcher'
 // and answers a muddier question. S47 already measured that spending is fair between equals; this
 // asks whether the earning skew adds to the outcome on top of the skill that produced it.
 
-const api = () => useGameStore.getState()
-const shuffled = (arr, rng) => {
-  const a = [...arr]
-  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
-  return a
-}
-
-// One game, played once. Returns everything both scorings need · the per-seat region scores and
-// cluster bonus (identical in both arms by construction) plus the token grants in ORDER.
-function playOnce(configs, seed) {
-  useGameStore.setState(useGameStore.getInitialState(), true)
-  const rng = makeRng(seed)
-  api().initGame(configs, shuffled(PROJECT_CARDS, rng), shuffled(PRODUCTION_TILES, rng))
-  let lastPlacedKey = null
-  const heldPrev = configs.map(() => 0)
-  const grantOrder = []   // the seat that earned each token, in the order the tokens were granted
-
-  for (let i = 0; i < 4000 && api().phase === 'playing'; i++) {
-    const s = api(); const seat = s.currentSeat
-    for (let k = 0; k < configs.length; k++) {
-      const held = s.players.find(x => x.seat === k)?.bonusTokens.length ?? 0
-      for (let n = heldPrev[k]; n < held; n++) grantOrder.push(k)
-      heldPrev[k] = held
-    }
-    const a = chooseBotAction({
-      state: api(), seat, difficulty: configs[seat].difficulty,
-      getValidPlacements: api().getValidPlacements, getBuildableCards: api().getBuildableCards, lastPlacedKey, rng,
-    })
-    if (a.type === 'placeElement') { api().placeElement(seat, a.factoryId, a.elementType, a.q, a.r, a.regionId); lastPlacedKey = `${a.q},${a.r}` }
-    else if (a.type === 'scoreCard') { api().scoreCard(seat, a.cardId, a.regionId, a.lastPlacedKey); lastPlacedKey = null }
-    else if (a.type === 'drawCard') api().drawCard(seat, a.source, a.cardIndex)
-    else { api().endTurn(); lastPlacedKey = null }
-  }
-  // Final sweep · a token granted by the last scoring action would otherwise be missed.
-  const st = api()
-  for (let k = 0; k < configs.length; k++) {
-    const held = st.players.find(x => x.seat === k)?.bonusTokens.length ?? 0
-    for (let n = heldPrev[k]; n < held; n++) grantOrder.push(k)
-  }
-  return {
-    grantOrder,
-    seats: configs.map((_, seat) => {
-      const p = st.players.find(x => x.seat === seat)
-      return {
-        // calculateFinalScore is best + second + 3*worst + 3*unusedTokens + cluster · the token term is
-        // purely additive, so a base computed with 0 tokens plus 3*n is EXACTLY the real score. Taking
-        // the base from the real function rather than re-deriving the formula keeps this from becoming
-        // a second scoring engine (Rule 45).
-        base: calculateFinalScore(p.scores, 0, getClusterTotal(st.regions, seat)),
-        earned: p.bonusTokens.length,
-      }
-    }),
-  }
-}
-
-const bots = (...levels) => levels.map((difficulty, i) => ({ userId: null, username: `B${i}`, isBot: true, difficulty }))
-
-// The flat deal: token i goes to seat i % nSeats, so an odd total leaves the extra token on SEAT 0.
-//
-// ⚠ THE FIRST VERSION ALTERNATED THE RECIPIENT PER GAME AND THAT WAS A BIAS, NOT A FIX. It took a
-// `parity` that flipped once per game so the extra token "would not always land on seat 0". But the
-// duel's own loop flips the orientation once per game too · `for (const swap of [false, true])` ·
-// so the two alternations LOCKED IN PHASE and logical player A received the odd token in every
-// single game. Measured: flatGap sat at +0.50 in all twelve rung-blocks when it must sit at 0, worth
-// a silent +1.5 points per game to whichever side was under test, in the arm whose entire claim is
-// that it is even. A randomisation scheme that shares a period with the thing it is meant to balance
-// against does not balance anything · and volume, movement and the exactness identity all stayed
-// green while it was wrong, which is why `flatGap` is now a counterweight rather than a report field.
-//
-// THE SECOND VERSION LEANED ON THE ORIENTATION SWAP and that was better but still seed-count
-// dependent: "extra always to seat 0" is even across a seed's two orientations only when both games
-// have the same token-count parity, so a residual survived and it grew as the block shrank. It held
-// at 40 seeds (|flatGap| <= 0.09) and BROKE THE GATE AT 12 · which I found only because a teeth-check
-// run at the smaller count went red before any mutation was applied. A bound that is correct at one
-// block size and wrong at another is a flake with a delay on it, and SPEND_SEEDS is an env override
-// anyone can turn down.
-//
-// SO THE REMAINDER IS SELF-CORRECTING INSTEAD OF BALANCED-IN-EXPECTATION. Each side's count is the
-// even split; when the total is odd the extra token goes to whichever LOGICAL side has received
-// fewer extras so far. That bounds the whole-block imbalance at ONE token no matter how many games
-// are played, so |flatGap| <= 1/games at every seed count and the 0.15 wire means the same thing at
-// 12 seeds as at 400. Fixing the instrument beats widening the tolerance that caught it.
-//
-// For two seats a round-robin over grantOrder is exactly this even split, so the order is not needed
-// to compute the deal · it is kept because it is the honest record of WHICH grants happened and it
-// generalises to more seats, where the round-robin is the actual rule.
-function flatDeal(totalTokens, extras) {
-  const half = Math.floor(totalTokens / 2)
-  const deal = { a: half, b: half }
-  if (totalTokens % 2) {
-    if (extras.a <= extras.b) { deal.a++; extras.a++ } else { deal.b++; extras.b++ }
-  }
-  return deal
-}
-
-// Play `seeds` x 2 orientations ONCE each, and score every game both ways.
-function ladderRow(levelA, levelB, seeds) {
-  let earnedWinsA = 0, earnedWinsB = 0, flatWinsA = 0, flatWinsB = 0
-  let marginEarned = 0, marginFlat = 0, flips = 0, moved = 0
-  let tokensA = 0, tokensB = 0, flatA = 0, flatB = 0, totalTokens = 0, games = 0
-  let volumePreserved = true
-  const extras = { a: 0, b: 0 }   // whole-block ledger of the odd token · keeps the flat deal even
-
-  for (const seed of seeds) {
-    for (const swap of [false, true]) {
-      const configs = bots(swap ? levelB : levelA, swap ? levelA : levelB)
-      const aSeat = swap ? 1 : 0, bSeat = 1 - aSeat
-      const g = playOnce(configs, seed)
-      const earnedTok = [g.seats[0].earned, g.seats[1].earned]
-      const deal = flatDeal(earnedTok[0] + earnedTok[1], extras)
-      const flat = []
-      flat[aSeat] = deal.a; flat[bSeat] = deal.b
-      games++
-
-      if (flat[0] + flat[1] !== earnedTok[0] + earnedTok[1]) volumePreserved = false
-      if (flat[aSeat] !== earnedTok[aSeat]) moved++
-
-      totalTokens += earnedTok[0] + earnedTok[1]
-      tokensA += earnedTok[aSeat]; tokensB += earnedTok[bSeat]
-      flatA += flat[aSeat]; flatB += flat[bSeat]
-
-      const eA = g.seats[aSeat].base + 3 * earnedTok[aSeat]
-      const eB = g.seats[bSeat].base + 3 * earnedTok[bSeat]
-      const fA = g.seats[aSeat].base + 3 * flat[aSeat]
-      const fB = g.seats[bSeat].base + 3 * flat[bSeat]
-
-      marginEarned += eA - eB
-      marginFlat += fA - fB
-      if (eA > eB) earnedWinsA++; else if (eB > eA) earnedWinsB++
-      if (fA > fB) flatWinsA++; else if (fB > fA) flatWinsB++
-      if ((eA > eB) !== (fA > fB) || (eA === eB) !== (fA === fB)) flips++
-    }
-  }
-  const pct = (w, l) => (w + l ? +(100 * w / (w + l)).toFixed(1) : 50)
-  return {
-    games, volumePreserved, moved, flips,
-    winPctEarned: pct(earnedWinsA, earnedWinsB),
-    winPctFlat: pct(flatWinsA, flatWinsB),
-    marginEarned: +(marginEarned / games).toFixed(2),
-    marginFlat: +(marginFlat / games).toFixed(2),
-    earnedPerGameA: +(tokensA / games).toFixed(2),
-    earnedPerGameB: +(tokensB / games).toFixed(2),
-    earnGap: +((tokensA - tokensB) / games).toFixed(2),
-    flatGap: +((flatA - flatB) / games).toFixed(2),
-    tokensPerGame: +(totalTokens / games).toFixed(2),
-    // Unrounded, for the exactness identity below · the rounded fields above are for the report and
-    // comparing them at 1e-9 would be comparing rounding error.
-    raw: { marginEarned: marginEarned / games, marginFlat: marginFlat / games,
-      earnGap: (tokensA - tokensB) / games, flatGap: (flatA - flatB) / games },
-  }
-}
+// playOnce / flatDeal / ladderRow / bots moved to ./ladderHarness.js (T2 S49). S49 asks a different
+// question of the same machinery · whether the DIFFICULTY LADDER is internally spaced · and a second
+// copy of a playout engine is exactly the duplication that produced the same deadlock-board bug in two
+// lanes three sessions ago. The consolidation costs a second witness (Rule 94), which is why
+// flatDeal's evenness is asserted below as an IDENTITY rather than as a tolerance.
 
 // SEED COUNT · 40, WHICH IS THE SAME BLOCK THE REPORTED FINDING USES.
 //
@@ -212,12 +64,7 @@ const SEEDS = Number(process.env.SPEND_SEEDS || 40)
 const OFFSET = Number(process.env.SEED_OFFSET || 0)
 const seedList = Array.from({ length: SEEDS }, (_, i) => 9000 + OFFSET + i)
 
-const REPORT = (label, obj) => {
-  if (process.env.SPEND_OUT) {
-    // eslint-disable-next-line no-undef
-    require('node:fs').appendFileSync(process.env.SPEND_OUT, JSON.stringify({ label, ...obj }) + '\n')
-  }
-}
+const REPORT = makeReporter('SPEND_OUT')
 
 test('the earn skew · does flattening the distribution change who wins?', () => {
   const rows = {}
@@ -264,13 +111,26 @@ test('the earn skew · does flattening the distribution change who wins?', () =>
   //     of flatDeal did exactly this (see its header), flatGap read +0.50 in 12 of 12 rung-blocks,
   //     and I read past it once because the number was small and the other three guards were green.
   //     THE FLAT ARM'S TOKEN GAP IS THE ONE QUANTITY THAT MUST BE ZERO BY CONSTRUCTION, so it is
-  //     asserted rather than reported. Bounded at 0.15 tokens/game: the residual is the odd token in
-  //     odd-total games, which the orientation swap balances in expectation but not exactly.
+  //     asserted rather than reported.
+  //
+  //     ⚠ S48 ASSERTED IT AS A RATE WITH A 0.15 TOLERANCE, WHICH WAS THE SAME MISTAKE ONE LEVEL DOWN.
+  //     flatGap is an absolute imbalance DIVIDED BY THE GAME COUNT, so a bound on it means different
+  //     things at different block sizes and needs re-tuning whenever SPEND_SEEDS moves · and T3 duly
+  //     found it red at a smaller block in the shared tree while my own 40-seed run was green. I had
+  //     criticised exactly this pattern in flatDeal's own header ("a bound correct at one block size
+  //     and wrong at another is a flake with a delay on it") and then committed it one function down.
+  //
+  //     SO IT IS AN IDENTITY NOW. flatDeal gives the odd token to whichever side has had fewer, which
+  //     bounds the WHOLE-BLOCK imbalance at ONE TOKEN by construction at any seed count. Nobody has
+  //     to decide whether 0.15 is close enough, and this means precisely the same thing at 12 seeds
+  //     as at 4000. When a guarantee can be made structural, prove it by identity rather than defend
+  //     a tolerance (Rule 81's better half).
   for (const level of GUARDED) {
-    expect(Math.abs(rows[level].flatGap), `${level}: the "flat" arm gave one side ` +
-      `${rows[level].flatGap} more tokens per game than the other · it is not flat, so the ` +
-      'difference between the arms is partly a bias I introduced rather than the skew under test')
-      .toBeLessThanOrEqual(0.15)
+    expect(rows[level].flatTokenImbalance, `${level}: the "flat" arm dealt one side ` +
+      `${rows[level].flatTokenImbalance} more tokens than the other ACROSS THE WHOLE BLOCK · that ` +
+      'cannot exceed 1 unless flatDeal\'s self-correcting remainder is broken. The arm is not flat, ' +
+      'so part of the difference between the arms is a bias I introduced, not the skew under test')
+      .toBeLessThanOrEqual(1)
   }
 
   // 3 · VOLUME MUST BE PRESERVED EXACTLY. If the flat deal loses or invents a token, the flat arm is
@@ -335,10 +195,29 @@ test('the earn skew · does flattening the distribution change who wins?', () =>
   // COARSE · one backstop, below. Flattening the token distribution entirely must not re-order the
   //         ladder · if it ever does, the token term has become a primary driver of outcomes rather
   //         than a garnish on one, and that is a balance emergency rather than a tuning question.
-  expect(rows.apprentice.winPctFlat, 'flattening tokens handed the apprentice the ladder · the token ' +
-    'term now dominates skill').toBeLessThan(50)
-  expect(rows.architect.winPctFlat, 'flattening tokens cost the architect the ladder · the token term ' +
-    'now dominates skill').toBeGreaterThan(70)
+  //
+  // ⚠ S48 WROTE THIS AS `apprentice.winPctFlat < 50` AND `architect.winPctFlat > 70`, AND BOTH
+  // NUMBERS CAME OUT OF THE VERY MEASUREMENT THEY GUARD. I flagged that pattern in my own closing
+  // note the same night: a wire sized to what a run happened to produce is a flake with a delay, and
+  // 70 in particular had no derivation at all · it was "below the 98.8 I saw, with room".
+  //
+  // DERIVED FROM THE CONTROL INSTEAD. rows.control is identical policies on both sides, so it sits at
+  // 50.0 for a STRUCTURAL reason rather than an observed one, and it is measured in the same run on
+  // the same commit. The claim worth gating is not "the architect stays above some remembered
+  // number" · it is THE LADDER IS STILL ORDERED, and ordering is a comparison, not a threshold:
+  //     apprentice < control < architect,
+  // with a margin wide enough that a tie cannot pass. Everything on the right-hand side is measured
+  // here; nothing is a number I once saw. If the whole ladder shifts for a legitimate reason, this
+  // follows it instead of reddening (Rule 88c), and if flattening genuinely re-orders the rungs it
+  // still fires.
+  const ctrl = rows.control.winPctFlat
+  expect(rows.apprentice.winPctFlat, `under flattening the apprentice reached ${rows.apprentice.winPctFlat}% ` +
+    `against a ${ctrl}% symmetric control · it must remain clearly the WEAKER side, and if tokens can ` +
+    'lift it to parity they are outweighing the policy difference').toBeLessThan(ctrl - 10)
+  expect(rows.architect.winPctFlat, `under flattening the architect fell to ${rows.architect.winPctFlat}% ` +
+    `against a ${ctrl}% symmetric control · it must remain clearly the STRONGER side`).toBeGreaterThan(ctrl + 10)
+  expect(rows.architect.winPctFlat, 'the ladder must stay ORDERED under flattening')
+    .toBeGreaterThan(rows.apprentice.winPctFlat)
 
   // AND THE CONTROL MUST BE A CLEAN NULL IN BOTH ARMS.
   // ⚠ I WROTE PLAUSIBLE NUMBERS INTO THIS COMMENT BEFORE RUNNING IT · "48.8/51.2/50.0/48.8, never
