@@ -903,12 +903,43 @@ test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)
       // The audit's exhaustion, reconstructed: nothing to draw, nothing to place. Set through the store
       // rather than played to, because reaching it naturally took a human auditor 33 turns · the STATE is
       // what is under test here, and every assertion below is on the real UI and the real engine.
-      await page.evaluate(() => {
+      // ── THE AUDIT'S SHAPE, NOT A DEGENERATE ONE (T3 S46) ─────────────────────────────────────────────
+      // The first version emptied every factory, which is a deadlock but the EASY one · "nothing to place
+      // because there is nothing to place with". The board the audit actually hit is harder and is the one
+      // T2's engine condition was written against (deadlockEndgame.test.js `seedDeadlock`): a factory that
+      // is STILL STOCKED but borders only regions that are 19/19 FULL, while the other factories hold
+      // nothing and can never restock, because restocking only happens on a placement. AND TILES REMAIN ·
+      // that is the whole point of the class, and my version had none of it.
+      // ⚠ I cannot import their fixture: seedDeadlock is module-private inside a vitest file, so a
+      // Playwright spec cannot reach it and importing it would register their suite. Requested an export
+      // in comms rather than keeping a second copy · until then this mirrors the shape deliberately and
+      // says so, which is the honest version of "one fixture" while there are unavoidably two (Rule 45).
+      await page.evaluate(async () => {
+        // FILL EVERY HEX IN THE RADIUS, not merely the keys that already exist. My first version mapped
+        // over Object.keys(region.hexes), which on a fresh board is nearly empty · so it filled almost
+        // nothing and the counterweight measured 2 LEGAL PLACEMENTS in a state meant to have none.
+        // T2's fillRegion carries a comment saying their first draft did exactly this and reported the
+        // same number. Two lanes, same bug, same 2 · which is the argument for one fixture rather than
+        // two, and the reason the request is in comms.
+        const { hexesInRadius, REGIONS } = await import('/src/utils/hexUtils.js')
         const st = window.__neotopia_store.getState()
+        const fill = (region) => {
+          const def = REGIONS.find(rd => rd.id === region.id)
+          const hexes = { ...region.hexes }
+          for (const h of hexesInRadius(def.cq, def.cr, def.radius)) {
+            hexes[`${h.q},${h.r}`] = { ...(hexes[`${h.q},${h.r}`] ?? {}), element: 'energy', placedBy: 0 }
+          }
+          return { ...region, hexes }
+        }
         window.__neotopia_store.setState({
           phase: 'playing', currentSeat: 0, actionsRemaining: 3, turnNumber: 33,
           deck: [], theOffer: [],
-          factories: st.factories.map(f => ({ ...f, elements: f.elements.map(e => ({ ...e, count: 0 })) })),
+          productionTilesRemaining: 3, // TILES REMAIN · the clock cannot advance without a placement
+          endGameTriggered: false, endGameRoundsRemaining: 2,
+          factories: st.factories.map(f => f.id === 0
+            ? { ...f, betweenRegions: [0, 1], elements: [{ type: 'energy', count: 2 }] } // stocked, boxed in
+            : { ...f, elements: f.elements.map(e => ({ ...e, count: 0 })) }),            // empty forever
+          regions: st.regions.map(r => (r.id === 0 || r.id === 1 ? fill(r) : r)),
         })
       })
       await page.waitForTimeout(800)
@@ -930,14 +961,27 @@ test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)
       // condition consumes, all directly observable, and none of them requires me to judge legality.
       const dead = await page.evaluate(() => {
         const g = window.__neotopia_store.getState()
+        // A stocked factory now EXISTS, so "no elements anywhere" is no longer the right question · the
+        // question is whether any stocked factory can reach a hex. Asked through the engine's own
+        // validator, per factory/element, exactly as T2's anyPlacementPossible does (element count FIRST ·
+        // the term I dropped in S45 and which measured SIX on an empty board).
+        let placements = 0
+        for (const f of g.factories) {
+          if (!f.elements.some(e => e.count > 0)) continue
+          for (const rid of f.betweenRegions) placements += (g.getValidPlacements?.(f.id, rid) ?? []).length
+        }
         return {
-          elementsInFactories: g.factories.reduce(
-            (n, f) => n + f.elements.reduce((m, e) => m + e.count, 0), 0),
+          placements,
+          stockedFactories: g.factories.filter(f => f.elements.some(e => e.count > 0)).length,
+          tiles: g.productionTilesRemaining,
           deck: g.deck.length, offer: g.theOffer.length, actions: g.actionsRemaining,
         }
       })
+      // stockedFactories 1 and tiles 3 are asserted, not incidental: they are what make this the AUDIT's
+      // deadlock rather than an empty board. If a future change let the stocked factory reach a hex, or
+      // let the clock advance without a placement, this reds and says which.
       expect(dead, 'the board is still playable · this test would be asserting nothing about a soft-lock')
-        .toEqual({ elementsInFactories: 0, deck: 0, offer: 0, actions: 3 })
+        .toEqual({ placements: 0, stockedFactories: 1, tiles: 3, deck: 0, offer: 0, actions: 3 })
 
       // ── T1's HALF · the real control, and the reason it is unlocked ───────────────────────────────────
       const endTurn = page.getByTestId('end-turn-btn')
