@@ -631,6 +631,32 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   }, [])
   const focusRegion = isPhone && uiPhase === 'regionSelected' ? selectedRegion : null
 
+  // ── THE SHEET DRAGS THE BOARD OFF SCREEN IF ITS BUTTON KEEPS FOCUS (T1 S50) ─────────────────────
+  // MEASURED at 600x800 the moment region focus landed: `.game-board-area` at top -250 inside a
+  // `.game-main` that sits at 122..736, i.e. the board had been SCROLLED UP by 372px. 6 hexes of the
+  // focused region off the top of the window and 7 more behind the header.
+  // THE MECHANISM, and it is worth stating because `overflow: hidden` reads as "cannot scroll":
+  // hidden containers are still PROGRAMMATICALLY scrollable, and clicking a region button leaves it
+  // focused · then the sheet translates 100%+44px downwards out of view, and the browser dutifully
+  // scrolls the nearest scrollable ancestor to keep the focused control visible. The board is what
+  // moves. It is timing-dependent, which is why it reproduced at 600 everywhere but at 414 only on
+  // production · a flake in a probe would have been the easy conclusion and it would have been wrong.
+  // Two defences, because they fix different halves:
+  //   BLUR · a control that has just slid off screen should not hold focus. This is the correct
+  //          behaviour on its own terms (a keyboard user was left on an invisible button) and it
+  //          removes the cause.
+  //   RESET · onScroll puts `main` back to 0. The cause is not the only thing that can scroll a
+  //          container · anything calling focus() or scrollIntoView() inside the sheet does too ·
+  //          so the container asserts its own invariant rather than trusting every future caller.
+  const mainRef = useRef(null)
+  useEffect(() => {
+    if (sheetOpen) return
+    const sheet = document.getElementById('game-sheet')
+    const active = document.activeElement
+    if (sheet && active && sheet.contains(active) && typeof active.blur === 'function') active.blur()
+    if (mainRef.current) { mainRef.current.scrollTop = 0; mainRef.current.scrollLeft = 0 }
+  }, [sheetOpen, uiPhase])
+
   const cancelRef = useRef(null)
   cancelRef.current = () => {
     // Escape closes a sheet the player opened by hand, even with nothing selected · otherwise the
@@ -830,7 +856,15 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       </header>
 
       {/* MAIN */}
-      <div className="game-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+      <div
+        className="game-main"
+        ref={mainRef}
+        // `overflow: hidden` clips paint but does NOT stop the browser scrolling this box to chase a
+        // focused descendant · see the block above. The handler is the invariant, stated where the
+        // container is: this element's scroll offset is always 0.
+        onScroll={e => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0 }}
+        style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}
+      >
 
         {/* BOARD */}
         {/* The board area needs a NAME so the phone layout can give it a share of the column ·

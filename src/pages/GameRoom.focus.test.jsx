@@ -37,6 +37,13 @@
 // The sixth, `focusRegion` computed during `elementSelected` too, is a VOID mutation rather than an
 // uncaught one: selectedRegion is null in that phase, so the two forms are behaviourally identical
 // and no test could separate them (Rule 100's corollary · a mutation must change behaviour).
+//
+// AND ONE MORE THAT THIS FILE CANNOT HOLD, stated rather than implied: deleting the `onScroll`
+// reset on `.game-main` leaves every test here green. It has to · jsdom has no layout, no scroll
+// container and no focus-scroll behaviour, so the thing it defends against cannot happen in it. Its
+// evidence is the browser measurement recorded in GameRoom.jsx (board area at top -250, restored to
+// 122) and three clean repeats at four widths. The blur, which is the CAUSE, is gated here in both
+// directions; the reset is the belt to that pair of braces and it is browser-only by nature.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen, fireEvent, act } from '@testing-library/react'
@@ -209,6 +216,65 @@ describe('the camera follows step 3, and only step 3', () => {
     await act(async () => { fireEvent.click(targets[0]) })
     await until(() => focusAttr() === 'none')
     expect(focusAttr(), 'the camera stayed zoomed after a placement').toBe('none')
+  })
+
+  it('nothing inside the closed sheet keeps focus · it dragged the board off screen', async () => {
+    // MEASURED at 600x800 the moment focus landed: the board area sat at top -250 inside a
+    // `.game-main` at 122..736, so 6 hexes of the focused region were off the top of the window and
+    // 7 more behind the header. `overflow: hidden` clips paint but the box is still programmatically
+    // scrollable, and the browser was scrolling it to chase the region button that kept focus while
+    // the sheet translated away. It reproduced at 600 everywhere and at 414 only on production,
+    // which is exactly the shape of a defect that gets written off as harness flake.
+    // jsdom has no layout so the 372px is not visible here · what IS decidable is the cause.
+    //
+    // ⚠ THE FIRST VERSION OF THIS TEST COULD NOT FAIL, AND ONLY A MUTATION SAID SO (Rule 86). It
+    // drove the flow with fireEvent.click and then asserted focus was outside the sheet · but jsdom's
+    // click does NOT move document.activeElement the way a real click does, so activeElement was
+    // <body> whether the blur ran or not. Deleting the blur left it green. Focus is now set
+    // EXPLICITLY, which is what a real browser would have done for me.
+    await mount('phone')
+    await act(async () => { fireEvent.click(screen.getAllByTestId('factory')[0]) })
+    await until(() => uiPhase() === 'factorySelected')
+    await act(async () => { fireEvent.click(screen.getAllByTestId('element-btn')[0]) })
+    await until(() => uiPhase() === 'elementSelected')
+    const rb = screen.queryAllByTestId('region-btn').filter(b => !b.disabled)
+    expect(rb.length).toBeGreaterThan(0)
+    // The region button survives into regionSelected (it renders in both phases), so without the
+    // blur it holds focus inside a sheet that has gone · exactly the live case.
+    await act(async () => { rb[0].focus() })
+    expect(document.activeElement).toBe(rb[0])
+    await act(async () => { fireEvent.click(rb[0]) })
+    await until(() => uiPhase() === 'regionSelected')
+
+    const sheetEl = document.getElementById('game-sheet')
+    expect(sheetEl, 'no sheet element · this assertion would be vacuous').toBeTruthy()
+    expect(sheet()).toBe('closed')
+    expect(sheetEl.contains(document.activeElement),
+      `focus is on <${document.activeElement?.tagName}> inside a sheet that has slid off screen · ` +
+      'the browser will scroll an ancestor to chase it, and the board is what moves').toBe(false)
+  })
+
+  it('counterweight · focus SURVIVES a phase change that leaves the sheet open', async () => {
+    // The wrong fix is to blur on every phase change. Then a keyboard or screen-reader user loses
+    // their place every time the flow advances, and the controls · which are IN the open sheet ·
+    // stop being keyboard-reachable. Blur belongs to the sheet CLOSING and to nothing else.
+    // The <aside> is used as the focus holder because it is the one thing in there that survives
+    // every phase; the buttons inside it unmount as the flow moves, so focusing one of those would
+    // measure unmounting rather than blurring.
+    await mount('phone')
+    await act(async () => { fireEvent.click(screen.getAllByTestId('factory')[0]) })
+    await until(() => uiPhase() === 'factorySelected')
+    expect(sheet()).toBe('open')
+    const sheetEl = document.getElementById('game-sheet')
+    sheetEl.setAttribute('tabindex', '-1')
+    await act(async () => { sheetEl.focus() })
+    expect(document.activeElement, 'the fixture could not put focus in the sheet').toBe(sheetEl)
+    // factorySelected -> elementSelected: uiPhase changes, the sheet STAYS open.
+    await act(async () => { fireEvent.click(screen.getAllByTestId('element-btn')[0]) })
+    await until(() => uiPhase() === 'elementSelected')
+    expect(sheet(), 'the fixture needs a phase change that keeps the sheet up').toBe('open')
+    expect(document.activeElement, 'focus was stolen from a sheet the player can still see')
+      .toBe(sheetEl)
   })
 
   it('the board keeps its label and its accessible name says where you are', async () => {
