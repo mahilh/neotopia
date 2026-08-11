@@ -26,8 +26,20 @@ STATUS (post S17 · June 27 2026 · ALL THREE COMPLETE):
 
   ✅ GAMES_WON: award_game_win has a caller (T2 S35 · 4781b13 · FinalScore, every seat, retries 'no_game_end').
      Was applied S33 and invoked by nothing for 2 sessions · game_wins had 0 rows against 3 finished games.
-  🟡 CARD ART: 20/56 · shimmer is graceful fallback for the other 36 · real PNGs are the civilization's face
-     (was recorded as 0/56 for ~15 sessions while 20 PNGs sat in public/art/cards/ · corrected T2 S34)
+  ✅ CARD ART: 56/56 (T2 S42 · 3cf9620) · Mahil completed the deck; scripts/sync-card-art.cjs maps Drive's
+     unpadded cardN.png to the deck's card_NN and reports GAPS/COLLISIONS/STRAYS before copying. Masters
+     are ~1.4MB, the shipped contract is 320x320/~142KB, so they are downscaled: avg 136KB, 7.4MB total
+     rather than 78MB in a public repo. The pipeline reproduces the 20 previously-shipped PNGs
+     BYTE-FOR-BYTE from the masters, which is what validates the settings. GATED by src/lib/cardArt.test.js
+     (every id resolves · ids two-digit padded · nothing over 400KB) because a missing PNG does not error,
+     it renders the shimmer and looks deliberate · the same invisibility that let this read 0/56 for ~15
+     sessions. T3 S42 (a572fd4) gates the render half in a browser.
+  ✅ DRAW RPC AUDIT ROW: APPLIED (T2 S42 · migration 021) · one game_events row inside the RPC's existing
+     FOR UPDATE txn, carrying seat/source/card/post-draw counts and via='draw_card_for_seat'. Closes the
+     S40 ambiguity: a value in game_sessions.state cannot distinguish never-attempted from
+     attempted-and-refused from attempted-written-and-overwritten. Live proof tests/e2e/draw-rpc-audit.mjs
+     12/12 · refusals write ZERO rows (counterweight first) · and the row SURVIVES a clobber, which is the
+     property that closes the open hypothesis. No concurrency regression: 16/16 distinct, 0 lost.
   ✅ CARD NAMES: bucket B APPLIED · 20 renamed (T2 S34 · T1's audit 28c077a, Mahil approved) · zero
      esoteric proper nouns left in the deck · Node/Gateway gone from every name · 56 stays 56 ·
      bucket A 24 and bucket C 12 untouched by design
@@ -536,6 +548,33 @@ The tell is available in both cases and it is the same tell: THE INSTRUMENT AGRE
 EASILY. A stable reading and a correct reading are different claims. Sharpens Rule 90 with the
 observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
 probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
+
+RULE 97 (T2 S42 · August 11 2026):
+A CITATION OUTLIVES THE THING IT CITES, AND IT KEEPS ITS CONFIDENCE THE WHOLE TIME.
+Migration 011's VERIFY checklist reads "PROVEN EMPIRICALLY T3 S23 · FOR UPDATE serialized: YES". That
+was true when written. Then seedHelpers.js was split and re-exported `from './fixtureNames'` with no
+file extension · fine under Playwright's bundler, fatal under raw node ESM · and both draw harnesses
+are standalone `node` scripts. They died ON IMPORT, before one assertion, for every session since. So
+the strongest empirical claim in the migration record was pointing at a proof that could not execute,
+and nothing anywhere could have said so: a standalone harness in no workflow cannot report its own
+decay (Rule 79), and a comment citing it cannot either. One character fixed it and 16/16 came back.
+  97a · WHEN A DOCUMENT CITES A PROOF, RE-RUN THE PROOF, NOT THE DOCUMENT. A checklist line is an
+        artifact of the day it was written. Treat "verified in S23" exactly like "the migration is in
+        git" · evidence of INTENT at a past moment, not of present state (Rule 68, one level up).
+  97b · AND THE SAME FAILURE IN MY OWN VOICE, which is why this is not just about other people's
+        comments. My S40 Rule 91 said pattern[0] "disagrees with or ties the majority on 24 of 56
+        cards", which is arithmetically exact, and I let it imply the PRODUCT was misreading the
+        element on those 24. It is not: GameRoom's cardPrimaryElement resolves ties to the first type
+        reaching the max · i.e. to the anchor · so product and anchor agree on 54 of 56, and only
+        card_22 and card_55 actually differ. A true number attached to the wrong subject is a citation
+        of exactly this kind, and the one I was most likely to trust because I computed it myself.
+        Compute the quantity the DECISION rests on, not the one that is easy to compute (T1's Rule 96,
+        arrived at independently the same night · that agreement is the argument for both).
+COROLLARY on probes, third instance this session and the cheapest yet: information_schema reports
+column_default NULL for a GENERATED ALWAYS AS IDENTITY column, which reads as "the caller must supply
+this" and is the precise opposite of the truth · supplying it raises 428C9. I nearly wrote the insert
+that way. Ask is_identity. A probe that answers a question adjacent to yours is worse than one that
+errors, because it answers (Rule 75b).
 
 RULE 91 (T2 S40 · August 10 2026):
 AN INCIDENTAL POSITION IN A DATA STRUCTURE GETS READ AS A SEMANTIC FIELD, AND THE READING SURVIVES
