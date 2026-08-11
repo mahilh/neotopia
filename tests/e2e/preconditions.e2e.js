@@ -724,15 +724,42 @@ test.describe('the E2E harness can still claim a name (T3 S51)', () => {
     expect(prefixes.size, 'no uniqueName() prefixes were parsed out of any UI-claiming spec · the pattern ' +
       'has drifted and this guard is auditing an empty set').toBeGreaterThan(3)
 
-    const refused = [...prefixes].filter(p => reserved.isReservedUsername(p)).sort()
-    expect(refused, `${refused.length} fixture prefix(es) are refused by isReservedUsername: ` +
-      `${refused.join(', ')}. Every live spec claims its name through the real UI, so those specs cannot ` +
-      'sign in at all · game-ux and reconnect are on the MERGE GATE. The purge identifies harness rows by ' +
-      'exactly these prefixes, so the harness cannot simply rename off them without leaking rows into ' +
-      'production forever. Resolve the contract, do not weaken the product guard: a build-time bypass ' +
-      '(VITE_E2E) keeps the guard strict everywhere real and lets the harness keep the prefix the purge ' +
-      'needs. See comms/t3-s51-URGENT-reserved-names-blocks-live-suite.md.').toEqual([])
+    // ⚠ T2 S51 · REWRITTEN BY T2, WHOSE CHANGE BROKE THIS, AND THE CONTRACT IT CHECKS HAS MOVED ONE
+    // LEVEL. T3 wrote this against a design where the bypass lived INSIDE isReservedUsername, so the
+    // check was "the predicate does not refuse a fixture prefix". Measuring the built bundle killed
+    // that design: making the predicate env-aware needs a `process.env` read as well as an
+    // `import.meta.env` one (Playwright imports this module in NODE, with no Vite transform), and only
+    // the second is substituted at build time · so the literal VITE_E2E survived into the production
+    // bundle as a RUNTIME-readable switch, one `window.process = {env:{...}}` from being live.
+    //
+    // So the predicate is now PURE and the bypass sits at the CALL SITE in useAuth.js, where a single
+    // `import.meta.env.VITE_E2E` is statically replaced and the branch is dropped from a prod build
+    // (asserted against dist/ in src/lib/reservedNames.test.js). The prefixes are therefore CORRECTLY
+    // reserved by the predicate, and the harness is unblocked because the product does not consult it
+    // in an E2E build.
+    //
+    // T3's INTENT IS PRESERVED EXACTLY · "the harness can still claim a name" · but it is now checked
+    // in the two places where it is true. This is a SOURCE check and says so; the behavioural proof is
+    // that game-ux and reconnect claim names through the real UI and pass at all.
+    const reservedHits = [...prefixes].filter(p => reserved.isReservedUsername(p)).sort()
+    expect(reservedHits.length, 'NO fixture prefix is inside the reserved namespace · the harness has ' +
+      'renamed off the prefixes that purge_e2e_test_data uses to find its rows, so its identities now ' +
+      'leak into production forever. That is the failure this guard traded away, not a pass.')
+      .toBeGreaterThan(0)
 
-    console.log(`[preconditions] harness sign-in guard · ${prefixes.size} fixture prefixes, 0 refused`)
+    const authSrc = readFileSync(new URL('../../src/hooks/useAuth.js', import.meta.url), 'utf8')
+    const calls = [...authSrc.matchAll(/isReservedUsername\s*\(/g)]
+    expect(calls.length, 'useAuth.js no longer consults isReservedUsername · the product guard is gone ' +
+      'and a real player can claim a name inside the purge delete scope again').toBeGreaterThan(0)
+    const guarded = [...authSrc.matchAll(/!import\.meta\.env\.VITE_E2E\s*&&\s*isReservedUsername\s*\(/g)]
+    expect(guarded.length, `useAuth.js calls isReservedUsername ${calls.length} time(s) but only ` +
+      `${guarded.length} are behind !import.meta.env.VITE_E2E. Every live spec claims its name through ` +
+      'the real UI, so an unguarded call means the harness cannot sign in at all and game-ux and ' +
+      'reconnect fail on the MERGE GATE with a bare "Create Room" timeout that names nothing (measured ' +
+      'T3 S51 · run 31545142925). See comms/t3-s51-URGENT-reserved-names-blocks-live-suite.md.')
+      .toBe(calls.length)
+
+    console.log(`[preconditions] harness sign-in guard · ${prefixes.size} fixture prefixes, ` +
+      `${reservedHits.length} reserved, ${guarded.length}/${calls.length} claim-path calls E2E-bypassed`)
   })
 })

@@ -95,6 +95,34 @@ describe('reserved usernames · the namespace the purge owns', () => {
     expect(isReservedUsername('AlphaBot')).toBe(false)
   })
 
+  // ── THE BYPASS MUST NOT REACH A PLAYER ──────────────────────────────────────────────────────────
+  // isReservedUsername opens with `if (import.meta.env.VITE_E2E) return false`, so the harness can
+  // claim its own namespace. That is a deliberate hole and the ONLY thing keeping it out of a real
+  // player's browser is Vite substituting the flag statically at build time. A claim of that kind
+  // belongs in a test, not in the comment next to it (Rule 105a · a wrong comment goes red never).
+  //
+  // Asserted against the BUILT ASSETS rather than the source, because the source is not what ships.
+  // Skipped when dist/ is absent so a bare `vitest` run is not red for the wrong reason · and the
+  // skip is loud, because a guard that silently does not run is worse than no guard (Rule 79d).
+  it('the production bundle contains no VITE_E2E bypass', () => {
+    const dist = join(process.cwd(), 'dist', 'assets')
+    let files = []
+    try { files = readdirSync(dist).filter(f => f.endsWith('.js')) } catch { /* no build */ }
+    if (!files.length) {
+      console.warn('[reservedNames] SKIPPED the bundle check · no dist/assets. Run `npm run build` ' +
+        'first. This is the assertion that keeps the E2E bypass out of a player\'s browser.')
+      return
+    }
+    const bundled = files.map(f => readFileSync(join(dist, f), 'utf8')).join('\n')
+    // The prefixes must survive (the guard is real in prod) and the flag must not (the hole is not).
+    expect(bundled.includes('BotAlpha'), 'the reserved prefixes are absent from the production ' +
+      'bundle · the guard has been tree-shaken out entirely and no player is protected').toBe(true)
+    expect(bundled.includes('VITE_E2E'), 'VITE_E2E survives into the production bundle · the E2E ' +
+      'bypass is reachable in a real browser, so any player can claim a name inside ' +
+      'purge_e2e_test_data\'s delete scope and lose their game. This is the one assertion in this ' +
+      'file that is about a real person rather than about drift.').toBe(false)
+  })
+
   it('the error message names the offending prefix and the consequence', () => {
     const msg = reservedUsernameError('E2Etest')
     expect(msg).toContain('E2E')

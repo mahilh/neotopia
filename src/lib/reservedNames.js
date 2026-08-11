@@ -35,8 +35,33 @@
  */
 export const RESERVED_USERNAME_PREFIXES = ['E2E', 'BotAlpha', 'BotBeta']
 
+// ── WHY THE E2E BYPASS IS NOT IN THIS FILE, AND THAT IS THE SECOND DESIGN I TRIED ────────────────
+// I SHIPPED THIS GUARD AND BROKE THE ENTIRE LIVE SUITE. The harness IS this namespace: every live spec
+// claims its identity through the real UI as `uniqueName('E2E...')`, precisely so the purge can find
+// and delete it afterwards. The guard refused the harness's own sign-in, and game-ux and reconnect died
+// on the merge gate with a bare "Create Room" timeout naming nothing (T3 diagnosed and measured it ·
+// run 31545142925, three retries identical, and staged VITE_E2E on the dev server for me). I wrote a
+// rule this same session about auditing reasons for inaction, and did not run the one grep that would
+// have found the biggest consumer of the exact prefixes I was reserving. Rule 101.
+//
+// The harness cannot rename off the prefix: the prefix is HOW purge_e2e_test_data finds its rows, so
+// renaming trades a loud breakage for a permanent silent leak. So there has to be a bypass.
+//
+// MY FIRST FIX PUT IT HERE, and measuring the built bundle killed it. Reading the flag inside this
+// module needs TWO reads · `import.meta.env?.VITE_E2E` for the browser and `process.env` for Node,
+// because Playwright's audit imports this file directly with no Vite transform and the bare form
+// throws TypeError. Only the first is substituted at build time, so the second left the literal
+// VITE_E2E in the production bundle as a RUNTIME-readable switch · one `window.process = {env:{...}}`
+// from being live in a real browser, in a module whose own comment claimed that was impossible.
+//
+// SO THIS FILE STAYS PURE and the bypass lives at the CALL SITE in useAuth.js, where a single
+// `import.meta.env.VITE_E2E` is statically replaced and the whole branch is removed from a production
+// build. The predicate is then honestly testable in any loader, which is also what lets the drift
+// guard and T3's harness audit both call it without an environment.
+// (Rule 110c · fix the design, do not widen the assertion that caught it.)
+
 /**
- * Is this name inside a prefix the cleanup routine owns?
+ * Is this name inside a prefix the cleanup routine owns?  PURE · no environment, no bypass.
  * Compared case-insensitively and after trimming, because that is how the value reaches the DB.
  */
 export function isReservedUsername(name) {

@@ -23,7 +23,7 @@ export function useAuth() {
       // claim screen to stop them · the fix would then protect everyone except the people it was
       // written for. Treated as UNCLAIMED rather than rewritten, so they are asked again and meet the
       // real error message (see the note in claimUsername on why silent substitution is the wrong fix).
-      if (isReservedUsername(stored)) {
+      if (!import.meta.env.VITE_E2E && isReservedUsername(stored)) {
         try { localStorage.removeItem(CLAIMED_KEY); localStorage.removeItem(USERNAME_KEY) } catch { /* blocked */ }
         return ''
       }
@@ -132,7 +132,15 @@ export function useAuth() {
     // the wrong fix: the player typed a name, and a system that quietly substitutes a different one
     // is how you get a person who cannot find their own profile. The check is stricter than the SQL
     // on purpose (case-insensitive against a case-sensitive `like`) · see src/lib/reservedNames.js.
-    if (isReservedUsername(cleaned)) return { error: reservedUsernameError(cleaned) }
+    // THE E2E BYPASS LIVES HERE, NOT IN reservedNames.js, and the placement is the point. Vite
+    // substitutes `import.meta.env.VITE_E2E` STATICALLY, so a production build compiles this to
+    // `if (false && ...)` and drops it · the literal never reaches a player's bundle, which is
+    // asserted against the built assets in reservedNames.test.js rather than claimed here.
+    // playwright.config.js sets the flag on its dev server (T3 S51) so the harness can keep claiming
+    // the 'E2E...' names the purge needs in order to find and delete its own rows.
+    if (!import.meta.env.VITE_E2E && isReservedUsername(cleaned)) {
+      return { error: reservedUsernameError(cleaned) }
+    }
 
     // player_profiles.username is NON-unique (migration 012 dropped UNIQUE(username) · confirmed against the
     // live schema this session · Rule 68) and each player keeps ONE row (keyed by user_id), so a claim is an
