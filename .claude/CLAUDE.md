@@ -179,7 +179,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (96 · cumulative):
+PERMANENT ANTI-REGRESS RULES (98 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -412,6 +412,28 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 98 (T1 S43 · August 11 2026):
+A GUARD APPLIED TO ONE MEMBER OF A CLASS ROTS THE MOMENT THE CLASS GROWS · MAKE IT ENUMERATE.
+In S41 I wrote a test that rebuilds `reachability` from its own source with the module scope stripped,
+because a probe crossing into a page via page.evaluate arrives as TEXT and a free variable would throw
+only in the browser it exists to drive. Correct, deliberate, and load-bearing. Then in S42 I added a
+second page-bound function to the same file and did not extend it · and T3 found that seedPlayedBoard
+could never have run in a page at all. The late-game reachability case READ AS COVERED and was
+reachable only from jsdom, which is Rule 97's citation rot inside my own harness.
+THE FIX IS THE SHAPE, NOT THE PATCH: the guard now takes a LIST of every page-bound export and a
+counterweight that reds when a new export is added without being classified. It found a THIRD on its
+first run · seedOneOfEach, broken the same way since S38. Two of the three functions that file offers
+a page were broken, neither noticed, and the one with a guard was fine. That ratio is the argument.
+  98a · The tell is a guard whose subject is a NAME rather than a SET. `expect(reachability...)` cannot
+        notice a sibling; `it.each(PAGE_BOUND)` can, and the cost is one line.
+  98b · And enumerate from the CODE where you can. The list is checked against the actual exports, so
+        forgetting to add one is itself the red · a hand-maintained list is the same defect one level
+        up (Rule 89's "a hand pass MISSED two symbols entirely", which is why the audit became a script).
+COROLLARY, from the same session: the guard I did have caught nothing for two sessions because it was
+never pointed at anything new. Rule 96's corollary said an instrument earns trust from RANGE; this is
+the same thought about coverage · a guard earns trust from BREADTH, and both decay silently while
+looking green.
 
 RULE 96 (T1 S42 · August 11 2026):
 THE HEADLINE NUMBER IS OFTEN NOT THE DECIDING ONE · MEASURE THE QUANTITY THE DECISION ACTUALLY RESTS ON.
