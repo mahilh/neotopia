@@ -897,34 +897,22 @@ test.describe('practice mode · the end of the game', () => {
 // ONE DEFINITION OF THE AUDIT BOARD, used by both soft-lock tests (T3 S47). They were inline in the
 // first test and the second needed the same state · two copies of a fixture is how the two lanes'
 // versions of this board already diverged once (Rule 45), so it is named once here.
-// ⚠ STILL A SECOND COPY OF T2's, and saying so rather than letting it be silent: their seedDeadlock is
-// module-private inside deadlockEndgame.test.js (a vitest file), so a Playwright spec cannot import it
-// and importing would register their suite. Export requested in comms; when it lands this deletes.
+// ✅ T3 S48 · MY SECOND COPY IS GONE. T2 exported the board as src/store/deadlockFixture.js (S47, on my
+// S46 ask), so this seeds from THEIR module and their unit test seeds from the same one · the two lanes
+// can no longer drift. What I deleted was a hand-rolled radius fill and a hand-rolled factory geometry,
+// which is precisely the pair that had already diverged once: both our first drafts filled only the hex
+// keys that already existed and both measured 2 legal placements on a board meant to have none.
+// Reconciled by SUBTRACTION (Rule 95): I kept nothing of mine that theirs also does. Checked before
+// swapping rather than assumed · DEADLOCK_FACTORIES carries the same q/r as the real initial factories
+// (gameStore.js:102-104), so adopting it changes the board's contents and not its geometry.
+// What stays mine is the two keys their patch has no opinion on, layered on top: this is a LATE game.
 async function seedAuditDeadlock(page) {
   await page.evaluate(async () => {
-    // Fill EVERY hex in the radius, not merely the keys that already exist · a fresh board's hexes map is
-    // nearly empty, so mapping over Object.keys fills almost nothing and leaves the board playable. My
-    // first version did exactly that and measured 2 legal placements in a state meant to have none · the
-    // same number T2's fillRegion comment records from their own first draft. Two lanes, same bug.
-    const { hexesInRadius, REGIONS } = await import('/src/utils/hexUtils.js')
+    const { deadlockStatePatch } = await import('/src/store/deadlockFixture.js')
     const st = window.__neotopia_store.getState()
-    const fill = (region) => {
-      const def = REGIONS.find(rd => rd.id === region.id)
-      const hexes = { ...region.hexes }
-      for (const h of hexesInRadius(def.cq, def.cr, def.radius)) {
-        hexes[`${h.q},${h.r}`] = { ...(hexes[`${h.q},${h.r}`] ?? {}), element: 'energy', placedBy: 0 }
-      }
-      return { ...region, hexes }
-    }
     window.__neotopia_store.setState({
-      phase: 'playing', currentSeat: 0, actionsRemaining: 3, turnNumber: 33,
-      deck: [], theOffer: [],
-      productionTilesRemaining: 3, // TILES REMAIN · the clock cannot advance without a placement
-      endGameTriggered: false, endGameRoundsRemaining: 2,
-      factories: st.factories.map(f => f.id === 0
-        ? { ...f, betweenRegions: [0, 1], elements: [{ type: 'energy', count: 2 }] } // stocked, boxed in
-        : { ...f, elements: f.elements.map(e => ({ ...e, count: 0 })) }),            // empty forever
-      regions: st.regions.map(r => (r.id === 0 || r.id === 1 ? fill(r) : r)),
+      ...deadlockStatePatch(st.regions, { tiles: 3, actionsRemaining: 3 }), // TILES REMAIN · the clock
+      turnNumber: 33,                                 // cannot advance without a placement, and none exist
     })
   })
   await page.waitForTimeout(800)
@@ -934,13 +922,17 @@ async function seedAuditDeadlock(page) {
 // T2's anyPlacementPossible does. getValidPlacements alone answers "which hexes are geometrically legal
 // for this pair" and never looks at whether the factory holds anything · it measured SIX on an empty
 // board in S45 and nearly put a second, wrong rules engine inside the guard written to prevent one.
-const readDeadlockShape = (page) => page.evaluate(() => {
+// T3 S48 · the count now comes from the fixture's countLegalPlacements, my third re-derivation of it and
+// the last. Theirs additionally multiplies by the number of DISTINCT element types a factory holds, which
+// mine did not · a stocked factory with two types offers two placements per hex, so mine under-counted
+// and a counterweight that under-counts is one that passes a board it should have condemned.
+// The shape fields below stay a READING OF MY OWN, taken from the store rather than from the fixture:
+// sharing the placement count removes a second contract, and Rule 94 says what that costs is a second
+// witness · so the premise (a stocked factory, tiles left, an empty deck) is still asserted independently.
+const readDeadlockShape = (page) => page.evaluate(async () => {
+  const { countLegalPlacements } = await import('/src/store/deadlockFixture.js')
   const g = window.__neotopia_store.getState()
-  let placements = 0
-  for (const f of g.factories) {
-    if (!f.elements.some(e => e.count > 0)) continue
-    for (const rid of f.betweenRegions) placements += (g.getValidPlacements?.(f.id, rid) ?? []).length
-  }
+  const placements = countLegalPlacements(g, (fid, rid) => g.getValidPlacements?.(fid, rid) ?? [])
   return {
     placements,
     stockedFactories: g.factories.filter(f => f.elements.some(e => e.count > 0)).length,
