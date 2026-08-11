@@ -53,6 +53,7 @@ export default function ActionBar({
   mySeat = null,          // null = solo (no turn ownership concept)
   isMyTurn = true,        // solo is always your turn
   actionsRemaining = 3,
+  noLegalMove = false,    // no placement, no draw, no district to score · unlocks End Turn early
   bonusTokens = [],       // [type, ...] held by the current player
   bonusUsedThisTurn = false, // the engine allows exactly one bonus per turn and refuses in silence
   turnTimeRemaining = null, // seconds left this turn · null hides the timer (legacy callers / tests)
@@ -61,7 +62,15 @@ export default function ActionBar({
   onUseBonus = () => {},  // (type) => void · spends the token through the store
 }) {
   const used = Math.max(0, TOTAL_ACTIONS - actionsRemaining)
-  const canEndTurn = actionsRemaining === 0 && isMyTurn
+  // ── THE ESCAPE HATCH (T1 S44) ──────────────────────────────────────────────────────────────────
+  // `actionsRemaining === 0` alone is a CAGE, and a real player sat in it at Turn 33: two actions
+  // left, deck empty, every reachable region full, so nothing could be spent and the only control
+  // that ends the turn refused on the grounds that the turn was not over. Reloading restored it from
+  // sessionStorage · a permanent soft-lock in shipped code.
+  // The engine never agreed: handleEndTurn gates on isMyTurn alone and would have ended that turn.
+  // So the condition is "the turn is over OR this player cannot act", and the second half is
+  // computed from real legal-move counts by GameRoom rather than guessed here.
+  const canEndTurn = isMyTurn && (actionsRemaining === 0 || noLegalMove)
 
   // Turn-status label · multiplayer shows whose turn, solo just shows the player.
   const status = mySeat === null
@@ -355,8 +364,10 @@ export default function ActionBar({
         <button
           className="ab-end-turn"
           data-testid="end-turn-btn"
+          data-unlocked-by={noLegalMove && actionsRemaining > 0 ? 'no-legal-move' : undefined}
           onClick={onEndTurn}
           disabled={!canEndTurn}
+          title={noLegalMove && actionsRemaining > 0 ? 'No legal move left · end your turn' : undefined}
           style={{
             height: 44, padding: '0 22px', borderRadius: 8, fontSize: 13, fontWeight: 500,
             cursor: canEndTurn ? 'pointer' : 'default',

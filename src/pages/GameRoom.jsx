@@ -211,6 +211,9 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   const turnNumber    = useGameStore(s => s.turnNumber)
   const turnTimeRemaining = useGameStore(s => s.turnTimeRemaining)
   const theOffer      = useGameStore(s => s.theOffer)
+  // Length, not the array · a draw from an empty deck still SPENDS the action (gameStore.drawCard
+  // shifts undefined and decrements anyway), so "is a draw a real move" needs this number.
+  const deckCount     = useGameStore(s => s.deck.length)
   const factories     = useGameStore(s => s.factories)
   const regions       = useGameStore(s => s.regions)
   const players       = useGameStore(s => s.players)
@@ -351,6 +354,30 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     stepPanelRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   }, [isChoosing, uiPhase])
 
+  // ── THE REWARD MUST BE ON SCREEN (T1 S44) ──────────────────────────────────────────────────────
+  // MEASURED in a browser audit: "Pattern complete · select a glowing card to score" fired with
+  // exactly ONE glowing card, at y=1580 in a 749px viewport · 831px BELOW THE FOLD, sidebar
+  // scrollTop 0, no auto-scroll, visible false. Meanwhile End Turn was enabled and the brightest
+  // control on screen. So the game told the player they had earned a district, hid the only way to
+  // take it, and lit the button that throws it away. That is the one moment in this game where the
+  // interface can cost real points, and it was costing them.
+  // The step panel above already scrolls for the CHOOSING phases and scorePending is not one of
+  // them · the affordance existed and simply did not cover the case that mattered most.
+  // `block: 'center'` rather than 'nearest': nearest is satisfied by one pixel of the card touching
+  // the scrollport, which on a 168px card is not a card anybody can see.
+  const scoreCardRef = useRef(null)
+  const firstScoreableId = uiPhase === 'scorePending'
+    ? (currentPlayer?.hand ?? []).find(c => buildableMatches.some(m => m.cardId === c.id))?.id ?? null
+    : null
+  useEffect(() => {
+    if (uiPhase !== 'scorePending') return
+    // After paint · the glowing card only exists once buildableMatches has rendered it.
+    const id = requestAnimationFrame(() => {
+      scoreCardRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [uiPhase, buildableMatches])
+
   // Draw a card from The Offer. In a REAL authenticated room we route through the atomic RPC so
   // concurrent draws can't clobber (the bug T2 flagged · 17f5931); the card returns and also lands in
   // hand when the RPC's game_sessions.state write streams back via postgres_changes. The RPC needs the
@@ -455,6 +482,54 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
 
   // Persistent "what to do next" line (colonist.io pattern). The first playtest reached turn 17 with an
   // empty board because nothing ever told the players what their options were · this never lets that happen.
+  // ── WHAT CAN ACTUALLY BE DONE RIGHT NOW (T1 S44) ───────────────────────────────────────────────
+  // A player reached Turn 33 with 2 actions remaining and the game stopped accepting input FOREVER:
+  // deck empty, every reachable region 19/19 full, so no placement and no draw existed · and End
+  // Turn was disabled because it demanded all three actions be SPENT. Reloading restored the lock
+  // from sessionStorage. The engine was never the problem: handleEndTurn gates on isMyTurn alone and
+  // would have ended that turn happily. The UI's enable condition was the whole cage.
+  //
+  // THIS PREDICATE IS THE ANSWER TO "IS THERE ANYTHING TO DO", and it is deliberately the same one
+  // for the escape hatch, the instruction line and the region buttons · three surfaces that were
+  // each guessing separately, which is how the header came to promise dashed hexes that do not
+  // exist. One source, so they cannot disagree (Rule 45).
+  //
+  // WHAT COUNTS, in the order it is cheapest to check:
+  //   · a district waiting to be scored · costs NO action, so it is live even at zero (S36)
+  //   · a draw · but only if a card can really be TAKEN. The engine spends the action either way:
+  //     `const card = state.deck.shift(); if (card) player.hand.push(card)` still decrements. So an
+  //     empty deck is not a move, it is a way to lose an action. Flagged to T2.
+  //   · a placement · a factory holding at least one element AND a region it borders with at least
+  //     one legal hex. Asked of getValidPlacements rather than reasoned about, because centre-first
+  //     and adjacency are the engine's rules and a second copy of them here would drift (Rule 45).
+  const legalPlacements = useMemo(() => {
+    if (!isMyTurn || phase !== 'playing' || actionsLeft <= 0) return { total: 0, byRegion: {}, byFactory: {} }
+    const store = useGameStore.getState()
+    const byRegion = {}, byFactory = {}
+    let total = 0
+    for (const f of factories) {
+      const stock = (f.elements ?? []).reduce((n, e) => n + (e.count ?? 0), 0)
+      byFactory[f.id] = 0
+      if (stock === 0) continue
+      for (const rid of (f.betweenRegions ?? [])) {
+        const n = (store.getValidPlacements?.(f.id, rid) ?? []).length
+        if (!n) continue
+        byRegion[rid] = (byRegion[rid] ?? 0) + n
+        byFactory[f.id] += n
+        total += n
+      }
+    }
+    return { total, byRegion, byFactory }
+    // `regions` is in the deps because a placement's legality depends on what is already down.
+  }, [isMyTurn, phase, actionsLeft, factories, regions])
+
+  const canDraw = actionsLeft > 0 && (theOffer.length > 0 || deckCount > 0)
+  const hasLegalMove = buildableMatches.length > 0 || canDraw || legalPlacements.total > 0
+  // The escape hatch. Not "the game is over" · just "this player cannot act", which is the only
+  // condition that has to unlock End Turn early. T2 is shipping real terminal-state detection in
+  // parallel; this is deliberately narrower and they do not conflict (see comms).
+  const noLegalMove = isMyTurn && phase === 'playing' && actionsLeft > 0 && !hasLegalMove
+
   const instruction = (() => {
     if (!isMyTurn) return `Waiting for ${currentPlayer?.username ?? 'the other player'}`
     // SCORING OUTRANKS "out of actions", and the old order had it the other way round. Because
@@ -463,15 +538,55 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     // one moment in the game where the instruction line can cost real points.
     if (uiPhase === 'scorePending') return 'Pattern complete · select a glowing card to score'
     if (actionsLeft <= 0) return 'No actions left · ending your turn'
+    // ── AND THE LINE MUST NOT PROMISE WHAT THE BOARD CANNOT DO (T1 S44) ──────────────────────────
+    // Every string below used to be static, so each described the HAPPY path and kept describing it
+    // after the board ran out. All three were unrecoverable except by an undocumented click on the
+    // same factory again. They are gated on real counts now · the same counts the buttons use.
+    if (noLegalMove) return 'No legal move left · end your turn'
     switch (uiPhase) {
-      case 'factorySelected': return aimedRegion != null
-        ? `Pick an element · it goes into ${REGION_NAMES[aimedRegion]}`
-        : 'Pick an element · the dashed hexes show where it can go'
+      case 'factorySelected': {
+        // "the dashed hexes show where it can go" was printed even when strokeDasharray matched ZERO
+        // polygons · a factory with stock whose regions are all full, or an empty factory.
+        const reach = legalPlacements.byFactory[selectedFactory] ?? 0
+        if (reach === 0) return 'This factory has nowhere to place · pick another'
+        return aimedRegion != null
+          ? `Pick an element · it goes into ${REGION_NAMES[aimedRegion]}`
+          : 'Pick an element · the dashed hexes show where it can go'
+      }
       case 'elementSelected':  return 'Choose a region to place into'
       case 'regionSelected':   return 'Click a highlighted hex to place the element'
-      default:                 return 'Click a factory to take an element · or draw a card from the Offer'
+      default:                 return canDraw
+        ? 'Click a factory to take an element · or draw a card from the Offer'
+        : 'Click a factory to take an element'
     }
   })()
+  // ── ESCAPE CANCELS THE PLACEMENT FLOW (T1 S44) ─────────────────────────────────────────────────
+  // Measured `escapeWorked: false`. A player four clicks into a placement had exactly one way back
+  // and it is undocumented: click the SAME factory again, which handleFactoryClick treats as a
+  // toggle-off. Nothing on screen says so, and the header meanwhile insists on picking an element.
+  // It uses that existing toggle rather than a second cancel path · reset() is not exported from
+  // useGameActions (T2's lane) and a private copy of the teardown would be a second contract that
+  // drifts the first time a step is added to the machine (Rule 45).
+  // Handler in a ref, deps empty: this component re-renders once a second for the turn clock, and an
+  // effect that re-subscribes on every render is the S35/S76 hazard. Values change, the listener
+  // does not.
+  const cancelRef = useRef(null)
+  cancelRef.current = () => {
+    if (uiPhase === 'idle' || uiPhase === 'scorePending') return false
+    if (selectedFactory === null) return false
+    handleFactoryClick(selectedFactory) // same id → reset()
+    setAimedRegion(null)
+    return true
+  }
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      if (cancelRef.current?.()) e.preventDefault()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   // Pulse the factories to invite the first action · only on your turn, with actions left, before a pick.
   const factoriesPulse = isMyTurn && actionsLeft > 0 && selectedFactory === null
 
@@ -679,7 +794,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
           />
           <ActionLog entries={actionLog} />
           {/* Sacred milestone celebration · covers the board for 2500ms when a total crosses 7/9/13/18/27/36 */}
-          <MilestoneOverlay />
+          <MilestoneOverlay mySeat={mySeat} />
         </div>
 
         {/* SIDEBAR */}
@@ -699,6 +814,30 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 @media (prefers-reduced-motion: reduce) { .neo-soul-tip { transition: none; } }
               `}</style>
               <div style={sectionLabel}>Select element</div>
+              {/* AN EMPTY PANEL IS NOT AN ANSWER (T1 S44). Clicking a factory with zero tokens opened
+                  this panel with 0 rows and 0 buttons while the header went on saying "Pick an
+                  element", and the only way out was to click the same factory again · which nothing
+                  tells the player. The panel now says what happened and offers the way back as a real
+                  control rather than as folklore. */}
+              {factory.elements.filter(el => el.count > 0).length === 0 && (
+                <div data-testid="factory-empty" style={{
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                  color: 'rgba(255,255,255,0.5)', fontSize: 12, lineHeight: 1.5,
+                }}>
+                  <span>This factory is empty · it holds no elements to take.</span>
+                  <button
+                    data-testid="cancel-selection"
+                    onClick={() => cancelRef.current?.()}
+                    style={{
+                      minHeight: 44, padding: '0 14px', borderRadius: 8, cursor: 'pointer',
+                      border: '1px solid rgba(255,255,255,0.16)', background: 'transparent',
+                      color: 'rgba(255,255,255,0.75)', fontSize: 13, letterSpacing: 0.3,
+                    }}
+                  >
+                    Pick another factory
+                  </button>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {factory.elements.filter(el => el.count > 0).map(el => {
                   const soul = ELEMENT_SOUL_METAL[el.type]
@@ -750,13 +889,25 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 {factory.betweenRegions.map(rid => {
                   const regionNames = ['Sacred City', 'Living Earth', 'Free Energy']
                   const regionColors = ['#7F77DD', '#1D9E75', '#E24B4A']
+                  // A REGION WITH NO LEGAL HEX IS NOT A CHOICE (T1 S44). These rendered as ordinary
+                  // enabled buttons on a full region, so the player picked one, the board lit nothing,
+                  // and the header told them to click a highlighted hex that did not exist. Counted
+                  // from the same getValidPlacements the board itself draws from, so the button and
+                  // the hexes can never disagree.
+                  const free = legalPlacements.byRegion[rid] ?? 0
+                  const dead = free === 0
                   return (
                     <button key={rid}
                       data-testid="region-btn"
                       data-region={rid}
-                      onClick={() => handleRegionSelect(rid)}
+                      data-free-hexes={free}
+                      disabled={dead}
+                      title={dead ? `${regionNames[rid]} is full · no legal hex from this factory` : undefined}
+                      onClick={() => { if (!dead) handleRegionSelect(rid) }}
                       style={{
-                        height: 44, padding: '0 14px', borderRadius: 8, cursor: 'pointer',
+                        height: 44, padding: '0 14px', borderRadius: 8,
+                        cursor: dead ? 'not-allowed' : 'pointer',
+                        opacity: dead ? 0.45 : 1,
                         border: selectedRegion === rid
                           ? `1px solid ${regionColors[rid]}`
                           : '1px solid rgba(255,255,255,0.12)',
@@ -766,6 +917,9 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                     >
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: regionColors[rid] }} />
                       <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>{regionNames[rid]}</span>
+                      {dead && (
+                        <span style={{ marginLeft: 'auto', color: 'rgba(255,255,255,0.35)', fontSize: 11 }}>full</span>
+                      )}
                     </button>
                   )
                 })}
@@ -817,6 +971,10 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 const isScoreable = uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === card.id)
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-hand" isSelected={isScoreable}
+                    // The FIRST scoreable card is the scroll target · DERIVED from the current hand
+                    // and matches, never latched. A `!ref.current` test here would pin the ref to the
+                    // first card it ever saw and quietly scroll to a stale one on the next pattern.
+                    innerRef={card.id === firstScoreableId ? scoreCardRef : undefined}
                     card={{ ...card, element: cardPrimaryElement(card) }}
                     onClick={isScoreable ? () => {
                       const scored = handleCardScore(card.id)
@@ -873,6 +1031,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         mySeat={mySeat}
         isMyTurn={isMyTurn}
         actionsRemaining={actionsLeft}
+        noLegalMove={noLegalMove}
         bonusTokens={currentPlayer?.bonusTokens ?? []}
         bonusUsedThisTurn={bonusUsedThisTurn}
         onUseBonus={(type) => {
