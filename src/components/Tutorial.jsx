@@ -18,6 +18,31 @@ export const tutorialSeen = () => { try { return !!localStorage.getItem(KEY) } c
 // Flow is a short simultaneous-draw sprint, Classic a longer turn-locked game. The numbers come from
 // getModeConfig — the single source for the per-mode params (gameConfig.js) — never hardcoded here, so a
 // config change can't silently drift the onboarding copy (rule 32 · constants, not magic numbers).
+// ── THE PLACEMENT SEQUENCE · ONE SOURCE FOR THE COPY AND FOR THE TEST THAT DRIVES IT (T1 S50) ────
+// This overlay has now taught the wrong placement flow in three different ways across three
+// sessions (S8's two-click version, S29's fix, S30's aim-first rewrite), and every time the copy
+// was checked by READING it. So it is no longer prose: it is this list, the paragraph is rendered
+// from it, and Tutorial.flow.test.jsx CLICKS `testid` in this order against a real GameRoom and
+// requires each tap to advance the phase. A step that the game does not have cannot survive that,
+// and neither can a step in the wrong place.
+//
+// WHY THE PANEL PATH AND NOT THE BOARD SHORTCUT. Clicking a previewed hex right after the factory
+// does do something · it AIMS at that hex's region · and S30 rewrote this step around it. Two
+// measured reasons it is the wrong thing to teach:
+//   1 · IT MAKES THE READER TAP A HEX TWICE. Aim, then choose an element, then tap a hex again to
+//       place. As instructions that is simply confusing, and the two taps look identical.
+//   2 · ON A PHONE IT IS PARTLY BEHIND THE SHEET. In `factorySelected` the bottom sheet is OPEN,
+//       because the element buttons live in it · measured at 320, 27 of 60 board cells are covered
+//       in exactly that phase. So the hex the S30 copy tells a first-timer to look for may not be
+//       on screen, on the device most first-timers are holding.
+// The shortcut still works and is left in the product. It is discovered, not taught.
+export const PLACEMENT_TAPS = [
+  { testid: 'factory',     text: 'a factory token · the coloured icons between the regions' },
+  { testid: 'element-btn', text: 'which element to take, in the panel' },
+  { testid: 'region-btn',  text: 'which region it goes to' },
+  { testid: 'hex-valid',   text: 'a highlighted hex on the board' },
+]
+
 const buildSteps = (cfg, isFlow) => [
   {
     // THIS STEP OFFERED TWO EQUAL CHOICES AND THEY ARE NOT EQUAL (fixed T1 S37 · gap 1 of
@@ -51,12 +76,13 @@ const buildSteps = (cfg, isFlow) => [
     // ever had an element placed. Verified by driving the real UI at 375px and 1280px · all four
     // controls are on screen and the loop completes, so the interaction works and only the
     // instructions for it were wrong.
-    // S30 · rewritten again, because the interaction changed under it. The board now previews every
-    // hex the picked factory can reach, and clicking one of those chooses its region · so the trip to
-    // the region panel that the S29 copy taught is no longer the shortest way through. The copy
-    // teaches the BOARD path, since that is the one a player finds without reading anything.
+    // S30 · rewritten again, around the board's aim shortcut. S50 REVERSED THAT, for two measured
+    // reasons in the PLACEMENT_TAPS block above · it told the reader to tap a hex twice, and on a
+    // phone the hex it points at is behind the sheet in exactly that phase. The order below is now
+    // executed by a test rather than read by a reviewer.
     heading: 'To place an element',
-    body: 'Click a factory token (the coloured icons between the regions). The board marks every hex that factory can reach with a dashed outline · click the one you want. Then pick which element goes there from the panel, and the hex lights up. Click it to place.',
+    body: `Four taps, and the panel asks for them in this order. Only a highlighted hex will accept an element, and the line at the top of the screen always says which tap it is waiting for.`,
+    taps: PLACEMENT_TAPS,
     visual: 'factory',
   },
   {
@@ -143,9 +169,26 @@ export default function Tutorial({ onDismiss }) {
           {s.heading}
         </h2>
 
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75, marginBottom: 26 }}>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 1.75, marginBottom: s.taps ? 14 : 26 }}>
           {s.body}
         </p>
+
+        {/* A NUMBERED LIST, NOT A SENTENCE. Four taps written as prose is one 40-word line in which
+            the order is carried by the words "then" and "and" · which is how the last three versions
+            of this step managed to be wrong without looking wrong. An ordered list makes the count
+            and the sequence structural, and it is what the test reads. */}
+        {s.taps && (
+          <ol data-testid="tutorial-taps" style={{ margin: '0 0 24px', paddingLeft: 22 }}>
+            {s.taps.map(t => (
+              <li key={t.testid} data-tap={t.testid} style={{
+                fontSize: 14, color: 'rgba(255,255,255,0.62)', lineHeight: 1.6, marginBottom: 6,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {t.text}
+              </li>
+            ))}
+          </ol>
+        )}
 
         {/* Factory → Board visual (step 2 · the action they missed). */}
         {s.visual === 'factory' && (
