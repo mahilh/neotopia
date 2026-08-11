@@ -497,20 +497,32 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // (above), and the acting-browser reads (the loop took whose-turn AND how-many-actions from the
       // HOST's copy while clicking in the joiner · both are now read from the browser being driven).
       //
-      // ⚠ THE ONE REMAINING BLOCKER IS NOT MINE, AND IT LOOKS LIKE A PRODUCT DEFECT · ROUTED TO T2.
-      // Once the board is full, the only legal action is a DRAW, and in a real room that is the atomic RPC.
-      // With force:true on the offer card (CardFrame carries the art shimmer · an infinite animation, so a
-      // plain click never settles and TIMES OUT · that alone accounted for `draw RPC calls []`):
-      //     the wire says  200 /rest/v1/rpc/draw_card_for_seat
-      //     the client says  offer STILL 4 cards · actionsRemaining STILL 3 · drawStatus null · 10s later
-      // So the draw SUCCEEDS server-side and the drawing player's own screen never changes. No error is
-      // shown, because there was no error. Note the contrast that makes this specific rather than vague:
-      // multiplayer-endgame-live already PROVED that a game_sessions.state UPDATE written by a real member
-      // reaches both clients through postgres_changes and syncFromServer. The difference here is that the
-      // UPDATE happens INSIDE a SECURITY DEFINER function. That is the question to ask first, and it is
-      // T2's lane (RPC + migrations), not mine.
-      // I am NOT claiming the cause · I am claiming the two readings above, which disagree.
-      test.fixme(true, 'a live draw returns 200 and the drawing client never updates · routed to T2 · T3 S40')
+      // ⚠ THE BLOCKER MOVED THIS SESSION, AND THE NEW ONE IS IN MY OWN LANE (T3 S41) ─────────────────
+      //
+      // S40 I routed a draw defect to T2: 200 on draw_card_for_seat with the client unchanged, and framed
+      // it as "a SECURITY DEFINER write may not reach clients like a normal UPDATE does". THAT FRAMING WAS
+      // WRONG and T2's read-only audit (aec54da) is the correction worth keeping: game_sessions IS in the
+      // supabase_realtime publication, and every session from that run sits at deck 46 / offer 4 / actions
+      // 3, untouched. The DB was never written · no draw ever landed, so there was nothing to deliver.
+      // T2 fixed the surface that made it unsayable: useDrawCard returned { card: data ?? null, error: null },
+      // so a 200 with a null body reported as SUCCESS. It is named now. They say explicitly, and correctly,
+      // that this is not the whole of the stall.
+      //
+      // WITH THAT IN THE TREE, THREE LIVE RUNS STOP EARLIER AND SOMEWHERE ELSE, and the diagnostic above
+      // answers it rather than leaving a hypothesis. At turn 19 the driver waits for seat 1's browser to
+      // agree the turn is its own, and it never does · because IT IS RIGHT:
+      //     the joiner  · localSeat 0, localTurn 19, channel realtime:game-sync:...:joined
+      //     the SERVER  · column_seat 0, column_turn 19, state_seat 0, phase 'playing'
+      //     the host    · believes currentSeat is 1
+      // The joiner is in exact agreement with the server and its channel is subscribed, so this is NOT a
+      // delivery defect and not the peer's fault. The HOST advanced its own store past an End Turn that
+      // never reached game_sessions. Both players then deadlock in opposite directions: the host waits for
+      // a joiner who is correctly waiting for the host.
+      // Same family as the draw hazard this project already documented ("concurrent draws CLOBBER · a draw
+      // can be LOST" · whole-state snapshots), but for END TURN, which nothing has ever watched.
+      // useGameSync.js is MY file, so this one is mine to open next · it is not routed anywhere.
+      // I am claiming the three readings above. I am not yet claiming which write dropped it.
+      test.fixme(true, 'an End Turn is lost before game_sessions · host says seat 1, server and joiner both say seat 0 · T3 S41')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -528,9 +540,14 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // invent a fourth hypothesis · that habit is what cost last session.
       const drawCalls = []
       for (const page of [p1, p2]) {
-        page.on('response', (r) => {
+        page.on('response', async (r) => {
           if (r.status() >= 400 && /supabase\.co/.test(r.url())) {
-            httpErrors.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`)
+            // THE BODY, NOT ONLY THE STATUS. A bare "403 POST /rest/v1/game_events" is a fact with no
+            // cause, and I shipped exactly that last session · PostgREST puts the reason in the body (the
+            // failing policy, a raise message, a rate-limit verdict), so discarding it is Rule 93 in the
+            // listener instead of in a click. Six of these appeared in a live run and said nothing.
+            const why = await r.text().then(t => t.replace(/\s+/g, ' ').slice(0, 200)).catch(() => 'unreadable')
+            httpErrors.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname} :: ${why}`)
           }
           if (/draw_card_for_seat/.test(r.url())) {
             drawCalls.push(`${r.status()} ${new URL(r.url()).pathname}`)
@@ -692,15 +709,49 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           // isMyTurn (useGameActions.js:117,158,171,192).
           // This is the Rule 65 shape: two halves each correct, the COMPOSED value wrong. Waiting on the
           // acting page's OWN view is the only reading that can authorise a click in it.
-          await expect.poll(async () => await page.evaluate(() => {
+          const agreed = async () => await page.evaluate(() => {
             const s = window.__neotopia_store?.getState?.()
             const root = document.querySelector('[data-ui-phase]')
             return `${s?.currentSeat}:${root?.getAttribute('data-my-turn')}`
-          }).catch(() => 'unreadable'), {
-            timeout: 20_000,
-            message: `seat ${g.currentSeat}'s own browser never agreed the turn was its own · the host's ` +
-              'state says it is, so this is sync latency or a seat-ownership disagreement, not a dead control',
-          }).toBe(`${g.currentSeat}:true`)
+          }).catch(() => 'unreadable')
+          try {
+            await expect.poll(agreed, { timeout: 20_000 }).toBe(`${g.currentSeat}:true`)
+          } catch {
+            // ── AND IF IT NEVER AGREES, SAY WHY IT COULD NOT (T3 S41 · Rule 90's corollary) ─────────────
+            // "seat 1 never agreed the turn was its own" is a symptom with at least three causes that need
+            // opposite responses: the realtime channel is not subscribed (a connection defect), it is
+            // subscribed and the row itself has not moved (the writer never wrote), or the row moved and
+            // this client did not apply it (a syncFromServer defect). Timing out with only the symptom is
+            // the same failure as the bare null this file already fixed once · so read all three.
+            // EVERY FIELD HERE READS FROM A SOURCE THAT EXISTS, and the first draft of this block did not:
+            // it read `window.supabase.getChannels()` (the app never puts the client on window, so it
+            // reported `channels: []` for every run · a false zero in the very instrument written to stop
+            // false zeroes) and looked the row up by a roomId it guessed from location.pathname, which
+            // returned "no row". Both are Rule 80 inside a Rule 90 fix. The client comes from the app's own
+            // module and the roomId is PASSED IN from the test, which already knows it.
+            const why = await page.evaluate(async (rid) => {
+              const st = window.__neotopia_store?.getState?.()
+              const out = { localSeat: st?.currentSeat, localTurn: st?.turnNumber }
+              try {
+                const m = await import('/src/lib/supabase.js')
+                out.channels = m.supabase.getChannels().map(c => `${c.topic}:${c.state}`)
+                if (!out.channels.length) out.channels = 'NONE SUBSCRIBED · this client is not listening'
+                const { data, error } = await m.supabase.from('game_sessions')
+                  .select('current_seat, turn_number, phase, state').eq('room_id', rid).maybeSingle()
+                out.server = error ? `READ REFUSED: ${error.message}`
+                  : data ? {
+                    column_seat: data.current_seat, column_turn: data.turn_number, column_phase: data.phase,
+                    state_seat: data.state?.currentSeat, state_turn: data.state?.turnNumber,
+                  } : `NO ROW for room_id ${rid} · UNMEASURED, not "the game is missing"`
+              } catch (e) { out.server = `UNMEASURED · ${e.message}` }
+              return out
+            }, roomId).catch((e) => ({ error: `the diagnostic itself failed: ${e.message}` }))
+            throw new Error(`seat ${g.currentSeat}'s own browser never agreed the turn was its own · read ` +
+              `"${await agreed()}" (want "${g.currentSeat}:true"). The host's state says it IS their turn.\n` +
+              `  WHICH OF THE THREE: if server.state_currentSeat is ${g.currentSeat} and local is not, this ` +
+              'client received nothing (channel/apply); if the server ALSO reads stale, the previous End ' +
+              `Turn never persisted and the writer is the defect.\n  ${JSON.stringify(why)}`)
+          }
 
           // AND READ THE ACTION COUNT FROM THE ACTING BROWSER, NOT FROM THE HOST'S COPY OF IT.
           // Second half of the same measured defect. `g` comes from p1, and p1 learns about p2's placements
