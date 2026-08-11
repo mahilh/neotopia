@@ -237,6 +237,28 @@ export async function runTwoHumanLobby(p1, p2, { expect, hostName, joinerName, b
   await expect(p1.locator(boardSelector)).toBeVisible({ timeout: 20_000 })
   await expect(p2.locator(boardSelector)).toBeVisible({ timeout: 20_000 })
 
+  // ── AND DISMISS THE TUTORIAL, IN BOTH BROWSERS, OR NOTHING BELOW THIS CAN BE CLICKED ──────────────────
+  // MEASURED (T3 S40), after a whole session last time spent guessing at this exact stall. GameRoom holds
+  // `useState(() => !tutorialSeen())` (GameRoom.jsx:196) and tutorialSeen reads localStorage
+  // (Tutorial.jsx:15). EVERY Playwright context starts with empty localStorage, so the tutorial is up for
+  // every live spec, always · and it renders on `phase === 'playing'`, which is the instant a driver starts
+  // clicking. On the practice board, with the tutorial up, document.elementFromPoint at the centre of all
+  // three factories returned a plain HTML <div>/<p> with `containsHit: false`, and a real mouse click left
+  // uiPhase at 'idle'. With it dismissed the same click gives 'factorySelected' and the hit is a <text>
+  // INSIDE the factory <g> (containsHit true · Rule 83's `el.contains(top)` correction, exactly).
+  // THAT is what stalled S39: seat 0 held 2 actions and 4 offer cards and neither a placement nor a draw
+  // committed, because every click was landing on the tutorial. Not uiPhase, which was my hypothesis and is
+  // falsified twice over (handleDrawCard never reads it, and the dim-the-rest CSS is opacity-only).
+  // It belongs HERE rather than in one spec: every live spec that reaches a board needs it, and the two
+  // that already exist were both missing it, silently, because an overlay does not announce itself.
+  for (const p of [p1, p2]) {
+    const skip = p.getByTestId('tutorial-skip')
+    if (await skip.isVisible().catch(() => false)) await skip.click({ timeout: 10_000 })
+    await expect(p.getByRole('dialog', { name: /how to play/i }),
+      'the tutorial is still up · every click below it lands on the overlay, not on the board')
+      .toBeHidden({ timeout: 10_000 })
+  }
+
   return { code, roomId: new URL(p1.url()).pathname.split('/').pop() }
 }
 

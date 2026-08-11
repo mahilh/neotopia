@@ -177,7 +177,20 @@ const readSessionRow = (page, roomId) => page.evaluate(async (rid) => {
 /**
  * Spend ONE action in the browser whose turn it is, through the real interface.
  * Placement first (that is the only action that can advance the production clock), drawing as the fallback.
- * Returns 'place' | 'draw' | null.
+ *
+ * ALWAYS returns an object, and on failure it NAMES THE STEP IT DIED ON instead of collapsing every
+ * failure into one indistinguishable null (T3 S40):
+ *     { action: 'place' | 'draw', stage: 'ok', plan? }
+ *     { action: null, stage, why, plan, ...snapshot, ui: { uiPhase, myTurn, drawStatus, counts } }
+ * stage is one of:
+ *     no-legal-move   the engine offers no placement anywhere AND there is no offer to draw from ·
+ *                     a legitimate end of turn, not necessarily a defect
+ *     factory-inert   engine offers the move, factory clicked, element-btn never appeared
+ *     element-inert   element clicked, region-btn never appeared
+ *     region-inert    region clicked, board rendered ZERO hex-valid nodes · UI and engine disagree
+ *     hexes-covered   hex-valid nodes exist and none committed at centre or off-centre
+ *     offer-inert     the offer is on screen and a real click spent nothing · read ui.drawStatus
+ *     no-draw-after-placement-failed   the placement path failed and there is nothing to fall back on
  *
  * force:true on the hex is REQUIRED and load-bearing · hexPulse animates the <g> bbox forever, so
  * Playwright's click-stability wait times out before onClick→placeElement ever fires. Documented in
@@ -199,16 +212,66 @@ async function spendOneAction(page) {
   // that cannot resolve waits FOREVER · which is exactly how six live runs died: the play loop logged one
   // heartbeat and never produced a second, because spendOneAction never returned. A test timeout then
   // reports "5.0m exceeded" with no step, and the harness looks like the product.
-  const spent = async (fn, tries = 4) => {
+  // `tries` is short by default because a PLACEMENT commits LOCALLY · placeElement mutates the store and
+  // only then persists (useGameActions.js:126-130), measured at 114-202ms on a warm board · and this runs
+  // inside a loop over candidate hexes, where a generous poll would turn "try eight" into ten seconds.
+  //
+  // A DRAW IN A REAL ROOM IS NOT THAT, and assuming it was is what actually killed S39 (see the offer
+  // branch below). Callers that go through the network pass their own budget.
+  const spent = async (fn, tries = 4, waitMs = 80) => {
     const before = (await read(page))?.actionsRemaining
     await fn()
     for (let i = 0; i < tries; i++) {
       const now = (await read(page))?.actionsRemaining
       if (typeof now === 'number' && typeof before === 'number' && now < before) return true
-      await page.waitForTimeout(80)
+      // A refusal is authoritative and instant · stop waiting for a round trip that already failed.
+      const refusal = await page.evaluate(() => {
+        const s = document.querySelector('[data-testid="draw-status"]')
+        const t = s ? (s.textContent || '').trim() : ''
+        return t && t !== 'Drawing…' ? t : null
+      }).catch(() => null)
+      if (refusal) return false
+      await page.waitForTimeout(waitMs)
     }
     return false
   }
+
+  // ── IT HAS TO SAY WHERE IT STOPPED (T3 S40 · acting on my own S39 closing recommendation) ───────────────
+  // This function used to return a bare `null` for THREE different failures: no legal move exists, a legal
+  // move exists but no hex is clickable, and a legal move exists but the UI ignores clicks entirely. Those
+  // need OPPOSITE responses · end the turn, file a board defect, file a UI defect · and it reported them
+  // identically, so six live runs last session produced a hypothesis instead of a diagnosis, and the
+  // hypothesis I did form (uiPhase) turned out to be wrong in both of its halves. Rule 90's corollary says
+  // an instrument that cannot say WHERE it stopped has not measured anything; that was written about the
+  // missing per-iteration heartbeat, and this is the same defect one level down, inside the step.
+  //
+  // IT READS THE DOM AND NOT ONLY THE STORE, and that is the point rather than an implementation detail:
+  // uiPhase is React state inside useGameActions, mirrored out only as `data-ui-phase` on the GameRoom root
+  // (GameRoom.jsx:510), so a store snapshot CANNOT see which step the interface believes it is on. Same for
+  // draw-status, the only external trace of isDrawingCard. The two facts most likely to explain a stall are
+  // both invisible to the seam this spec otherwise reads through.
+  const diagnose = async () => ({
+    ...(await read(page)),
+    ui: await page.evaluate(() => {
+      const root = document.querySelector('[data-ui-phase]')
+      const status = document.querySelector('[data-testid="draw-status"]')
+      const n = (sel) => document.querySelectorAll(sel).length
+      return {
+        uiPhase: root?.getAttribute('data-ui-phase') ?? 'NO-ROOT',
+        myTurn: root?.getAttribute('data-my-turn') ?? 'unset',
+        drawStatus: status ? ((status.textContent || '').trim() || 'EMPTY') : null,
+        counts: {
+          factory: n('[data-testid="factory"]'),
+          elementBtn: n('[data-testid="element-btn"]'),
+          regionBtn: n('[data-testid="region-btn"]'),
+          hexValid: n('[data-testid="hex-valid"]'),
+          cardOffer: n('[data-testid="card-offer"]'),
+        },
+      }
+      // A failed evaluate must not masquerade as a diagnosis (Rule 80 · never resolve to a plausible value).
+    }).catch((e) => ({ uiPhase: `UNMEASURED · evaluate failed: ${e.message}` })),
+  })
+  const stopped = async (stage, why, plan = null) => ({ action: null, stage, why, plan, ...(await diagnose()) })
 
   // ASK THE ENGINE WHICH MOVE IS LEGAL, THEN MAKE THAT EXACT MOVE THROUGH THE REAL UI.
   //
@@ -241,11 +304,17 @@ async function spendOneAction(page) {
   if (plan) {
     await page.locator(`[data-testid="factory"][data-factory="${plan.factoryId}"]`).click({ timeout: 2_000 }).catch(() => {})
     const el = page.locator(`[data-testid="element-btn"][data-element="${plan.element}"]`).first()
-    if (await el.isVisible({ timeout: 1_500 }).catch(() => false)) {
-      await el.click({ timeout: 2_000 }).catch(() => {})
-      const region = page.locator(`[data-testid="region-btn"][data-region="${plan.regionId}"]`).first()
-      if (await region.isVisible({ timeout: 1_500 }).catch(() => false)) {
-        await region.click({ timeout: 2_000 }).catch(() => {})
+    if (!(await el.isVisible({ timeout: 1_500 }).catch(() => false))) {
+      return stopped('factory-inert', `the engine offers ${plan.element} from ${plan.factoryId} into ` +
+        `${plan.regionId}, the factory was clicked, and no element-btn for ${plan.element} ever appeared`, plan)
+    }
+    await el.click({ timeout: 2_000 }).catch(() => {})
+    const region = page.locator(`[data-testid="region-btn"][data-region="${plan.regionId}"]`).first()
+    if (!(await region.isVisible({ timeout: 1_500 }).catch(() => false))) {
+      return stopped('element-inert', `${plan.element} was clicked and no region-btn for ${plan.regionId} ` +
+        'ever appeared · the element step did not advance the interface', plan)
+    }
+    await region.click({ timeout: 2_000 }).catch(() => {})
         // TRY EVERY OFFERED HEX, not just the first in DOM order. Measured on the solo board: the engine
         // reported 6 valid spots, the UI rendered 6 hex-valid nodes, and clicking the FIRST one committed
         // nothing · the board is SVG and a <g> can sit under another at its own centre point, which
@@ -264,27 +333,85 @@ async function spendOneAction(page) {
         // legal placement the turn cannot progress at all (the probe stalled that way at 18 placements).
         // Routed to T1 · almost certainly `pointer-events: none` on the label. The offsets below are the
         // harness working around a real defect, and they are labelled as that rather than as tuning.
-        const hexes = await page.getByTestId('hex-valid').all()
-        for (const hex of hexes.slice(0, 8)) {
-          const box = await hex.boundingBox().catch(() => null)
-          const spots = box
-            ? [undefined, { x: box.width * 0.5, y: box.height * 0.82 }, { x: box.width * 0.5, y: box.height * 0.18 }]
-            : [undefined]
-          for (const position of spots) {
-            if (await spent(() => hex.click({ force: true, position, timeout: 3_000 }).catch(() => {}))) return 'place'
-          }
+    const hexes = await page.getByTestId('hex-valid').all()
+    if (hexes.length === 0) {
+      return stopped('region-inert', `${plan.regionId} was clicked and the board rendered ZERO hex-valid ` +
+        'nodes while the engine says the placement is legal · the UI and the engine disagree', plan)
+    }
+    const tried = []
+    for (const hex of hexes.slice(0, 8)) {
+      const box = await hex.boundingBox().catch(() => null)
+      const spots = box
+        ? [undefined, { x: box.width * 0.5, y: box.height * 0.82 }, { x: box.width * 0.5, y: box.height * 0.18 }]
+        : [undefined]
+      for (const position of spots) {
+        if (await spent(() => hex.click({ force: true, position, timeout: 3_000 }).catch(() => {}))) {
+          return { action: 'place', stage: 'ok', plan }
         }
       }
+      tried.push(box ? `${Math.round(box.x)},${Math.round(box.y)}` : 'no-box')
     }
+    return stopped('hexes-covered', `the engine offers the move, the board rendered ${hexes.length} ` +
+      `hex-valid nodes, and NONE of the ${tried.length} tried committed · at centre or at 18%/82% ` +
+      `off-centre. If that is every hex it is not the covered-label defect, it is the action layer ` +
+      `refusing the click (tried ${tried.join(' ')})`, plan)
   }
 
   // Fallback · drawing spends an action without touching the production clock, which is what the turns
   // AFTER the trigger need. It is second because only a placement can advance the clock.
   const offer = page.getByTestId('card-offer').first()
-  if (await offer.isVisible({ timeout: 700 }).catch(() => false)) {
-    if (await spent(() => offer.click({ timeout: 2_000 }).catch(() => {}), 12)) return 'draw'
+  if (!(await offer.isVisible({ timeout: 700 }).catch(() => false))) {
+    return stopped(plan ? 'no-draw-after-placement-failed' : 'no-legal-move',
+      plan ? 'the placement path failed above and there is no card-offer to fall back on'
+        : 'the engine reports no legal placement in any factory/region pair, and no card-offer is visible ' +
+          '· this is a legitimate end-of-turn, not necessarily a defect')
   }
-  return null
+  // ── THE DRAW IS REMOTE IN A REAL ROOM, AND THE OLD BUDGET ASSUMED IT WAS LOCAL ─────────────────────────
+  // A SEPARATE, LATENT DEFECT · NOT the cause of the S39 stall. Saying so explicitly because writing down
+  // the plausible cause instead of the measured one is the mistake this whole session is about: the stall
+  // was the TUTORIAL OVERLAY (see seedHelpers.runTwoHumanLobby), measured, and this is a second thing that
+  // was also wrong and would have bitten on the very next run.
+  // READ FROM THE CODE, not yet exercised live, and labelled as that. In a real room GameRoom.onDrawOffer
+  // takes the `isRealRoom` branch (roomId && sessionId && mySeat != null · GameRoom.jsx:361-368) and calls
+  // draw_card_for_seat. That RPC does the whole draw SERVER-side · pops the card, appends it to the hand,
+  // and decrements actionsRemaining inside the row lock (011_atomic_draw_rpc.sql:147-161) · then RETURNS.
+  // It never touches this client's store. The local actionsRemaining moves only once the UPDATE streams
+  // back through postgres_changes and syncFromServer applies it: a Mumbai round trip plus realtime
+  // propagation. The old code polled 12 x 80ms = 960ms for a LOCAL decrement, and the caller threw on the
+  // first null with no retry, so a draw that SUCCEEDED server-side would be reported as a dead interface.
+  // Same family as judging any remote commit by a local reading.
+  // Practice cannot reproduce this one · isRealRoom is unsatisfiable there by design (GameRoom.jsx:359), so
+  // the local deterministic path runs and commits in a tick. Which is the honest boundary of "ask the cheap
+  // question first": the free probe answered the stall completely, and could not have answered this.
+  // force:true for the SAME reason the hexes need it, and it took a measurement to see it: CardFrame
+  // carries the art shimmer, an infinite animation, so Playwright's click-stability wait never settles and
+  // a plain click TIMES OUT. The old line swallowed that timeout in `.catch(() => {})` and then waited
+  // politely for a state change that no click had ever asked for · which is why the wire showed
+  // `draw RPC calls []`: not a refused draw, not a disabled card, NO CLICK AT ALL. A swallowed error is an
+  // unmeasured failure, which is this session's lesson in its third costume.
+  let clickError = null
+  const clicked = await spent(
+    () => offer.click({ force: true, timeout: 5_000 }).catch((e) => { clickError = e.message.split('\n')[0] }),
+    40, 250)
+  if (clicked) return { action: 'draw', stage: 'ok' }
+  if (clickError) {
+    return stopped('offer-unclickable', `the offer card could not be clicked at all: ${clickError}`)
+  }
+  // THE OFFER IS ON SCREEN AND THE CLICK DID NOTHING · this is the branch S39 died in, blind, six times.
+  // GameRoom.jsx:783 computes `disabled = actionsLeft === 0 || !isMyTurn || isDrawingCard` and then passes
+  // `onClick={disabled ? undefined : ...}`, so a disabled offer card has NO HANDLER AT ALL · it is not a
+  // greyed control that refuses, it is a node that never hears the click and cannot say so. Two of those
+  // three inputs are already in the store snapshot; the third, isDrawingCard, is React state with no store
+  // mirror, and its ONLY external trace is the `draw-status` node · which is precisely why diagnose() reads
+  // it. My S39 hypothesis for this stall was uiPhase, and it was wrong: handleDrawCard
+  // (useGameActions.js:157) does not read uiPhase at all, and the dim-the-rest CSS on [data-offer] is
+  // opacity-only by deliberate design (index.css:22-27 · "never display/visibility"), so it cannot swallow
+  // a click either. Both halves of that guess are falsified in the file that made it.
+  return stopped('offer-inert', 'the card-offer is visible and a real click spent no action within 10s · ' +
+    'READ drawStatus FIRST, it distinguishes the three causes: a message names the RPC refusal verbatim ' +
+    '(auth, seat ownership, deck empty) · "Drawing…" still showing means the round trip has not returned ' +
+    'and 10s was not enough · null, while myTurn is true with actions left, means isDrawingCard is stuck ' +
+    'true, and a disabled offer card is rendered with onClick=undefined so it never hears a click at all')
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -337,17 +464,49 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       //   5. the seat→page map was assumed rather than derived · now each page answers for itself (it turned
       //      out correct, which is exactly why it needed measuring rather than arguing)
       //
-      // WHAT IS STILL WRONG, precisely, with the evidence: at the armed state (49 of 54 hexes filled) seat 0
-      // holds 2 actions, the offer holds 4 cards, and NEITHER a placement NOR a draw commits. The store would
-      // accept the draw (gameStore.drawCard gates only on isCurrentSeat + actionsRemaining, both satisfied),
-      // so the click is not reaching the action layer. The strong remaining hypothesis, untested: the driver
-      // leaves uiPhase at 'regionSelected' after its hex attempts fail, and the Offer is not interactive
-      // mid-placement · so the fallback draw is ignored. The fix is to RESET the selection before falling
-      // back, and the next session should confirm what actually resets uiPhase before writing it.
+      //   6. THE TUTORIAL WAS UP THE WHOLE TIME (T3 S40 · this is what the stall actually was).
+      //      GameRoom holds useState(() => !tutorialSeen()) and tutorialSeen reads localStorage, which is
+      //      EMPTY in every fresh Playwright context · so the overlay renders the moment phase is 'playing',
+      //      which is the instant this driver starts clicking. Measured on the free practice board: with the
+      //      tutorial up, elementFromPoint at the centre of all three factories returns a plain HTML
+      //      <div>/<p>, containsHit false, and a real mouse click leaves uiPhase at 'idle'; dismissed, the
+      //      same click yields 'factorySelected'. Fixed in runTwoHumanLobby so no live spec can inherit it.
       //
-      // ⚠ T2 · DO NOT WIRE THE LIVE HALF into any workflow until this line is gone. The ENGINE test above is
-      // free, green and safe to gate on today.
-      test.fixme(true, 'the played-endgame driver stalls at the armed state · see the note above · T3 S39')
+      // MY S39 HYPOTHESIS WAS WRONG, IN BOTH HALVES, AND IT IS WORTH SAYING SO HERE RATHER THAN DELETING IT.
+      // I wrote: "the driver leaves uiPhase at 'regionSelected' and the Offer is not interactive
+      // mid-placement". Falsified by reading the code it names, in minutes, for free:
+      //   · handleDrawCard (useGameActions.js:157-166) does not read uiPhase AT ALL · it gates on isMyTurn
+      //     and actionsRemaining only
+      //   · the dim-the-rest rule for [data-offer] at uiPhase 'regionSelected' (index.css:41-44) is OPACITY
+      //     ONLY, deliberately so ("never display/visibility"), and opacity cannot swallow a click
+      // The symptom I built that hypothesis from was real and precisely described. The explanation was
+      // invented to fit it, and it survived a whole session because nothing cheap was asked to contradict
+      // it. Eight live runs could not answer what one reading of two files did.
+      //
+      // ── WHERE IT STANDS NOW (T3 S40 · five live runs, each one ending with a NAMED stage) ─────────────
+      // The played endgame now runs, and most of it works. Measured, in one run:
+      //     placements commit through the real 4-step path in BOTH browsers
+      //     TRIGGER WITNESSED LIVE · "tiles 0 · rounds 2 · turn 17" · endGameTriggered true while phase is
+      //       still 'playing' · THE COUNTERWEIGHT STATE, observed in a real synced room for the first time
+      //     the round-wrap burns down · rounds 2 -> 1 · the board fills to placed 54 of 54
+      // Two harness defects fixed on the way, both measured rather than guessed: the tutorial overlay
+      // (above), and the acting-browser reads (the loop took whose-turn AND how-many-actions from the
+      // HOST's copy while clicking in the joiner · both are now read from the browser being driven).
+      //
+      // ⚠ THE ONE REMAINING BLOCKER IS NOT MINE, AND IT LOOKS LIKE A PRODUCT DEFECT · ROUTED TO T2.
+      // Once the board is full, the only legal action is a DRAW, and in a real room that is the atomic RPC.
+      // With force:true on the offer card (CardFrame carries the art shimmer · an infinite animation, so a
+      // plain click never settles and TIMES OUT · that alone accounted for `draw RPC calls []`):
+      //     the wire says  200 /rest/v1/rpc/draw_card_for_seat
+      //     the client says  offer STILL 4 cards · actionsRemaining STILL 3 · drawStatus null · 10s later
+      // So the draw SUCCEEDS server-side and the drawing player's own screen never changes. No error is
+      // shown, because there was no error. Note the contrast that makes this specific rather than vague:
+      // multiplayer-endgame-live already PROVED that a game_sessions.state UPDATE written by a real member
+      // reaches both clients through postgres_changes and syncFromServer. The difference here is that the
+      // UPDATE happens INSIDE a SECURITY DEFINER function. That is the question to ask first, and it is
+      // T2's lane (RPC + migrations), not mine.
+      // I am NOT claiming the cause · I am claiming the two readings above, which disagree.
+      test.fixme(true, 'a live draw returns 200 and the drawing client never updates · routed to T2 · T3 S40')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -357,10 +516,20 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       const p2 = await ctx2.newPage() // joiner · seat 1
       const bySeat = [] // filled from each page's OWN resolved seat · never assumed
       const httpErrors = []
+      // Every draw RPC, not only the failing ones. "The offer is visible, it is my turn, I have actions,
+      // drawStatus is empty, and the click spends nothing" exhausted all three causes I had written down,
+      // and the decisive question is not answerable from the DOM: does clicking the card SEND a
+      // draw_card_for_seat request at all? No request means the click never reached onDrawOffer; a request
+      // with a status means the server answered and the answer is the finding. Measure the wire rather than
+      // invent a fourth hypothesis · that habit is what cost last session.
+      const drawCalls = []
       for (const page of [p1, p2]) {
         page.on('response', (r) => {
           if (r.status() >= 400 && /supabase\.co/.test(r.url())) {
             httpErrors.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`)
+          }
+          if (/draw_card_for_seat/.test(r.url())) {
+            drawCalls.push(`${r.status()} ${new URL(r.url()).pathname}`)
           }
         })
       }
@@ -508,20 +677,60 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           const page = bySeat[g.currentSeat]
           if (!page) throw new Error(`currentSeat ${g.currentSeat} has no browser · seats are 0 and 1`)
 
-          if (g.actionsRemaining > 0) {
+          // ── THE ACTING BROWSER HAS TO AGREE IT IS ITS TURN (T3 S40 · measured, not guessed) ─────────────
+          // `g` is read from p1. The turn advances when the OTHER browser clicks End Turn, and that change
+          // reaches this one only via postgres_changes → syncFromServer · a Mumbai round trip. The loop was
+          // reading seat ownership from ONE browser and immediately acting in ANOTHER, with a 150ms pause
+          // after the End Turn click standing in for that trip. First live run past the tutorial fix died
+          // exactly there and SAID SO: stage factory-inert with ui.myTurn "false" on the acting page while
+          // the shared state already said currentSeat 1. Nothing was wrong with the click · the browser
+          // receiving it correctly believed it was not its turn, and GameRoom gates every handler on
+          // isMyTurn (useGameActions.js:117,158,171,192).
+          // This is the Rule 65 shape: two halves each correct, the COMPOSED value wrong. Waiting on the
+          // acting page's OWN view is the only reading that can authorise a click in it.
+          await expect.poll(async () => await page.evaluate(() => {
+            const s = window.__neotopia_store?.getState?.()
+            const root = document.querySelector('[data-ui-phase]')
+            return `${s?.currentSeat}:${root?.getAttribute('data-my-turn')}`
+          }).catch(() => 'unreadable'), {
+            timeout: 20_000,
+            message: `seat ${g.currentSeat}'s own browser never agreed the turn was its own · the host's ` +
+              'state says it is, so this is sync latency or a seat-ownership disagreement, not a dead control',
+          }).toBe(`${g.currentSeat}:true`)
+
+          // AND READ THE ACTION COUNT FROM THE ACTING BROWSER, NOT FROM THE HOST'S COPY OF IT.
+          // Second half of the same measured defect. `g` comes from p1, and p1 learns about p2's placements
+          // only when they stream back · so after seat 1 spent all three of its actions, p1 still read
+          // actionsRemaining 3 and the loop went on driving a browser whose turn had already ended. The run
+          // that found this reported place:5 for a 3-action turn and then stopped at offer-inert with
+          // myTurn false · both numbers are the lag, not the game. Whose turn it is comes from the shared
+          // state; what that seat may still DO is only answerable by the browser doing it.
+          const acting = await read(page)
+          if (!acting) throw new Error(`the store seam vanished in seat ${g.currentSeat}'s browser`)
+
+          if (acting.actionsRemaining > 0) {
             const did = await spendOneAction(page)
-            if (did) {
-              actions[did]++
+            if (did.action) {
+              actions[did.action]++
               if ((actions.place + actions.draw) % 3 === 0) {
-                console.log(`[endgame] +${did} · turn ${g.turnNumber} seat ${g.currentSeat} · tiles ${g.tiles} ` +
-                  `· factories ${JSON.stringify(g.factories)} · ${Math.round((Date.now() - started) / 1000)}s`)
+                console.log(`[endgame] +${did.action} · turn ${g.turnNumber} seat ${g.currentSeat} · tiles ` +
+                  `${g.tiles} · factories ${JSON.stringify(g.factories)} · ` +
+                  `${Math.round((Date.now() - started) / 1000)}s`)
               }
               continue
             }
-            // Nothing legal left this turn · end it rather than spinning. End Turn is gated on zero actions,
-            // so this is the genuine soft-lock case and the assertion after the loop will name it.
-            throw new Error(`seat ${g.currentSeat} has ${g.actionsRemaining} actions and no legal move · ` +
-              `factories ${JSON.stringify(g.factories)} offer ${g.offer}`)
+            // NAMED, not collapsed into "no legal move". The failures behind this throw need OPPOSITE
+            // responses · end the turn / file a board defect / file a UI defect · and the previous version
+            // reported all of them as the first one, which is how a harness fault gets filed as a product
+            // bug. `stage` says which, `ui` says what the interface thought it was doing, and `why` is
+            // written for whoever reads this in a CI log weeks from now with no memory of this session.
+            throw new Error(`seat ${g.currentSeat} could not spend an action · STOPPED AT: ${did.stage}\n` +
+              `  why:    ${did.why}\n` +
+              `  ui:     ${JSON.stringify(did.ui)}\n` +
+              `  plan:   ${JSON.stringify(did.plan)}\n` +
+              `  state:  actions ${acting.actionsRemaining} (host copy said ${g.actionsRemaining}) · factories ${JSON.stringify(g.factories)} · ` +
+              `offer ${g.offer} · placed ${g.placed} · tiles ${g.tiles}\n` +
+              `  so far: ${JSON.stringify(actions)}`)
           }
           const endTurn = page.getByTestId('end-turn-btn')
           await expect(endTurn, `End Turn never enabled for seat ${g.currentSeat} at zero actions`)
@@ -574,6 +783,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         expect(httpErrors, 'the backend refused something during a played endgame').toEqual([])
       } finally {
         console.log('[endgame] http errors', JSON.stringify(httpErrors))
+        console.log('[endgame] draw RPC calls', JSON.stringify(drawCalls))
         await ctx1.close()
         await ctx2.close()
         await deleteRoomAsHost(hostSession, roomId)
