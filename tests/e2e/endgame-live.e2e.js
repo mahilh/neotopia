@@ -497,32 +497,32 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // (above), and the acting-browser reads (the loop took whose-turn AND how-many-actions from the
       // HOST's copy while clicking in the joiner · both are now read from the browser being driven).
       //
-      // ⚠ THE BLOCKER MOVED THIS SESSION, AND THE NEW ONE IS IN MY OWN LANE (T3 S41) ─────────────────
+      // ── A LIVE ROOM REACHED ITS OWN ENDING · MEASURED T3 S45 ────────────────────────────────────────
+      // THE THING NOBODY HAD SEEN, and it is in the server's own columns rather than a client's belief:
+      //     column_phase 'finished' · state_turn 21 · state_seat 0 · both clients agreeing
+      //     TRIGGER witnessed live earlier in the same run · tiles 0 · rounds 2 · turn 17
+      //     writeorder on the peer · { overtakes: [], version: 0 } · the predicate refused NOTHING
+      // sessionPhaseColumn maps store 'scoring' → column 'finished', so that row IS the ending, arrived at
+      // by two real browsers playing. The S41-S44 blocker (an End Turn lost to its own placement) is gone:
+      // T2's state_version predicate plus the wiring in useGameSync closed it, and zero overtakes in a
+      // turn-serialised game is what "closed" looks like from the client side.
       //
-      // S40 I routed a draw defect to T2: 200 on draw_card_for_seat with the client unchanged, and framed
-      // it as "a SECURITY DEFINER write may not reach clients like a normal UPDATE does". THAT FRAMING WAS
-      // WRONG and T2's read-only audit (aec54da) is the correction worth keeping: game_sessions IS in the
-      // supabase_realtime publication, and every session from that run sits at deck 46 / offer 4 / actions
-      // 3, untouched. The DB was never written · no draw ever landed, so there was nothing to deliver.
-      // T2 fixed the surface that made it unsayable: useDrawCard returned { card: data ?? null, error: null },
-      // so a 200 with a null body reported as SUCCESS. It is named now. They say explicitly, and correctly,
-      // that this is not the whole of the stall.
+      // TWO HARNESS DEFECTS FIXED GETTING HERE, both of which had passed on timing for four sessions:
+      //   · the spec wrote the armed state before the host had INSERTed game_sessions. An UPDATE matching
+      //     ZERO ROWS returns no error, so the write reported success and only the read-back caught it.
+      //     It now waits for the row to exist · absence of an error is not evidence of an effect.
+      //   · the turn loop demanded another turn from a game that had ALREADY ENDED, and threw "seat 1
+      //     never agreed the turn was its own" · a harness bug reporting as a product one. The ending is
+      //     the success condition and is now checked first.
       //
-      // WITH THAT IN THE TREE, THREE LIVE RUNS STOP EARLIER AND SOMEWHERE ELSE, and the diagnostic above
-      // answers it rather than leaving a hypothesis. At turn 19 the driver waits for seat 1's browser to
-      // agree the turn is its own, and it never does · because IT IS RIGHT:
-      //     the joiner  · localSeat 0, localTurn 19, channel realtime:game-sync:...:joined
-      //     the SERVER  · column_seat 0, column_turn 19, state_seat 0, phase 'playing'
-      //     the host    · believes currentSeat is 1
-      // The joiner is in exact agreement with the server and its channel is subscribed, so this is NOT a
-      // delivery defect and not the peer's fault. The HOST advanced its own store past an End Turn that
-      // never reached game_sessions. Both players then deadlock in opposite directions: the host waits for
-      // a joiner who is correctly waiting for the host.
-      // Same family as the draw hazard this project already documented ("concurrent draws CLOBBER · a draw
-      // can be LOST" · whole-state snapshots), but for END TURN, which nothing has ever watched.
-      // useGameSync.js is MY file, so this one is mine to open next · it is not routed anywhere.
-      // I am claiming the three readings above. I am not yet claiming which write dropped it.
-      test.fixme(true, 'an End Turn is lost before game_sessions · host says seat 1, server and joiner both say seat 0 · T3 S41')
+      // STILL FIXME, and honestly: the run is not reliably green. Each deal is random, and the driver
+      // still loses steps in the UI (a later run stopped at `element-inert` · the element buttons had not
+      // appeared for a move the engine offered). That is my driver, not the product · the product reached
+      // its ending. Wiring this to a workflow while it is flaky would train people to ignore a red.
+      // ⚠ RUN IT WITH NO E2E WORKFLOW IN FLIGHT. global-teardown.js calls purge_e2e_test_data(), which
+      // sweeps E2E rooms of ANY status, so a CI run triggered by your own push DELETES this room mid-game.
+      // Measured: `server: NO ROW for room_id ... UNMEASURED` while two browsers were still playing it.
+      test.fixme(true, 'the live room DOES reach its own ending (column_phase finished, turn 21) · the driver is not yet reliably green · T3 S45')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -582,6 +582,19 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         expect(seed, 'could not reach an armed opening in 8 deals · see the ENGINE test above').toBeTruthy()
         console.log(`[endgame] armed · factories ${JSON.stringify(seed.factories)} · seat ${seed.currentSeat} ` +
           `· actions ${seed.actionsRemaining} · offer ${seed.offer} · deck ${seed.deck}`)
+
+        // ── WAIT FOR THE ROW TO EXIST BEFORE WRITING TO IT (T3 S45) ─────────────────────────────────
+        // The host INSERTs game_sessions from useGameRoom (line 579) AFTER both clients have navigated to
+        // /game/:roomId, so arriving on the board does not mean the row is there yet. This spec assumed it
+        // was, and a run failed with "the armed state did not land · row reads null" · an UPDATE matching
+        // ZERO ROWS returns no error, so the write reported success and only the read-back caught it. That
+        // is the same shape as `.select()` on the predicate: absence of an error is not evidence of an
+        // effect. It passed for four sessions on timing alone.
+        await expect.poll(async () => (await readSessionRow(p1, roomId)) !== null, {
+          timeout: 30_000,
+          message: 'the host never INSERTed a game_sessions row for this room · nothing below can be ' +
+            'written, and an UPDATE against a missing row would report success',
+        }).toBe(true)
 
         const writeErr = await p1.evaluate(async ({ rid, state }) => {
           const m = await import('/src/lib/supabase.js')
@@ -709,6 +722,23 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           // isMyTurn (useGameActions.js:117,158,171,192).
           // This is the Rule 65 shape: two halves each correct, the COMPOSED value wrong. Waiting on the
           // acting page's OWN view is the only reading that can authorise a click in it.
+          // THE GAME MAY HAVE ALREADY ENDED, and waiting for a seat to take its turn in a finished game
+          // is a harness bug that reports as a product one (T3 S45). Measured: a live run reached
+          // column_phase 'finished' / state_turn 21 with both clients agreeing, and this loop went on
+          // waiting for seat 1 and threw "never agreed the turn was its own". The ending is the SUCCESS
+          // condition · check it before demanding another turn.
+          const term = await readSessionRow(page, roomId)
+          if (term?.statePhase === 'scoring' || term?.column === 'finished') {
+            console.log(`[endgame] the room ENDED on its own · column ${term.column} · state ` +
+              `${term.statePhase} · turn ${term.tiles !== undefined ? g.turnNumber : g.turnNumber}`)
+            final = await read(page)
+            if (final?.phase !== 'scoring') {
+              await expect.poll(async () => (await read(page))?.phase, { timeout: 30_000 }).toBe('scoring')
+              final = await read(page)
+            }
+            break
+          }
+
           const agreed = async () => await page.evaluate(() => {
             const s = window.__neotopia_store?.getState?.()
             const root = document.querySelector('[data-ui-phase]')
@@ -744,8 +774,16 @@ test.describe('a real room reaches its own ending · the composition nobody had 
                     state_seat: data.state?.currentSeat, state_turn: data.state?.turnNumber,
                   } : `NO ROW for room_id ${rid} · UNMEASURED, not "the game is missing"`
               } catch (e) { out.server = `UNMEASURED · ${e.message}` }
+              // AND WHAT THIS CLIENT'S OWN WRITES DID · the fourth possibility the three above do not
+              // cover: the write was neither lost nor undelivered, it was REFUSED by the state_version
+              // predicate and nothing retried it. Two clients count versions independently, so a client
+              // whose counter is behind the row has every write turned away · writeOrder.js anticipates
+              // exactly this ("B can re-sync and retry") and no retry exists yet.
+              out.writeorder = window.__neotopia_writeorder ?? 'NO SEAM (production build?)'
               return out
             }, roomId).catch((e) => ({ error: `the diagnostic itself failed: ${e.message}` }))
+            const otherWO = await (bySeat[1 - g.currentSeat]?.evaluate(
+              () => window.__neotopia_writeorder ?? null).catch(() => null))
             throw new Error(`seat ${g.currentSeat}'s own browser never agreed the turn was its own · read ` +
               `"${await agreed()}" (want "${g.currentSeat}:true"). The host's state says it IS their turn.\n` +
               `  WHICH OF THE THREE: if server.state_currentSeat is ${g.currentSeat} and local is not, this ` +
