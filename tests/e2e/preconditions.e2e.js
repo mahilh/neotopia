@@ -520,6 +520,30 @@ test.describe('no comment cites a migration that a later one has replaced (T3 S4
       'broke or the premise of this gate has genuinely expired · check before deleting it')
       .toBeGreaterThan(0)
 
+    // A cited number counts only if it actually DEFINES this function and is not the end of its chain.
+    // definedIn holds zero-padded STRINGS ('011'), so membership is compared as strings and ORDER is
+    // compared as numbers · mixing those is not a style question. My first draft wrote `.map(Number)`
+    // before `.includes(c)`, which is false for every input, so every finding would have vanished and
+    // `expect(stale).toEqual([])` would have gone green on a detector that had stopped detecting. The
+    // gated bucket is EMPTY BY DESIGN, so an empty list is indistinguishable from a broken predicate ·
+    // which is precisely the shape this whole file exists to refuse (Rule 86).
+    const chainCitation = (fn, cited) => [...cited]
+      .filter(c => definedIn[fn].includes(c) && Number(c) < Number(endOfChain[fn]))
+      .sort()
+
+    // COUNTERWEIGHT for exactly that, and it cannot be satisfied by the corpus being clean: drive the
+    // predicate with a synthetic citation of a function's OWN first definition, which is stale by
+    // construction, and one of its last, which is correct by construction.
+    const probeFn = moved[0]
+    expect(chainCitation(probeFn, new Set([definedIn[probeFn][0]])),
+      `the chain predicate no longer flags ${probeFn} citing its own superseded definition · every ` +
+      'finding below would silently be an empty list, and the gate would report perfect health')
+      .toEqual([definedIn[probeFn][0]])
+    expect(chainCitation(probeFn, new Set([endOfChain[probeFn]])),
+      'the chain predicate flags a citation of the CURRENT end of the chain · it would condemn every ' +
+      'correct comment in the repo (Rule 94a · a gate that reds on working input gets switched off)')
+      .toEqual([])
+
     // A TOOL THAT SCANS THE REPO MUST EXCLUDE ITSELF (Rule 89's corollary), and this one proved it on its
     // FIRST RUN by condemning its own header · which names purge_e2e_test_data next to a citation of
     // migration 005 as an EXAMPLE of a false pairing. T2's dead-surface script did exactly this too, and
@@ -528,19 +552,31 @@ test.describe('no comment cites a migration that a later one has replaced (T3 S4
     // stated rather than hidden: a genuinely stale citation written INTO this file is not caught by it.
     const SELF = 'preconditions.e2e.js'
     const files = []
-    const walk = (dir) => {
+    const walk = (dir, gated) => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
-        if (e.isDirectory()) { if (!['node_modules', 'fixtures'].includes(e.name)) walk(new URL(e.name + '/', dir)) }
-        else if (/\.(js|jsx|mjs|cjs|md)$/.test(e.name) && e.name !== SELF) files.push(new URL(e.name, dir))
+        if (e.isDirectory()) { if (!['node_modules', 'fixtures'].includes(e.name)) walk(new URL(e.name + '/', dir), gated) }
+        else if (/\.(js|jsx|mjs|cjs|md)$/.test(e.name) && e.name !== SELF) files.push({ url: new URL(e.name, dir), gated })
       }
     }
-    walk(new URL('../../tests/', import.meta.url))
-    files.push(new URL('../../.claude/CLAUDE.md', import.meta.url))
+    // GATED · files I can fix today. Reddening a merge gate on someone else's file is a tripwire aimed at
+    // a colleague (Rule 103b · the mistake I made in S39 and removed in S42).
+    walk(new URL('../../tests/', import.meta.url), true)
+    files.push({ url: new URL('../../.claude/CLAUDE.md', import.meta.url), gated: true })
+    // REPORTED, NEVER GATED (T3 S50) · T1's and T2's lanes plus the shared docs. In S49 I found these,
+    // listed them in a comms note, and offered to widen the scope once the lanes were clean. A comms note
+    // is consumed once and then expires in silence · which is exactly how the purge hazard went quiet for
+    // two sessions (Rule 108a). So the finding gets a home that runs instead: it prints on every merge
+    // gate, it cannot rot, and it still cannot redden anybody else's build. Measured at the time of
+    // writing: 5 here against 0 gated · and one of the 5 (src/pages/GameRoom.jsx) was in no comms note at
+    // all, because a hand-written list is a hand pass wearing a different hat (Rule 89).
+    walk(new URL('../../src/', import.meta.url), false)
+    walk(new URL('../../docs/', import.meta.url), false)
 
     let citationLines = 0
     const stale = []
+    const otherLanes = []
     const nearMiss = []
-    for (const url of files) {
+    for (const { url, gated } of files) {
       const rel = url.pathname.split('/NeoTopia/')[1] ?? url.pathname
       const lines = readFileSync(url, 'utf8').split('\n')
       lines.forEach((line, i) => {
@@ -560,10 +596,20 @@ test.describe('no comment cites a migration that a later one has replaced (T3 S4
         const sameLine = moved.filter(fn => line.toLowerCase().includes(fn))
         const record = (fn, bucket) => {
           if (cited.has(endOfChain[fn])) return
-          bucket.push(`${rel}:${i + 1} · ${fn} cites ${[...cited].sort().join('/')} · the chain ends at ` +
+          // ONLY A NUMBER THAT ACTUALLY DEFINES THIS FUNCTION IS A CHAIN CITATION (tightened T3 S50).
+          // Until the scope widened to src/ + docs/ this could not be seen, because tests/ happened to
+          // contain no counter-example: SECURITY_SURFACE.md:335 says draw_card_for_seat was "Fixed in
+          // migration 015", and 015 never defines it · 011>014>021 does. That line is CORRECT and was
+          // being reported as stale. Reported noise is not free even when nothing is gated on it · a
+          // report people learn to scroll past is a report nobody reads on the day it is right (Rule 94a).
+          // Third time this session that pointing an instrument somewhere new found a defect in the
+          // instrument rather than in the target (Rule 96's corollary · range, not review).
+          const inChain = chainCitation(fn, cited)
+          if (!inChain.length) return
+          bucket.push(`${rel}:${i + 1} · ${fn} cites ${inChain.join('/')} · the chain ends at ` +
             `${endOfChain[fn]} (${definedIn[fn].join('>')})`)
         }
-        if (sameLine.length) { for (const fn of sameLine) record(fn, stale); return }
+        if (sameLine.length) { for (const fn of sameLine) record(fn, gated ? stale : otherLanes); return }
         // near-miss: the subject is on a neighbouring line. Reported, never gated · see the header.
         const near = moved.filter(fn => lines.slice(Math.max(0, i - 1), i + 2).join('\n').toLowerCase().includes(fn))
         if (near.length === 1) record(near[0], nearMiss)
@@ -579,13 +625,21 @@ test.describe('no comment cites a migration that a later one has replaced (T3 S4
       console.log(`[preconditions] migration citations · ${nearMiss.length} NEAR-MISS (subject on an ` +
         `adjacent line · reported, not gated):\n  ${nearMiss.join('\n  ')}`)
     }
+    if (otherLanes.length) {
+      console.log(`[preconditions] migration citations · ${otherLanes.length} STALE IN src/ + docs/ ` +
+        '(T1 and T2 own these · REPORTED, deliberately not gated · T3 will widen the gate to cover them ' +
+        `in one line the day they are clean):\n  ${otherLanes.join('\n  ')}`)
+    }
     expect(stale, `${stale.length} comment(s) cite a migration that a later one replaced:\n  ` +
-      `${stale.join('\n  ')}\n\nDO NOT simply swap the number. The newest migration is not necessarily the ` +
-      'DEPLOYED one (014 and 023 are committed and unapplied right now), and only the live database can ' +
-      'say which body is running · pg_get_functiondef, not a file (Rule 109a). Name the CHAIN, or mark ' +
-      'the line MIGRATION-HISTORY if it means an older migration deliberately.').toEqual([])
+      `${stale.join('\n  ')}\n\nDO NOT simply swap the number. The newest migration file is not necessarily ` +
+      'the DEPLOYED body · some committed migrations are not applied · and only the live database can say ' +
+      'which one is running: pg_get_functiondef, not a file (Rule 109a). Name the CHAIN, or mark the line ' +
+      'MIGRATION-HISTORY if it means an older migration deliberately.\n\n(This message used to name WHICH ' +
+      'migrations were unapplied. That is applied-state in a comment · a world fact that changes with no ' +
+      'commit here · and it went stale inside a single session in S49, in the very file whose subject is ' +
+      'that mistake. Removed T3 S50.)').toEqual([])
 
     console.log(`[preconditions] migration citations · ${citationLines} cited lines across ${files.length} ` +
-      `files · ${moved.length} functions have moved · 0 stale`)
+      `files · ${moved.length} functions have moved · ${stale.length} stale in the gated scope`)
   })
 })
