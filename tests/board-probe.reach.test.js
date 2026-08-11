@@ -163,6 +163,62 @@ describe('what counts as reachable', () => {
     expect(r.failures[0].rect[2], 'the failure has to carry the number that made it fail').toBe(240)
   })
 
+  it('separates BELOW THE FOLD from OFF THE SCREEN · they are different bugs', () => {
+    // Found by pointing this at the real card Hand at 320 (T1 S42). Three cards sat 683px down a
+    // sidebar with scrollHeight 931 against clientHeight 239 · this probe called all three
+    // unreachable, and scrollIntoView then put elementFromPoint straight back on the card. That is a
+    // FALSE POSITIVE on a working screen, and Rule 94a is exactly that a false positive is not the
+    // safe error. S38's End Turn is the case that IS a defect: 17px past the edge inside a fixed
+    // footer, where no gesture recovers it.
+    document.body.innerHTML = `
+      <div id="scroller"><div class="ctl"><span data-box="0,900,40,40" class="shape"></span></div></div>
+      <div id="fixed"><div class="ctl"><span data-box="900,0,40,40" class="shape"></span></div></div>`
+    window.innerWidth = 300; window.innerHeight = 300
+    const scroller = document.getElementById('scroller')
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true })
+    scroller.style.overflowY = 'auto'
+    const rects = new Map()
+    document.querySelectorAll('[data-box]').forEach(n => {
+      const [x, y, w, h] = n.getAttribute('data-box').split(',').map(Number)
+      rects.set(n, { x, y, width: w, height: h, left: x, top: y, right: x + w, bottom: y + h })
+    })
+    Element.prototype.getBoundingClientRect = function () {
+      return rects.get(this) || { x: 0, y: 0, width: 0, height: 0, left: 0, top: 0, right: 0, bottom: 0 }
+    }
+    document.elementFromPoint = () => null
+
+    const r = reachability({ controls: '.ctl', hit: '.shape', handlerGroups: [] })
+    expect(r.belowFold, 'the one in a scrollport is one gesture away, not lost').toBe(1)
+    expect(r.offscreen, 'the one in a fixed container is genuinely unreachable').toBe(1)
+    expect(r.ok, 'a real offscreen control still fails').toBe(false)
+    expect(r.failures.map(f => f.verdict), 'belowFold must not be reported as a failure by default')
+      .toEqual(['offscreen'])
+    expect(r.failures[0].scroller, 'and the genuine one has no scrollport to blame').toBeNull()
+  })
+
+  it('can be told that below the fold IS the bug · the FinalScore case', () => {
+    // S39: the score screen was reachable by scrolling and still a defect, because there was no
+    // passive affordance · the macOS overlay scrollbar is 0px wide until you are already scrolling.
+    // That is a judgement about a particular screen, so it is a caller's flag rather than a default.
+    document.body.innerHTML = `<div id="scroller"><div class="ctl"><span data-box="0,900,40,40" class="shape"></span></div></div>`
+    window.innerWidth = 300; window.innerHeight = 300
+    const scroller = document.getElementById('scroller')
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 300, configurable: true })
+    scroller.style.overflowY = 'auto'
+    const shape = document.querySelector('.shape')
+    Element.prototype.getBoundingClientRect = function () {
+      return this === shape ? { x: 0, y: 900, width: 40, height: 40, left: 0, top: 900, right: 40, bottom: 940 }
+        : { x: 0, y: 0, width: 0, height: 0, left: 0, top: 0, right: 0, bottom: 0 }
+    }
+    document.elementFromPoint = () => null
+    const r = reachability({ controls: '.ctl', hit: '.shape', handlerGroups: [], foldIsFailure: true })
+    expect(r.ok).toBe(false)
+    expect(r.failures.map(f => f.verdict)).toEqual(['belowFold'])
+    expect(r.failures[0].scroller, 'name the scrollport so the fix has somewhere to go').toBeTruthy()
+  })
+
   it('can be told not to care about the viewport, and then says so in its counts', () => {
     scene({ html: THREE, topFor: (i, c) => c, viewport: [220, 800] })
     const r = reachability({ controls: '.ctl', hit: '.shape', handlerGroups: [], requireInViewport: false })
@@ -179,6 +235,57 @@ describe('what counts as reachable', () => {
     }
     document.elementFromPoint = () => ctl
     expect(reachability({ controls: '.ctl', hit: '', handlerGroups: [] })).toMatchObject({ ok: true, self: 1 })
+  })
+})
+
+describe('seedPlayedBoard · a fresh board is not the hard case', () => {
+  const fakeStore = () => {
+    let state = {
+      regions: probe.REGION_META.map(m => ({ id: m.id, hexes: {} })),
+      players: [{ seat: 0, scores: [0, 0, 0] }],
+    }
+    return { getState: () => state, setState: (p) => { state = { ...state, ...p } } }
+  }
+
+  it('reports trustworthy:false rather than a count when it seeded nothing', () => {
+    // WRITTEN FIRST. `seedOneOfEach` exists because the original probe indexed a sparse map that is
+    // empty until somebody plays, placed nothing, and then reported confident numbers for twelve
+    // cells. A seeder that returns `placed: 57` computed from its own loop rather than from the
+    // store has learned nothing from that · it is Rule 92 exactly, both sides from the same source.
+    // So this one reads a real element back out and says so when it cannot.
+    const broken = { getState: () => ({ regions: probe.REGION_META.map(m => ({ id: m.id, hexes: {} })), players: [] }), setState: () => {} }
+    const r = probe.seedPlayedBoard(broken)
+    expect(r.trustworthy, 'a seeder whose write did not land must never look successful').toBe(false)
+    expect(r.sampleElement).toBeNull()
+  })
+
+  it('fills every hex of every region and reads one back', () => {
+    const store = fakeStore()
+    const r = probe.seedPlayedBoard(store)
+    expect(r.placed, '3 regions x 19 hexes').toBe(57)
+    expect(r.trustworthy).toBe(true)
+    expect(Object.keys(probe.ELEMENT_COLORS)).toContain(r.sampleElement)
+    for (const m of probe.REGION_META) {
+      expect(Object.keys(store.getState().regions[m.id].hexes)).toHaveLength(19)
+    }
+  })
+
+  it('drives the region scores to a width no real game reaches', () => {
+    // The point of the seeder. My S40 measurement: the region score sits 0.79 units from the next
+    // hex centre row and clears it only SIDEWAYS, by 44.1 · so it is a wide-enough score away from
+    // being the district-name bug again. Three digits is deliberately past a real game.
+    const store = fakeStore()
+    const r = probe.seedPlayedBoard(store)
+    expect(r.scores).toEqual([128, 256, 999])
+    expect(String(Math.max(...r.scores)).length,
+      'a two-digit ceiling would test the number today rather than the class').toBeGreaterThanOrEqual(3)
+  })
+
+  it('stamps placedBy, so cluster ownership still reads correctly off a seeded board', () => {
+    const store = fakeStore()
+    probe.seedPlayedBoard(store, { seat: 1 })
+    const hexes = Object.values(store.getState().regions[0].hexes)
+    expect(hexes.every(h => h.placedBy === 1)).toBe(true)
   })
 })
 

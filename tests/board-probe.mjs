@@ -111,11 +111,23 @@ export function seedOneOfEach(store, { seat = 0 } = {}) {
 // IT REPORTS UNMEASURED RATHER THAN OK (Rule 80). If the selector matches nothing, `ok` is FALSE
 // and `measured` is false. A reachability probe that answers "all clear" for a board it never found
 // is the exact failure this whole family is about.
+// OFF THE SCREEN AND BELOW THE FOLD ARE DIFFERENT BUGS, and conflating them is a false positive
+// (T1 S42, found by pointing this at the card Hand). S38's End Turn sat 17px past the right edge of
+// a 320px phone inside a FIXED footer · genuinely lost, no gesture recovers it. The Hand's cards sit
+// 683px down a sidebar whose scrollHeight is 931 against a 239 clientHeight · one scroll away, and
+// `scrollIntoView` then puts elementFromPoint right back on the card. Reporting those two the same
+// way condemns a working screen, and Rule 94a is exactly that a false positive is not the safe
+// error: a gate that cries wolf gets switched off before the day it is right.
+// So: a control outside the window is `offscreen` only when NOTHING between it and the document can
+// scroll it into view. Otherwise it is `belowFold` · surfaced, counted, and not a failure unless the
+// caller says so. This is T3's third case from S39 (below the fold in a scrollable container, which
+// is neither 78a nor 78b) given a name in the instrument rather than in a handoff.
 export function reachability({
   controls = 'g.hex-cell',          // selector for every control to check
   hit = 'polygon',                  // child whose box defines the centre · '' uses the control itself
   handlerGroups = ['[data-factory]'], // ancestors that own a click handler for their whole subtree
   requireInViewport = true,
+  foldIsFailure = false,            // true = demand it be on screen WITHOUT scrolling
 } = {}) {
   const nodes = Array.from(document.querySelectorAll(controls))
   if (nodes.length === 0) {
@@ -131,7 +143,20 @@ export function reachability({
     if (txt && txt.length <= 40) s += `("${txt}")`
     return s
   }
-  const counts = { self: 0, group: 0, blocked: 0, offscreen: 0 }
+  // The nearest ancestor that could bring this into view. document.scrollingElement counts · a page
+  // that scrolls is the commonest scrollport of all.
+  const scrollerFor = (node) => {
+    for (let n = node.parentElement; n; n = n.parentElement) {
+      const cs = window.getComputedStyle(n)
+      const scrollsY = /auto|scroll/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1
+      const scrollsX = /auto|scroll/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 1
+      if (scrollsY || scrollsX) return n
+    }
+    const doc = document.scrollingElement || document.documentElement
+    if (doc && (doc.scrollHeight > doc.clientHeight + 1 || doc.scrollWidth > doc.clientWidth + 1)) return doc
+    return null
+  }
+  const counts = { self: 0, group: 0, blocked: 0, offscreen: 0, belowFold: 0 }
   const failures = []
   nodes.forEach((node, i) => {
     const shape = (hit && node.querySelector(hit)) || node
@@ -139,9 +164,15 @@ export function reachability({
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2
     const inside = r.left >= 0 && r.top >= 0 && r.right <= vw && r.bottom <= vh
     if (requireInViewport && !inside) {
-      counts.offscreen++
-      failures.push({ i, cx: Math.round(cx), cy: Math.round(cy), verdict: 'offscreen',
-        rect: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)], viewport: [vw, vh] })
+      const scroller = scrollerFor(node)
+      const verdict = scroller ? 'belowFold' : 'offscreen'
+      counts[verdict]++
+      if (verdict === 'offscreen' || foldIsFailure) {
+        failures.push({ i, cx: Math.round(cx), cy: Math.round(cy), verdict,
+          rect: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)],
+          viewport: [vw, vh],
+          scroller: scroller ? describe(scroller) : null })
+      }
       return
     }
     const top = document.elementFromPoint(cx, cy)
@@ -153,8 +184,47 @@ export function reachability({
   })
   return {
     measured: true,
-    ok: counts.blocked === 0 && counts.offscreen === 0,
+    ok: counts.blocked === 0 && counts.offscreen === 0 && (!foldIsFailure || counts.belowFold === 0),
     total: nodes.length, ...counts, failures,
+  }
+}
+
+// ── A PLAYED BOARD, because a fresh one is not the hard case (T1 S42, from T3's gap) ────────────
+// T3's merge gate runs `reachability` on a freshly dealt board · no tokens placed, every region
+// score at 0 · which covers the FIX and not the CLASS. My own S40 measurement is why that matters:
+// the region score sits 0.79 user units from the next hex centre row and clears it only SIDEWAYS,
+// by 44.1, so it is a wide-enough score away from being the district-name bug again.
+//
+// MEASURED with this seeder, at 320 and 1280: every one of the 57 hexes holding a token and the
+// three region scores rendered on screen as 128 / 256 / 999 · still 60 of 60 reachable, 0 blocked.
+// The class IS closed, and it is closed for a reason worth keeping: the S40 fix made every board
+// <text> pointer-events:none, so a score may grow as wide as it likes and still cannot take a
+// click. That is the difference an identity makes over a tolerance · but it is also exactly the
+// kind of property a later change removes silently, which is why it wants a gate rather than a
+// paragraph. Three digits is past anything a real game reaches, deliberately.
+export function seedPlayedBoard(store, { seat = 0, scores = [128, 256, 999] } = {}) {
+  const els = Object.keys(ELEMENT_COLORS)
+  const state = store.getState()
+  const regions = JSON.parse(JSON.stringify(state.regions))
+  let placed = 0
+  for (const m of REGION_META) {
+    for (const [q, r] of hexesInRadius(m.cq, m.cr, 2)) {
+      regions[m.id].hexes[`${q},${r}`] = { element: els[placed % els.length], placedBy: seat }
+      placed++
+    }
+  }
+  store.setState({ regions, players: state.players.map(p => ({ ...p, scores: [...scores] })) }, false)
+
+  // THE READ-BACK, because a seeder that silently places nothing is the exact lie this file was
+  // built to stop (Rule 75b · check the probe measured the thing it names). Read a real value back
+  // out of the store rather than trusting the count we just computed.
+  const after = store.getState()
+  const sample = after.regions[REGION_META[0].id].hexes[`${REGION_META[0].cq},${REGION_META[0].cr}`]
+  return {
+    placed,
+    scores: after.players[0] ? after.players[0].scores : null,
+    sampleElement: sample ? sample.element : null,
+    trustworthy: placed === 57 && !!sample && els.includes(sample.element),
   }
 }
 
@@ -239,4 +309,4 @@ export async function setup({ scale = 2, inlineImages = true } = {}) {
   return { at, recognise, contrast, luminance, viewBox: [vx, vy, vw, vh], scale, background: bg, intrinsic: R.intrinsic, rasterise, width: R.w, height: R.h }
 }
 
-export default { setup, seedOneOfEach, reachability, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
+export default { setup, seedOneOfEach, seedPlayedBoard, reachability, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
