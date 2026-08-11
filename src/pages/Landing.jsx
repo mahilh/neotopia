@@ -12,6 +12,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getGlobalIndex } from '../lib/supabase'
+import HowItWorksDemo, { demoFinalScore, GOLD as BALANCE_GOLD } from '../components/HowItWorksDemo'
 
 const GLOBAL_INDEX_BASE = 147823 // fallback only · getGlobalIndex already folds the seed in.
 
@@ -101,6 +102,9 @@ export default function Landing() {
   }, [])
 
   const shownIndex = (index ?? GLOBAL_INDEX_BASE).toLocaleString()
+  // The engine's own final-score arithmetic on the demo's regions · shared with the animation above
+  // so the two can never state different rules.
+  const balance = demoFinalScore()
 
   return (
     <main style={{ background: BG, color: 'rgba(255,255,255,0.9)', fontFamily: 'var(--font-sans, system-ui, sans-serif)' }}>
@@ -203,6 +207,15 @@ export default function Landing() {
         <h2 style={{ fontSize: 'clamp(22px, 3.5vw, 34px)', fontWeight: 300, color: 'rgba(255,255,255,0.92)', margin: '0 0 24px', letterSpacing: -0.3 }}>
           Three actions per turn. That's it.
         </h2>
+
+        {/* THE SECTION SHOWS THE GAME BEFORE IT DESCRIBES IT (T1 S48). It sits ABOVE the prose on
+            purpose: a visitor who scrolled here to find out what this is gets four beats of the real
+            loop · a real placement, a real pattern match, a real district, the real formula · before
+            they are asked to read anything. The paragraphs below are no longer the explanation, they
+            are the detail behind it, and they are what a reduced-motion or screen-reader visitor
+            gets in full. */}
+        <HowItWorksDemo />
+
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, maxWidth: 680, margin: '0 0 14px' }}>
           NeoTopia is a hexagonal strategy game set in the year 2055. You and up to three others build a
           world · placing elements, completing patterns, and scoring districts.
@@ -216,10 +229,52 @@ export default function Landing() {
           No luck mechanics. No randomness. Every outcome is a decision.
         </p>
 
+        {/* PLACE and SCORE only. BALANCE was the third card and that was the mistake · it is not a
+            third mechanic, it is the entire strategic argument of the game, and at identical width,
+            padding, border and type size it read as one more thing to do rather than the reason the
+            other two are hard. It is promoted to its own panel below (T1 S48). These two are now
+            also the text of beats 1 and 2 above, which is deliberate: the animation and the prose are
+            one idea in two renderings, and the prose is the one that survives reduced motion. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
           <MicroCard tag="PLACE" lines={['Move elements from factories into regions.', 'Build patterns. Complete districts.']} />
           <MicroCard tag="SCORE" lines={['Match your hand to the board.', 'Each completed pattern builds a named civilization project.']} />
-          <MicroCard tag="BALANCE" lines={["Your worst region's score is multiplied by three.", 'You cannot ignore a failing district. Balance is not optional.']} />
+        </div>
+
+        {/* ── BALANCE · the strategic argument, at the weight it earns ────────────────────────────
+            The amber rule down the left is the same treatment the manifesto blockquote gets further
+            down the page, which is the page's existing signal for "this is the point, not a detail".
+            THE NUMBERS ARE THE ENGINE'S. `demoFinalScore()` calls patternMatcher.calculateFinalScore,
+            so this panel and the animation above cannot disagree with each other or with the game ·
+            and if the formula ever gains a term, the front door moves with it instead of continuing
+            to state a rule that stopped being true (Rule 97). */}
+        <div
+          data-testid="balance-panel"
+          style={{
+            marginTop: 26, padding: '26px 28px', borderRadius: 16,
+            borderLeft: `2px solid ${BALANCE_GOLD}`,
+            border: '1px solid rgba(200,148,64,0.22)', borderLeftWidth: 2, borderLeftColor: BALANCE_GOLD,
+            background: 'rgba(200,148,64,0.05)',
+          }}
+        >
+          <div style={{ fontSize: 12, letterSpacing: 4, color: BALANCE_GOLD, marginBottom: 12 }}>BALANCE</div>
+          <p style={{ fontSize: 'clamp(17px, 2.4vw, 21px)', fontWeight: 300, lineHeight: 1.5, color: 'rgba(255,255,255,0.9)', margin: '0 0 14px' }}>
+            Your worst region is multiplied by three.
+          </p>
+          <p
+            data-testid="balance-formula"
+            style={{
+              fontSize: 16, color: 'rgba(255,255,255,0.75)', margin: '0 0 12px',
+              fontVariantNumeric: 'tabular-nums', letterSpacing: 0.5,
+            }}
+          >
+            {balance.best} + {balance.second} +{' '}
+            <span style={{ color: BALANCE_GOLD }}>({balance.worst} &times; 3)</span> ={' '}
+            <span style={{ color: BALANCE_GOLD }}>{balance.total}</span>
+          </p>
+          <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', lineHeight: 1.7, margin: 0, maxWidth: 620 }}>
+            A brilliant district cannot cover for a neglected one. You cannot ignore a failing region ·
+            balance is not optional, it is the arithmetic.
+          </p>
         </div>
       </section>
 
