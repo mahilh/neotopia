@@ -435,6 +435,27 @@ test.describe('practice mode · the board takes its clicks', () => {
 
       console.log('[practice] board reachability · ' + results.map(m =>
         `${m.size.width}:${m.result.blocked}/${m.result.total}`).join(' · ') + ' (blocked/total)')
+
+
+      // ── THE LATE-GAME CASE IS STILL NOT COVERED IN A BROWSER, AND SAYING SO IS THE POINT (T3 S42) ─────
+      // Everything above probes the OPENING position: no tokens placed, every region score a single
+      // digit. I flagged that as the gap in my own S41 gate, because T1's measurement of the fix showed
+      // the score label clears the row below it by 0.79 units and misses only SIDEWAYS by 44.1 · so a
+      // three-digit score is one render from being the same defect the fix closed.
+      //
+      // T1 SHIPPED THE SEEDER FOR IT THIS SESSION and unit-proved it · probe.seedPlayedBoard fills all 57
+      // hexes, stamps placedBy, and sets scores [128, 256, 999], reporting `trustworthy` from a read-back
+      // rather than from its own loop. I tried to use it here and it CANNOT CROSS INTO THE PAGE: it
+      // references module-scope ELEMENT_COLORS / REGION_META / hexesInRadius, and page.evaluate serialises
+      // a function as source. reachability() was deliberately written with no module-scope references for
+      // exactly this reason (T1's own API note); the seeder was not, because it was built for the jsdom
+      // side where that constraint does not exist. `ReferenceError: ELEMENT_COLORS is not defined`.
+      //
+      // NOT WRITING A SECOND SEEDER. That is the duplicate I deleted last session (Rule 94/95) and it
+      // would drift from T1's the first time the board geometry moves. ROUTED: the change is small and
+      // theirs · inline those three references, or export an evaluate-safe variant, and this gate gains a
+      // played-board pass in about six lines. Until then the honest statement is that the opening position
+      // is gated at six widths and the late game is NOT, rather than a green tick implying both.
     })
 
   // ── THE DIAGNOSTIC PROVES IT CAN SEE · MY OWN S40 CLOSING NOTE, MADE PERMANENT (T3 S41) ────────────────
