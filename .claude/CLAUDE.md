@@ -195,7 +195,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (110 · cumulative):
+PERMANENT ANTI-REGRESS RULES (111 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -488,6 +488,40 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 111 (T2 S49 · August 11 2026):
+A CONSTANT THAT APPEARS AT EVERY CALL SITE OF AN EXPERIMENT IS A HIDDEN PARAMETER, AND ITS VALUE
+SILENTLY QUALIFIES EVERY RESULT. Because it never varies, it never looks like a choice.
+Five sessions measured "the ladder". Every duel in the repository · S39's, S46's, S47's, S48's ·
+passed REFERENCE_POLICY as the opponent:
+    duel(REFERENCE_POLICY, level)  ·  duel(level, REFERENCE_POLICY, ...)  ·  ladderRow(level, REFERENCE_POLICY)
+NOTHING HAD EVER PLAYED APPRENTICE AGAINST BUILDER. The function signatures took two arbitrary
+policies the whole time; one argument was simply always the same, so it read as part of the harness
+rather than as a variable, and every finding was really "X against one middling opponent".
+  111a · THE COST WAS NOT THE MISSING ROW, IT WAS WHAT I BUILT ON IT. In S48 I read apprentice ~5%
+        and architect ~99% as SATURATION and designed around that reading · chose the score margin as
+        the reported statistic because a rate near a bound cannot move, sized gates on it, and wrote
+        "both ends are pinned" into three documents including the roadmap Mahil reads. Measured
+        against ITSELF the ladder is worse, not better: 6.3% adjacent, 15.2% adjacent, and 0.0% across
+        80 games end to end. The conclusion survived; it survived by luck, and it could as easily have
+        been an artifact of an opponent nobody had named.
+  111b · THIS IS MY OWN RULE 106 AIMED ONE LEVEL LOWER. 106 says a measurement between equals cannot
+        answer a question about a ladder · ask WHO the comparison was against. I asked that of the
+        bonus token, the subject, and never of the INSTRUMENT doing the comparing. Apply your rules to
+        your tools, not only to your findings; the tool is where an unexamined assumption survives
+        longest, because it is re-used rather than re-derived.
+  111c · THE TELL IS CHEAP AND MECHANICAL: grep the call sites of your own experiment and look at
+        which argument never changes. It took one grep and ten seconds, and it should be the first
+        thing done to any harness that has produced more than one session's findings.
+COROLLARY, and it is P4 of the same session: WHEN A GUARANTEE CAN BE MADE STRUCTURAL, ASSERT THE
+IDENTITY, NOT A TOLERANCE. S48's flat-arm evenness was gated as `|flatGap| <= 0.15` · a rate, i.e. an
+absolute imbalance divided by a game count, so the bound means different things at different block
+sizes and needs re-tuning whenever the seed count moves. T3 duly found it red at a smaller block while
+my own run was green. The fix was not a wider bound: flatDeal's remainder is self-correcting, so the
+WHOLE-BLOCK imbalance is at most ONE TOKEN by construction and `<= 1` means the same thing at 12 seeds
+as at 4000. Same move for a threshold: gate the ORDER against a control measured in the same run
+(apprentice < control < architect) rather than against a number somebody once observed. A wire sized
+from the run it guards is a flake with a delay on it (Rule 81's better half, Rule 88c's sibling).
 
 RULE 110 (T2 S48 · August 11 2026):
 COUNTERWEIGHT-FIRST PROTECTS YOU FROM THE FAILURES YOU CAN IMAGINE. ASSERT THE THING'S DEFINING
