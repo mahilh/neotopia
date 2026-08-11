@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent } from '@testing-library/react'
 import ActionBar from './ActionBar'
 
@@ -141,6 +141,73 @@ describe('what each token DOES is reachable, not hidden in a title attribute', (
     expect(screen.getByTestId('bonus-detail'), 'the panel should still be open').toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByTestId('bonus-detail'), 'Escape stopped working · a listener read a stale open').toBeNull()
+  })
+})
+
+describe('a token can finally be SPENT · and only when the engine would accept it', () => {
+  // WRITTEN FIRST (Rule 90). The cheap wrong version of this feature is a Use button on every row
+  // that calls useBonus unconditionally. It would look finished and pass any "the button exists"
+  // test, because useBonus REJECTS IN SILENCE · wrong turn, second use in a turn, or a type it does
+  // not implement all return with no error and no state change. The player taps, the panel closes,
+  // the token is still there, and nothing anywhere says why. So the assertion that matters is the
+  // NEGATIVE one: for every case the engine would refuse, the click must not reach the store.
+  const cases = [
+    ['permits', { isMyTurn: true, bonusUsedThisTurn: false }, 'the engine has a bare `break` for this type'],
+    ['initiative', { isMyTurn: true, bonusUsedThisTurn: false }, 'needs a hex · one click cannot supply bonusData'],
+    ['subsidy', { isMyTurn: false, bonusUsedThisTurn: false }, 'not this players turn'],
+    ['subsidy', { isMyTurn: true, bonusUsedThisTurn: true }, 'one bonus per turn'],
+  ]
+  it.each(cases)('never calls the store for %s when %o · %s', (type, flags) => {
+    const onUseBonus = vi.fn()
+    render(<ActionBar bonusTokens={[type]} onUseBonus={onUseBonus} {...flags} />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    const btn = screen.getByTestId('bonus-use')
+    expect(btn.getAttribute('data-blocked')).toBe('true')
+    expect(btn.disabled).toBe(true)
+    fireEvent.click(btn)
+    expect(onUseBonus, 'a click that the engine would silently refuse must not reach it').not.toHaveBeenCalled()
+  })
+
+  it('spends a subsidy on your own turn · the one that actually works today', () => {
+    // subsidy is 91 of the 156 tokens T2 measured across 40 games, and it is the only grantable type
+    // useBonus fully implements without a placement payload. automatization also works but is the
+    // bonus-HEX reward, whose (q,r) data has been outstanding twelve requests · no player holds one.
+    const onUseBonus = vi.fn()
+    render(<ActionBar bonusTokens={['subsidy']} isMyTurn onUseBonus={onUseBonus} />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    const btn = screen.getByTestId('bonus-use')
+    expect(btn.getAttribute('data-blocked')).toBe('false')
+    fireEvent.click(btn)
+    expect(onUseBonus).toHaveBeenCalledWith('subsidy')
+    expect(screen.queryByTestId('bonus-detail'), 'spending it should close the panel').toBeNull()
+  })
+
+  it('says what a blocked token is FOR as well as why it is blocked', () => {
+    // My first version replaced the effect text with the refusal, and the S38 test above caught it.
+    // A player holding a token they cannot spend is the common state, and that is exactly when they
+    // most need to know what it does.
+    render(<ActionBar bonusTokens={['permits']} isMyTurn />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    const panel = screen.getByTestId('bonus-detail')
+    expect(panel.textContent).toContain('outer ring')                       // what it does
+    expect(screen.getByTestId('bonus-blocked-why').textContent).toMatch(/not implemented/i) // why it cannot
+  })
+
+  it('keeps the Use control at 44px · it is a control like any other', () => {
+    render(<ActionBar bonusTokens={['subsidy']} isMyTurn />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    const btn = screen.getByTestId('bonus-use')
+    expect(btn.style.height).toBe('44px')   // Rule 4
+    expect(btn.style.minHeight).toBe('44px')
+    expect(btn.getAttribute('aria-label')).toMatch(/use subsidy/i)
+  })
+
+  it('gives every held token its own button, keyed to its own type', () => {
+    render(<ActionBar bonusTokens={['subsidy', 'permits', 'subsidy']} isMyTurn />)
+    fireEvent.click(screen.getByTestId('bonus-chip'))
+    const btns = screen.getAllByTestId('bonus-use')
+    expect(btns.map(b => b.getAttribute('data-bonus-type'))).toEqual(['subsidy', 'permits', 'subsidy'])
+    expect(btns.map(b => b.getAttribute('data-blocked'))).toEqual(['false', 'true', 'false'])
   })
 })
 

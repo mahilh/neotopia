@@ -214,6 +214,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   const factories     = useGameStore(s => s.factories)
   const regions       = useGameStore(s => s.regions)
   const players       = useGameStore(s => s.players)
+  const bonusUsedThisTurn = useGameStore(s => s.bonusUsedThisTurn)
   const currentPlayer = players.find(p => p.seat === currentSeat)
 
   // This client's seat · derived from the synced roster by matching our auth id (no need to thread
@@ -406,11 +407,17 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // Held back while the score story is on screen. A turn that changes underneath the flash takes
   // away the one moment that tells a player what they just did.
   //
-  // NOTHING ELSE IS SPENDABLE AT ZERO ACTIONS, and that is load-bearing rather than incidental: the
-  // store has useBonus and 'Automation · +1 action this turn', but no control anywhere calls it, so
-  // a bonus token cannot buy an action today (they are worth 3 points each unspent, which is the
-  // only thing they currently do). IF a bonus is ever wired to a button, this gate needs a
-  // `bonusTokens.length === 0` term or it will end the turn out from under the player using it.
+  // SOMETHING ELSE IS SPENDABLE AT ZERO ACTIONS NOW, and this is the note my past self left for the
+  // moment it became true (T1 S43). The old text read: "no control anywhere calls useBonus, so a
+  // bonus token cannot buy an action today · IF a bonus is ever wired to a button, this gate needs a
+  // `bonusTokens.length === 0` term or it will end the turn out from under the player using it."
+  // The button shipped this session, so the term is here. Without it the sequence is: third action
+  // spent, panel opened to spend Automation for a fourth, and 1100ms later the turn ends underneath
+  // the open panel · the one case the whole feature exists for.
+  // IT IS A HELD TOKEN, NOT A USABLE ONE, deliberately: `bonusUsedThisTurn` already blocks a second
+  // spend, so gating on "can still spend" would re-open the hole the moment a player holds a token
+  // they cannot use this turn. Holding any token at all buys the pause; auto-end still fires the
+  // instant the last one is spent or the player ends the turn themselves.
   // THE DEPENDENCY LIST IS THE FEATURE, and getting it wrong killed this outright the first time.
   // `handleEndTurn` is a NEW FUNCTION EVERY RENDER: it is a useCallback on `persist`, which is a
   // useCallback on `sync`, and the practice transport returns a fresh object literal from every
@@ -429,7 +436,8 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   logRef.current = addLogEntry
   const canAutoEnd =
     phase === 'playing' && isMyTurn && actionsLeft === 0 &&
-    uiPhase === 'idle' && buildableMatches.length === 0 && !scoreFlash
+    uiPhase === 'idle' && buildableMatches.length === 0 && !scoreFlash &&
+    (currentPlayer?.bonusTokens?.length ?? 0) === 0
   useEffect(() => {
     if (!canAutoEnd) return
     // Keyed on the TURN, not on a boolean · a re-render inside the window must not queue a second
@@ -866,6 +874,25 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         isMyTurn={isMyTurn}
         actionsRemaining={actionsLeft}
         bonusTokens={currentPlayer?.bonusTokens ?? []}
+        bonusUsedThisTurn={bonusUsedThisTurn}
+        onUseBonus={(type) => {
+          // THE ENGINE REJECTS IN SILENCE · wrong turn, second use in a turn, or a type it does not
+          // implement all return with no error and no change. The button is already disabled for
+          // every one of those, so this should never see a refusal · which is exactly why it checks.
+          // Read the token count back out of the store and only claim what actually happened: a log
+          // line for a bonus that was refused is the same lie the disabled state exists to avoid,
+          // and a `used subsidy` entry with no cards drawn would be unfalsifiable from the screen.
+          const seat = mySeat ?? useGameStore.getState().currentSeat
+          const held = () => useGameStore.getState().players.find(p => p.seat === seat)?.bonusTokens?.length ?? 0
+          const before = held()
+          useGameStore.getState().useBonus(seat, type)
+          if (held() < before) {
+            addLogEntry(`used ${type}`, '#C89440')
+            // Same wire every other action uses (useGameActions.persist is sync.pushState). A bonus
+            // that only exists on one client is a divergence the next snapshot silently overwrites.
+            transport?.pushState?.('use_bonus')
+          }
+        }}
         turnTimeRemaining={turnSecondsLeft}
         turnTimeLimit={TURN_TIME_LIMIT}
         onEndTurn={() => {

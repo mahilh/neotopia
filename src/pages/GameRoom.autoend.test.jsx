@@ -181,3 +181,54 @@ describe('it must not end a turn that still has a district in it', () => {
       'the district is built and there is nothing left to do · the turn should end itself').toBe(true)
   })
 })
+
+describe('a held bonus token holds the turn open · T1 S43', () => {
+  // THE NOTE MY PAST SELF LEFT HERE, in GameRoom.jsx, for the moment this became true:
+  //   "no control anywhere calls useBonus, so a bonus token cannot buy an action today · IF a bonus
+  //    is ever wired to a button, this gate needs a `bonusTokens.length === 0` term or it will end
+  //    the turn out from under the player using it."
+  // The Use button shipped this session. Without the term the sequence is: third action spent, panel
+  // opened to spend Automation for a fourth action, and 1100ms later the turn ends underneath the
+  // open panel · the exact case the whole feature exists for. This is that assertion, written as the
+  // damage rather than as the mechanism.
+
+  it('does not end the turn at zero actions while a token is still held', async () => {
+    await mount()
+    const turn = state().turnNumber
+    const seat = state().currentSeat
+    await act(async () => {
+      useGameStore.setState(s => ({
+        actionsRemaining: 0,
+        players: s.players.map(p => (p.seat === seat ? { ...p, bonusTokens: ['automatization'] } : p)),
+      }), false)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_END_MS * 4) })
+    expect(state().turnNumber, 'the turn ended while the player still had a token to spend').toBe(turn)
+    expect(state().currentSeat, 'the seat changed underneath an open bonus panel').toBe(seat)
+  })
+
+  it('ends it as soon as the last token is gone · the pause is a token, not a mode', async () => {
+    // The counterweight to the assertion above, and the reason it is not just "never auto-end":
+    // holding the turn open forever would be a worse bug than ending it early, and it would look
+    // identical to a broken auto-end for anyone not reading this file.
+    await mount()
+    const turn = state().turnNumber
+    const seat = state().currentSeat
+    await act(async () => {
+      useGameStore.setState(s => ({
+        actionsRemaining: 0,
+        players: s.players.map(p => (p.seat === seat ? { ...p, bonusTokens: ['subsidy'] } : p)),
+      }), false)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_END_MS * 2) })
+    expect(state().turnNumber, 'precondition · the token should be holding it open').toBe(turn)
+
+    await act(async () => {
+      useGameStore.setState(s => ({
+        players: s.players.map(p => (p.seat === seat ? { ...p, bonusTokens: [] } : p)),
+      }), false)
+    })
+    expect(await until(() => state().turnNumber > turn, 60),
+      'the last token was spent and the turn still would not end').toBe(true)
+  })
+})

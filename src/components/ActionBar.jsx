@@ -8,11 +8,42 @@ import { useEffect, useRef, useState } from 'react'
 // The KEYS are the engine's contract (gameStore.js useBonus · T2's lane) and never change. Only the
 // label/hint are player-facing: 'Automatization' was a translation artefact from the original board
 // game, and 'Automation' is the ordinary English word for the same thing.
+// ── WHAT A TOKEN DOES, AND WHETHER IT CAN YET BE DONE (T1 S43) ──────────────────────────────────
+// The chip has displayed these four effects since S38 and offered no way to perform any of them ·
+// an affordance for a verb that did not exist. This is the verb. But the four cases are NOT equal
+// in the engine, and a control that pretends they are would be worse than none:
+//
+//   subsidy        useBonus draws 2 (Offer first, then deck) · consumed = drawn > 0.   ONE CLICK.
+//   automatization actionsRemaining++ · consumed unconditionally.                      ONE CLICK.
+//                  NOT REACHABLE TODAY: it is the bonus-HEX reward, and the hex (q,r) data has been
+//                  outstanding twelve requests, so no player can hold one. Wired anyway · it costs
+//                  a line and it is the one case that stops being dead the day the data lands.
+//   initiative     needs bonusData {elementType,toQ,toR,regionId} and re-validates centre-first and
+//                  adjacency. A one-click button CANNOT supply that, so it is not offered as one.
+//   permits        `case 'permits': break` · the engine does nothing at all, by its own TODO
+//                  (needs outer-ring tracking). There is no honest button for this today.
+//
+// AND `useBonus` REJECTS SILENTLY · it returns with no error on a wrong turn, on a second use in one
+// turn, or on an unimplemented type. So the button must be disabled for exactly the cases the engine
+// would refuse, and must SAY WHY. A control that no-ops on click is the worst of the three options,
+// and it is what shipping this naively would have produced (Rule 80, in the UI: never resolve to a
+// plausible nothing).
 const BONUS_META = {
-  automatization: { label: 'Auto',       hint: 'Automation · +1 action this turn',            color: '#E24B4A' },
-  subsidy:        { label: 'Subsidy',    hint: 'Subsidy · draw 2 cards (Offer first)',        color: '#1D9E75' },
-  initiative:     { label: 'Initiative', hint: 'Initiative · place an element from reserve',  color: '#7F77DD' },
-  permits:        { label: 'Permits',    hint: 'Permits · place in the outer ring',           color: '#378ADD' },
+  automatization: { label: 'Auto',       hint: 'Automation · +1 action this turn',            color: '#E24B4A', oneClick: true },
+  subsidy:        { label: 'Subsidy',    hint: 'Subsidy · draw 2 cards (Offer first)',        color: '#1D9E75', oneClick: true },
+  initiative:     { label: 'Initiative', hint: 'Initiative · place an element from reserve',  color: '#7F77DD', oneClick: false, why: 'Pick a hex on the board · not yet wired' },
+  permits:        { label: 'Permits',    hint: 'Permits · place in the outer ring',           color: '#378ADD', oneClick: false, why: 'Not implemented in the rules engine yet' },
+}
+
+// Why this token cannot be spent right now, or null when it can. Ordered so the most specific
+// reason wins · "it is not your turn" is more useful than "you already used one".
+export function bonusBlockedReason(type, { isMyTurn, bonusUsedThisTurn }) {
+  const meta = BONUS_META[type]
+  if (!meta) return 'Unknown token'
+  if (!meta.oneClick) return meta.why
+  if (!isMyTurn) return 'Only on your turn'
+  if (bonusUsedThisTurn) return 'One bonus per turn'
+  return null
 }
 
 const TOTAL_ACTIONS = 3
@@ -23,9 +54,11 @@ export default function ActionBar({
   isMyTurn = true,        // solo is always your turn
   actionsRemaining = 3,
   bonusTokens = [],       // [type, ...] held by the current player
+  bonusUsedThisTurn = false, // the engine allows exactly one bonus per turn and refuses in silence
   turnTimeRemaining = null, // seconds left this turn · null hides the timer (legacy callers / tests)
   turnTimeLimit = 90,     // full turn budget · drives the progress-bar width
   onEndTurn = () => {},
+  onUseBonus = () => {},  // (type) => void · spends the token through the store
 }) {
   const used = Math.max(0, TOTAL_ACTIONS - actionsRemaining)
   const canEndTurn = actionsRemaining === 0 && isMyTurn
@@ -264,15 +297,54 @@ export default function ActionBar({
               >
                 {bonusTokens.map((type, i) => {
                   const meta = BONUS_META[type] ?? { label: type, hint: type, color: '#888' }
+                  const blocked = bonusBlockedReason(type, { isMyTurn, bonusUsedThisTurn })
                   return (
                     <div key={`${type}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
                       <span style={{ color: meta.color, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, flexShrink: 0 }}>
                         {meta.label}
                       </span>
-                      <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, lineHeight: 1.45 }}>
-                        {meta.hint}
+                      {/* WHAT IT DOES AND WHY IT CANNOT BE DONE ARE BOTH REQUIRED, and my first
+                          version replaced the first with the second · the S38 test caught it, which
+                          is precisely what it was written for. A blocked token that stops saying
+                          what it is for teaches the player nothing about the token they are holding
+                          and cannot spend, which is the state they are in most of the time. */}
+                      <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, lineHeight: 1.45 }}>
+                          {meta.hint}
+                        </span>
+                        {blocked && (
+                          <span data-testid="bonus-blocked-why" style={{
+                            color: 'rgba(255,255,255,0.32)', fontSize: 10, lineHeight: 1.4, fontStyle: 'italic',
+                          }}>
+                            {blocked}
+                          </span>
+                        )}
                       </span>
+                      {/* THE VERB. Rule 4's 44px applies here as much as anywhere · this is the only
+                          control that spends a token, and it lives in a panel a player opened on
+                          purpose. Disabled carries the reason in the row above rather than in a
+                          title attribute, which a touch device never shows (the S38 lesson). */}
+                      <button
+                        data-testid="bonus-use"
+                        data-bonus-type={type}
+                        data-blocked={blocked ? 'true' : 'false'}
+                        disabled={!!blocked}
+                        title={blocked ?? `Use ${meta.label}`}
+                        aria-label={blocked ? `${meta.label} unavailable · ${blocked}` : `Use ${meta.label}`}
+                        onClick={() => { if (!blocked) { onUseBonus(type); setTokensOpen(false) } }}
+                        style={{
+                          marginLeft: 'auto', flexShrink: 0,
+                          height: 44, minHeight: 44, padding: '0 12px', borderRadius: 8,
+                          border: `1px solid ${blocked ? 'rgba(255,255,255,0.12)' : meta.color}`,
+                          background: blocked ? 'transparent' : `${meta.color}22`,
+                          color: blocked ? 'rgba(255,255,255,0.3)' : meta.color,
+                          fontSize: 11, letterSpacing: 0.6, whiteSpace: 'nowrap',
+                          cursor: blocked ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        Use
+                      </button>
                     </div>
                   )
                 })}
