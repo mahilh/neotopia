@@ -197,7 +197,18 @@
     z-index: 2;
     width: auto !important;
     max-width: none !important;
-    max-height: 58%;
+    /* 68% IS MEASURED, NOT CHOSEN. At the first draft's 58% the FOURTH element button sat below the
+       sheet's own edge: the step's controls end 237px into the sheet, which is 66.9% of `main`'s
+       354px at 320x568, against the 205px that 58% gives. It was measured REACHABLE (the sheet
+       scrolls, so the probe credits it) and that is exactly the reading Rule 78 warns about · a
+       control you must scroll a panel to find is one you will not find.
+       AND IT IS A CEILING, NOT A HEIGHT · the sheet's full content is 1165px, so it is a scroll
+       surface either way. What this buys is that the CURRENT STEP never scrolls, which is the only
+       part of it the player is being asked to act on.
+       THE COST, stated because it is real: with the sheet up, 48-54 of 60 controls are covered
+       against 27 at 58%. That is the honest trade at 320 · there is not room for a full board and a
+       full panel, and the phases where it is up are the ones where the board is not the target. */
+    max-height: 68%;
     min-height: 0;
     border-left: none !important;
     border-top: 1px solid rgba(255,255,255,0.10);
