@@ -101,13 +101,31 @@ exists in order to fix two that do not. Proven rather than claimed: its decision
 district while it still has somewhere to place does not look weak, it looks broken. Difficulty should
 read as playing worse, never as malfunctioning.
 
-### ⚠ `defendWorst` is worth ZERO win rate
+### `defendWorst` is worth ZERO win rate · and HALVES the region spread
 
 Builder + `defendWorst` against builder: **50.0%, margin +3.00**, 80 games. The code called it "the one
 genuinely strategic idea in the file" and hedged that it was "a SMALL part of the gap." It is not small,
-it is **nil as a win term**. Kept as *flavour* · it gives architect a visible character, steering toward
-the region multiplied by three · and now labelled as such. (Rule 73: before concluding a mechanic
-matters, check whether it is *capable* of mattering.)
+it is **nil as a win term**. (Rule 73: before concluding a mechanic matters, check whether it is
+*capable* of mattering.)
+
+**S50 kept it as "flavour · it gives architect a visible character" with no evidence at all. S51
+measured that claim** (`ladderVisibility.test.js`, three disjoint 40-seed blocks):
+
+| self-play | clustering | region spread |
+|---|---|---|
+| apprentice | **15.6** | 12.0 |
+| builder | 24.9 | **15.2** |
+| architect | 25.6 | 9.5 |
+| builder + `defendWorst` *(isolated)* | 25.4 | **7.7** |
+
+**`defendWorst` halves the region spread, 15.2 → 7.7.** The axis worth exactly zero win rate produces
+the largest board-shape difference in the ladder, while `drawBias` · worth essentially the entire
+ladder · leaves almost no visual trace. **Win rate and board shape are close to orthogonal here.**
+
+The bottom rung is visible by a different mechanism: apprentice clusters 15.6 against builder's 24.9,
+about 37% less clumped, in every block. So a player can see which rung they are playing on both
+steps · scattered at the bottom, even at the top. Note region spread is **non-monotone**: builder is
+the most lopsided player on the board, because only `defendWorst` evens up on purpose.
 
 ### The tradeoffs, stated
 

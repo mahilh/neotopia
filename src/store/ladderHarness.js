@@ -79,11 +79,28 @@ export function playOnce(configs, seed, mode) {
   }
   return {
     grantOrder,
+    // T2 S51 · `scores` and `pileClaimed` are ADDITIVE and exist for the four-player experiment.
+    // The bonus granter drops a contested crossing SILENTLY · gameStore.js:487 does
+    // `if (i >= 0) { claim }` with no else · so a player who crosses 7 in a region whose subsidy is
+    // already gone gets nothing and nothing records that they tried. DEMAND is therefore not
+    // observable from the grant log, and at four players sharing a nine-token pool it is the whole
+    // question.
+    // It IS observable from the final scores, exactly and without re-implementing the granter
+    // (Rule 45): region scores only ever increase (scoreCard adds, nothing subtracts), so a final
+    // score of S in a region means precisely the thresholds <= S were crossed at some point.
+    scores: configs.map((_, seat) => ({ ...st.players.find(x => x.seat === seat).scores })),
+    pileClaimed: (st.regions ?? []).reduce((n, r) => n + (r.bonusPile ?? []).filter(b => b.claimed).length, 0),
+    pileTotal: (st.regions ?? []).reduce((n, r) => n + (r.bonusPile ?? []).length, 0),
     seats: configs.map((_, seat) => {
       const p = st.players.find(x => x.seat === seat)
       return {
         base: calculateFinalScore(p.scores, 0, getClusterTotal(st.regions, seat)),
         earned: p.bonusTokens.length,
+        // T2 S51 · ADDITIVE, for the perceptibility check. The cluster total is 1 point per element
+        // of this seat's colour in the biggest cluster per region (board rule p9), so it is a direct
+        // proxy for how CLUMPED this player's board looks · which is the thing a person actually
+        // sees, as against the win column. Taken from the real scoring function, not re-derived.
+        cluster: getClusterTotal(st.regions, seat),
       }
     }),
   }

@@ -127,6 +127,15 @@ export const REFERENCE_POLICY = 'reference'
 //   kept because it gives architect a visible character (it steers toward the region being multiplied
 //   by three) and costs nothing, and it is now labelled as flavour rather than as strength. Rule 73:
 //   before concluding a mechanic matters, check whether it is capable of mattering.
+//   ✅ T2 S51 · AND "VISIBLE CHARACTER" IS NOW MEASURED, NOT ASSERTED. When I wrote that sentence it
+//   was a claim about human perception with no evidence, made in the same breath as demonstrating the
+//   feature was worth nothing · which is the kind of thing that survives forever because it sounds
+//   like a concession. Measured over three disjoint 40-seed blocks (ladderVisibility.test.js):
+//   defendWorst, isolated on builder, takes a seat's REGION SPREAD from 15.2 to 7.7. It HALVES it.
+//   So the axis worth exactly 0 win rate produces the largest board-shape difference in the ladder,
+//   and drawBias · which is worth essentially the whole ladder · leaves almost no visual trace.
+//   Win rate and board shape are close to orthogonal here, and that is worth knowing before anyone
+//   "simplifies" this table by deleting the term that does not move the win column.
 export const POLICIES = {
   apprentice:        { drawBias: 0.30, scoreEager: true,  placement: 'random',   defendWorst: false },
   builder:           { drawBias: 0.30, scoreEager: true,  placement: 'affinity', defendWorst: false },
