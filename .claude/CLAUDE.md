@@ -602,6 +602,33 @@ EASILY. A stable reading and a correct reading are different claims. Sharpens Ru
 observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
 probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
 
+RULE 98 (T2 S43 · August 11 2026):
+A GUARD'S ALARM AND A GUARD'S REMEDY AGE DIFFERENTLY · THE ALARM IS A FACT, THE REMEDY IS A GUESS
+MADE BEFORE THE SITUATION EXISTED. My S40 premise guard fired on precisely the day it was built for
+(T1 shipped the spend control, 5381760) · a genuine success, and the first time in this project a guard
+has caught its own premise expiring. Its failure message then said "RE-RUN the measurement", and that
+instruction was WRONG. The experiment plays BOT games and bots still contain no reference to bonus
+state, so the control cannot change a single bot decision: a re-run replays identical games and returns
+bit-identical numbers. Demonstrated, not argued · the balance test passed untouched in the same run
+that reddened the premise check. What the control invalidated was the EXTRAPOLATION to human play, not
+the measurement. The alarm was right, the prescription was a year-old guess about what would matter.
+  98a · WRITE THE ALARM PRECISELY AND THE REMEDY PROVISIONALLY. A guard should assert what is true and
+        name who to ask; the moment it prescribes a specific fix, it is predicting a future it cannot
+        see. Re-point the guard rather than obey it · here the fix was to scope the claim to bot play
+        and assert THAT, which is now a check that can also fail.
+  98b · AND MY OWN COUNTERWEIGHT WAS VACUOUS AGAIN, second session running. I relaxed the write-order
+        model from `>` to `>=` and all seven tests passed: no two writes in my sequences shared a
+        version, and the two operators differ ONLY at equality. The strictness the entire design rests
+        on was asserted nowhere, in the file whose subject is that strictness. A predicate test needs a
+        case AT the boundary, not merely on both sides of it · and the boundary here was the two-client
+        case I had described in the module header and not tested. Documented is not covered.
+COROLLARY, and it is the better half: RUN A CONTROL BEFORE READING A MEASUREMENT AS SPECIFIC. Asked
+whether card_55's art clashes with its community-blue frame, I measured 76% of pixels at hue 210° ·
+exactly the frame's hue · and nearly reported a match. The control killed the precision: card_38, an
+ENERGY card with a red frame, is also 210°-dominant, because the whole deck shares a dark blue ground.
+The finding survives (no clash) but the REASON I was about to give was a palette-wide property read as
+a card-specific one. One extra sample turned a false explanation into a true one (Rule 81c, T1's 96).
+
 RULE 97 (T2 S42 · August 11 2026):
 A CITATION OUTLIVES THE THING IT CITES, AND IT KEEPS ITS CONFIDENCE THE WHOLE TIME.
 Migration 011's VERIFY checklist reads "PROVEN EMPIRICALLY T3 S23 · FOR UPDATE serialized: YES". That
