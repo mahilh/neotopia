@@ -1,12 +1,29 @@
-# IS THE DIFFICULTY LADDER A LADDER?
-**T2 S49 · August 11 2026 · 40 seeds, 80 games per row, measured at HEAD `cdcab77`**
-**Harness: `src/store/ladderCalibration.test.js` · engine: `src/store/ladderHarness.js`**
+# THE DIFFICULTY LADDER · v1 was a rout, v2 is a ladder
+
+**T2 S49 measured it. T2 S50 retuned it, on Mahil's explicit call.**
+**40 seeds, 80 games per row · v1 numbers at HEAD `cdcab77`, v2 at the S50 retune commit.**
+**Harness: `ladderCalibration.test.js` (order) · `ladderSpacing.test.js` (derivation) · engine: `ladderHarness.js`**
 
 ---
 
-## THE PREMISE THAT TOOK ONE GREP
+## THE HEADLINE
 
-Every duel in this repository — S39's, S46's, S47's, S48's — passes `REFERENCE_POLICY` as the opponent:
+| matchup | **v1** (S32–S49) | **v2** (S50) | target |
+|---|---|---|---|
+| apprentice vs builder | **6.3%** | **32.5%** | ~35% |
+| builder vs architect | **15.2%** | **34.2%** | ~35% |
+| apprentice vs architect | **0.0%** *(0 wins in 80)* | **13.9%** | — |
+| every rung vs **itself** | 50.0 / margin 0.00 | 50.0 / margin 0.00 | 50 |
+
+v2 is the mean of **three disjoint 40-seed blocks** — 32.5 / 35.4 / 32.5 and 34.2 / 29.5 / 31.2 and
+13.9 / 21.3 / 10.0. The two adjacent steps sit **1.7 points apart** at 40 seeds, against v1's 6.3 and
+15.2 (a factor of 2.4).
+
+---
+
+## PART 1 · THE PREMISE THAT TOOK ONE GREP (S49)
+
+Every duel in this repository — S39's, S46's, S47's, S48's — passed `REFERENCE_POLICY` as the opponent:
 
 ```
 bonusBalance      duel(REFERENCE_POLICY, level, SEEDS)        for each level
@@ -14,67 +31,118 @@ spendableBalance  duel(level, REFERENCE_POLICY, HEAVY, ...)   for each level
 flatGrantBalance  ladderRow(level, REFERENCE_POLICY, ...)     for each level
 ```
 
-**Nothing had ever played apprentice against builder, or builder against architect.** Five sessions of
-"ladder" measurement, and the ladder had never been asked whether its own rungs are separated. The
-functions took two arbitrary policies the whole time; one argument was simply always the same.
+**Nothing had ever played apprentice against builder.** Five sessions of "ladder" measurement, and the
+ladder had never been asked whether its own rungs are separated. The functions took two arbitrary
+policies the whole time; one argument was simply always the same. (Rule 111.)
+
+Measured against itself, v1 was worse than the reference rows suggested, not better — **one step of
+difficulty took a player from an even game to one win in seven, and the two ends were not a contest.**
+My hypothesis had been the flattering one: that the instrument was distorting S48's reading. The
+reading was conservative.
 
 ---
 
-## THE TABLE
+## PART 2 · WHY v1 WAS A ROUT · the decomposition (S50)
 
-| matchup | win % | mean margin | saturated | tokens A | tokens B |
-|---|---|---|---|---|---|
-| **apprentice vs itself** | **50.0** | **0.00** | no | 0.64 | 0.64 |
-| **builder vs itself** | **50.0** | **0.00** | no | 2.24 | 2.24 |
-| **architect vs itself** | **50.0** | **0.00** | no | 3.41 | 3.41 |
-| apprentice vs **builder** | **6.3** | −30.91 | no | 0.26 | 2.95 |
-| builder vs **architect** | **15.2** | −28.66 | no | 1.61 | 4.63 |
-| apprentice vs **architect** | **0.0** | −76.49 | **YES** | 0.04 | 6.10 |
-| *apprentice vs reference* | *5.1* | *−20.50* | no | 0.26 | 2.08 |
-| *builder vs reference* | *77.2* | *+13.59* | no | 2.54 | 1.63 |
-| *architect vs reference* | *98.8* | *+61.38* | **YES** | 6.20 | 1.21 |
+Until S50 a "difficulty" was four scattered `level === 'x'` comparisons, so it **read as one dial**.
+It is four axes, and v1's apprentice was handicapped on **three of them at once**:
 
-The three self-play rows are the counterweight, written and asserted first: a policy against itself
-must tie, and all three land on **exactly 50.0 with a margin of exactly 0.00**. The harness has no
-side, so the asymmetric rows are measuring the ladder and not the instrument.
+| | drawBias | scoreEager | placement | defendWorst |
+|---|---|---|---|---|
+| v1 apprentice | 0.05 | **false** | random | false |
+| v1 builder | 0.30 | true | affinity | false |
+| v1 architect | 0.55 | true | affinity | **true** |
 
----
+Reverting one axis at a time from builder, 80 games each:
 
-## THE FINDING · the ladder is more extreme against ITSELF than against the reference
+| arm | win % vs builder | mean margin |
+|---|---|---|
+| builder + v1's draw bias (0.05) | 11.3 | **−16.35** |
+| builder + random placement | 32.5 | **−9.31** |
+| builder + lazy scoring | 42.3 | **−6.69** |
+| | **sum** | **−32.35** |
+| v1 apprentice (all three) | **0.0** | **−32.60** |
 
-**One step of difficulty takes a player from an even game to roughly one win in seven. The two ends
-are not a contest at all — zero wins in eighty games.**
+**The three handicaps compose ADDITIVELY in margin (−32.35 predicted, −32.60 measured — 0.8% error)
+while the win rate collapses to zero.** A win rate is a *threshold* on the margin, so three
+individually-survivable handicaps stack past the point where any game is winnable. That is Rule 88's
+saturation explaining its own mechanism, and it is why v1 needed re-spacing rather than a rewrite.
 
-I expected the opposite. My hypothesis was that a ladder can be perfectly spaced internally while
-looking extreme against a common reference, which would have made S48's "both ends are pinned" an
-artifact of the comparison partner. **It is the reverse.** Adjacent rungs (6.3%, 15.2%) are *harder*
-matchups than anything measured against the reference except architect-vs-reference.
+### The draw-bias response curve
 
-So S48's saturation reading was correct and **understated**. The ends are not merely pinned against a
-middling opponent; adjacent rungs are pinned against each other. **There is no competitive pairing in
-this ladder except a policy against itself.**
+The only continuous axis, swept against a fixed 0.30 midpoint:
 
-The reference policy sits *inside* the ladder, between apprentice and builder — which is why it looked
-like the gentler opponent. It was never a neutral yardstick; it was an unnamed fourth rung.
+| drawBias | 0.00 | 0.10 | 0.20 | **0.30** | 0.40 | 0.55 | 0.70 | 0.85 | 1.00 |
+|---|---|---|---|---|---|---|---|---|---|
+| win % | 5.1 | 24.1 | 31.6 | **50.0** | 67.9 | 77.2 | 97.5 | 96.3 | 98.8 |
+| margin | −20.69 | −12.82 | −6.40 | **0.00** | +10.85 | +18.57 | +36.84 | +40.61 | +46.59 |
 
-### What this means if the ladder is ever exposed
-
-The ladder is **not exposed in the UI, and that is a decision, not an omission** (Mahil, S33). This is
-recorded for the session that changes that decision: as it stands, the three settings are not three
-difficulties, they are three different games. A player who finds "builder" even would win about 15% of
-games against "architect" and about 94% against "apprentice". There is no rung a player can climb to.
-
-**Not recommending a rebalance.** That is Mahil's call and the standing pattern is evidence first — the
-same discipline the bonus-token question closed under. What is missing before any tuning is a human
-data point, and there is none: no human with a claimed username has ever finished a recorded
-multiplayer game (S48).
+Slope near the middle: **~0.86 points of margin per 0.01 of draw bias**. That number is what the v2
+constants were chosen from. Note the top of the range: the win rate is **saturated above 0.70** (97.5 →
+96.3 → 98.8, non-monotone) while the margin is still climbing cleanly — the same run showing both a
+statistic that has run out of room and one that has not.
 
 ---
 
-## FREE COROLLARY · the S48 token finding survives rung-vs-rung
+## PART 3 · v2, AND WHAT IT COST
 
-`ladderRow` scores every game both ways, so the flat-vs-earned comparison came along at no cost — and
-S48's conclusion was only ever tested rung-**vs-reference**:
+| | drawBias | scoreEager | placement | defendWorst |
+|---|---|---|---|---|
+| apprentice | 0.30 | true | **random** | false |
+| builder | 0.30 | true | affinity | false |
+| architect | **0.39** | true | affinity | true |
+
+**Builder is byte-identical to v1.** It is `DEFAULT_DIFFICULTY`, so it is the only policy any human has
+ever played against (practice mode has no picker), and moving it would change the one experience that
+exists in order to fix two that do not. Proven rather than claimed: its decision fingerprint in
+`botPolicyIdentity.test.js` is unchanged from `3994d8d`.
+
+**Apprentice loses only placement quality now**, and it is `scoreEager` — a bot that holds a *completed*
+district while it still has somewhere to place does not look weak, it looks broken. Difficulty should
+read as playing worse, never as malfunctioning.
+
+### ⚠ `defendWorst` is worth ZERO win rate
+
+Builder + `defendWorst` against builder: **50.0%, margin +3.00**, 80 games. The code called it "the one
+genuinely strategic idea in the file" and hedged that it was "a SMALL part of the gap." It is not small,
+it is **nil as a win term**. Kept as *flavour* — it gives architect a visible character, steering toward
+the region multiplied by three — and now labelled as such. (Rule 73: before concluding a mechanic
+matters, check whether it is *capable* of mattering.)
+
+### The tradeoffs, stated
+
+1. **65/35 adjacent and a gentle end-to-end are mutually exclusive.** Two steps of ~1/3 compound to
+   ~1/9. 13.9% end-to-end is exactly what evenly-spaced 33% steps imply — arithmetic, not a design
+   failure. A milder 60/40 ladder would give ~25% end-to-end and a duller middle.
+2. **The whole ladder now sits above the frozen reference** — 60.0 / 66.7 / 84.8, where v1 straddled it
+   at 5.1 / 77.2 / 98.8. Rungs that are ~35 points apart are necessarily close to any third party too,
+   so the span against the yardstick **compressed from 94 points to 25**. The ordering survives and is
+   gated; what is lost is resolution between apprentice and builder specifically.
+3. **The win rate can no longer order the bottom two rungs.** On the first v2 run `botPolicy.test.js`
+   reported apprentice 75.0% and builder 73.7% against the reference — *inverted* — on games whose
+   margins were cleanly ordered (2.60 vs 10.10). The gates now assert the **margin** (Rule 88b). This is
+   the price of a calibrated ladder: making it fair makes it more expensive to measure.
+4. **`REFERENCE_POLICY` stays frozen and unpickable** (Mahil, S50). A yardstick that moves is not one,
+   and moving it voids every rate recorded since S39.
+
+---
+
+## PART 4 · WHAT THIS DOES NOT MEASURE — unchanged, and it is the important caveat
+
+**Bot against bot, two players, Classic mode.** Nothing here predicts what a human finds hard, and no
+human with a claimed username has ever finished a recorded multiplayer game (S48). The retune was made
+on Mahil's explicit overrule of "evidence first" — *"0.0% and 6.3% are outside any range a human
+measurement could rescue"* — which is a statement about v1 being knowably wrong, not a claim that v2 is
+knowably right. **v2's 32.5/34.2 is a bot-calibrated ladder awaiting its first human game.**
+
+And per Rule 111, the two constants this harness still hides: every row above is **Classic mode**
+(`initGame` is never passed a 4th argument) and **two players** (`bots()` is only ever called with two).
+
+---
+
+## FREE COROLLARY · the S48 token finding survives the retune
+
+`ladderRow` scores every game both ways, so flat-vs-earned came along at no cost. Under **v1**:
 
 | matchup | win % as earned | win % flattened | games flipped |
 |---|---|---|---|
@@ -82,13 +150,8 @@ S48's conclusion was only ever tested rung-**vs-reference**:
 | builder vs architect | 15.2 | 16.5 | 8 / 80 |
 | apprentice vs architect | 0.0 | 0.0 | 0 / 80 |
 
-Redistributing every bonus token evenly moves these matchups by **0.0, 1.3 and 0.0 points**. The earn
-skew decides nothing between real ladder rungs either, which is the generalisation S48 could not make.
-
----
-
-## WHAT THIS DOES NOT MEASURE
-
-Bot against bot. Nothing here predicts what a human finds hard. It answers the narrower question the
-ladder's own design implies: **are these three policies distinguishable from each other, in the right
-order, by a usable amount?** Ordered — yes, and gated as such. Usable — no.
+Redistributing every bonus token evenly moved these matchups by **0.0, 1.3 and 0.0 points**. The earn
+skew decides nothing between real ladder rungs — the generalisation S48 could not make. The gates in
+`flatGrantBalance.test.js` that carried this claim now assert the ladder's **ordering** rather than its
+position relative to the reference, because the position was a buried assumption that the retune
+falsified (see that file's S50 note).

@@ -161,8 +161,35 @@ test('the earn skew · does flattening the distribution change who wins?', () =>
   }
 
   // ── AND THE LADDER MUST STILL BE A LADDER, or nothing compares to S39/S47 ────────────────────────
-  expect(rows.apprentice.winPctEarned, 'apprentice must lose to the reference').toBeLessThan(40)
-  expect(rows.architect.winPctEarned, 'architect must beat it').toBeGreaterThan(80)
+  // ⚠ T2 S50 · THIS PAIR USED TO READ, and both halves have now been falsified by a legitimate change:
+  //       expect(rows.apprentice.winPctEarned).toBeLessThan(40)   // apprentice must LOSE to the reference
+  //       expect(rows.architect.winPctEarned).toBeGreaterThan(80)
+  // They were written against ladder v1, where the rungs straddled the frozen reference (5.1 / 77.2 /
+  // 98.8). The S50 retune pulled the rungs together so they are playable against each other, and a
+  // ladder whose rungs are ~35 points apart is necessarily close to any third party too · so the whole
+  // ladder now sits ABOVE the reference (60.0 / 66.7 / 84.8) and "apprentice must lose to it" is
+  // simply false. Nothing regressed; an assumption I never wrote down expired.
+  //
+  // THE ASSUMPTION WAS THE STRADDLE, and it was invisible because it was true. That is Rule 111 in the
+  // place I would least expect it after writing Rule 111: not a constant at every call site this time,
+  // but a POSITIONAL relationship between the subject and the yardstick, baked into a threshold.
+  //
+  // WHAT SURVIVES IS THE ORDERING, and it needs no threshold at all · it is three comparisons against
+  // ONE common opponent, and it is the only thing this file needs from the ladder in order for its own
+  // measurement to be readable. Magnitudes are deliberately not gated here: under a calibrated ladder
+  // they are small BY DESIGN, so any floor on them would be encoding a spacing target, which belongs
+  // in ladderSpacing.test.js and ladderCalibration.test.js where it is the subject rather than a
+  // background assumption.
+  // ⚠ ONLY THE ARCHITECT IS SEPARABLE BY THIS YARDSTICK UNDER v2. The rungs sit ~6.7 points apart
+  // against the frozen reference (v1: 72 apart), so no block any gate here can afford resolves
+  // apprentice from builder · spendableBalance's copy of this assertion inverted them at
+  // SEED_OFFSET=500, and botPolicy.test.js inverted them on win rate at 10 seeds. Asserting the
+  // bottom-two order would be asserting more resolution than the comparison has, which is how a gate
+  // becomes a coin flip nobody trusts (Rule 88c). docs/LADDER_CALIBRATION.md Part 3 tradeoff 2.
+  expect(rows.architect.winPctEarned, 'architect must sit above builder against the reference')
+    .toBeGreaterThan(rows.builder.winPctEarned)
+  expect(rows.architect.winPctEarned, 'architect must sit above apprentice against the reference')
+    .toBeGreaterThan(rows.apprentice.winPctEarned)
 
   const out = {}
   for (const level of [...DIFFICULTIES, 'control']) {
@@ -210,14 +237,32 @@ test('the earn skew · does flattening the distribution change who wins?', () =>
   // here; nothing is a number I once saw. If the whole ladder shifts for a legitimate reason, this
   // follows it instead of reddening (Rule 88c), and if flattening genuinely re-orders the rungs it
   // still fires.
+  // ⚠ T2 S50 · AND THE CONTROL-DERIVED FORM WAS STILL CARRYING THE SAME BURIED ASSUMPTION.
+  // S49 replaced two remembered numbers (50 and 70) with `ctrl - 10` and `ctrl + 10`, and that fixed
+  // the right half of the problem · the bound now moves with the run instead of with my memory. But
+  // it still asserted a POSITION relative to the control, which silently required the apprentice to
+  // be below the reference and the architect above it. Under v2 the apprentice is above it, so the
+  // improved wire went red on working code exactly as the original would have.
+  //
+  // The lesson is one level past S49's: deriving a bound from a control measured in the same run
+  // removes the STALE-NUMBER failure and not the STRUCTURAL-ASSUMPTION one. `ctrl - 10` reads as
+  // "measured, therefore safe" and it is still a claim about where the subject sits relative to the
+  // yardstick. An ORDERING among the rungs makes no such claim: it compares things that are all
+  // moving together, so a wholesale shift of the ladder carries it along instead of breaking it,
+  // which is precisely the event that happened here.
   const ctrl = rows.control.winPctFlat
-  expect(rows.apprentice.winPctFlat, `under flattening the apprentice reached ${rows.apprentice.winPctFlat}% ` +
-    `against a ${ctrl}% symmetric control · it must remain clearly the WEAKER side, and if tokens can ` +
-    'lift it to parity they are outweighing the policy difference').toBeLessThan(ctrl - 10)
-  expect(rows.architect.winPctFlat, `under flattening the architect fell to ${rows.architect.winPctFlat}% ` +
-    `against a ${ctrl}% symmetric control · it must remain clearly the STRONGER side`).toBeGreaterThan(ctrl + 10)
-  expect(rows.architect.winPctFlat, 'the ladder must stay ORDERED under flattening')
-    .toBeGreaterThan(rows.apprentice.winPctFlat)
+  expect(rows.architect.winPctFlat, `under flattening the architect (${rows.architect.winPctFlat}%) fell ` +
+    `below the apprentice (${rows.apprentice.winPctFlat}%) against the same opponent · the token term ` +
+    'has become a primary driver of outcomes rather than a garnish on one, which is a balance ' +
+    'emergency rather than a tuning question').toBeGreaterThan(rows.apprentice.winPctFlat)
+  expect(rows.architect.winPctFlat, 'flattening re-ordered architect and builder')
+    .toBeGreaterThan(rows.builder.winPctFlat)
+  // The control is a SYMMETRIC matchup, so it is the one row whose flat win rate is pinned to 50 for
+  // a structural reason. Every asymmetric row must be distinguishable from it in the direction its
+  // matchup implies · this is the check that the flat arm has not simply collapsed everything to a
+  // coin flip, and it is stated against the measured control rather than against 50.
+  expect(rows.architect.winPctFlat, `the architect is indistinguishable from a symmetric ${ctrl}% ` +
+    'control under flattening · the flat arm has collapsed the matchup').toBeGreaterThan(ctrl + 5)
 
   // AND THE CONTROL MUST BE A CLEAN NULL IN BOTH ARMS.
   // ⚠ I WROTE PLAUSIBLE NUMBERS INTO THIS COMMENT BEFORE RUNNING IT · "48.8/51.2/50.0/48.8, never

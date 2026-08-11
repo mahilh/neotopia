@@ -281,16 +281,74 @@ test('P2 · the LADDER under spending · comparable to S39 at last', () => {
   }
   REPORT('P2_ladder', rows)
   // The ladder must still BE a ladder, or the comparison to S39 is meaningless.
-  expect(rows.apprentice.without, 'apprentice must lose to the reference').toBeLessThan(40)
-  expect(rows.architect.without, 'architect must beat it').toBeGreaterThan(80)
+  // ⚠ T2 S50 · THIS PAIR USED TO READ, and the S50 ladder retune falsified both halves:
+  //       expect(rows.apprentice.without).toBeLessThan(40)   // apprentice must LOSE to the reference
+  //       expect(rows.architect.without).toBeGreaterThan(80)
+  // They encoded a STRADDLE · that the rungs sit either side of the frozen reference · which was true
+  // of ladder v1 (5.1 / 77.2 / 98.8) and is false of v2 (60.0 / 66.7 / 84.8). Pulling the rungs close
+  // enough together to be playable necessarily pulled them close together relative to any third party
+  // too, and the whole ladder ended up above the yardstick. Nothing regressed; an assumption nobody
+  // ever wrote down expired. Third file in the same blast radius, same shape in all three.
+  //
+  // The claim these were reaching for is that the ladder is ORDERED against a COMMON opponent, which
+  // needs no threshold at all and moves with the ladder instead of pinning it to where the ladder
+  // happened to sit in S46.
+  //
+  // ⚠ BUT ONLY THE ARCHITECT IS SEPARABLE BY THIS YARDSTICK UNDER v2, AND I OVER-ASSERTED IT FIRST.
+  // My initial fix here demanded apprentice < builder < architect against the reference. It passed at
+  // the default block and went RED at SEED_OFFSET=500 · apprentice 67.1, builder 63.3. That is not a
+  // flake to be tuned away, it is the documented compression: v2's rungs sit ~6.7 points apart
+  // against the frozen reference where v1's sat 72 apart, so a 40-seed block cannot resolve the
+  // bottom two. Three independent confirmations now (botPolicy.test.js at 10 seeds inverted them on
+  // win rate; flatGrantBalance sees the same squeeze; this file at two offsets), and the right
+  // response is to assert what the instrument can see rather than what I wish it could
+  // (docs/LADDER_CALIBRATION.md, Part 3, tradeoff 2).
+  expect(rows.architect.without, 'architect must sit above builder against the reference')
+    .toBeGreaterThan(rows.builder.without)
+  expect(rows.architect.without, 'architect must sit above apprentice against the reference')
+    .toBeGreaterThan(rows.apprentice.without)
   // THE FINDING, gated coarsely: when BOTH sides spend, the skill ordering barely moves. Measured
   // deltas over two blocks: apprentice +1.2/0.0, builder -6.3/-1.8, architect 0.0/-3.8 · small and
-  // mostly negative, the same direction S39 found for UNSPENT tokens. Bound at 15 because the per-rung
-  // spread is several points and a tight wire here would flake (Rule 88c), and because the sharp
-  // evidence for this session lives in the earn gap below, not in a saturated win rate.
-  for (const level of DIFFICULTIES) {
-    expect(Math.abs(rows[level].delta), `${level} moved ${rows[level].delta} points when both sides ` +
-      'spend · spending is not supposed to re-order the ladder').toBeLessThanOrEqual(15)
+  // mostly negative, the same direction S39 found for UNSPENT tokens.
+  //
+  // ── T2 S50 · RE-MEASURED ON LADDER v2, AND THE FINDING SURVIVES · but I nearly reported the
+  // opposite, and the near-miss is the more useful half.
+  //
+  // At this file's DEFAULT block (12 seeds, 24 games) the first v2 run produced apprentice -18.5,
+  // builder -12.5, architect +8.8 · monotone in the ladder, large, and with a ready-made mechanism
+  // (architect out-earns the reference 2.4x, so making tokens spendable should convert an earn
+  // advantage into a win advantage). It also had a tidy story about WHY it had never been seen: v1's
+  // ladder was saturated at 5.1/98.8 and a saturated rate cannot show an amplification (Rule 88). I
+  // was one paragraph from writing "spending amplifies the calibrated ladder" into the roadmap.
+  //
+  // THREE DISJOINT 40-SEED BLOCKS KILLED IT:
+  //     apprentice   -11.6  -11.4   +8.8      <- the sign flips
+  //     builder       -6.3   -5.8   -8.1
+  //     architect     -0.1   -9.0   -6.2
+  // Small, mostly negative, no ordering in the deltas · the same direction S39, S46 and S47 all found.
+  // The monotone shape at 24 games was noise wearing a mechanism's clothes. A suggestive pattern plus
+  // a plausible mechanism is the single most convincing form a false finding takes, because the
+  // mechanism makes the noise feel explained (Rule 105's corollary · repeat it BEFORE writing it
+  // down, not after).
+  //
+  // WHAT IS GATED NOW, and why the old wire could not stay. `|delta| <= 15` was sized on blocks larger
+  // than the 12 this file defaults to, so it was a bound from one block size applied at another · the
+  // exact defect I removed from flatGrantBalance in S49 and then walked into here. At 12 seeds the
+  // honest bound would be ~25, which asserts nothing. So the magnitude claim runs only where the block
+  // supports it, and the always-on claim is the threshold-free one.
+  const ordered = rows.architect.with > rows.builder.with && rows.architect.with > rows.apprentice.with
+  expect(ordered, `with both sides spending the architect (${rows.architect.with}%) is not above ` +
+    `builder (${rows.builder.with}%) and apprentice (${rows.apprentice.with}%) · spending has ` +
+    're-ordered the ladder, which would make the token a primary driver of outcomes').toBe(true)
+  // ⚠ apprentice-vs-builder is deliberately NOT ordered here. Under v2 they sit ~6.7 points apart
+  // against the frozen reference (docs/LADDER_CALIBRATION.md), and block 3 above put them at 63.3 and
+  // 63.3 · an exact tie. Asserting a strict order between them would be asserting more resolution
+  // than this comparison has, which is how a gate becomes a coin flip nobody trusts (Rule 88c).
+  if (HEAVY.length >= 40) {
+    for (const level of DIFFICULTIES) {
+      expect(Math.abs(rows[level].delta), `${level} moved ${rows[level].delta} points when both ` +
+        'sides spend · spending is not supposed to re-order the ladder').toBeLessThanOrEqual(15)
+    }
   }
 }, 600_000)
 
@@ -322,8 +380,29 @@ test('P3 · does earning COMPOUND with spending? the asymmetric case', () => {
   // any spending decision is taken.
   // The win rate cannot see it: architect sits at ~99% and apprentice at ~5-12%, both pinned against a
   // bound (Rule 88). That is exactly why this is asserted on the EARN GAP and not on a win rate.
-  expect(rows.architect.earnGap, 'the stronger policy must out-earn the reference · if this ever ' +
+  //
+  // ── T2 S50 · BOTH WIRES HERE WERE STATED RELATIVE TO THE REFERENCE, AND BOTH MOVED ───────────────
+  //       expect(rows.architect.earnGap).toBeGreaterThan(2)
+  //       expect(rows.apprentice.earnGap).toBeLessThan(0)     // "the weaker policy must under-earn it"
+  // The second is the fourth instance this session of one buried assumption · that the ladder
+  // STRADDLES the frozen reference. Under v2 the apprentice is stronger than the reference, so it
+  // out-earns it slightly (+0.31 / +0.32 / +0.60 across three disjoint 40-seed blocks) and "the weaker
+  // policy" no longer names it. Nothing regressed.
+  //
+  // AND THE FIRST WIRE IS A REAL RESULT RATHER THAN A STALE ONE, which is why it is not simply
+  // loosened. The architect's earn advantage FELL from ~5.3 tokens per game to ~2.0 (2.45 / 1.95 /
+  // 2.14), because tokens are earned by crossing 7/13/18 · so earning tracks SCORING SPEED, and the
+  // retune cut architect's draw bias from 0.55 to 0.39. The `> 2` bound now sits inside the block
+  // spread and would have flaked on one of the three. So the S47 compounding concern is roughly
+  // HALVED as a side effect of the ladder retune, with no token rule touched. That is worth more than
+  // the gate: docs/LADDER_CALIBRATION.md carries it.
+  //
+  // What is gated is the claim itself · EARNING FAVOURS THE LEADER · which is an ordering plus a
+  // separation measured across the same three blocks (1.54 / 1.63 / 2.14), floored with headroom.
+  expect(rows.architect.earnGap, 'the stronger policy must out-earn the weaker one · if this ever ' +
     'goes near zero the compounding concern is gone and the balance note should be revisited')
-    .toBeGreaterThan(2)
-  expect(rows.apprentice.earnGap, 'and the weaker policy must under-earn it').toBeLessThan(0)
+    .toBeGreaterThan(rows.apprentice.earnGap)
+  expect(rows.architect.earnGap - rows.apprentice.earnGap, 'the earn skew across the ladder ends ' +
+    `is ${(rows.architect.earnGap - rows.apprentice.earnGap).toFixed(2)} tokens per game · if it ` +
+    'collapses, earning has stopped tracking scoring speed and S47 needs re-deriving').toBeGreaterThan(1)
 }, 600_000)

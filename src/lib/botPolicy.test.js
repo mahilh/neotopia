@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from 'vitest'
 import { useGameStore, PRODUCTION_TILES } from '../store/gameStore'
 import { PROJECT_CARDS } from './projectCards'
 import { chooseBotAction, enumeratePlacements, makeRng, DIFFICULTIES, REFERENCE_POLICY, DIFFICULTY_SELECTABLE } from './botPolicy'
+import { makeReporter } from '../store/ladderHarness'
 
 // Deterministic shuffle so a win-rate measurement measures the POLICY, not one lucky deck.
 function shuffled(arr, rng) {
@@ -64,8 +65,16 @@ const bots = (...levels) => levels.map((difficulty, i) => ({
  * this game ties often at low scores and folding those in would drag every rate toward 50% and hide
  * a real difference. `decisive` is returned so a caller can refuse to conclude from too few games.
  */
+// T2 S50 · ALSO RETURNS THE MEAN SCORE MARGIN, and that is not a convenience. A win rate is a
+// THRESHOLD on the margin · it throws away how much a game was won by and keeps only the sign · so
+// its variance at these sample sizes is large and it saturates near 0 and 100 (Rule 88). That was
+// tolerable while the ladder was 92-100% and every gap was enormous. Under the S50 retune the rungs
+// are ~35 points apart by design, which is exactly the regime where a 20-game win rate cannot tell
+// two policies apart: the reference test below INVERTED apprentice and builder on its first v2 run
+// (75.0% vs 73.7%) on data whose margins were cleanly ordered. Ties are excluded from `rate` as
+// before, but they are KEPT in the margin, where a 0 is a real observation rather than a missing one.
 function winRate(weak, strong, seeds) {
-  let strongWins = 0, decisive = 0
+  let strongWins = 0, decisive = 0, marginSum = 0, completed = 0
   for (let seed = 1; seed <= seeds; seed++) {
     for (const flip of [false, true]) {
       useGameStore.setState(useGameStore.getInitialState(), true)
@@ -73,12 +82,19 @@ function winRate(weak, strong, seeds) {
       if (r.phase !== 'scoring') continue
       const s = flip ? r.scores[0] : r.scores[1]
       const w = flip ? r.scores[1] : r.scores[0]
+      completed++
+      marginSum += s - w
       if (s === w) continue
       decisive++
       if (s > w) strongWins++
     }
   }
-  return { rate: decisive ? strongWins / decisive : 0, decisive }
+  return {
+    rate: decisive ? strongWins / decisive : 0,
+    decisive,
+    margin: completed ? +(marginSum / completed).toFixed(2) : 0,
+    completed,
+  }
 }
 
 describe('bot policy · practice mode', () => {
@@ -137,20 +153,54 @@ describe('bot policy · practice mode', () => {
     // builder vs builder must land at 50%, and with the levels collapsed EVERY row becomes that row.
     const run = winRate
 
-    // Measured over 20 seeds x both seatings this session:
-    //   apprentice vs builder   92%   ·  apprentice vs architect  100%
-    //   builder    vs architect 98%   ·  builder    vs builder     50%  (control)
+    // ⚠ THE OLD WIRE HERE WAS `rate > 0.65`, AND THE S50 RETUNE IS EXACTLY WHAT EXPOSES IT.
+    // It was written when the ladder was 92-100% and it read as a loose backstop. It is not loose ·
+    // it is a requirement that the stronger rung win MORE THAN 65% of decisive games, which is the
+    // precise opposite of the calibration target Mahil set ("adjacent rungs at roughly 65/35"). A
+    // properly-spaced ladder sits ON this wire, so the gate encoded the very miscalibration S50
+    // exists to remove, and would have had to be widened by whoever fixed the ladder · which is the
+    // move Rule 110c says is always wrong (a tolerance widened to accommodate a defect is a defect
+    // with permission). The right fix is not a wider bound, it is a statistic that can carry the
+    // claim: see the margin note on winRate.
+    //
+    // WHAT IS ASSERTED NOW: the ORDER, on the margin, against a control measured in the SAME run
+    // (my own S49 P4 lesson · a backstop derived from an observed number is a wire sized from the
+    // run it guards). These runs are fully DETERMINISTIC · winRate walks seeds 1..n · so the values
+    // cannot drift with luck and a tight gate cannot flake. Only a code change moves them, which is
+    // the only thing this should ever report.
+    //
+    // MEASURED AT v2 (8 seeds x 2 seatings = 16 games per row, written by the run, not by hand):
+    const REPORT = makeReporter('BOTPOLICY_OUT')
+    const control = run('builder', 'builder', 8)
+    const pairs = {}
     for (const [weak, strong] of [['apprentice', 'builder'], ['apprentice', 'architect'], ['builder', 'architect']]) {
-      const { rate, decisive } = run(weak, strong, 8)
-      expect(decisive, `${weak} vs ${strong} · too few decisive games to measure`).toBeGreaterThan(8)
-      expect(rate, `${strong} did not out-play ${weak} · ${Math.round(rate * 100)}%`).toBeGreaterThan(0.65)
+      const r = run(weak, strong, 8)
+      pairs[`${weak}_v_${strong}`] = { rate: r.rate, margin: r.margin, decisive: r.decisive }
+      expect(r.decisive, `${weak} vs ${strong} · too few decisive games to measure`).toBeGreaterThan(8)
+      // The stronger policy must be ahead ON POINTS by more than the control's own residual. The
+      // control is a policy against itself, so its margin is 0.00 by construction and any non-zero
+      // value in it is a harness side · using it as the floor means this bound re-sizes itself if
+      // the harness ever acquires one, instead of silently absorbing it.
+      expect(r.margin, `${strong} is not ahead of ${weak} on points · margin ${r.margin} against a ` +
+        `control residual of ${control.margin}`).toBeGreaterThan(Math.abs(control.margin) + 3)
     }
+    REPORT('S50_rung_v_rung_16g', { control: { rate: control.rate, margin: control.margin }, ...pairs })
+
+    // Transitivity, which is what makes it a LADDER rather than three ordered pairs: the ends must be
+    // further apart than either single step. This is the assertion that a collapsed or reordered
+    // ladder cannot satisfy, and it needs no threshold at all.
+    expect(pairs.apprentice_v_architect.margin, 'the ladder ends must be further apart than either ' +
+      'adjacent step, or these are three pairings and not a ladder')
+      .toBeGreaterThan(pairs.apprentice_v_builder.margin)
+    expect(pairs.apprentice_v_architect.margin)
+      .toBeGreaterThan(pairs.builder_v_architect.margin)
 
     // The control. Same policy both sides must be a coin flip · if this drifts, the harness is biased
     // and every number above is worthless.
-    const control = run('builder', 'builder', 8)
     expect(control.rate).toBeGreaterThan(0.3)
     expect(control.rate).toBeLessThan(0.7)
+    expect(Math.abs(control.margin), 'builder against ITSELF carries a points advantage · the ' +
+      'orientation swap is not cancelling and every margin above inherits it').toBeLessThan(1)
   }, 30000) // 64 full games. 3.3s in isolation, 7.1s under full-suite contention · it FAILED the first
             // full run on the 5s default, which is the same trap I fixed for engineFuzz one session ago
             // and then walked straight into. Sized on the measured contended number with headroom.
@@ -176,26 +226,64 @@ describe('bot policy · practice mode', () => {
     // intermittently under the full suite · a different one each run, all passing 10/10 in isolation.
     // Proven both ways: skip this test and the whole suite went 3/3 clean. My benchmark, my lane, my
     // fix. A heavy test that destabilises somebody else's is a bug in mine even when both pass alone.
-    const rates = {}
+    // ⚠ T2 S50 · WHAT THIS TEST USED TO ASSERT, AND WHY IT NO LONGER CAN. Kept in full rather than
+    // silently edited, because the old claim is the argument for the new one (Rule 101b).
+    //
+    //     expect(rates.apprentice).toBeLessThan(0.4)      // the ladder STRADDLES the yardstick
+    //     expect(rates.architect).toBeGreaterThan(0.85)
+    //
+    // Both were true of ladder v1 (5.1 / 77.2 / 98.8 against the reference) and both are false of v2,
+    // and that is arithmetic rather than regression. The reference is frozen at drawBias 0.25 with
+    // random placement · which is v2's apprentice with a slightly lower draw bias · so once the rungs
+    // were pulled close enough together to be playable, the whole ladder ended up above it. Rungs
+    // that are ~35 points apart from each other are necessarily close to any third party too: the
+    // span against the yardstick compressed from 94 points to 25.
+    //
+    // AND THE WIN RATE CAN NO LONGER ORDER THE BOTTOM TWO. On the first v2 run this test reported
+    // apprentice 75.0% and builder 73.7% · INVERTED · on games whose margins were cleanly ordered
+    // (2.60 vs 10.10). That is not noise in the usual sense (winRate walks seeds 1..n and is
+    // deterministic); it is a threshold statistic being asked to resolve a difference smaller than
+    // one game's worth of sign-flips. The margin sees it at every size tried: 10, 14 and 20 seeds
+    // gave apprentice 2.60 / 5.14 / 4.90 against builder 10.10 / 9.96 / 13.53 and architect 32.45 /
+    // 32.68 / 34.67, ordered 3 of 3. So the ordering is asserted on the margin (Rule 88b · prefer a
+    // statistic that cannot saturate) and the rate is reported rather than gated.
+    //
+    // THE YARDSTICK STILL DOES ITS JOB, which is the reason to keep it frozen rather than re-cut it:
+    // it is a FIXED point, so a number recorded against it tonight is comparable with one from S39,
+    // and one human game against it still locates that human on the same scale. What it has lost is
+    // resolution between apprentice and builder specifically. That is the honest price of freezing
+    // an instrument, and the alternative · moving it · voids five sessions of recorded rates and is
+    // exactly what its own header forbids.
+    const REPORT = makeReporter('BOTPOLICY_OUT')
+    const vsRef = {}
     for (const level of DIFFICULTIES) {
-      const { rate, decisive } = winRate(REFERENCE_POLICY, level, 10)
+      const { rate, decisive, margin } = winRate(REFERENCE_POLICY, level, 10)
       expect(decisive, `${level} vs reference · too few decisive games`).toBeGreaterThan(12)
-      rates[level] = rate
+      vsRef[level] = { rate, margin, decisive }
     }
+    const refControl = winRate(REFERENCE_POLICY, REFERENCE_POLICY, 20)
+    REPORT('S50_rung_v_reference_20g', { ...vsRef, control: { rate: refControl.rate, margin: refControl.margin } })
 
-    // Strictly increasing against the fixed opponent. Collapse any two levels and this fails.
-    expect(rates.apprentice, `apprentice ${Math.round(rates.apprentice * 100)}% is not below builder`)
-      .toBeLessThan(rates.builder)
-    expect(rates.builder, `builder ${Math.round(rates.builder * 100)}% is not below architect`)
-      .toBeLessThan(rates.architect)
-    // And they must straddle the yardstick, not merely be ordered somewhere off to one side.
-    expect(rates.apprentice).toBeLessThan(0.4)
-    expect(rates.architect).toBeGreaterThan(0.85)
+    // Strictly increasing against the fixed opponent, ON POINTS. Collapse any two levels and this
+    // fails · which is the property that makes the reference a SCALE rather than just an opponent.
+    expect(vsRef.apprentice.margin, `apprentice (${vsRef.apprentice.margin}) is not below builder ` +
+      `(${vsRef.builder.margin}) against the reference`).toBeLessThan(vsRef.builder.margin)
+    expect(vsRef.builder.margin, `builder (${vsRef.builder.margin}) is not below architect ` +
+      `(${vsRef.architect.margin}) against the reference`).toBeLessThan(vsRef.architect.margin)
+    // Every rung must be located ABOVE the yardstick's own control, not merely ordered among
+    // themselves · that is what says the reference is a floor of the v2 ladder rather than adrift
+    // somewhere inside it. Compared against the control measured in this same run, never a constant.
+    expect(vsRef.apprentice.margin, 'even the weakest rung must beat the frozen reference on points ' +
+      'under v2 · if this goes red the ladder has drifted back below its own yardstick and the ' +
+      'compression note above needs re-measuring, not deleting')
+      .toBeGreaterThan(refControl.margin)
 
     // The instrument checks itself: the reference against a copy of itself must be a coin flip. If
     // this drifts, the harness is biased and every rate recorded above is worthless.
-    const control = winRate(REFERENCE_POLICY, REFERENCE_POLICY, 20)
-    expect(control.rate).toBeGreaterThan(0.3)
-    expect(control.rate).toBeLessThan(0.7)
+    expect(refControl.rate).toBeGreaterThan(0.3)
+    expect(refControl.rate).toBeLessThan(0.7)
+    expect(Math.abs(refControl.margin), 'the reference against a COPY OF ITSELF carries a points ' +
+      'advantage · seat or orientation is worth something and every margin above inherits it')
+      .toBeLessThan(1)
   }, 30000) // 80 full games · ~3s in isolation. Sized like its sibling for full-suite contention.
 })

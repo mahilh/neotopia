@@ -55,7 +55,12 @@ for b in $(seq 0 $((BLOCKS - 1))); do
   : > "$RAW"
   emit() {  # emit <source-file> <env-var-name> <spec>
     local src="$1" var="$2" spec="$3" tmp; tmp="$(mktemp)"
+    # SPACING_FULL=1 unlocks ladderSpacing's two heavy derivation sections, which are skipped on the
+    # merge gate because they play ~500 games each (T2 S50). SPACING_SEEDS is passed for the same
+    # reason every other seed var is: the evenness assertion is a RATE comparison and refuses to run
+    # below 40 seeds rather than silently reporting a number its block cannot support.
     env "$var=$tmp" SEED_OFFSET="$OFFSET" BALANCE_SEEDS="$SEEDS" SPEND_SEEDS="$SEEDS" \
+        SPACING_SEEDS="$SEEDS" SPACING_FULL=1 \
         npx vitest run "$spec" --no-file-parallelism >/dev/null 2>&1 || true
     if [ -s "$tmp" ]; then
       while IFS= read -r line; do
@@ -86,6 +91,10 @@ print(json.dumps(o))
   emit bonusBalance     BALANCE_OUT src/store/bonusBalance.test.js
   emit spendableBalance SPEND_OUT   src/store/spendableBalance.test.js
   emit flatGrant        SPEND_OUT   src/store/flatGrantBalance.test.js
+  # T2 S50 · the ladder retune's derivation. Wired here rather than left standalone because a spec in
+  # no workflow cannot report its own rot (Rule 79) · and the two sections this unlocks are precisely
+  # the ones the merge gate skips, so without this line they would run NOWHERE.
+  emit ladderSpacing    SPACING_OUT src/store/ladderSpacing.test.js
 
   # `|| true` inside emit is deliberate · a red assertion still writes its REPORT and that row is
   # evidence. It is also why the NEXT branch matters: a block that produced nothing must be visible as

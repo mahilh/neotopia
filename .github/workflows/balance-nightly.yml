@@ -40,7 +40,9 @@ jobs:
   blocks:
     name: Bonus-token balance · disjoint stamped blocks
     runs-on: ubuntu-latest
-    # 3 blocks x 40 seeds measured at ~7 minutes locally on a loaded 8-core machine. 30 is headroom for
+    # 3 blocks x 40 seeds measured at ~7 minutes locally on a loaded 8-core machine, and T2 S50 added
+    # ladderSpacing's two heavy derivation sections (~114s per block at 40 seeds), so ~13 minutes now.
+    # 30 is headroom for
     # a cold shared runner, sized from a measurement rather than picked (Rule 81).
     timeout-minutes: 30
     steps:

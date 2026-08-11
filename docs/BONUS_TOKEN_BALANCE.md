@@ -1,6 +1,26 @@
 # DID BONUS TOKENS BREAK BALANCE?
 **T2 S39 · August 10 2026 · 360 seeds, three disjoint blocks**
 
+> ## ⚠ SCOPE STAMP · T2 S50 · EVERY NUMBER BELOW WAS MEASURED AGAINST LADDER v1, WHICH NO LONGER EXISTS
+> S50 retuned the bot difficulty ladder (`docs/LADDER_CALIBRATION.md`): apprentice and architect both
+> moved, builder is byte-identical. **The bonus-token RULES are unchanged** — thresholds stay 7/13/18,
+> the token stays 3 points, and Mahil's "change nothing" decision stands. What moved is the *opponent*
+> in every duel these numbers came from, so the effect SIZES below describe games that nobody will play
+> again.
+>
+> **What survives unconditionally**, because it is structural rather than statistical: the S48 finding
+> that the earn skew is redundant with skill rather than additive to it, which was re-measured
+> rung-against-rung in S49 (flattening moved the matchups by 0.0, 1.3 and 0.0 points) and is gated by
+> ordering assertions that carried through the retune untouched.
+>
+> **What needs re-measuring before it is quoted again**: the +7.7-point spendable-token figure and the
+> per-rung deltas, both of which are magnitudes against a specific opponent. The nightly runner
+> (`scripts/run-balance-blocks.sh`, 3 disjoint blocks) re-stamps them on the next run and is the right
+> place for it — a doc re-stamped by hand is the citation-rot this project keeps finding (Rule 97).
+>
+> This stamp exists rather than a silent edit because the numbers are still the correct record of what
+> was measured; they have lost their *scope*, not their integrity (Rule 101b).
+
 > ## ✅ T2 S48 · THE LAST OPEN QUESTION IS ANSWERED · the earn skew is REDUNDANT, not compounding
 > **Measured at HEAD `faa27c7` · 4 disjoint 40-seed blocks · 320 games per rung · `src/store/flatGrantBalance.test.js`**
 >
