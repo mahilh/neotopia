@@ -859,11 +859,16 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       <div
         className="game-main"
         ref={mainRef}
-        // `overflow: hidden` clips paint but does NOT stop the browser scrolling this box to chase a
-        // focused descendant · see the block above. The handler is the invariant, stated where the
-        // container is: this element's scroll offset is always 0.
+        // ⚠ THE OVERFLOW MOVED TO index.css IN S51 AND MUST NOT COME BACK HERE. It is declared
+        // twice there · `overflow: hidden; overflow: clip` · which a JS style object cannot express,
+        // and that pair is the whole safety argument: `clip` makes the box non-scrollable by
+        // construction (measured: Chromium 149 and WebKit 26.5 both refuse a scrollTop of 500),
+        // while a Safari that does not know `clip` drops that declaration and keeps `hidden`.
+        // Re-adding an inline `overflow` here would beat the stylesheet and silently restore the
+        // scrollable box, which is the 372px defect S50 fixed.
+        // The reset stays as the belt for a pre-16 Safari, where the rule degrades to `hidden`.
         onScroll={e => { e.currentTarget.scrollTop = 0; e.currentTarget.scrollLeft = 0 }}
-        style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}
+        style={{ flex: 1, display: 'flex', minHeight: 0 }}
       >
 
         {/* BOARD */}

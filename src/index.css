@@ -155,6 +155,30 @@
    (S48's finding · a 66-char string wraps and takes 20px of header). One wrap is absorbed; a second
    would make the board height-limited and start shrinking the hex again. That is why the gate pins
    the STRING and not just the viewport. */
+/* ── `overflow: hidden` IS NOT UNSCROLLABLE · AND THAT COST THE BOARD 372px (T1 S51) ─────────────
+   S50 measured a real defect at 600x800: the board area sat at top -250 inside a `.game-main` at
+   122..736, because a hidden box is still PROGRAMMATICALLY scrollable and the browser was scrolling
+   it to chase a region button that kept focus while the sheet translated away underneath it.
+   S50 defended it with a blur plus an onScroll reset, and I closed that session saying the reset was
+   held by no test · mutating it away leaves every focus test green, because jsdom has no scroll
+   container. A recorded gap is still a gap.
+   `overflow: clip` is the structural version: it clips WITHOUT creating a scroll container, so the
+   box cannot be scrolled at all and there is nothing for a focus-scroll to move. MEASURED in both
+   engines rather than assumed, which is the check S50 declined to make:
+       Chromium 149     hidden -> scrollTop 500 · clip -> 0 · `hidden;clip` computes to clip -> 0
+       WebKit 26.5      hidden -> scrollTop 500 · clip -> 0 · `hidden;clip` computes to clip -> 0
+   BOTH DECLARATIONS ARE DELIBERATE AND THIS IS THE WHOLE REASON IT IS SAFE. My S50 hesitation was
+   that Safari below 16 does not know `clip` and would fall back to `visible`, letting the sheet
+   spill. That is true of a BARE `overflow: clip` and false here: an unsupported value makes the
+   declaration invalid, and an invalid declaration is DROPPED, leaving `hidden` standing. The
+   fallback is a property of the cascade, not of a browser, so it needs no browser to verify.
+   It lives here rather than inline on the element because a JS style object cannot hold one property
+   twice · the progressive enhancement is only expressible in CSS.
+   The blur in GameRoom stays: it removes the CAUSE and is correct on its own terms, since a control
+   that has slid off screen should not hold focus. The onScroll reset also stays, as the belt for a
+   pre-16 Safari where this rule degrades to `hidden` and the box is scrollable again. */
+.game-main { overflow: hidden; overflow: clip; }
+
 @media (max-width: 600px) {
   .game-main { flex-direction: column !important; position: relative; }
 

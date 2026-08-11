@@ -38,6 +38,27 @@
 // uncaught one: selectedRegion is null in that phase, so the two forms are behaviourally identical
 // and no test could separate them (Rule 100's corollary · a mutation must change behaviour).
 //
+// ── S51 · THE SCROLL INVARIANT IS STRUCTURAL NOW, AND THE DIFFERENTIAL IS UNEARNED ───────────────
+// `.game-main` is declared `overflow: hidden; overflow: clip` in index.css. `clip` clips WITHOUT
+// creating a scroll container, so there is nothing for a focus-scroll to move. MEASURED in both
+// engines, which is the check the S50 close declined to make:
+//     Chromium 149  hidden -> scrollTop 500 · clip -> 0 · `hidden;clip` computes to clip -> 0
+//     WebKit 26.5   hidden -> scrollTop 500 · clip -> 0 · `hidden;clip` computes to clip -> 0
+// Both declarations are the safety argument: a Safari that does not know `clip` makes that
+// declaration invalid, invalid declarations are DROPPED, and `hidden` stands. That is a property of
+// the cascade and needs no browser to verify · which is what dissolved the S50 hesitation.
+//
+// ⚠ AND I CANNOT SHOW A BEFORE/AFTER, SO I AM NOT CLAIMING ONE. I rebuilt the exact S50 pre-fix
+// state · `hidden`, no blur, no reset · and traced it twice at 600x800 with focus confirmed ON the
+// region button inside the closed sheet for 650ms. mainScrollTop stayed 0 and boardTop stayed 122
+// both times. THE DEFECT DID NOT REPRODUCE. The S50 measurement was real (boardArea.top -250, twice,
+// in two environments), so what I have is a control that no longer fails, not a fix I can
+// demonstrate. A green baseline makes any A/B free and meaningless (Rule 110b), so `clip` ships on
+// the MECHANISM · a box that cannot be scrolled cannot be scrolled by a focus-scroll · and not on a
+// differential. HYPOTHESIS, labelled as one and not investigated: the scroll distance depends on
+// where the focused button lands, which depends on the sheet's content height, which depends on the
+// dealt hand · so the defect may be data-dependent and intermittent rather than gone.
+//
 // AND ONE MORE THAT THIS FILE CANNOT HOLD, stated rather than implied: deleting the `onScroll`
 // reset on `.game-main` leaves every test here green. It has to · jsdom has no layout, no scroll
 // container and no focus-scroll behaviour, so the thing it defends against cannot happen in it. Its
@@ -48,6 +69,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import fs from 'node:fs'
+import path from 'node:path'
 import { useGameStore } from '../store/gameStore'
 import { clearSaved } from '../hooks/useLocalSession'
 
@@ -275,6 +298,31 @@ describe('the camera follows step 3, and only step 3', () => {
     expect(sheet(), 'the fixture needs a phase change that keeps the sheet up').toBe('open')
     expect(document.activeElement, 'focus was stolen from a sheet the player can still see')
       .toBe(sheetEl)
+  })
+
+  it('main declares clip AFTER hidden, and NOTHING re-adds overflow inline', async () => {
+    // A stylesheet regex usually cannot answer "does this rule win" (GameRoom.phone.test.jsx's whole
+    // header is about that). Here it can, because the claim IS about two declarations and their
+    // ORDER · that is a fact about the text, not about the cascade, and it is the only part a regex
+    // is the right instrument for.
+    const css = fs.readFileSync(path.resolve(__dirname, '../index.css'), 'utf8')
+    const rule = css.match(/\.game-main\s*\{[^}]*overflow[^}]*\}/)?.[0] ?? ''
+    expect(rule, '.game-main has no overflow rule in index.css at all').not.toBe('')
+    expect(rule.indexOf('overflow: hidden'), 'the hidden fallback is gone · a Safari that does not ' +
+      'know clip would drop the declaration and get overflow: visible, and the sheet would spill')
+      .toBeGreaterThanOrEqual(0)
+    expect(rule.indexOf('overflow: clip'), 'clip is missing · the box is scrollable again')
+      .toBeGreaterThan(rule.indexOf('overflow: hidden'))
+
+    // THE REGRESSION THAT WOULD SILENTLY UNDO IT: an inline `overflow` on the element beats the
+    // stylesheet, so re-adding one here restores the scrollable box while index.css still reads
+    // correct. That is exactly the shape T3 caught me on in S48 (the value a regex cannot see), so
+    // it is asserted on the rendered element rather than on the file.
+    await mount('phone')
+    const main = document.querySelector('.game-main')
+    expect(main, 'no .game-main rendered').toBeTruthy()
+    expect(main.style.overflow, 'an inline overflow beats index.css and re-creates the scroll container')
+      .toBe('')
   })
 
   it('the board keeps its label and its accessible name says where you are', async () => {
