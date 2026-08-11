@@ -301,14 +301,13 @@ export default function Landing() {
           halls.
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 18px' }}>
-          Every project card in this game is named after a real district that will exist in the physical
-          NeoTopia world by 2055. When you score a Solar Temple, you are not earning five points. You are
-          rehearsing the construction of a building that Mahil intends to see standing on Earth within
-          his lifetime.
+          Every project card in this game is named after a real district planned for the physical
+          NeoTopia world. When you score a Solar Temple, you are not earning five points. You are
+          rehearsing the construction of a building that is meant to stand on Earth by 2055.
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 32px' }}>
-          NeoTopia was founded by Mahil. Building it takes five stages · this game is the second one.
-          The last stage is real land, really bought and really built on.
+          Building NeoTopia takes five stages · this game is the second one. The last stage is real
+          land, really bought and really built on.
         </p>
         <blockquote style={{
           margin: 0, padding: '20px 28px', borderLeft: '2px solid rgba(255,215,0,0.4)',
@@ -402,7 +401,7 @@ export default function Landing() {
             fontSize: 12, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', letterSpacing: 0.5,
           }}
         >
-          github.com/mahilh/neotopia
+          View the source on GitHub
         </a>
       </footer>
     </main>
