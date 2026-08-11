@@ -96,10 +96,16 @@ test('the premise check has teeth · a real product file with one added call is 
     return hit[1]
   }
 
+  // GameRoom.jsx GAINED the control in T1's 5381760, so it is now a positive sample rather than the
+  // clean one. Both directions still have to be exercised or the detector is half-tested: a file with
+  // no call must read false, and real source with a call must read true.
   const real = pick('pages/GameRoom.jsx')
-  expect(invokesUseBonus(real), 'GameRoom.jsx is the file most likely to gain the control first, and ' +
-    'it must read as clean today or the guard is already broken').toBe(false)
-  expect(invokesUseBonus(real + '\n  const spend = () => useBonus(seat, type)\n'),
+  expect(invokesUseBonus(real), 'GameRoom.jsx calls useBonus since T1 s43 · if this is false the ' +
+    'stripper has started eating real code').toBe(true)
+  const clean = pick('lib/botPolicy.js')
+  expect(invokesUseBonus(clean), 'botPolicy has no business calling useBonus · a detector that ' +
+    'reports true for everything is not a detector').toBe(false)
+  expect(invokesUseBonus(clean + '\n  const spend = () => useBonus(seat, type)\n'),
     'the stripper eats real source · this guard would be green no matter what shipped').toBe(true)
 
   // And the definition is not a call · without this the guard is red from birth and gets deleted.
@@ -107,32 +113,49 @@ test('the premise check has teeth · a real product file with one added call is 
     'useBonus is gone · this whole file needs revisiting').toBe(true)
 })
 
-test('PREMISE · bonus tokens are still unspent and the bots are still token-blind', () => {
-  const callers = productSources().filter(([, s]) => invokesUseBonus(s)).map(([n]) => n)
-  expect(callers, [
-    '',
-    `PRODUCT CODE NOW CALLS useBonus (${callers.join(', ')}).`,
-    '',
-    'This is not a regression · it is the feature landing, and this guard exists to catch the day it',
-    'does. But it invalidates docs/BONUS_TOKEN_BALANCE.md, which measured a term worth a flat 3 points',
-    'each because every token was unspent. A spendable token is a DECISION, and the measured effect',
-    '(tokens help the weaker player, -0.8 to -3.0 pts) rests entirely on the term being NOISE ·',
-    'signal-to-noise 0.23. Choice converts noise into skill. THE SIGN MAY INVERT.',
-    '',
-    'RE-RUN, then update the doc and this test:',
-    '  BALANCE_SEEDS=120 SEED_OFFSET=0|120|240 BALANCE_OUT=/tmp/bal.jsonl \\',
-    '    npx vitest run src/store/bonusBalance.test.js --no-file-parallelism',
-    '',
-  ].join('\n')).toEqual([])
+// ── RESOLVED T2 S43 · THE GUARD FIRED, AND THE ANSWER WAS NOT THE ONE IT PRESCRIBED ────────────────
+// T1 shipped the control (5381760 · GameRoom.jsx calls useGameStore().useBonus). Premise A went red on
+// exactly the day it was designed for, which is the whole point of having written it.
+//
+// But its instruction · "RE-RUN the measurement" · was WRONG, and the reason is worth keeping. The
+// measurement plays BOT games and scores each one twice. Bots still contain no reference to bonus state
+// at all (premise B below, still green), so T1's control cannot change a single bot decision: a re-run
+// replays the identical games and returns bit-identical numbers. Demonstrated rather than argued · the
+// balance test in this file passed untouched in the same run that reddened these two.
+//
+// So what T1's control invalidates is not the MEASUREMENT, it is the EXTRAPOLATION. The finding "tokens
+// favour the weaker player, -0.8 to -3.0" remains exactly true of bot play and is now silent about human
+// play, where a token is a decision rather than a constant. That distinction is the one the guard was
+// too coarse to draw · I said so when I built it ("it catches re-weighting, not re-balancing") and this
+// is what that coarseness cost: a correct alarm attached to the wrong remedy.
+//
+// The guard is therefore re-pointed rather than deleted. It now asserts the SCOPE is recorded, which is
+// the thing that actually has to stay true, and it will go red again if the doc's scoping is removed.
 
-  // PREMISE B · the exactness of the control, which breaks silently and changes no number.
+test('PREMISE · the bots are still token-blind · the same-games control is still exact', () => {
+  // PREMISE B, unchanged and still the dangerous one: it breaks silently, changes no number, and
+  // downgrades one-game-scored-twice into two different games. Nothing else in the repo would say so.
   for (const f of BOT_DECISION_FILES) {
     const src = readFileSync(join(SRC_ROOT, f), 'utf8')
     expect(/bonus/i.test(src), `${f} now reads bonus state, so seeding the pile can change a DECISION ` +
       'and not merely a score. The same-games control in this file is no longer exact · it is two ' +
-      'different games, and every "identical play" claim in docs/BONUS_TOKEN_BALANCE.md must go.')
+      'different games, and every "identical play" claim in docs/BONUS_TOKEN_BALANCE.md must go. ' +
+      'THIS one really does require a re-run, and a redesign of the control before the re-run.')
       .toBe(false)
   }
+})
+
+test('SCOPE · a human can now spend, so the finding must say it is about BOT play', () => {
+  const humanCanSpend = productSources().some(([, s]) => invokesUseBonus(s))
+  if (!humanCanSpend) return // control reverted · the original unscoped claim is valid again
+
+  // The doc must carry the limit, because the number on its own now reads as a claim about players.
+  const doc = readFileSync(join(process.cwd(), 'docs', 'BONUS_TOKEN_BALANCE.md'), 'utf8')
+  expect(/bot play/i.test(doc) && /S43/.test(doc),
+    'product code calls useBonus, so tokens are a DECISION for humans · but this measurement is of BOT ' +
+    'games and bots never read tokens. docs/BONUS_TOKEN_BALANCE.md must state that its finding is ' +
+    'scoped to bot play and unmeasured for humans. Re-running changes nothing (identical games); ' +
+    'scoping the claim is the fix, and measuring humans is a new experiment.').toBe(true)
 })
 
 const api = () => useGameStore.getState()

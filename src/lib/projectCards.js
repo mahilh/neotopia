@@ -96,7 +96,7 @@ export const PROJECT_CARDS = [
     id: 'card_15', name: 'Wireless Power Tower',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'technology' }, { q: 0, r: 2, type: 'energy' }],
     points: 3, illustration: 'tower', district: 7,
-    description: 'Consciousness rises from earth to sky, carried on frequencies we are learning to read.',
+    description: 'Energy rises from earth to sky, carried on frequencies we are learning to read.',
   },
   {
     id: 'card_16', name: 'Healing Sanctuary',
@@ -156,7 +156,7 @@ export const PROJECT_CARDS = [
     id: 'card_25', name: 'Mycelium Intelligence Dome',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 1, r: -1, type: 'biofarming' }, { q: 0, r: 1, type: 'technology' }],
     points: 3, illustration: 'dome', district: 5,
-    description: 'The first conscious building material. Grown, not manufactured. Alive, not inert.',
+    description: 'The first building material that answers back. Grown, not manufactured. Alive, not inert.',
   },
   {
     id: 'card_26', name: 'Star Chart Institute',
@@ -191,28 +191,28 @@ export const PROJECT_CARDS = [
 
   // 4-ELEMENT CARDS (18 cards, 4pts)
   {
-    id: 'card_31', name: 'Solar Temple',
+    id: 'card_31', name: 'Bladeless Turbine',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'community' }, { q: 1, r: -1, type: 'energy' }, { q: 0, r: 1, type: 'community' }],
     points: 4, illustration: 'temple', district: 1,
-    description: 'The oldest technology is the sacred building. Stone aligned with sun.',
+    description: 'No blades, no noise, nothing for a bird to hit. The wind gives everything and takes nothing back.',
   },
   {
-    id: 'card_32', name: 'Open Contact Embassy',
+    id: 'card_32', name: 'Alien Contact Embassy',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: -1, type: 'technology' }],
     points: 4, illustration: 'embassy', district: 9,
     description: 'A civilization ready for contact with the unknown is a civilization ready for itself.',
   },
   {
-    id: 'card_33', name: 'Holographic Research Center',
+    id: 'card_33', name: 'Hologram Lab',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: -1, type: 'energy' }],
     points: 4, illustration: 'campus', district: 7,
     description: "Bohm's implicate order made visible: the universe unfolds from this room.",
   },
   {
-    id: 'card_34', name: 'Regeneration Field',
+    id: 'card_34', name: 'Soil Restoration Field',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 1, r: 0, type: 'biofarming' }, { q: 0, r: 1, type: 'biofarming' }, { q: 1, r: -1, type: 'energy' }],
     points: 4, illustration: 'field', district: 5,
-    description: 'Four seasons of conscious farming restore what centuries of extraction took.',
+    description: 'Four seasons of patient farming restore what centuries of extraction took.',
   },
   {
     id: 'card_35', name: 'Community Water Tower',
@@ -227,7 +227,7 @@ export const PROJECT_CARDS = [
     description: 'Buildings grown from the earth must return to it. Architecture as regeneration.',
   },
   {
-    id: 'card_37', name: 'Consciousness Broadcast Tower',
+    id: 'card_37', name: 'Community Radio Tower',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'technology' }, { q: 2, r: 0, type: 'community' }, { q: 1, r: 1, type: 'community' }],
     points: 4, illustration: 'studio', district: 8,
     description: 'What you transmit becomes the frequency of the district. Choose carefully.',
@@ -245,13 +245,13 @@ export const PROJECT_CARDS = [
     description: 'Nine seats. Nine principles. No decision leaves this room without all nine.',
   },
   {
-    id: 'card_40', name: 'Bio-Energy Nexus',
+    id: 'card_40', name: 'Biogas Plant',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 1, r: 0, type: 'energy' }, { q: 0, r: 1, type: 'energy' }, { q: 1, r: -1, type: 'biofarming' }],
     points: 4, illustration: 'nexus', district: 4,
     description: 'The field knows. The sun gives. Together they power everything.',
   },
   {
-    id: 'card_41', name: 'Conscious Tech Lab',
+    id: 'card_41', name: 'AI Commons',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'technology' }, { q: 1, r: -1, type: 'energy' }, { q: -1, r: 1, type: 'community' }],
     points: 4, illustration: 'lab', district: 7,
     description: 'Technology designed with soul · the rarest substance on Earth.',
@@ -263,7 +263,7 @@ export const PROJECT_CARDS = [
     description: 'Education that awakens instead of programs. The rarest school.',
   },
   {
-    id: 'card_43', name: 'Harmonic Microgrid',
+    id: 'card_43', name: 'Tesla Coil Station',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: -1, type: 'energy' }, { q: 0, r: 1, type: 'community' }, { q: -1, r: 1, type: 'community' }],
     points: 4, illustration: 'grid', district: 4,
     description: 'Power distributed with love cannot be corrupted. The grid is the covenant.',
@@ -275,13 +275,13 @@ export const PROJECT_CARDS = [
     description: 'The body knows how to heal. We build the conditions and step aside.',
   },
   {
-    id: 'card_45', name: 'Ancestral Memory Garden',
+    id: 'card_45', name: 'Heritage Orchard',
     pattern: [{ q: 0, r: 0, type: 'biofarming' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: 0, type: 'biofarming' }, { q: -1, r: 1, type: 'community' }],
     points: 4, illustration: 'garden', district: 8,
     description: 'We plant what our grandparents dreamed. We harvest what our children will know.',
   },
   {
-    id: 'card_46', name: 'Bioelectric Research Lab',
+    id: 'card_46', name: 'Bioelectric Lab',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'energy' }, { q: 1, r: 1, type: 'technology' }, { q: 0, r: 1, type: 'energy' }],
     points: 4, illustration: 'hub', district: 2,
     description: 'Everything vibrates. The question is always: at what frequency are we building?',
@@ -293,7 +293,7 @@ export const PROJECT_CARDS = [
     description: 'No one negotiates from behind a wall. The circle has no head of the table.',
   },
   {
-    id: 'card_48', name: 'Open Data Hall',
+    id: 'card_48', name: 'Consensus Hall',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: -1, type: 'community' }, { q: 0, r: 1, type: 'biofarming' }, { q: 1, r: 0, type: 'energy' }],
     points: 4, illustration: 'node', district: 1,
     description: 'Where all four forces agree: that is the center of NeoTopia.',
@@ -308,11 +308,11 @@ export const PROJECT_CARDS = [
     description: 'The full civilization compressed into five connected hexes. This is what we are building.',
   },
   {
-    id: 'card_50', name: 'Source Temple',
+    id: 'card_50', name: 'School of Unseen Arts',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'community' }, { q: -1, r: 1, type: 'community' },
               { q: 0, r: 1, type: 'energy' }, { q: 1, r: -1, type: 'technology' }],
     points: 5, illustration: 'temple', district: 1,
-    description: 'The inner temple of NeoTopia. Where the work of expanding consciousness begins.',
+    description: 'What cannot be measured still has to be taught. The quietest building in the district.',
   },
   {
     id: 'card_51', name: 'Infinite Garden',
@@ -329,11 +329,11 @@ export const PROJECT_CARDS = [
     description: 'Four aligned energy sources and one intelligence to guide them. Free energy becomes real.',
   },
   {
-    id: 'card_53', name: 'Cosmic Council Hall',
+    id: 'card_53', name: 'World Assembly Hall',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'community' },
               { q: -1, r: 1, type: 'energy' }, { q: 1, r: -1, type: 'biofarming' }],
     points: 5, illustration: 'hall', district: 9,
-    description: 'All four elements gathered in service of the ninth district: open contact with the unknown.',
+    description: 'All four elements gathered in service of the ninth district. Every people, one room, one table.',
   },
   {
     id: 'card_54', name: 'Stellar Observatory',
@@ -350,11 +350,11 @@ export const PROJECT_CARDS = [
     description: 'Where the whole district gathers to decide. Five elements, one room, one voice at a time.',
   },
   {
-    id: 'card_56', name: '2055 Horizon',
+    id: 'card_56', name: 'Wardenclyffe Tower',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'biofarming' }, { q: 0, r: 1, type: 'technology' },
               { q: 1, r: -1, type: 'community' }, { q: -1, r: 1, type: 'energy' }],
     points: 5, illustration: 'horizon', district: 1,
-    description: 'The year this civilization exists in physical reality. Every card played brings it closer.',
+    description: 'Power with no wire and no meter. Drawn in 1901, and the district finally built it.',
   },
 ]
 

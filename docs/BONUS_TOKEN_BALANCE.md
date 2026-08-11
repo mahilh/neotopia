@@ -1,6 +1,24 @@
 # DID BONUS TOKENS BREAK BALANCE?
 **T2 S39 · August 10 2026 · 360 seeds, three disjoint blocks**
 
+> ## ⚠️ SCOPE, added T2 S43 · THIS IS A MEASUREMENT OF **BOT PLAY**
+>
+> T1 shipped the spend control in `5381760`, so a human can now *use* a bonus token. **Everything below
+> still stands exactly as measured, and it is now silent about human play.**
+>
+> The premise guard in `bonusBalance.test.js` fired on the day the control landed · which is what it was
+> built for · but the remedy it prescribed ("re-run the measurement") was **wrong**, and the reason is
+> the interesting part. This experiment plays *bot* games and scores each one twice. Bots still contain
+> no reference to bonus state at all, so the control cannot change a single bot decision: a re-run
+> replays the identical games and returns bit-identical numbers. Demonstrated, not argued · the balance
+> test passed untouched in the same run that reddened the premise checks.
+>
+> So what the control invalidates is not the measurement, it is the **extrapolation**. For a bot, a token
+> is a flat 3 points and therefore noise. For a human it is a *decision*, and a decision rewards skill
+> instead of diluting it. **The sign may still invert for humans, and that is now a separate, unrun
+> experiment** · it needs a spending policy, and the same-games control cannot survive one (a bot that
+> spends makes different games, so the exact control becomes a statistical one).
+
 ## The verdict, first
 
 **Bonus tokens systematically favour the WEAKER player. The effect is real, replicated and
