@@ -179,7 +179,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (99 · cumulative):
+PERMANENT ANTI-REGRESS RULES (100 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -444,7 +444,11 @@ AGAINST THE REAL SYSTEM. My write-race proof rested on an inherited mock I had R
 Measured: write B then A, and the row holds A · no version check, no merge, the counter goes backwards on the
 server. The claim two lanes are now building on is a measurement now, not a belief.
 
-RULE 98 (T1 S43 · August 11 2026):
+RULE 100 (T1 S43 · August 11 2026 · WAS NUMBERED 98 · renumbered T1 S44):
+CITED AS RULE 98 IN COMMITS 52f9aec AND e1d63d7 AND IN THE T1 S43 HANDOFF · T2 S43 independently
+took 98 the same night and neither of us saw the other's until the file had two. I renumbered MINE
+because I am the one who noticed, and the alias is recorded rather than the old citations silently
+going stale · which is T2's own Rule 97, applied to the collision it warned about.
 A GUARD APPLIED TO ONE MEMBER OF A CLASS ROTS THE MOMENT THE CLASS GROWS · MAKE IT ENUMERATE.
 In S41 I wrote a test that rebuilds `reachability` from its own source with the module scope stripped,
 because a probe crossing into a page via page.evaluate arrives as TEXT and a free variable would throw
