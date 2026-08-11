@@ -36,8 +36,8 @@ export const BOARD = 'svg[aria-label*="NeoTopia"]'
 // Fixture identity lives in fixtureNames.js · pure, so vitest can unit-test the name guard without
 // Playwright's loader (this file reads seededState.json at module level and is import-only there).
 // Re-exported so no spec has to know about the split.
-export { uniqueName, UI_RESERVED_WORDS, makeRoomCode } from './fixtureNames'
-import { makeRoomCode as _makeRoomCode } from './fixtureNames'
+export { uniqueName, UI_RESERVED_WORDS, makeRoomCode } from './fixtureNames.js'
+import { makeRoomCode as _makeRoomCode } from './fixtureNames.js'
 
 // Supabase rate-limits anonymous sign-ins per IP · a suite that mints many in a burst (or a fast local
 // re-run) can trip it. Back off and retry ONLY on that transient · fail fast on anything else.

@@ -189,6 +189,16 @@ grant execute on function public.draw_card_for_seat(uuid, integer, text, integer
 --       seat fire N concurrent draws · result is N DISTINCT cards, deck shrinks by exactly N, hand grows
 --       by exactly N · zero duplicate, zero loss ("FOR UPDATE serialized: YES"). The S22 single-channel
 --       gap is now CLOSED · the lock serializes under real network contention (Rule 61/63).
+--       ⚠️ CORRECTION (T2 S42): that claim was TRUE WHEN WRITTEN and then quietly stopped being
+--       runnable. seedHelpers.js was later split and re-exported `from './fixtureNames'` with no file
+--       extension · fine under Playwright's bundler, fatal under raw node ESM · and this harness is a
+--       standalone `node` script. It died on IMPORT, before a single assertion, for however many
+--       sessions that split has existed. So between then and S42 this checklist line cited an
+--       empirical proof that could not execute. Extension added and the harness re-run against the
+--       021 body: 16/16 distinct, 0 duplicates, 0 lost · the claim is true again, and now on purpose.
+--       Rule 79 in its other costume: not a spec wired to nothing, but a proof that ROTTED while its
+--       citation stayed confident. A standalone harness that no workflow runs cannot report its own
+--       decay · and the two harnesses here are exactly that.
 --   [x] RLS interaction: SECURITY DEFINER + search_path="" runs as owner, bypassing RLS; the
 --       room_players seat-ownership EXISTS check IS the authorization, and auth.uid() null-check
 --       rejects true-anon. GRANT is authenticated-only (anon NOT granted · tighter than 009 · Rule 44).
