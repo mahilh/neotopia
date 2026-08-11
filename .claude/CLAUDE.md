@@ -179,7 +179,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (98 · cumulative):
+PERMANENT ANTI-REGRESS RULES (99 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -412,6 +412,37 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 99 (T3 S43 · August 11 2026):
+A DETECTOR IS ONLY AS GOOD AS ITS CLOCK, AND HALF A LAMPORT CLOCK IS BLIND TO THE CASE YOU BUILT IT FOR.
+I shipped overtake detection for the lost End Turn with `__seq = (last OBSERVED) + 1`, which is the textbook
+rule with one term missing. Two pushes in the same turn both read the same stale value from the store · the
+server has echoed neither back yet · so both minted 1, and `serverSeq < sentSeq` was `1 < 1`, false. The
+instrument was blind to the exact self-clobber it existed for, and the run said `[1, 1]` on the first
+execution. The correct form carries BOTH terms, `max(lastObserved, lastSent) + 1`: the observed term makes it
+session-global across clients, the sent term makes this client's own writes strictly ordered. Drop either and
+it fails in opposite directions · observed-only goes blind, sent-only cries overtake every time the opponent
+legitimately moves, which is worse than no detector at all (Rule 88c).
+  99a · A DETECTOR MUST BE MUTATION-PROVEN IN BOTH DIRECTIONS, because the two failures look identical from
+        a green run: it must go red when the defect happens, AND stay silent when normal play happens. The
+        counterweight here is the NEGATIVE and it was written first · a peer's later write, and a write
+        arriving before this client has sent anything, must both report nothing.
+  99b · WIRE THE DETECTOR INTO ONE FUNNEL, not into the path you were thinking about. Three call sites fed
+        syncFromServer (realtime, REST re-seed, rollback); a detector on the realtime path alone would report
+        a clean room while a write vanished through another (Rule 84).
+  99c · AND THE HARNESS HID IT ONCE ALREADY: my test simulated the server push by calling the STORE action
+        directly, bypassing the hook wrapper where the detector lives, and reported 0 overtakes on the run
+        that had just clobbered a write. It delivers through the real postgres_changes callback now (Rule 36).
+COROLLARY, and it is the reason this landed clean rather than as a second contract: POST THE SHAPE BEFORE YOU
+BUILD IT. T2 is building the server-side version predicate this session. I wrote the counter's shape to comms
+first, corrected that note the moment the test falsified my formula, and said plainly that if they prefer a
+column I will drop the jsonb field and read theirs. Rule 94 says de-duplicating a check removes a second
+contract and a second witness · this is that lesson applied BEFORE the duplication exists, which costs one
+file and saves the argument entirely.
+SECOND COROLLARY, paid for in one anon sign-in: A MOCK IS A MODEL, SO MEASURE THE SEMANTIC IT ASSERTS ONCE
+AGAINST THE REAL SYSTEM. My write-race proof rested on an inherited mock I had REASONED matched Postgres.
+Measured: write B then A, and the row holds A · no version check, no merge, the counter goes backwards on the
+server. The claim two lanes are now building on is a measurement now, not a belief.
 
 RULE 98 (T1 S43 · August 11 2026):
 A GUARD APPLIED TO ONE MEMBER OF A CLASS ROTS THE MOMENT THE CLASS GROWS · MAKE IT ENUMERATE.
