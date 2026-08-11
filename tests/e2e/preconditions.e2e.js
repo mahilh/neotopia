@@ -232,3 +232,56 @@ test.describe('the precondition gate · a protected deployment is not a broken b
       .toMatchObject({ kind: 'sso' })
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// A CITATION WITH NO RUNNER IS A CLAIM, NOT EVIDENCE · EVERY SPEC DECLARES ITS WORKFLOW (T3 S43)
+//
+// T2 found that draw-rpc-concurrency.mjs had been DEAD ON IMPORT for nineteen sessions while migration 011
+// cited it as "PROVEN EMPIRICALLY T3 S23". Nothing that citation said was wrong when it was written · and
+// that is the whole problem, because nothing was watching, so it could not report its own rot (Rule 79) and
+// it outlived the thing it cited (T2's Rule 97).
+//
+// Doing that audit BY HAND is the wrong instrument for the same reason Rule 89 gives: orphans are invisible
+// by construction, and a hand pass finds the ones you already suspect. So it is a gate, and it runs on the
+// merge gate alongside the rest of this file.
+//
+// IT DOES NOT DEMAND THAT EVERY SPEC BE WIRED, and that restraint is deliberate · a new spec is legitimately
+// unwired for a session or two while the lane that owns the workflow picks it up, and a gate that reds on
+// that would be a tripwire aimed at a colleague (the mistake I made in S39 and removed in S42). What it
+// demands is that the file SAY SO: either a workflow runs it, or its header declares `RUNS-NOWHERE:` with a
+// reason. The honest state is always available; the silent one is not.
+import { readdirSync, readFileSync } from 'node:fs'
+
+test.describe('every E2E spec names the workflow that runs it, or says it runs nowhere (T3 S43)', () => {
+  test('no spec is silently orphaned', async () => {
+    const specDir = new URL('.', import.meta.url)
+    const wfDir = new URL('../../.github/workflows/', import.meta.url)
+
+    const specs = readdirSync(specDir).filter(f => f.endsWith('.e2e.js'))
+    const workflows = readdirSync(wfDir).filter(f => /\.ya?ml$/.test(f))
+    // COUNTERWEIGHT FIRST (Rule 90): if either list came back empty, every spec below would read as
+    // "wired" or the loop would not run at all, and this gate would pass while auditing nothing. That is
+    // the exact shape of the thing it was built to catch, one level up.
+    expect(specs.length, 'no E2E specs were found · this gate is auditing an empty set').toBeGreaterThan(10)
+    expect(workflows.length, 'no workflow files were found · every spec would look orphaned, or none would')
+      .toBeGreaterThan(0)
+
+    const wfText = workflows.map(w => readFileSync(new URL(w, wfDir), 'utf8')).join('\n')
+    const orphans = []
+    for (const spec of specs) {
+      if (wfText.includes(spec)) continue
+      const header = readFileSync(new URL(spec, specDir), 'utf8').slice(0, 4000)
+      if (/RUNS-NOWHERE:/.test(header)) continue
+      orphans.push(spec)
+    }
+
+    expect(orphans, `${orphans.length} E2E spec(s) are in no workflow and do not say so: ` +
+      `${orphans.join(', ')}. A spec that runs nowhere cannot report its own rot · it decays silently and ` +
+      'in the direction of a lie (Rule 79), and any comment citing it as proof is a claim rather than ' +
+      'evidence (Rule 97). Either wire it, or put a line in its header starting RUNS-NOWHERE: saying why ' +
+      'and who owns wiring it.').toEqual([])
+
+    console.log(`[preconditions] spec-runner audit · ${specs.length} specs across ${workflows.length} ` +
+      'workflows · 0 silent orphans')
+  })
+})

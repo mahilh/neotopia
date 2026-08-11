@@ -1,5 +1,10 @@
 // NeoTopia · DOES POSTGRES ACTUALLY DO THE THING MY MOCK SAYS IT DOES? (T3 S43)
 //
+// RUNS-NOWHERE: not in any workflow as of T3 S43. It costs one anon sign-in, so it belongs on
+// e2e-live-nightly.yml, and workflow wiring is T2's. Declared rather than left silent because a spec no
+// workflow runs cannot report its own rot (Rule 79) and any comment citing it as proof is a claim rather
+// than evidence (T2's Rule 97) · the preconditions spec now gates exactly this, and it caught this file.
+//
 // useGameSync.writeorder.test.js reproduces the lost End Turn against a MOCK, and a mock is a model of
 // Postgres, not Postgres. I inherited that mock from simultaneousdraw.test.js and REASONED that it matched
 // full-row-replace semantics · which is the same "reasoned mechanism" that was wrong twice in S42 (the
