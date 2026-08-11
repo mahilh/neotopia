@@ -70,7 +70,7 @@
 
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { forEachViewport, selfTestReachability, assertDiagnoseCanSee } from './seedHelpers'
+import { forEachViewport, selfTestReachability, assertDiagnoseCanSee } from './measure'
 import probe from '../board-probe.mjs'
 
 // Read the storage key from its declaration rather than restating it. Importing useLocalSession here would
@@ -746,7 +746,7 @@ test.describe('practice mode · the end of the game', () => {
     // A gate that only ever ran at the default 1280x720 would report the easiest case in the table above and
     // call it covered.
     //
-    // THROUGH forEachViewport, which resets scroll BY CONSTRUCTION (T3 S39 · seedHelpers). The first version
+    // THROUGH forEachViewport, which resets scroll BY CONSTRUCTION (T3 S39 · measure.js). The first version
     // of this loop resized in place and inherited the previous pass's scrollTop, so the 320 reading came from
     // a dialog somebody had already scrolled · 489px and 2 gestures instead of the true 1038px and 3. That was
     // the third occurrence of one mistake in three sessions, which makes it a missing harness step rather than

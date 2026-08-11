@@ -47,7 +47,9 @@
 // ⚠ Run it against a dev server nobody else is editing · see multiplayer-endgame-live's header (Rule 82).
 
 import { test, expect } from '@playwright/test'
-import { loadEnv, uniqueName, deleteRoomAsHost, runTwoHumanLobby, spendOneAction, read } from './seedHelpers'
+import { loadEnv, uniqueName, deleteRoomAsHost } from './seedHelpers'
+import { runTwoHumanLobby } from './lobby'
+import { spendOneAction, read } from './driver'
 import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../../src/store/gameStore'
 import { DECK } from '../../src/lib/projectCards'
 
@@ -138,7 +140,7 @@ function playToOnePlacementFromTheEnd(identities) {
   return null
 }
 
-// `read` and SNAPSHOT now come from seedHelpers with the driver · one snapshot shape, one definition
+// `read` and SNAPSHOT now come from driver.js · one snapshot shape, one definition
 // (Rule 45 · a second copy of a contract is a second contract, and it is the copy that drifts).
 
 // The authoritative row, read through the app's own authenticated client. The COLUMN and the jsonb say
@@ -199,7 +201,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       //
       // WHAT IS ALREADY FIXED AND PROVEN (each cost a live run, each is a harness defect, not a product one):
       //   1. the lobby waited for the Start control to be VISIBLE · it is disabled={!canStart}, so the click
-      //      did nothing · now runTwoHumanLobby waits for ENABLED (fixed in seedHelpers, shared)
+      //      did nothing · now runTwoHumanLobby waits for ENABLED (fixed in lobby.js, shared)
       //   2. a draw was counted from a click that never committed · now the engine is the judge (actionsRemaining)
       //   3. the driver took the FIRST element and FIRST region only, while the offline driver searches all ·
       //      it stalled after ~8 placements
