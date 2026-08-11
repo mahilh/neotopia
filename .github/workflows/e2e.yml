@@ -43,10 +43,17 @@ on:
 # run per group and cancels older PENDING ones itself, so this self-limits: it costs a little latency
 # on a rapid series of pushes and never silently drops a teardown.
 #
+# SCOPE, STATED PRECISELY, BECAUSE "our workflows" WOULD BE WRONG. This group covers the two
+# PUSH-TRIGGERED purge callers · this file and e2e-placement-guard.yml · which is the pair that
+# collided on literally every push to main. e2e-live-nightly.yml is NOT in it, on purpose: it runs a
+# ~55-minute budget, and sharing a group would queue the merge gate behind it and block merges for an
+# hour. So a push landing during the 05:00 UTC nightly can still collide, and a local live run racing
+# CI is untouched · which is what `gh run list` before a live run is for (documented in
+# global-teardown.js).
+#
 # THIS IS A MITIGATION, NOT THE FIX. The fix is scoping the purge itself so it cannot take a room it
 # did not create · written as scripts/migrations/024, deliberately NOT applied (tonight's approval was
-# scoped to 023). Serialising the callers removes the collision between OUR workflows; it does nothing
-# about a local live run racing CI, which is what `gh run list` before a live run is for.
+# scoped to 023). Two of the three collision surfaces close here; the third closes with 024.
 concurrency:
   group: neotopia-e2e-purge-${{ github.ref }}
   cancel-in-progress: false
