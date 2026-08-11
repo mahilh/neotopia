@@ -634,6 +634,36 @@ EASILY. A stable reading and a correct reading are different claims. Sharpens Ru
 observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
 probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
 
+RULE 100 (T2 S44 · August 11 2026):
+WHEN A TERMINAL CONDITION IS DRIVEN BY AN ACTION, REMOVING THE ACTION REMOVES THE ENDING.
+A practice game soft-locked forever at turn 33. The engine had TWO endgame rescues and neither could
+fire, for one shared reason nobody had stated: endGameTriggered has exactly one natural source ·
+refillFactoryDraft · which runs only as a side effect of A PLACEMENT that empties a factory. The tile
+clock is therefore not a clock at all, it is a COUNTER OF PLACEMENTS wearing a clock's costume. Take
+placements away and it stops, so the very situation that most needs an ending is the one situation
+that can never reach it. The S19 Flow rescue then missed it twice over: mode-gated to Flow, and
+additionally requiring productionTilesRemaining<=1, a value a deadlocked board can never arrive at for
+exactly the same reason. Ask what ADVANCES your terminal condition, and whether the failure you are
+guarding against also disables the advance · if it does, the guard is decorative.
+  100a · A TERMINAL CONDITION IS DANGEROUS IN THE OPPOSITE DIRECTION TO THE BUG. The hang is loud and
+         visible; a game that ends four turns early just looks like a game. So the counterweights are
+         the load-bearing tests, and they belong exactly one step from the trigger · a board with ONE
+         legal placement, and a board with no placement but ONE drawable card. Distance from the
+         boundary is not safety, it is untested space.
+  100b · PREFER A CLOSED PROOF TO A HEURISTIC. "No draw and no placement" is not a guess that the
+         player is stuck: drawing needs deck or offer, placing needs a stocked factory, and a factory
+         can ONLY be restocked by a placement · so no future state differs from this one. That
+         argument is what makes it safe to end a real game on, and it is worth writing out before
+         shipping the condition, because if it cannot be written the condition is a heuristic.
+COROLLARY, and I nearly logged a green teeth-check on it: my first mutation replaced the function
+DEFINITION as well as its call sites, so the file was a syntax error and vitest reported "no tests".
+A mutation that breaks compilation tests nothing · it must change BEHAVIOUR, one call site at a time.
+Read the mutated run's test COUNT, not just its colour (Rule 79d, one level down).
+AND A FIXTURE CAN DESCRIBE AN IMPOSSIBLE BOARD: the new rule reddened endGamePhase.test.js, whose
+partial setState inherited three EMPTY factories alongside its deliberately empty deck. The rule was
+right and the fixture was unreachable in play · when a new invariant fails an old test, ask whether
+the old test's world can exist before weakening the invariant.
+
 RULE 98 (T2 S43 · August 11 2026):
 A GUARD'S ALARM AND A GUARD'S REMEDY AGE DIFFERENTLY · THE ALARM IS A FACT, THE REMEDY IS A GUESS
 MADE BEFORE THE SITUATION EXISTED. My S40 premise guard fired on precisely the day it was built for
