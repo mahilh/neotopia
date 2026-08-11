@@ -510,6 +510,42 @@ alone would pass on a build where the bot seat was skipped entirely, so it requi
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
 
+RULE 116 (T1 S51, written S52 · August 11 2026):
+A SOURCE READ CANNOT ANSWER A QUESTION WHOSE ANSWER IS COMPOSED. GREP TELLS YOU WHAT THE TEXT SAYS;
+THE QUESTION IS ALMOST ALWAYS WHAT THE RUNNING SYSTEM PRODUCES, AND THOSE DIVERGE THE MOMENT ANYTHING
+COMBINES BETWEEN THEM · A STACK, A CASCADE, OR A BUILD STEP.
+One session, three witnesses, all the same shape, and each one cost a wrong claim before a live
+measurement corrected it:
+  116a · A STACK. "The legal target gets the thinnest stroke on the board" · read off HexCell.jsx:52.
+        Line 52 is the BASE polygon of a SEVEN-polygon cell, and line 126 gives the valid target its
+        own ring at 2.0. The hierarchy was never inverted. This shipped as a closing recommendation
+        and came back as the next session's P1 (Rule 108), so the cost was a whole priority.
+  116b · A BUILD STEP, and this is the sharpest one because the source was genuinely correct.
+        `.game-main { overflow: hidden; overflow: clip }` is the textbook progressive enhancement and
+        the duplicate declaration IS the safety argument for a pre-16 Safari. Lightning CSS collapses
+        duplicate declarations of one property to the last, so the DEPLOYED stylesheet read
+        `.game-main{overflow:clip}` with no fallback anywhere. Source-green, artifact-broken, and no
+        test in the repo could see it because they all read src/. Found by reading the deployed asset.
+  116c · DISTRIBUTED RULES. `grep 'neo-soul-tip' src/index.css` returned NOTHING, so I reported the
+        element tooltips were always visible. The rule lives in a JSX `<style>` block inside
+        GameRoom.jsx, and the computed value on a real touch viewport is `opacity: 0`. The brief was
+        right and my grep was wrong · about my own lane's file.
+THE TELL, and it is one question: COULD MORE THAN ONE PLACE CONTRIBUTE TO THIS ANSWER? Stacking order,
+the cascade, inheritance, an inline style, a minifier, a bundler, a media query, a later migration
+(Rule 109) · if any of them sit between the text and the value, the text is a hypothesis. Read the
+composed value from where it is composed: `getComputedStyle`, the FULL element list rather than
+`querySelector`, the built artifact, the deployed asset.
+WHY IT IS SEDUCTIVE RATHER THAN CARELESS: grep is fast and it is CONFIDENT. Zero hits reads as "it
+does not exist" and one hit reads as "that is the one", and neither result carries any signal that it
+was the wrong instrument. Every other failing probe in this project at least returned a number that
+looked odd.
+COROLLARY, AND IT IS WHY RULE 92 DID NOT SAVE ME: I did "verify" 116a with a live browser probe · and
+the probe used `g.querySelector('polygon')`, which returns the same base polygon line 52 describes. A
+source read and a live measurement agreed BECAUSE THEY WERE THE SAME READING TWICE. So when a probe
+confirms a source read, check that it reads a DIFFERENT LAYER, not merely that it runs in a different
+place. Two sides from one source agree by construction, and running one of them in a browser does not
+make it a second source.
+
 RULE 112 (T3 S50 · August 11 2026):
 A SUBSTRING MATCH IS AN IDENTITY CHECK WITH NO BOUNDARY, AND AN INSTRUMENT BUILT ON ONE WILL EVENTUALLY
 HIDE THE EXACT CASE IT EXISTS TO FIND. The spec-runner audit · the gate whose whole purpose is finding
