@@ -195,7 +195,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (111 · cumulative):
+PERMANENT ANTI-REGRESS RULES (112 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -488,6 +488,40 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 112 (T3 S50 · August 11 2026):
+A SUBSTRING MATCH IS AN IDENTITY CHECK WITH NO BOUNDARY, AND AN INSTRUMENT BUILT ON ONE WILL EVENTUALLY
+HIDE THE EXACT CASE IT EXISTS TO FIND. The spec-runner audit · the gate whose whole purpose is finding
+tests that run nowhere · asked `workflowText.includes('endgame-live.e2e.js')`. That string is a SUFFIX OF
+`multiplayer-endgame-live.e2e.js`, which is wired twice. So a 653-line spec that plays a real multiplayer
+room to its own ending, the composition CLAUDE.md names as the honest remaining gap, sat in NO WORKFLOW
+from S39 to S50 while the gate reported it wired every single run. THE ORPHAN DETECTOR WAS HIDING AN
+ORPHAN FROM ITSELF. Three holes in one 12-line gate, all the same defect in different costumes: prose
+about the RUNS-NOWHERE marker excused a file, a spec named only in a `#` comment read as wired, and a
+filename rode on its neighbour. Ask of any check that uses `includes`/`grep -q`/`in`: could the thing it
+matches be CONTAINED IN something that is not it · a longer name, a comment about it, a doc describing it?
+  112a · AGE IS NOT EVIDENCE. IT IS THE ABSENCE OF EVIDENCE, ACCUMULATING. Six sessions of green was the
+        whole reason nobody looked, and rereading the gate would not have found any of the three · I had
+        reread it in S49 and found only the one I already suspected. What found them was MUTATING it:
+        deleting the neighbour's two run lines reddened with TWO names when I had touched one. My own
+        closing critique in S49 was "my instruments have been earning trust from age rather than from
+        being exercised", and the cost of testing that was twenty minutes. Rule 96 says an instrument
+        earns trust from RANGE and Rule 100 from BREADTH; this is the third and the cheapest · it earns
+        trust from being MADE TO FAIL, and a gate that has never gone red has not been tested, it has
+        merely been present.
+  112b · WHEN THE FIX REMOVES THE CORPUS THAT DOCUMENTED THE DEFECT, PIN IT AS A FIXTURE OR THE PROOF
+        EVAPORATES. Declaring the orphan made the real repo clean, so reverting the boundary fix now
+        leaves the live gate GREEN at 19-wired · measured, not predicted (mutation M6). The only witness
+        left is a synthetic corpus holding the exact collision. Rule 101 says a fix turns the tests that
+        documented a defect into false claims; this is its sharper sibling · a fix can turn the REAL WORLD
+        into an environment where the defect is no longer reproducible, and then the fixture is not
+        belt-and-braces, it is the entire proof.
+COROLLARY, caught in my own mutation harness before it ran and worth more than the rule: the script
+restored the file under test with `git checkout --`, and THAT FILE'S FIX WAS UNCOMMITTED · one run would
+have deleted the work it existed to prove. A mutation harness edits real files in place, so its restore
+path must be a byte copy taken before the first mutation, never version control, whose idea of "restore"
+is "discard everything you have not committed". Same family as Rule 89's tool-scans-itself: the harness
+is inside the blast radius of the thing it is testing.
 
 RULE 111 (T2 S49 · August 11 2026):
 A CONSTANT THAT APPEARS AT EVERY CALL SITE OF AN EXPERIMENT IS A HIDDEN PARAMETER, AND ITS VALUE
