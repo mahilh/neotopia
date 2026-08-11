@@ -22,9 +22,23 @@ on:
   pull_request:
     branches: [main]
 
+# ══ SHARED WITH e2e.yml · SEE THE FULL NOTE THERE (T2 S49) ═══════════════════════════════════════
+# This group was `${{ github.workflow }}-${{ github.ref }}`, which serialises this workflow against
+# ITSELF and against nothing else. Both this and e2e.yml trigger on every push to main, both run
+# Playwright, and both therefore run global-teardown.js → purge_e2e_test_data(), which deletes rooms
+# project-wide with no status or age predicate. They were destroying each other's rooms on every
+# push · the mechanism behind this guard reddening on commits that touch no code.
+#
+# A mutex has to be as wide as the resource it protects. The purge is project-wide, so the group name
+# is a CONSTANT shared across workflows rather than an interpolation of the workflow's own name.
+#
+# cancel-in-progress flipped true → FALSE deliberately: a cancelled Playwright run never reaches its
+# teardown, so cancelling converts a collision into a permanently orphaned room, and production
+# already holds 571 rooms the purge can no longer reach (measured T2 S49). GitHub keeps one pending
+# run per group and cancels older pending ones itself, so a rapid push series still self-limits.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: neotopia-e2e-purge-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   placement-guard:

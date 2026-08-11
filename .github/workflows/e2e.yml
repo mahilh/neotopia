@@ -20,6 +20,37 @@ on:
   pull_request:
     branches: [main]
 
+# ══ SHARED WITH e2e-placement-guard.yml ON PURPOSE · A GLOBAL MUTEX FOR A GLOBAL DESTRUCTIVE OP ══
+# (T2 S49 · the purge hazard T3 reinstated as Rule 109.)
+#
+# Every workflow that runs Playwright also runs tests/e2e/global-teardown.js, which calls
+# purge_e2e_test_data(). That function is GLOBAL: it deletes game_rooms by host-username prefix with
+# NO status and NO age predicate (migration 008 removed the filter deliberately), and game_sessions
+# cascades from game_rooms. So a teardown does not clean up "this run" · it cleans up EVERY run.
+#
+# This workflow and the placement guard BOTH trigger on every push to main, so until now they ran
+# simultaneously and each one's teardown destroyed the other's rooms. That is the mechanism behind a
+# Placement Guard reddening on a docs-only commit, and it cost T3 at least one live run.
+#
+# The correct scope for a mutex is the scope of the thing it protects. The purge is project-wide, so
+# the group is shared across workflows rather than keyed on ${{ github.workflow }} · which is what
+# both files had, and which is exactly why it did not help.
+#
+# cancel-in-progress: FALSE, and that is a deliberate change from the guard's previous `true`.
+# A cancelled Playwright run does not get to run its teardown, so cancelling trades a purge collision
+# for an ORPHANED ROOM · and there are already 571 rooms in production whose host profile is gone and
+# which the purge can therefore never reach again (measured T2 S49). GitHub keeps at most one pending
+# run per group and cancels older PENDING ones itself, so this self-limits: it costs a little latency
+# on a rapid series of pushes and never silently drops a teardown.
+#
+# THIS IS A MITIGATION, NOT THE FIX. The fix is scoping the purge itself so it cannot take a room it
+# did not create · written as scripts/migrations/024, deliberately NOT applied (tonight's approval was
+# scoped to 023). Serialising the callers removes the collision between OUR workflows; it does nothing
+# about a local live run racing CI, which is what `gh run list` before a live run is for.
+concurrency:
+  group: neotopia-e2e-purge-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   reconnect:
     name: Reconnect + backend-down E2E

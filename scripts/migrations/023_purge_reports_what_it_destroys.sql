@@ -1,7 +1,13 @@
 -- 023 · purge_e2e_test_data reports the counters it is about to destroy  (T2 S48)
 --
--- ⚠ NOT APPLIED. Needs Mahil's explicit approval, like 021 and 022 before it. Migration 014 remains
--- unapplied and this is unrelated to it.
+-- ✅ APPLIED T2 S49 · August 11 2026, on Mahil's explicit approval (scoped to this migration only).
+--    Recorded as supabase migration `023_purge_reports_what_it_destroys`.
+--    POST-APPLY READ-BACK, because create-or-replace preserving grants is a claim until it is checked:
+--        grants BEFORE : authenticated=EXECUTE, postgres=EXECUTE
+--        grants AFTER  : authenticated=EXECUTE, postgres=EXECUTE      <- identical, nothing widened
+--        anon EXECUTE  : false (before and after) · 015's narrowing intact
+--        prosecdef true · proconfig search_path="" · both preserved
+--    Migration 014 remains unapplied and is unrelated to this.
 --
 -- ══ THE FINDING, AND IT IS NOT THE ONE THE ROADMAP RECORDED ════════════════════════════════════════
 -- docs/T2_ROADMAP.md (S47) said: "the ledger moves and the denormalised columns don't", and framed

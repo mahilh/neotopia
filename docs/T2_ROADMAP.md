@@ -129,11 +129,30 @@ observer**, because our own teardown destroys the only witness between the run a
 writer with no caller (`award_game_win`, S35). Not a render with no gate (card art, S42). **A caller
 with no observable**, which is worse, because every individual piece is correct and tested.
 
-**Fix written, not applied:** `scripts/migrations/023_purge_reports_what_it_destroys.sql` has the purge
-report the two sums it is about to erase, so the increment becomes visible in the nightly log without
-the row surviving. **Needs your approval** — it edits a function that deletes production rows.
-*Deliberately not* exempting counted profiles from the purge: the table would then grow without bound,
-and T3's Rule 109 makes the same point about the room clause from the other side.
+**✅ APPLIED S49** — `scripts/migrations/023_purge_reports_what_it_destroys.sql`. The purge now reports
+the two sums it is about to erase, so the increment shows up in the nightly log without the row
+surviving. Grants read back **identical** to before (`authenticated`, `postgres`; `anon` EXECUTE
+false), SECURITY DEFINER and empty `search_path` intact. The next nightly that finishes a real game
+should print a non-zero `games_won_destroyed`.
+
+**🔴 AND THE SAME FUNCTION HAS TWO MORE PROBLEMS, both measured S49** (`migrations/024`, **written,
+NOT applied — needs your yes**):
+
+1. **It deletes rooms that are being played right now.** No status and no age predicate, and
+   `game_sessions` cascades from `game_rooms`. This is T3's Rule 109 hazard. Their proposed fix —
+   "skip rooms updated in the last N minutes" — **cannot be written as specified: `game_rooms` has no
+   `updated_at` column.** 024 uses `created_at` with a 30-minute window, sized from the longest
+   measured live spec (~3.0 min), and says plainly that it protects by *creation* time, not last-touch.
+2. **It can never reach 571 of the 608 rooms in production.** It selects rooms via
+   `host_id IN (profiles LIKE 'E2E%')` and then **deletes those profiles** — it destroys its own
+   selector. So it sweeps too *wide* in time and too *narrow* in reach, from one root cause. 024
+   deliberately does **not** fix the leak: that means deleting 571 rooms and 557 sessions in one
+   statement, which deserves its own approval and its own dry run.
+
+**Shipped tonight without needing the DB:** the three workflows that run the purge had three different
+concurrency groups (and `e2e.yml` had none), so `e2e.yml` and the placement guard ran simultaneously on
+every push and destroyed each other's rooms. They now share one group. That is the mechanism behind a
+Placement Guard reddening on a docs-only commit.
 
 ---
 
@@ -147,7 +166,15 @@ old list meets the outcome instead of a silent edit.)*
    7/13/18. See §2 and `docs/BONUS_TOKEN_BALANCE.md`.
 2. ~~**`games_played` / `games_won` read 0** (§3).~~ **DIAGNOSED S48**, and my framing of it was wrong —
    the write lands and the teardown deletes the row. Migration 023 written, **awaiting approval**.
-3. **Bonus tokens are one-quarter shipped.** Only **subsidy** is spendable today.
+3. 🔴 **THE DIFFICULTY LADDER HAS NO USABLE MIDDLE** (new, S49 · `docs/LADDER_CALIBRATION.md`).
+   Measured rung-against-rung for the first time — every previous duel in the repo used one common
+   opponent, so this had never been asked. **apprentice v builder 6.3% · builder v architect 15.2% ·
+   apprentice v architect 0.0% (zero wins in 80 games).** Self-play controls exactly 50.0/0.00, so the
+   harness has no side. One step of difficulty is roughly one win in seven; the ends are not a
+   contest. **Not recommending a rebalance** — evidence first, and the missing evidence is a human:
+   nobody with a claimed username has ever finished a recorded game. Matters only when the ladder is
+   exposed in the UI, which is currently a deliberate no.
+4. **Bonus tokens are one-quarter shipped.** Only **subsidy** is spendable today.
    - `initiative` — needs T1's placement sub-flow (choose element + hex with no factory constraint)
    - `permits` — needs outer-ring/off-map tracking that does not exist
    - `automatization` — needs **bonus-hex coordinates**, outstanding **14 requests** (see §6)
