@@ -187,7 +187,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (105 · cumulative):
+PERMANENT ANTI-REGRESS RULES (108 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -451,6 +451,35 @@ SECOND COROLLARY, paid for in one anon sign-in: A MOCK IS A MODEL, SO MEASURE TH
 AGAINST THE REAL SYSTEM. My write-race proof rested on an inherited mock I had REASONED matched Postgres.
 Measured: write B then A, and the row holds A · no version check, no merge, the counter goes backwards on the
 server. The claim two lanes are now building on is a measurement now, not a belief.
+
+RULE 108 (T3 S47 · August 11 2026):
+A CLOSING RECOMMENDATION IS A CLAIM, AND IT IS THE ONE NOBODY CHECKS · IT ARRIVES AS THE NEXT SESSION'S
+PRIORITY. I ended S46 recommending a free reproducer: "route-delay Supabase requests on the practice board
+and the live driver flakiness becomes reproducible for zero identities." It cannot work, and a SEVEN-SECOND
+probe says why · the practice board makes ZERO Supabase requests, during load and during play, because
+running without a backend is the entire point of the mode. There is nothing to delay. I recommended it from
+the SHAPE of the problem without opening the page I proposed to run it on, which is Rule 105 exactly, one
+session after I wrote Rule 105, about my own next step rather than someone else's code.
+  108a · A recommendation is worse than a rule for this, not better. A rule at least sits in a file people
+        re-read; a recommendation is consumed once, converted into a brief, and executed by someone who
+        reasonably assumes the person proposing it had checked. The forge did precisely that with my S45
+        purge hypothesis and sent me to fix a non-bug.
+  108b · THE CHECK IS ALWAYS CHEAPER THAN THE RECOMMENDATION. Seven seconds here; one `sed` on migration
+        006 last session. Before proposing work, run the smallest probe that could falsify its premise ·
+        and if that probe is not obvious, that is itself the finding.
+  108c · When it dies, RECORD WHAT IS AND IS NOT POSSIBLE where the work would have started (driver.js
+        here), not only in a handoff. And name the tempting wrong fix · a stubbed backend with injected
+        latency would make practice "reproduce" live failures and would be a model rather than a mirror
+        (Rule 36), which is how three sessions of product bugs turned out to be environment.
+COROLLARY, AND IT IS THE SESSION'S ACTUAL WIN: the soft-lock is CLOSED, and it took FOUR fixes across three
+lanes · T1's End Turn unlock, T2's terminal condition, my restore refusal, and T2's bot-latch fix keyed on
+turnNumber. Rule 103 said three correct halves can leave a bug open; four was exactly as untested until it
+was run. Measured with the control, which is what makes it a claim: with the fix, scoring at turn 37 in 2
+SECONDS; with turnNumber removed from the latch key, stuck at turn 36 / seat 1 / rounds 1 for 122s · the
+S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOME: `phase === scoring`
+alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
+least two turns and given each up, and the human to have clicked no more than its own two. One test,
+mutation-proven against all three lanes.
 
 RULE 105 (T3 S46 · August 11 2026):
 A RULE IS THE WORST PLACE TO PUT A HYPOTHESIS, BECAUSE NOTHING EVER RE-DERIVES IT. I wrote Rule 103's
