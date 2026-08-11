@@ -70,7 +70,8 @@
 
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { forEachViewport } from './seedHelpers'
+import { forEachViewport, selfTestReachability, assertDiagnoseCanSee } from './seedHelpers'
+import probe from '../board-probe.mjs'
 
 // Read the storage key from its declaration rather than restating it. Importing useLocalSession here would
 // drag React into Playwright's Node loader; a second copy of the string would be a second contract, which is
@@ -346,6 +347,125 @@ const ENDGAME_BUDGET_MS = 210_000
 // seats, the human is only required to pass, and the real interface path is already asserted by the tests
 // above. Driving 37 turns of UI would also make this the slowest spec in the repo for no extra claim.
 const passHumanTurn = (page) => page.evaluate(() => window.__neotopia_store.getState().endTurn())
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// EVERY CELL ON THE BOARD TAKES ITS OWN CENTRE CLICK · T1's FIX, GATED IN A REAL BROWSER (T3 S41)
+//
+// WHY THIS EXISTS. I measured 13 of 97 legal offers unreachable at their own centre in S39 · an SVG <text>
+// on top every time, and twice the ONLY legal placement was one of them, so the turn could not progress at
+// all. T1 fixed it in 4fcb539 (`pointer-events: none` on every board <text>, structural rather than nudging
+// one label) and enumerated the fix surface exactly: 3 POSITIONS, the top-centre hex of each region, each
+// covered by its district name. My 13 offers were those 3 positions recurring on different turns.
+//
+// AND THE FIX IS PROTECTED BY NOTHING IN A BROWSER. T1's BoardLabels.reach.test.jsx gates the MECHANISM in
+// jsdom · every <text> inert, cells still live, labels still visible, geometry still overlapping so nobody
+// can quietly downgrade it to a nudge · and that is the right unit test. But jsdom has no layout and no
+// hit-testing, so it cannot say that elementFromPoint at a real centre returns the cell (Rule 78's own
+// corollary: keep the DECISION in the unit test, put the REACHABILITY check in the browser). This is that
+// half, and the two together are the whole guarantee.
+//
+// THE SECOND REASON, and it is the one that made this urgent: my own harness was carrying off-centre click
+// workarounds (18%/82% of the hex height) written when the defect was live. Those are removed in this same
+// commit · endgame-live.e2e.js · because a workaround that silently rescues a regression is a gate that
+// cannot see the thing it exists to catch.
+//
+// EVERY CELL, NOT ONLY THE LEGAL ONES · T1's framing and it is the right one: blockage is a property of the
+// LAYOUT, not of legality. Probing `g.hex-cell` gives all 60 (57 region + 3 factory) on every run,
+// deterministically, instead of however many placements happen to be legal on the turn the test looked.
+//
+// THE PROBE ITSELF IS T1's, IMPORTED, NOT REWRITTEN (Mahil's ruling · T1's Rule 94). I wrote my own earlier
+// this session, from the correction T1 published in comms, and deleted it when theirs landed · two
+// implementations of one check are a second contract and a second witness, and theirs additionally carries
+// `measured` and `requireInViewport`, which are exactly the two halves mine was weaker on.
+test.describe('practice mode · the board takes its clicks', () => {
+  test('every cell on the board is reachable at its own centre · in a real browser, at five widths',
+    async ({ page }) => {
+      await page.goto('/practice?bots=1')
+      await boardReady(page)
+
+      // ── COUNTERWEIGHT FIRST · THE PROBE PROVES IT CAN SEE BEFORE ITS ALL-CLEAR COUNTS (Rule 90) ────────
+      // "Every cell is reachable" has two cheap wrong satisfiers that both report a healthy board: there
+      // were no cells to check, or the check credits so much that nothing can ever fail it. The second is
+      // live here rather than hypothetical · this probe DELIBERATELY credits the handler-bearing ancestor
+      // (T1's correction, without which three factory cells read as false positives), and one `contains`
+      // on the wrong node turns that generosity into a probe that always passes.
+      // So before believing any all-clear, drop a real full-viewport overlay on the page and require the
+      // SAME probe to call every cell blocked, then require the all-clear back when it is removed. A probe
+      // that cannot go red on a board that is genuinely covered has not cleared anything.
+      // I checked exactly this by hand last session, in a scratch file I then deleted · which is the
+      // "a rule stated as a fact gets rediscovered" failure Rule 90 exists to remove. It is a function now.
+      const REACH = { controls: 'g.hex-cell', hit: 'polygon', handlerGroups: ['[data-factory]'], requireInViewport: true }
+      const self = await selfTestReachability(page, probe.reachability, REACH)
+      expect(self.measured, 'the probe matched no cells at all · every assertion below would pass vacuously')
+        .toBe(true)
+      expect(self.probed, 'fewer cells than the 57 region hexes').toBeGreaterThanOrEqual(57)
+      expect(self.blockedWhenCovered, `the probe called ${self.blockedWhenCovered} of ${self.probed} cells ` +
+        'blocked while a full-viewport overlay sat on top of every one of them · it cannot detect a covered ' +
+        'cell, so its all-clear means nothing').toBe(self.probed)
+      expect(self.blockedAfterRemoval, 'the probe stayed red after the overlay was removed · it is measuring ' +
+        'something other than what is on top of the cells').toBe(self.blockedNormally)
+      console.log(`[practice] reach probe self-test · ${self.probed} cells · ${self.blockedWhenCovered} ` +
+        `blocked under an overlay · ${self.blockedAfterRemoval} after removing it`)
+
+      // ── THE CONTRACT · at the widths T1 verified the fix on, plus 320 where every margin is worst ──────
+      const results = await forEachViewport(page, [
+        { width: 320, height: 568 },
+        { width: 375, height: 667 },
+        { width: 620, height: 800 },
+        { width: 900, height: 900 },
+        { width: 1280, height: 720 },
+        { width: 1440, height: 900 },
+      ], async (pg, size) => {
+        const label = `${size.width}x${size.height}`
+        const r = await pg.evaluate(probe.reachability, REACH)
+        // measured FIRST, always · T1's own instruction, and it is the right one: "the board never mounted"
+        // and "a label is eating clicks" are different bugs and a lone `ok` gives them the same red.
+        expect(r.measured, `at ${label} · ${r.reason}`).toBe(true)
+        expect(r.total, `at ${label} the board rendered ${r.total} cells · fewer than the 57 region hexes, ` +
+          'so this pass is not looking at a whole board').toBeGreaterThanOrEqual(57)
+        expect(r.failures, `at ${label}, ${r.blocked} of ${r.total} board cells do not take a click at their ` +
+          `own centre and ${r.offscreen} are off screen · a player clicking the middle of a hex they can see ` +
+          'gets nothing, and when a covered hex is the only legal placement the turn cannot progress at all. ' +
+          'This is T1 4fcb539 (pointer-events:none on every board <text>) regressing · ' +
+          JSON.stringify(r.failures.slice(0, 5))).toEqual([])
+        console.log(`[practice] reach @ ${label} · ${r.total} cells · self ${r.self} · via handler group ` +
+          `${r.group} · blocked ${r.blocked} · offscreen ${r.offscreen}`)
+        return { total: r.total, blocked: r.blocked, offscreen: r.offscreen, group: r.group }
+      })
+
+      console.log('[practice] board reachability · ' + results.map(m =>
+        `${m.size.width}:${m.result.blocked}/${m.result.total}`).join(' · ') + ' (blocked/total)')
+    })
+
+  // ── THE DIAGNOSTIC PROVES IT CAN SEE · MY OWN S40 CLOSING NOTE, MADE PERMANENT (T3 S41) ────────────────
+  // endgame-live's diagnose() is what turns a five-minute silent timeout into a named stage, and it is the
+  // instrument three separate defects were found with last session. Every count it reports degrades to 0
+  // when its selector is wrong, which is indistinguishable from an honest "none right now" · Rule 80's
+  // shape, in my own tooling. I checked those selectors by hand last session, in a scratch probe I then
+  // deleted, and then wrote in my own closing note that this should be an assertion. This is that.
+  //
+  // IT RUNS HERE, ON THE FREE PRACTICE BOARD, ON THE MERGE GATE · deliberately. The live spec that owns
+  // diagnose() is nightly-class and currently test.fixme, so a check living only there would protect
+  // nothing today and rot exactly the way Rule 79 describes. The selectors are the same ones.
+  test('the endgame diagnostic can still see · every selector it reports on moves for real', async ({ page }) => {
+    await page.goto('/practice?bots=1')
+    await boardReady(page)
+
+    const before = await read(page)
+    const seen = await assertDiagnoseCanSee(page, { expect })
+    expect(seen.walked, 'the opening board offered no legal move to walk · the check degraded to invariants ' +
+      'only, which is the weaker half').toBe(true)
+
+    // AND IT HANDED THE BOARD BACK. The whole reason this can run unconditionally is that it commits
+    // nothing · if it ever costs an action, it stops being free and starts changing the game it inspects.
+    const after = await read(page)
+    expect(after.actionsRemaining, 'the diagnostic self-check SPENT AN ACTION · it selects and deselects, ' +
+      'and only a hex click may commit').toBe(before.actionsRemaining)
+    expect(after.turnNumber, 'the diagnostic self-check advanced the turn').toBe(before.turnNumber)
+    console.log(`[practice] diagnose can see · ${JSON.stringify(seen.saw)} · actions ` +
+      `${before.actionsRemaining}→${after.actionsRemaining} (unchanged, as required)`)
+  })
+})
 
 test.describe('practice mode · the end of the game', () => {
   test('a practice game reaches its own ending, shows the record, and writes nothing to it', async ({ page }) => {

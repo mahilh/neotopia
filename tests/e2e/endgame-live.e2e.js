@@ -188,7 +188,7 @@ const readSessionRow = (page, roomId) => page.evaluate(async (rid) => {
  *     factory-inert   engine offers the move, factory clicked, element-btn never appeared
  *     element-inert   element clicked, region-btn never appeared
  *     region-inert    region clicked, board rendered ZERO hex-valid nodes · UI and engine disagree
- *     hexes-covered   hex-valid nodes exist and none committed at centre or off-centre
+ *     hexes-covered   hex-valid nodes exist and none committed at its own centre
  *     offer-inert     the offer is on screen and a real click spent nothing · read ui.drawStatus
  *     no-draw-after-placement-failed   the placement path failed and there is nothing to fall back on
  *
@@ -250,6 +250,16 @@ async function spendOneAction(page) {
   // (GameRoom.jsx:510), so a store snapshot CANNOT see which step the interface believes it is on. Same for
   // draw-status, the only external trace of isDrawingCard. The two facts most likely to explain a stall are
   // both invisible to the seam this spec otherwise reads through.
+  //
+  // ⚠ EVERY COUNT BELOW DEGRADES TO 0 IF ITS SELECTOR IS WRONG, which is indistinguishable from an honest
+  // "none right now" · Rule 80, inside the instrument I diagnose with. That is guarded, and NOT here:
+  // seedHelpers.assertDiagnoseCanSee walks the same selectors on the free practice board and requires each
+  // one to MOVE off zero, on the MERGE GATE (practice.e2e.js · "the endgame diagnostic can still see").
+  // It lives there rather than in this file on purpose · this spec is nightly-class and currently fixme, so
+  // a self-check here would protect nothing today and would rot exactly as Rule 79 describes. It is also
+  // deliberately NOT called mid-run: it is proven free (it selects and deselects, committing nothing), but
+  // this run is evidence handed to another lane, and an instrument should not add clicks to the thing it
+  // is measuring. Mutation-proven: renaming element-btn, region-btn or hex-valid reds it, each of the three.
   const diagnose = async () => ({
     ...(await read(page)),
     ui: await page.evaluate(() => {
@@ -315,24 +325,22 @@ async function spendOneAction(page) {
         'ever appeared · the element step did not advance the interface', plan)
     }
     await region.click({ timeout: 2_000 }).catch(() => {})
-        // TRY EVERY OFFERED HEX, not just the first in DOM order. Measured on the solo board: the engine
-        // reported 6 valid spots, the UI rendered 6 hex-valid nodes, and clicking the FIRST one committed
-        // nothing · the board is SVG and a <g> can sit under another at its own centre point, which
-        // force:true does not fix (force skips the actionability wait, it does not redirect the event).
-        // A human clicks a hex they can see; this tries the offered ones until one lands, and only reports
-        // failure if none does. Without this the driver silently stalled after ~8 placements and every
-        // action fell through to a draw, which is what burned four live runs.
-        // force:true is required on THESE clicks only · hexPulse animates the <g> bbox forever so the
-        // stability wait never settles (CLAUDE.md "Bot: ALL steps force:true", DB-proven in S12).
-        //
-        // AND CLICK OFF-CENTRE IF THE CENTRE IS DEAD. Measured on the solo board across a whole game:
-        // the UI offered 97 legal hexes and 13 of them (13.4%) had something else at their own centre ·
-        // an SVG <text> label, every time. force:true does not help, because force skips the actionability
-        // WAIT and still dispatches at a point, where the topmost node receives it. A player is in the same
-        // position: the natural target is dead on one hex in seven, and when the covered hex is the ONLY
-        // legal placement the turn cannot progress at all (the probe stalled that way at 18 placements).
-        // Routed to T1 · almost certainly `pointer-events: none` on the label. The offsets below are the
-        // harness working around a real defect, and they are labelled as that rather than as tuning.
+    // TRY EVERY OFFERED HEX, not just the first in DOM order. The engine can report several valid spots
+    // while a particular one is momentarily unclickable, and only reporting failure if NONE lands keeps
+    // this from blaming the product for one bad target.
+    // force:true is required on THESE clicks only · hexPulse animates the <g> bbox forever so the
+    // stability wait never settles (CLAUDE.md "Bot: ALL steps force:true", DB-proven in S12).
+    //
+    // ── THE OFF-CENTRE WORKAROUND IS GONE (T3 S41), AND REMOVING IT IS THE POINT ────────────────────────
+    // This used to click each hex at its centre and then at 18% and 82% of its height, because in S39 I
+    // measured 13 of 97 legal offers with an SVG <text> sitting at their own centre. T1 fixed that in
+    // 4fcb539 · `pointer-events: none` on every board <text>, structural rather than a nudge · and I now
+    // gate it in a real browser (practice.e2e.js · 60 of 60 cells reachable at six widths, mutation-proven
+    // to red at "3 of 60 · hit: text" the moment the fix is reverted).
+    // A WORKAROUND THAT SILENTLY RESCUES A REGRESSION IS A GATE THAT CANNOT SEE IT. Left in, these offsets
+    // would let the driver keep placing on a board where the centre click is dead again, and the only
+    // symptom a future session would get is the same one that cost S39: everything looks fine until it
+    // inexplicably does not. The centre click is the player's click, so it is the only one this asks for.
     const hexes = await page.getByTestId('hex-valid').all()
     if (hexes.length === 0) {
       return stopped('region-inert', `${plan.regionId} was clicked and the board rendered ZERO hex-valid ` +
@@ -340,20 +348,16 @@ async function spendOneAction(page) {
     }
     const tried = []
     for (const hex of hexes.slice(0, 8)) {
-      const box = await hex.boundingBox().catch(() => null)
-      const spots = box
-        ? [undefined, { x: box.width * 0.5, y: box.height * 0.82 }, { x: box.width * 0.5, y: box.height * 0.18 }]
-        : [undefined]
-      for (const position of spots) {
-        if (await spent(() => hex.click({ force: true, position, timeout: 3_000 }).catch(() => {}))) {
-          return { action: 'place', stage: 'ok', plan }
-        }
+      if (await spent(() => hex.click({ force: true, timeout: 3_000 }).catch(() => {}))) {
+        return { action: 'place', stage: 'ok', plan }
       }
+      const box = await hex.boundingBox().catch(() => null)
       tried.push(box ? `${Math.round(box.x)},${Math.round(box.y)}` : 'no-box')
     }
     return stopped('hexes-covered', `the engine offers the move, the board rendered ${hexes.length} ` +
-      `hex-valid nodes, and NONE of the ${tried.length} tried committed · at centre or at 18%/82% ` +
-      `off-centre. If that is every hex it is not the covered-label defect, it is the action layer ` +
+      `hex-valid nodes, and NONE of the ${tried.length} tried committed at its own centre. The board ` +
+      `reachability gate in practice.e2e.js covers the covered-label defect (T1 4fcb539), so if THAT is ` +
+      `green this is the action layer ` +
       `refusing the click (tried ${tried.join(' ')})`, plan)
   }
 
