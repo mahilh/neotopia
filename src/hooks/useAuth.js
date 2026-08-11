@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { reportBackendUp, reportBackendDown, registerBackendRetry, getBackendHealth } from './useConnectionHealth'
+import { isReservedUsername, reservedUsernameError } from '../lib/reservedNames'
 
 const USERNAME_KEY = 'neotopia_username'
 const CLAIMED_KEY  = 'neotopia_username_claimed'
@@ -14,7 +15,20 @@ const HEALTH_SOURCE = 'auth' // key in the useConnectionHealth aggregate · see 
 export function useAuth() {
   const [user, setUser] = useState(null)
   const [username, setUsername] = useState(() => {
-    try { return localStorage.getItem(USERNAME_KEY) || '' }
+    try {
+      const stored = localStorage.getItem(USERNAME_KEY) || ''
+      // T2 S51 · A NAME CLAIMED BEFORE THE RESERVED-PREFIX CHECK EXISTED MUST NOT COME BACK.
+      // The guard in claimUsername below only protects NEW claims. Anyone who already typed "E2Etest"
+      // has it in localStorage and would be restored straight back into the purge's scope with no
+      // claim screen to stop them · the fix would then protect everyone except the people it was
+      // written for. Treated as UNCLAIMED rather than rewritten, so they are asked again and meet the
+      // real error message (see the note in claimUsername on why silent substitution is the wrong fix).
+      if (isReservedUsername(stored)) {
+        try { localStorage.removeItem(CLAIMED_KEY); localStorage.removeItem(USERNAME_KEY) } catch { /* blocked */ }
+        return ''
+      }
+      return stored
+    }
     catch { return '' } // localStorage blocked in some private browsing contexts
   })
   const [isLoading, setIsLoading] = useState(true)
@@ -107,6 +121,18 @@ export function useAuth() {
   const claimUsername = useCallback(async (name) => {
     if (!user || !name?.trim()) return { error: 'No user or empty name' }
     const cleaned = name.trim().slice(0, 20)
+
+    // T2 S51 · REJECT THE PURGE'S OWN NAMESPACE, AND SAY SO (T3's S50 finding).
+    // purge_e2e_test_data() deletes profiles and rooms by username prefix, and this function used to
+    // accept any string at all. A friend typing "E2Etest" got a profile inside that scope and lost
+    // their room, their session and their game to the next CI run · silently, with the cascade doing
+    // the damage and nothing naming them anywhere. A reserved namespace with no reservation.
+    //
+    // TOLD, NOT REWRITTEN. Silently sanitising to "test" would be the tempting one-liner and it is
+    // the wrong fix: the player typed a name, and a system that quietly substitutes a different one
+    // is how you get a person who cannot find their own profile. The check is stricter than the SQL
+    // on purpose (case-insensitive against a case-sensitive `like`) · see src/lib/reservedNames.js.
+    if (isReservedUsername(cleaned)) return { error: reservedUsernameError(cleaned) }
 
     // player_profiles.username is NON-unique (migration 012 dropped UNIQUE(username) · confirmed against the
     // live schema this session · Rule 68) and each player keeps ONE row (keyed by user_id), so a claim is an

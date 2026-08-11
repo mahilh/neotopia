@@ -1,6 +1,8 @@
 -- 024 · purge_e2e_test_data stops deleting rooms that are being played right now  (T2 S49)
 --
--- ⛔ SUPERSEDED BY 025, AND NEVER APPLIED. DO NOT APPLY THIS FILE.
+-- ⛔ SUPERSEDED BY 026 (APPLIED T2 S51), AND NEVER APPLIED ITSELF. DO NOT APPLY THIS FILE.
+--    S50 pointed this at 025; 025's age half was in turn superseded by 026, which is the one that
+--    shipped. The finding below that survives and is cited by both: game_rooms has no updated_at.
 --    Verified against the live database in S50 (Rule 109a · pg_get_functiondef and the migration
 --    list, not a file): the newest applied migration is 023. This one never landed, despite the S50
 --    brief describing it as having done so.

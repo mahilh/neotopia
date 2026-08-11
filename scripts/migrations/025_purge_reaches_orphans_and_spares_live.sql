@@ -1,6 +1,27 @@
 -- 025 · the purge reaches what it orphaned, and stops orphaning it  (T2 S50)
 --
--- ⚠ NOT APPLIED. NEEDS MAHIL'S EXPLICIT YES, in the form S49 used for 023 ("Apply it").
+-- ⛔ HELD. ITS AGE HALF SHIPPED AS 026 (APPLIED T2 S51); ITS REACH HALF IS DELIBERATELY NOT APPLIED.
+--
+--    MAHIL'S S51 DECISION, after LLM Council: "ship the age-guard predicate NOW, hold the mass
+--    delete · the age-guard is the fix; the deletion is housekeeping wearing the fix's clothes."
+--    So this file is no longer a candidate to apply AS IS · 026 is the deployed body and applying
+--    this one would REVERT 026's orphan-invariant clause while also running the mass delete.
+--
+--    WHAT THIS FILE IS NOW: the reference implementation of the REACH clause, kept for the day the
+--    tripwire fires. To use it, lift ONLY the `or not exists (... player_profiles ...)` disjunct in
+--    the room DELETE and add it on top of 026's body. Do not apply this file wholesale.
+--
+--    TRIPWIRE (recorded S51): orphaned rooms past ~1000, or a measurable query-performance impact.
+--    Measured 597 at the moment 026 was applied, growing roughly 4 per hour.
+--
+--    AND THE EVIDENCE ARGUMENT IN THIS HEADER IS WRONG · see docs/DRAW_AUDIT_READOUT.md. It says the
+--    delete would destroy "177 draw_card audit rows from migration 021". 175 of those carry an EMPTY
+--    payload and only 2 carry the audit fields, both being the harness's own `audit_offer_0` fixture.
+--    The corpus holds nothing recoverable. That does not re-open the decision · it means the held
+--    delete is cheap AND worthless, which is a better reason to leave it alone than the one I gave.
+--
+--    ⚠ ORIGINAL S50 HEADER FOLLOWS · NOT APPLIED. NEEDS MAHIL'S EXPLICIT YES, in the form S49 used
+--    for 023 ("Apply it").
 --    Migration 014 remains unapplied and is unrelated.
 --    SUPERSEDES 024, which was written in S49 and never applied · see the note at the bottom.
 --
