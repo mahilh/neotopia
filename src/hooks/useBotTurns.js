@@ -18,11 +18,26 @@ export const BOT_MOVE_DELAY_MS = 650
 
 // Everything one bot action can move. Exported so a test can state the deadlock in the same terms the
 // driver does rather than re-deriving it.
-export function seatSignature(player, currentSeat, actionsRemaining, phase) {
+export function seatSignature(player, currentSeat, actionsRemaining, phase, turnNumber = 0) {
   return [
     currentSeat, actionsRemaining, phase,
     player?.hand?.length ?? 0,          // draw, and the card that leaves the hand when a district is built
     player?.scoredCardIds?.length ?? 0, // the district itself · the move that used to cost nothing visible
+    // turnNumber (T2 S46) · THE ONLY COMPONENT THAT ALWAYS ADVANCES.
+    // The soft-lock survived three correct fixes and ended here. On a deadlocked board every other
+    // component is a CONSTANT: the seat cycles back to its old value, actions reset to 3, the phase is
+    // still 'playing', and a player who cannot act neither draws nor scores. So when the turn returned
+    // to a bot the key was byte-identical to the previous time, the latch below read it as a repeat
+    // invocation, and the bot never moved again · which stalls the two-round endgame burn, because that
+    // burn is driven by seats ENDING TURNS. endGameTriggered is necessary and not sufficient (Rule 103).
+    // Nothing here is a legality judgement: chooseBotAction already returns endTurn correctly when it
+    // has no options (botPolicy.js:195), and the driver's safety net already passes on a refused action.
+    // The bot was never choosing wrongly · it was never being ASKED. That is why a fourth legality
+    // predicate would have been the wrong fix (three surfaces were guessing separately before T1
+    // unified them, and this needed none of it).
+    // Within a turn turnNumber is constant, so the latch keeps its whole purpose · it still blocks the
+    // double invocation it was written for, and now re-arms when a genuinely new turn begins.
+    turnNumber,
   ].join(':')
 }
 
@@ -31,6 +46,7 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
   const currentSeat = useGameStore(s => s.currentSeat)
   const actionsRemaining = useGameStore(s => s.actionsRemaining)
   const phase = useGameStore(s => s.phase)
+  const turnNumber = useGameStore(s => s.turnNumber)   // latch component · see seatSignature
 
   // One RNG for the whole practice game, so a bot's choices are reproducible per session rather than
   // re-seeded on every render (rule 32 · no unseeded randomness in game logic).
@@ -74,7 +90,7 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
     const me = players.find(p => p.seat === currentSeat)
     if (!me?.isBot) return
 
-    const key = seatSignature(me, currentSeat, actionsRemaining, phase)
+    const key = seatSignature(me, currentSeat, actionsRemaining, phase, turnNumber)
     if (lastKeyRef.current === key) return
     lastKeyRef.current = key
 
@@ -96,7 +112,7 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
       // actually happened rather than what the action said it would do.
       const signature = () => {
         const x = useGameStore.getState()
-        return seatSignature(x.players.find(p => p.seat === seat), x.currentSeat, x.actionsRemaining, x.phase)
+        return seatSignature(x.players.find(p => p.seat === seat), x.currentSeat, x.actionsRemaining, x.phase, x.turnNumber)
       }
       const before = signature()
 
@@ -130,7 +146,7 @@ export function useBotTurns({ enabled = true, delayMs = BOT_MOVE_DELAY_MS } = {}
     }, delayMs)
 
     return () => clearTimeout(timer)
-  }, [enabled, players, currentSeat, actionsRemaining, phase, delayMs])
+  }, [enabled, players, currentSeat, actionsRemaining, phase, turnNumber, delayMs])
 
   useEffect(() => { lastPlacedRef.current = null }, [currentSeat])
 }
