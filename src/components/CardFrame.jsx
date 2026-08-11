@@ -103,6 +103,35 @@ function ProceduralArt({ element, color, w, h }) {
   )
 }
 
+// ── THE ART SLOT IS A CONTRACT WITH THE FILESYSTEM, SO IT IS EXPORTED (T1 S42) ──────────────────
+// The masters are square and the slot is not, so objectFit:cover crops. MEASURED rather than
+// argued: a 320x320 master into the 104x80 hand slot draws at 104x104 and shows 104x80, discarding
+// 23.1% OF THE AREA · 12px off the top and 12px off the bottom.
+//
+// AND THAT SOUNDS MUCH WORSE THAN IT IS, which is why it was worth measuring the right quantity
+// (Rule 81c · an eyeball reading of an image is a hypothesis). Sampling all 20 PNGs in a browser
+// canvas, taking each file's own corner as its background and counting pixels that differ from it,
+// the two discarded bands hold a MEDIAN OF 2.1% OF THE CARD'S INK · min 0.0, max 10.9 (card_15),
+// against a kept-centre ink density of 25-64%. The art is centre-composed, so cover is discarding
+// background. 23.1% of the area is 2.1% of the picture, and those are very different numbers to
+// make a decision on: this does not justify regenerating 56 masters or growing the card.
+//
+// WHAT IT DOES JUSTIFY IS A GATE, because that conclusion rests entirely on the masters being
+// SQUARE and centre-composed, and 36 of the 56 cards have no art yet. A 16:9 master dropped into
+// this slot would lose 42% of its area with nothing going red. CardFrame.assets.test.js reads these
+// numbers rather than retyping them, so the two sides of that check are genuinely two (Rule 92).
+export const CARD_SIZES = {
+  hand: { width: 120, height: 168, fontSize: 9, titleSize: 10, artSize: 80, borderW: 2 },
+  offer: { width: 152, height: 213, fontSize: 10, titleSize: 11, artSize: 105, borderW: 2.5 },
+  full: { width: 220, height: 308, fontSize: 12, titleSize: 13, artSize: 155, borderW: 3 },
+}
+
+// The art box for a given size, in css px · exactly what the <img> and the placeholder are given.
+export const artSlot = (size = 'hand') => {
+  const s = CARD_SIZES[size] || CARD_SIZES.hand
+  return { width: s.width - (s.borderW + 6) * 2, height: s.artSize }
+}
+
 export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
@@ -111,12 +140,7 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
   const colors = ELEMENT_COLORS[el] || ELEMENT_COLORS.community
   const corners = CORNER_SYMBOLS[el] || CORNER_SYMBOLS.community
 
-  const sizes = {
-    hand: { width: 120, height: 168, fontSize: 9, titleSize: 10, artSize: 80, borderW: 2 },
-    offer: { width: 152, height: 213, fontSize: 10, titleSize: 11, artSize: 105, borderW: 2.5 },
-    full: { width: 220, height: 308, fontSize: 12, titleSize: 13, artSize: 155, borderW: 3 },
-  }
-  const s = sizes[size] || sizes.hand
+  const s = CARD_SIZES[size] || CARD_SIZES.hand
 
   const artUrl = `/art/cards/${card.id}.png`
 

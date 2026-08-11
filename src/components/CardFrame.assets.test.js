@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { PROJECT_CARDS } from '../lib/projectCards'
+import { artSlot } from './CardFrame'
 
 // ── Why this file exists ─────────────────────────────────────────────────────────────────────────
 // S28 measured the card art costing 4.41 MB for one /game screen: 1254x1254 masters served into a box
@@ -58,6 +59,39 @@ describe('card art assets are sized for the box they render into', () => {
     const ids = new Set(PROJECT_CARDS.map(c => c.id))
     const orphans = files.map(f => f.replace(/\.png$/, '')).filter(id => !ids.has(id))
     expect(orphans, `art files with no matching card: ${orphans.join(', ')}`).toEqual([])
+  })
+
+  it.each(files)('%s is SQUARE · the crop budget depends on it', (name) => {
+    // T1 S42. Nothing checked the masters' SHAPE, only their size and weight · and shape is what
+    // decides how much of the picture a player never sees. The slot is 104x80 (1.30:1) and every
+    // existing master is 320x320, so objectFit:cover discards 23.1% of the area. I measured what
+    // that actually costs by sampling all 20 in a browser canvas against each file's own background:
+    // a MEDIAN of 2.1% of the card's ink, max 10.9 (card_15), because the art is centre-composed.
+    // 23.1% of the area is 2.1% of the picture, and that is why this is a gate rather than a
+    // regeneration ticket.
+    // BUT THE CONCLUSION IS ONLY AS GOOD AS THE PREMISE, and 36 cards have no art yet. A 16:9 master
+    // dropped in here loses 42% of its area with nothing going red, and nobody would look again.
+    const { width, height } = pngSize(path.join(ART_DIR, name))
+    expect(width / height,
+      `${name} is ${width}x${height}. Card art is generated square and the 104x80 slot crops it ` +
+      `centrally · that budget was measured on square masters (2.1% of ink, median). A different ` +
+      `aspect changes how much of the picture is discarded, so either regenerate this square or ` +
+      `re-measure the crop before changing this gate.`,
+    ).toBeCloseTo(1, 2)
+  })
+
+  it('states the crop the slot imposes, from the component rather than from memory', () => {
+    // The two sides of this check are genuinely two (Rule 92): the ART comes off the filesystem and
+    // the SLOT comes out of CardFrame. Retyping 104x80 here would be a check comparing a constant to
+    // its own copy · which is the exact defect that let a nudge-fix pass in S41.
+    const slot = artSlot('hand')
+    expect(slot).toEqual({ width: 104, height: 80 })
+    const shown = (slot.width / slot.height)
+    // cover from a 1:1 master · scale to the wider axis, discard the overflow on the other.
+    const areaKept = (slot.width * slot.height) / (slot.width * slot.width)
+    expect(+(100 * (1 - areaKept)).toFixed(1),
+      'the measured crop · if this moves, the 2.1%-of-ink finding needs re-measuring').toBe(23.1)
+    expect(shown).toBeGreaterThan(1) // the slot is landscape; the masters are not
   })
 
   it('keeps a whole /game screen under a megabyte of art', () => {
