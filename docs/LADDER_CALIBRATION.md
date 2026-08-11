@@ -8,14 +8,14 @@
 
 ## THE HEADLINE
 
-| matchup | **v1** (S32–S49) | **v2** (S50) | target |
+| matchup | **v1** (S32-S49) | **v2** (S50) | target |
 |---|---|---|---|
 | apprentice vs builder | **6.3%** | **32.5%** | ~35% |
 | builder vs architect | **15.2%** | **34.2%** | ~35% |
-| apprentice vs architect | **0.0%** *(0 wins in 80)* | **13.9%** | — |
+| apprentice vs architect | **0.0%** *(0 wins in 80)* | **13.9%** | n/a |
 | every rung vs **itself** | 50.0 / margin 0.00 | 50.0 / margin 0.00 | 50 |
 
-v2 is the mean of **three disjoint 40-seed blocks** — 32.5 / 35.4 / 32.5 and 34.2 / 29.5 / 31.2 and
+v2 is the mean of **three disjoint 40-seed blocks** · 32.5 / 35.4 / 32.5 and 34.2 / 29.5 / 31.2 and
 13.9 / 21.3 / 10.0. The two adjacent steps sit **1.7 points apart** at 40 seeds, against v1's 6.3 and
 15.2 (a factor of 2.4).
 
@@ -23,7 +23,7 @@ v2 is the mean of **three disjoint 40-seed blocks** — 32.5 / 35.4 / 32.5 and 3
 
 ## PART 1 · THE PREMISE THAT TOOK ONE GREP (S49)
 
-Every duel in this repository — S39's, S46's, S47's, S48's — passed `REFERENCE_POLICY` as the opponent:
+Every duel in this repository · S39's, S46's, S47's, S48's · passed `REFERENCE_POLICY` as the opponent:
 
 ```
 bonusBalance      duel(REFERENCE_POLICY, level, SEEDS)        for each level
@@ -35,7 +35,7 @@ flatGrantBalance  ladderRow(level, REFERENCE_POLICY, ...)     for each level
 ladder had never been asked whether its own rungs are separated. The functions took two arbitrary
 policies the whole time; one argument was simply always the same. (Rule 111.)
 
-Measured against itself, v1 was worse than the reference rows suggested, not better — **one step of
+Measured against itself, v1 was worse than the reference rows suggested, not better · **one step of
 difficulty took a player from an even game to one win in seven, and the two ends were not a contest.**
 My hypothesis had been the flattering one: that the instrument was distorting S48's reading. The
 reading was conservative.
@@ -63,7 +63,7 @@ Reverting one axis at a time from builder, 80 games each:
 | | **sum** | **−32.35** |
 | v1 apprentice (all three) | **0.0** | **−32.60** |
 
-**The three handicaps compose ADDITIVELY in margin (−32.35 predicted, −32.60 measured — 0.8% error)
+**The three handicaps compose ADDITIVELY in margin (−32.35 predicted, −32.60 measured · 0.8% error)
 while the win rate collapses to zero.** A win rate is a *threshold* on the margin, so three
 individually-survivable handicaps stack past the point where any game is winnable. That is Rule 88's
 saturation explaining its own mechanism, and it is why v1 needed re-spacing rather than a rewrite.
@@ -79,7 +79,7 @@ The only continuous axis, swept against a fixed 0.30 midpoint:
 
 Slope near the middle: **~0.86 points of margin per 0.01 of draw bias**. That number is what the v2
 constants were chosen from. Note the top of the range: the win rate is **saturated above 0.70** (97.5 →
-96.3 → 98.8, non-monotone) while the margin is still climbing cleanly — the same run showing both a
+96.3 → 98.8, non-monotone) while the margin is still climbing cleanly · the same run showing both a
 statistic that has run out of room and one that has not.
 
 ---
@@ -97,7 +97,7 @@ ever played against (practice mode has no picker), and moving it would change th
 exists in order to fix two that do not. Proven rather than claimed: its decision fingerprint in
 `botPolicyIdentity.test.js` is unchanged from `3994d8d`.
 
-**Apprentice loses only placement quality now**, and it is `scoreEager` — a bot that holds a *completed*
+**Apprentice loses only placement quality now**, and it is `scoreEager` · a bot that holds a *completed*
 district while it still has somewhere to place does not look weak, it looks broken. Difficulty should
 read as playing worse, never as malfunctioning.
 
@@ -105,21 +105,21 @@ read as playing worse, never as malfunctioning.
 
 Builder + `defendWorst` against builder: **50.0%, margin +3.00**, 80 games. The code called it "the one
 genuinely strategic idea in the file" and hedged that it was "a SMALL part of the gap." It is not small,
-it is **nil as a win term**. Kept as *flavour* — it gives architect a visible character, steering toward
-the region multiplied by three — and now labelled as such. (Rule 73: before concluding a mechanic
+it is **nil as a win term**. Kept as *flavour* · it gives architect a visible character, steering toward
+the region multiplied by three · and now labelled as such. (Rule 73: before concluding a mechanic
 matters, check whether it is *capable* of mattering.)
 
 ### The tradeoffs, stated
 
 1. **65/35 adjacent and a gentle end-to-end are mutually exclusive.** Two steps of ~1/3 compound to
-   ~1/9. 13.9% end-to-end is exactly what evenly-spaced 33% steps imply — arithmetic, not a design
+   ~1/9. 13.9% end-to-end is exactly what evenly-spaced 33% steps imply · arithmetic, not a design
    failure. A milder 60/40 ladder would give ~25% end-to-end and a duller middle.
-2. **The whole ladder now sits above the frozen reference** — 60.0 / 66.7 / 84.8, where v1 straddled it
+2. **The whole ladder now sits above the frozen reference** · 60.0 / 66.7 / 84.8, where v1 straddled it
    at 5.1 / 77.2 / 98.8. Rungs that are ~35 points apart are necessarily close to any third party too,
    so the span against the yardstick **compressed from 94 points to 25**. The ordering survives and is
    gated; what is lost is resolution between apprentice and builder specifically.
 3. **The win rate can no longer order the bottom two rungs.** On the first v2 run `botPolicy.test.js`
-   reported apprentice 75.0% and builder 73.7% against the reference — *inverted* — on games whose
+   reported apprentice 75.0% and builder 73.7% against the reference · *inverted* · on games whose
    margins were cleanly ordered (2.60 vs 10.10). The gates now assert the **margin** (Rule 88b). This is
    the price of a calibrated ladder: making it fair makes it more expensive to measure.
 4. **`REFERENCE_POLICY` stays frozen and unpickable** (Mahil, S50). A yardstick that moves is not one,
@@ -127,23 +127,23 @@ matters, check whether it is *capable* of mattering.)
 
 ---
 
-## PART 4 · WHAT THIS DOES NOT MEASURE — unchanged, and it is the important caveat
+## PART 4 · WHAT THIS DOES NOT MEASURE · unchanged, and it is the important caveat
 
 **Bot against bot, two players, Classic mode.** Nothing here predicts what a human finds hard, and no
 human with a claimed username has ever finished a recorded multiplayer game (S48). The retune was made
-on Mahil's explicit overrule of "evidence first" — *"0.0% and 6.3% are outside any range a human
-measurement could rescue"* — which is a statement about v1 being knowably wrong, not a claim that v2 is
+on Mahil's explicit overrule of "evidence first" · *"0.0% and 6.3% are outside any range a human
+measurement could rescue"* · which is a statement about v1 being knowably wrong, not a claim that v2 is
 knowably right. **v2's 32.5/34.2 is a bot-calibrated ladder awaiting its first human game.**
 
-Per Rule 111, the two constants this harness hid: every row above is **two players**, and — until S50
-— every row was **Classic mode**, because no balance harness had ever passed `initGame` its 4th
+Per Rule 111, the two constants this harness hid: every row above is **two players**, and · until S50
+· every row was **Classic mode**, because no balance harness had ever passed `initGame` its 4th
 argument. `ladderRow` now takes a mode. **Four players is still unmeasured**: `bots()` is only ever
 called with two, and `ladderRow` is structurally a duel.
 
 ### Flow mode · measured in S50, three disjoint 40-seed blocks
 
 **The worry was that Flow's 9 tiles would leave the token subsystem near-inert. It does not.** Flow
-grants tokens at a stable fraction of Classic's volume — apprentice **0.62**, builder **0.80**,
+grants tokens at a stable fraction of Classic's volume · apprentice **0.62**, builder **0.80**,
 architect **0.66**, with under 0.06 of spread between blocks. A quarter fewer tiles costs a
 proportionate slice of token volume, not a cliff, so the closed token decision transfers to Flow.
 
@@ -155,10 +155,10 @@ proportionate slice of token volume, not a cliff, so the closed token decision t
 | builder vs architect | 31.6 | **39.9** |
 | **step gap** | **1.9** | **12.3** |
 
-Ordered in both — no rung is broken, and that is gated. But v2 was tuned to sit at ~33/33 and in Flow
+Ordered in both · no rung is broken, and that is gated. But v2 was tuned to sit at ~33/33 and in Flow
 it sits at ~28/40: the bottom step is *harder* and the top step *easier*. Likely mechanism, stated as
 the hypothesis it is: apprentice's only handicap is random placement, and a game a quarter shorter
-gives fewer turns to recover from a bad placement. Untested — a decomposition sweep in Flow would
+gives fewer turns to recover from a bad placement. Untested · a decomposition sweep in Flow would
 settle it and did not run.
 
 **So every spacing number in this document is a Classic number.** The retune fixed a launch blocker in
@@ -178,7 +178,7 @@ measured before S50 at all.
 | apprentice vs architect | 0.0 | 0.0 | 0 / 80 |
 
 Redistributing every bonus token evenly moved these matchups by **0.0, 1.3 and 0.0 points**. The earn
-skew decides nothing between real ladder rungs — the generalisation S48 could not make. The gates in
+skew decides nothing between real ladder rungs · the generalisation S48 could not make. The gates in
 `flatGrantBalance.test.js` that carried this claim now assert the ladder's **ordering** rather than its
 position relative to the reference, because the position was a buried assumption that the retune
 falsified (see that file's S50 note).

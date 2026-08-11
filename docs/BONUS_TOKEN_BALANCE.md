@@ -3,7 +3,7 @@
 
 > ## ⚠ SCOPE STAMP · T2 S50 · EVERY NUMBER BELOW WAS MEASURED AGAINST LADDER v1, WHICH NO LONGER EXISTS
 > S50 retuned the bot difficulty ladder (`docs/LADDER_CALIBRATION.md`): apprentice and architect both
-> moved, builder is byte-identical. **The bonus-token RULES are unchanged** — thresholds stay 7/13/18,
+> moved, builder is byte-identical. **The bonus-token RULES are unchanged** · thresholds stay 7/13/18,
 > the token stays 3 points, and Mahil's "change nothing" decision stands. What moved is the *opponent*
 > in every duel these numbers came from, so the effect SIZES below describe games that nobody will play
 > again.
@@ -16,7 +16,7 @@
 > **What needs re-measuring before it is quoted again**: the +7.7-point spendable-token figure and the
 > per-rung deltas, both of which are magnitudes against a specific opponent. The nightly runner
 > (`scripts/run-balance-blocks.sh`, 3 disjoint blocks) re-stamps them on the next run and is the right
-> place for it — a doc re-stamped by hand is the citation-rot this project keeps finding (Rule 97).
+> place for it · a doc re-stamped by hand is the citation-rot this project keeps finding (Rule 97).
 >
 > This stamp exists rather than a silent edit because the numbers are still the correct record of what
 > was measured; they have lost their *scope*, not their integrity (Rule 101b).
@@ -39,10 +39,10 @@
 >
 > | rung | win% as earned | win% flattened | mean Δ | **games flipped** | earn gap | margin earned → flat | token share of margin |
 > |---|---|---|---|---|---|---|---|
-> | **control** (ref v ref) | 50.0 ×4 | 50.0 ×4 | **0.0 in 4/4** | 10.0 / 80 | 0.00 | 0 → 0 | — |
-> | apprentice | 5.1–11.3 | 7.6–15.0 | −3.8 | 4.5 / 80 | −1.94 | −20.1 → −14.3 | 0.41 |
-> | builder | 68.4–77.2 | 75.0–79.5 | −4.1 | 10.5 / 80 | +0.48 | +11.5 → +10.1 | 0.14 |
-> | **architect** | 98.8–100 | 98.8–100 | **0.0 in 4/4** | **0 / 80, 4/4** | +4.94 | +59.2 → +44.4 | **0.33** |
+> | **control** (ref v ref) | 50.0 ×4 | 50.0 ×4 | **0.0 in 4/4** | 10.0 / 80 | 0.00 | 0 → 0 | n/a |
+> | apprentice | 5.1-11.3 | 7.6-15.0 | −3.8 | 4.5 / 80 | −1.94 | −20.1 → −14.3 | 0.41 |
+> | builder | 68.4-77.2 | 75.0-79.5 | −4.1 | 10.5 / 80 | +0.48 | +11.5 → +10.1 | 0.14 |
+> | **architect** | 98.8-100 | 98.8-100 | **0.0 in 4/4** | **0 / 80, 4/4** | +4.94 | +59.2 → +44.4 | **0.33** |
 >
 > ### THE ANSWER
 >
@@ -93,7 +93,7 @@
 >
 > | plan | spends/game | vs hoarder | vs on-sight |
 > |---|---|---|---|
-> | on-sight | 1.14 | 56.0 | — |
+> | on-sight | 1.14 | 56.0 | n/a |
 > | late-game (tiles ≤5) | 1.15 | 56.0 | **50.0** |
 > | hand-short (≤3) | 0.49 | **47.3** | 46.7 |
 >
@@ -133,7 +133,7 @@
 > unspent that is **~15 points of final score for architect against ~0.8 for apprentice, before any
 > spending decision is taken.**
 >
-> **And the win rate cannot see it**, because architect sits at ~99% and apprentice at ~5–12%, both
+> **And the win rate cannot see it**, because architect sits at ~99% and apprentice at ~5-12%, both
 > pinned against a bound (Rule 88). That is why this is reported and gated on the **earn gap** rather
 > than on a win-rate delta · the delta is structurally incapable of expressing it.
 >
