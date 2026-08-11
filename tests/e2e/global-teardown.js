@@ -1,7 +1,7 @@
 // NeoTopia · Playwright globalTeardown (T3 S9) · authenticated purge of E2E/bot test data.
 // Runs ONCE after the whole suite. Calls purge_e2e_test_data() · SECURITY DEFINER, scoped to the
 // test-username prefixes E2E%/BotAlpha%/BotBeta%, so it can never touch a real player.
-// purge_e2e_test_data CHAIN 006 > 008 > 014 > 023 > 024 · a repo fact, gated by preconditions.e2e.js.
+// purge_e2e_test_data CHAIN 006 > 008 > 014 > 023 > 024 > 025 · a repo fact, gated by preconditions.e2e.js.
 // (The function name is on THIS line deliberately: the gate binds a citation to a function named beside
 // it, so a chain floating one line away from its subject is only reported, never gated.)
 // WHICH BODY IS DEPLOYED IS NOT RECORDED HERE ON PURPOSE, and that restraint was bought the hard way: I

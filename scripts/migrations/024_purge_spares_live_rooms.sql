@@ -1,6 +1,23 @@
 -- 024 · purge_e2e_test_data stops deleting rooms that are being played right now  (T2 S49)
 --
--- ⚠ NOT APPLIED. Tonight's approval was explicitly scoped to migration 023. This needs Mahil's yes.
+-- ⛔ SUPERSEDED BY 025, AND NEVER APPLIED. DO NOT APPLY THIS FILE.
+--    Verified against the live database in S50 (Rule 109a · pg_get_functiondef and the migration
+--    list, not a file): the newest applied migration is 023. This one never landed, despite the S50
+--    brief describing it as having done so.
+--
+--    Kept rather than deleted because it is the record of a correct diagnosis, and because two of its
+--    findings stand and are cited by 025 (game_rooms has no updated_at · the 30-minute window is
+--    sized from the longest measured live spec). But it must not be applied, for two reasons:
+--
+--    1 · IT IS THE WEAKER HALF, MEASURED. Its guard protects a room that is young AND still in play.
+--        Counted against production, that is zero rows today · every room created in the last half
+--        hour is already 'finished'. The clause that actually stops one CI job destroying another's
+--        rooms is an age guard on the PROFILE delete, which this file does not have, because in S49
+--        I never checked whether player_profiles had a created_at column. It does.
+--    2 · TWO COMMITTED, UNAPPLIED MIGRATIONS EACH REDEFINING ONE FUNCTION is exactly the
+--        "migrations are a log, not a state" trap that cost T3 a wrong retraction in S46 (Rule 109).
+--        Whoever applies next must not have to guess which file is meant.
+--
 --    Migration 014 remains unapplied and is unrelated.
 --
 -- ══ THE HAZARD, REINSTATED BY T3 AS RULE 109 ═══════════════════════════════════════════════════════

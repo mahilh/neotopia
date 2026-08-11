@@ -41,7 +41,7 @@ const BOARD = 'svg[aria-label*="NeoTopia"]'
 
 // Unique, E2E%-prefixed names: player_profiles.username is UNIQUE (a fixed name collides on the second run), and
 // the 'E2E' prefix lets globalTeardown's purge_e2e_test_data() backstop sweep any residual profile row left by a
-// crash · purge_e2e_test_data, chain 006 > 008 > 014 > 023 > 024, scoped to E2E%/BotAlpha%/BotBeta% (which body
+// crash · purge_e2e_test_data, chain 006 > 008 > 014 > 023 > 024 > 025, scoped to E2E%/BotAlpha%/BotBeta% (which body
 // is deployed is not recorded here · it changes with no commit). <=20 chars (claimUsername slices to 20).
 // The prefix is the ONLY scope: the status filter is gone, so the sweep takes rooms of any status
 // including ones being played · see global-teardown.js's header before starting a live run.
