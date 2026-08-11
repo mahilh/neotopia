@@ -240,6 +240,23 @@ test.describe('Every card in the deck renders something · no blanks (T3 S42)', 
       }
       const SEL = '[data-testid="card-hand"], [data-testid="card-offer"]'
 
+      // SETTLE FIRST · and this line exists because the counterweight below was VACUOUS without it.
+      // Run straight after the board mounts and the first card is still mid-decode: no loaded <img>, an
+      // empty skeleton, so the classifier legitimately reads BLANK. Then "stripping" it changes nothing,
+      // `verdict === 'BLANK'` is trivially true, and `restored === before` is BLANK === BLANK. The guard
+      // reported itself as PRESENT while proving nothing · Rule 86, in the guard I wrote to prevent it.
+      // Caught only because the log prints its own inputs ("a BLANK card reads BLANK once stripped").
+      await page.evaluate(() => Promise.all(
+        [...document.querySelectorAll('img.art-reveal')].map(i => i.decode().catch(() => {}))))
+      await expect.poll(async () => await page.evaluate(({ sel, fn }) => {
+        // eslint-disable-next-line no-new-func
+        return new Function(`return (${fn})`)()(sel)[0]?.verdict
+      }, { sel: SEL, fn: CLASSIFY.toString() }), {
+        timeout: 10_000,
+        message: 'no card ever settled into art or a placeholder, so the classifier self-test would have ' +
+          'been run against a card that was already blank and could not have failed',
+      }).not.toBe('BLANK')
+
       const canSayBlank = await page.evaluate(({ sel, fn }) => {
         // eslint-disable-next-line no-new-func
         const classify = new Function(`return (${fn})`)()
@@ -248,12 +265,18 @@ test.describe('Every card in the deck renders something · no blanks (T3 S42)', 
         const img = frame.querySelector('img.art-reveal')
         const skel = frame.querySelector('.art-skeleton')
         const before = classify(sel)[0]?.verdict   // whatever this card legitimately is right now
-        const keptImg = img ? img.style.opacity : null
+        // REMOVE the node rather than dimming it. Setting img.style.opacity = '0' does NOT work here and
+        // that mattered: .art-reveal carries `transition: opacity 0.4s`, so computed opacity is still ~1
+        // the instant after the assignment and the classifier correctly read 'art'. A strip that the
+        // subject can out-wait is not a strip · once every card had real art this counterweight started
+        // reporting the wrong thing, which is the second way it tried to be vacuous in one session.
+        const parent = img ? img.parentNode : null
+        const nextTo = img ? img.nextSibling : null
         const keptSkel = skel ? skel.innerHTML : null
-        if (img) img.style.opacity = '0'          // pretend the art never revealed
+        if (img) img.remove()                     // no revealed image, with no animation to wait out
         if (skel) skel.innerHTML = ''             // and the placeholder drew nothing
         const verdict = classify(sel)[0]?.verdict
-        if (img) img.style.opacity = keptImg ?? ''
+        if (img && parent) parent.insertBefore(img, nextTo)
         if (skel) skel.innerHTML = keptSkel ?? ''
         return { ran: true, before, verdict, restored: classify(sel)[0]?.verdict }
       }, { sel: SEL, fn: CLASSIFY.toString() })
@@ -264,6 +287,8 @@ test.describe('Every card in the deck renders something · no blanks (T3 S42)', 
       // Restored to what it WAS, not merely to "not blank" · the constant version reported "the self-test
       // did not put the card back" on a board where the card was legitimately blank to begin with, which
       // is a confusing red pointing at the wrong line. Compare against the card's own prior verdict.
+      expect(canSayBlank.before, 'the self-test ran against a card that was ALREADY blank · stripping it ' +
+        'proves nothing and the whole counterweight passes for free').not.toBe('BLANK')
       expect(canSayBlank.restored, 'the self-test did not put the card back the way it found it')
         .toBe(canSayBlank.before)
       console.log(`[card-art] classifier self-test · a ${canSayBlank.before} card reads ` +
