@@ -33,6 +33,12 @@
 //   p.at(x, y)                                                   // svg user units -> [r,g,b]
 //   p.contrast(a, b)                                             // WCAG ratio between two pixels
 //
+//   probe.reachability()                                         // Rule 78, both halves · see below
+//   // from Playwright, where it crosses into the page as source:
+//   const r = await page.evaluate(probe.reachability, { controls: 'g.hex-cell' })
+//   expect(r.measured, r.reason).toBe(true)   // <- CHECK THIS FIRST · never assert ok alone
+//   expect(r.failures).toEqual([])
+//
 // It reads the board and never writes to it, except through seedOneOfEach, which is explicit.
 
 export const ELEMENT_COLORS = {
@@ -72,6 +78,84 @@ export function seedOneOfEach(store, { seat = 0 } = {}) {
   }
   store.setState({ regions }, false)
   return placed
+}
+
+// ── REACHABILITY · THE RULE 78 PROBE, ONCE, FOR BOTH LANES (T1 S41) ─────────────────────────────
+// Three overlay-vs-control defects have shipped in five sessions and every one of them failed this
+// same check, which no unit test could hold because jsdom has no layout and no hit-testing:
+//
+//   S35  ScoreFlash · a fixed full-screen overlay with no dismiss, covering the board
+//   S36  the practice Leave button · in the DOM, correctly sized, underneath FinalScore
+//   S38  End Turn at 320 · correctly sized, 17px off the right of the screen
+//   S39  the action log · 31 of 57 cells invisible AND still clickable underneath it
+//   S40  the district names · 3 of 57 cells taking the click at their own centre
+//
+// Every time, a standard isVisible()/toBeVisible() passed. I have hand-written the probe from
+// scratch on four of those occasions, and in S40 I found a real defect IN MY OWN VERSION: three
+// factory cells report an SVG <text> on top and are NOT broken, because that text lives inside the
+// <g> carrying onFactoryClick, so the click reaches the right handler. A fifth writing would have
+// reported three false positives. That is the argument for this being a function rather than a
+// habit (Rule 90's corollary), and for it being ONE function rather than one per lane (Rule 45).
+//
+// IT IS DELIBERATELY SELF-CONTAINED · no imports, no module-scope references, options are strings
+// and booleans only. That is what lets it cross into a page: `page.evaluate(probe.reachability,
+// opts)` serialises the function, so a free variable from this module would arrive undefined.
+//
+// WHAT IT CHECKS, which is both halves of Rule 78 and not just the famous one:
+//   78a  COVERED    · the topmost element at the control's centre must BE the control, or sit
+//                     inside it, or sit inside an ancestor that owns the handler for its subtree
+//   78b  PUSHED OFF · the control's box must lie inside the viewport
+// And Rule 83's correction: `el === top || el.contains(top)`, because a control with children has
+// its own child at its centre. And S40's: credit the handler-bearing ancestor.
+//
+// IT REPORTS UNMEASURED RATHER THAN OK (Rule 80). If the selector matches nothing, `ok` is FALSE
+// and `measured` is false. A reachability probe that answers "all clear" for a board it never found
+// is the exact failure this whole family is about.
+export function reachability({
+  controls = 'g.hex-cell',          // selector for every control to check
+  hit = 'polygon',                  // child whose box defines the centre · '' uses the control itself
+  handlerGroups = ['[data-factory]'], // ancestors that own a click handler for their whole subtree
+  requireInViewport = true,
+} = {}) {
+  const nodes = Array.from(document.querySelectorAll(controls))
+  if (nodes.length === 0) {
+    return { measured: false, ok: false, reason: `no element matched ${controls}`, total: 0, failures: [] }
+  }
+  const vw = window.innerWidth, vh = window.innerHeight
+  const describe = (el) => {
+    if (!el) return 'null'
+    let s = el.tagName.toLowerCase()
+    const tid = el.getAttribute && el.getAttribute('data-testid')
+    if (tid) s += `[${tid}]`
+    const txt = (el.textContent || '').trim()
+    if (txt && txt.length <= 40) s += `("${txt}")`
+    return s
+  }
+  const counts = { self: 0, group: 0, blocked: 0, offscreen: 0 }
+  const failures = []
+  nodes.forEach((node, i) => {
+    const shape = (hit && node.querySelector(hit)) || node
+    const r = shape.getBoundingClientRect()
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2
+    const inside = r.left >= 0 && r.top >= 0 && r.right <= vw && r.bottom <= vh
+    if (requireInViewport && !inside) {
+      counts.offscreen++
+      failures.push({ i, cx: Math.round(cx), cy: Math.round(cy), verdict: 'offscreen',
+        rect: [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)], viewport: [vw, vh] })
+      return
+    }
+    const top = document.elementFromPoint(cx, cy)
+    if (top === node || node.contains(top)) { counts.self++; return }
+    const group = handlerGroups.map(sel => node.closest(sel)).find(g => g && g.contains(top))
+    if (group) { counts.group++; return }
+    counts.blocked++
+    failures.push({ i, cx: Math.round(cx), cy: Math.round(cy), verdict: 'blocked', top: describe(top) })
+  })
+  return {
+    measured: true,
+    ok: counts.blocked === 0 && counts.offscreen === 0,
+    total: nodes.length, ...counts, failures,
+  }
 }
 
 const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
@@ -155,4 +239,4 @@ export async function setup({ scale = 2, inlineImages = true } = {}) {
   return { at, recognise, contrast, luminance, viewBox: [vx, vy, vw, vh], scale, background: bg, intrinsic: R.intrinsic, rasterise, width: R.w, height: R.h }
 }
 
-export default { setup, seedOneOfEach, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
+export default { setup, seedOneOfEach, reachability, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
