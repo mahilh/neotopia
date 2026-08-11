@@ -10,6 +10,16 @@ import { useGameStore } from './gameStore'
 // So for N players exactly 2 full rounds (2N endTurns from a round start) elapse after the trigger.
 // Kept in its own file · gameStore.test.js had concurrent in-flight edits from another lane (T1 S6).
 
+// NOTE (T2 S44) · `factories` is now part of this fixture and is LOAD-BEARING.
+// This is a partial setState, so every key it omits keeps its initial-state value · and the initial
+// factories are all `elements: []`. Combined with the empty deck and offer that this fixture sets
+// deliberately, that describes a board with no possible draw AND no possible placement, which the new
+// deadlock terminal condition correctly reads as a finished game. It reddened the "does NOT enter
+// scoring" case below, and the rule was right: the fixture was describing a position that cannot occur
+// in play, because a real game never has three empty factories while tiles remain.
+// Stocking one factory restores the test's actual intent · that endTurn must not reach 'scoring' while
+// endGameTriggered is false · without asserting it on an impossible board. The regions are untouched
+// and start empty, so a stocked factory always has its region centre available.
 const twoPlayersMidEndgame = (extra = {}) => ({
   phase: 'playing',
   players: [{ seat: 0 }, { seat: 1 }],
@@ -18,6 +28,11 @@ const twoPlayersMidEndgame = (extra = {}) => ({
   turnNumber: 1,
   theOffer: [],
   deck: [],
+  factories: [
+    { id: 0, betweenRegions: [0, 1], q: 4, r: -2, elements: [{ type: 'energy', count: 1 }] },
+    { id: 1, betweenRegions: [1, 2], q: 6, r: 1, elements: [] },
+    { id: 2, betweenRegions: [0, 2], q: 2, r: 3, elements: [] },
+  ],
   endGameTriggered: true,
   endGameRoundsRemaining: 2,
   ...extra,

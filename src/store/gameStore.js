@@ -134,6 +134,10 @@ function refillFactoryDraft(state, factoryId) {
   // The clock may have reached its final tile WHILE the Flow deck was already empty (this is one of the two
   // orderings that complete the soft-lock · see maybeForceFlowEndgame). Re-check after every refill.
   maybeForceFlowEndgame(state)
+  // A refill that could not happen (tiles exhausted) is exactly when the board can go dead, so the
+  // deadlock check belongs here too · not only at end of turn. Catching it on the placement means a
+  // player who is about to be stuck is already in the endgame rather than one turn behind it.
+  maybeForceDeadlockEndgame(state)
 }
 
 // Flow soft-lock guard (T2 S19). Flow mode's simultaneous draw (getModeConfig.SIMULTANEOUS_DRAW) lets every
@@ -154,6 +158,64 @@ function maybeForceFlowEndgame(state) {
   if (state.deck.length === 0 && state.theOffer.length === 0 && state.productionTilesRemaining <= 1) {
     state.endGameTriggered = true
   }
+}
+
+// ── THE DEADLOCK TERMINAL CONDITION (T2 S44) ────────────────────────────────────────────────────────
+// A browser audit reached turn 33 in practice and the game stopped accepting input FOREVER: 2 actions
+// left, End Turn disabled (it wants all 3 spent), timer at 0 and not force-advancing, deck empty, two
+// factories holding nothing, and the one stocked factory bordering only regions that were 19/19 FULL.
+//
+// THIS IS NOT THE EXHAUSTION THE ENGINE ALREADY KNEW ABOUT, and conflating the two is why it survived.
+// endGameTriggered has exactly one natural source: refillFactoryDraft, which runs ONLY as a side effect
+// of a placement that empties a factory. So the tile clock is driven BY placements. Take placements
+// away and the clock cannot advance, the trigger can never fire, and the position is permanently dead
+// with tiles still on the board. maybeForceFlowEndgame above does not help: it is mode-gated to Flow
+// (its own comment reasons "Classic is turn-locked, so its slow deck never out-drains the clock", which
+// this audit falsifies) and it additionally requires productionTilesRemaining<=1, which a deadlocked
+// game never reaches for the same reason.
+//
+// MEASURED before writing this, on the reconstructed state: 40 consecutive endTurn() calls left phase
+// 'playing', endGameTriggered false and tiles frozen at 3. The game genuinely cannot end.
+//
+// WHY THIS IS SAFE · the condition is not "the player is stuck this turn", it is "no action can ever
+// become available again", which is a closed proof rather than a heuristic:
+//   · drawing needs deck or offer · both empty, and nothing refills them (endTurn's top-up pulls from
+//     the same empty deck)
+//   · placing needs a stocked factory with a legal hex in a region it borders
+//   · a factory can ONLY be restocked by refillFactoryDraft, which only runs on a placement
+// So with no draw and no placement, no future state differs from this one. Scoring a card is still
+// possible and costs no action, but it moves no element and stocks no factory · it cannot reopen play,
+// which is why it is deliberately not counted here.
+// Deliberately ignores actionsRemaining: the budget resets every turn, so it can make a player stuck
+// NOW but can never make a position dead. Checking it would end healthy games (Rule 73's question ·
+// can this term even mean what I want it to mean).
+function anyPlacementPossible(state) {
+  for (const f of state.factories) {
+    if (!f.elements?.some(e => e.count > 0)) continue
+    for (const regionId of f.betweenRegions) {
+      const region = state.regions.find(r => r.id === regionId)
+      const regionDef = REGION_DEFS.find(rd => rd.id === regionId)
+      if (!region || !regionDef) continue
+      const occupied = Object.values(region.hexes).some(h => h.element)
+      if (!occupied) return true // an empty region always accepts its centre
+      for (const hex of hexesInRadius(regionDef.cq, regionDef.cr, regionDef.radius)) {
+        if (region.hexes[`${hex.q},${hex.r}`]?.element) continue
+        if (NEIGHBOR_DIRS.some(([dq, dr]) => region.hexes[`${hex.q + dq},${hex.r + dr}`]?.element)) return true
+      }
+    }
+  }
+  return false
+}
+
+// Sets the SAME endGameTriggered flag the natural clock sets (Rule 62 · extend, never replace), so the
+// existing endTurn 2-round → 'scoring' path does the ending. All modes: the deadlock is a property of
+// the board, not of the draw rules.
+function maybeForceDeadlockEndgame(state) {
+  if (state.endGameTriggered) return
+  if (state.phase !== 'playing') return
+  if (state.deck.length > 0 || state.theOffer.length > 0) return
+  if (anyPlacementPossible(state)) return
+  state.endGameTriggered = true
 }
 
 export const useGameStore = create(immer((set, get) => ({
@@ -462,6 +524,11 @@ export const useGameStore = create(immer((set, get) => ({
     while (state.theOffer.length < 4 && state.deck.length > 0) {
       state.theOffer.push(state.deck.shift())
     }
+
+    // Deadlock check AFTER the top-up (which is the last thing that can make a draw possible again)
+    // and BEFORE the round accounting, so the very turn that discovers the deadlock also starts
+    // burning the two endgame rounds instead of waiting a full extra lap.
+    maybeForceDeadlockEndgame(state)
 
     // End-game round tracking: once triggered, each completed full round burns one
     // of the two remaining rounds. (Seat wrap to 0 marks a round boundary.)
