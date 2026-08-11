@@ -480,12 +480,24 @@ had silently dropped that term. Asserting on it would have put a second, wrong r
 guard written to stop exactly that (Rule 45). A counterweight is not paperwork: it is the assertion most
 likely to be measuring the wrong quantity, because it is the one you write while thinking about something
 else.
-SECOND COROLLARY, and it cost two live runs: YOUR OWN PUSH CAN DESTROY YOUR OWN LIVE RUN. global-teardown.js
-calls purge_e2e_test_data(), which sweeps E2E rooms of ANY status · so the E2E workflow triggered by the
-commit you just made DELETES the room your local run is playing in. Measured: "NO ROW for room_id ...
-UNMEASURED" while two browsers were still mid-game, with two workflow runs in flight confirmed via gh.
-Check `gh run list` for an in-flight E2E before any live run, the same way Rule 82 says build the isolated
-worktree first · isolation of the CODE does not isolate the DATABASE.
+SECOND COROLLARY · ⚠ CORRECTED T3 S46, AND THE CORRECTION IS THE MORE USEFUL HALF. As written in S45 this
+said "YOUR OWN PUSH CAN DESTROY YOUR OWN LIVE RUN · purge_e2e_test_data sweeps E2E rooms of ANY status, so
+the workflow your commit triggered deletes the room your local run is playing in." THE MECHANISM IS WRONG.
+Read one session later, from the migration and the live schema rather than from memory:
+    purge_e2e_test_data deletes rooms `where r.status = 'finished'` · NOT any status (migration 006)
+    nothing has a foreign key to player_profiles, so the unconditional profile delete cascades NOWHERE
+    the app marks a room 'finished' only when the HOST LEAVES (useGameRoom.js:614), not at game end
+An in-progress room is 'playing', so the purge cannot have taken it. What I actually measured stands: the
+session row was genuinely absent mid-run while two browsers were still playing ("NO ROW for room_id ...").
+THE CAUSE IS UNKNOWN and is now recorded as unknown rather than as a plausible story · which is the whole
+lesson. I had a real symptom, a nearby suspicious mechanism, and a re-run that "confirmed" it, and I wrote
+the three together into a permanent rule. A rule is exactly the wrong place for a hypothesis, because
+nothing re-derives it (Rule 101, applied to Rule 103 itself, one session later).
+WHAT REMAINS TRUE AND WORTH KEEPING: isolating the CODE in a worktree does not isolate the DATABASE, live
+runs and CI share one Supabase project, and `gh run list` before a live run costs nothing. And one real
+narrow hazard did fall out of the re-read: the purge deletes EVERY player_profiles row matching E2E% with
+no status or age filter, including profiles belonging to a run that is still going · scoped like the room
+delete or bounded by age, it would not.
 
 RULE 101 (T3 S44 · August 11 2026):
 A FIX'S BLAST RADIUS INCLUDES THE TESTS THAT DOCUMENTED THE DEFECT · THEY BECOME FALSE CLAIMS THE MOMENT
