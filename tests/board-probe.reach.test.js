@@ -451,3 +451,53 @@ describe('boardMetrics asserts its own claim, not just that it runs', () => {
     } finally { restore() }
   })
 })
+
+// ── THE CONTRAST HELPER MUST REFUSE, NOT REPORT (T1 S49) ────────────────────────────────────────
+// S48: an ad-hoc contrast probe returned 97186:1 for #C89440 because its alpha regex captured the
+// blue channel of rgb(200,148,64). It was caught only because the number was absurd · at 4.9:1 it
+// would have shipped and would have retro-justified every contrast claim made since S40. WCAG
+// contrast is bounded by construction to [1, 21], so anything outside that is proof the INPUT was
+// not a colour, and the only honest response is to throw.
+describe('contrast · an impossible ratio is a broken input, not a reading', () => {
+  it('returns the real ratio for real colours, and it is inside the bound', () => {
+    const white = [255, 255, 255], page = [10, 10, 15]
+    const r = probe.contrast(white, page)
+    expect(r).toBeGreaterThan(19)
+    expect(r).toBeLessThanOrEqual(21)
+    expect(probe.contrast(page, page)).toBeCloseTo(1, 6) // the identity, exactly
+    // symmetric · order must not change the answer
+    expect(probe.contrast(page, white)).toBeCloseTo(r, 10)
+  })
+
+  it('THROWS on the S48 input · a channel used as an alpha multiplier', () => {
+    // What the broken probe actually computed: rgb(200,148,64) composited against the page with
+    // alpha 64, i.e. 200*64 + 10*(1-64).
+    const over = (fg, bg, a) => fg.map((c, i) => c * a + bg[i] * (1 - a))
+    const poisoned = over([200, 148, 64], [10, 10, 15], 64)
+    expect(() => probe.contrast(poisoned, [10, 10, 15])).toThrow(/outside the possible range|0\.\.255/)
+  })
+
+  it('THROWS on 0..1 floats · the mistake that produces a BELIEVABLE wrong ratio', () => {
+    // This is the dangerous one: [0.78,0.58,0.25] is silently "very dark" and reports ~19:1 rather
+    // than the true 7.3:1, which is a plausible number in the direction of passing.
+    expect(() => probe.contrast([0.78, 0.58, 0.25], [10, 10, 15])).toThrow(/0\.\.1 floats/)
+  })
+
+  it('but a COMPOSITED colour keeps working · fractional channels are legitimate', () => {
+    // The reason the 0..1 check is narrow rather than "reject non-integers": compositing an alpha
+    // produces floats, and that is the probe's most common real input.
+    const over = (fg, bg, a) => fg.map((c, i) => c * a + bg[i] * (1 - a))
+    const composited = over([255, 255, 255], [10, 10, 15], 0.65) // -> 169.25, 169.25, 172.0
+    expect(composited.some(v => !Number.isInteger(v))).toBe(true)
+    const r = probe.contrast(composited, [10, 10, 15])
+    expect(r).toBeGreaterThan(1)
+    expect(r).toBeLessThan(21)
+  })
+
+  it('THROWS on a non-colour rather than coercing it', () => {
+    expect(() => probe.contrast([255, 255], [10, 10, 15])).toThrow()
+    expect(() => probe.contrast(null, [10, 10, 15])).toThrow()
+    expect(() => probe.contrast([NaN, 0, 0], [10, 10, 15])).toThrow()
+    expect(() => probe.contrast([300, 0, 0], [10, 10, 15])).toThrow(/0\.\.255/)
+  })
+})

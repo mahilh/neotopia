@@ -355,6 +355,10 @@ export function cascadeFacts() {
     const cs = window.getComputedStyle(el)
     const r = el.getBoundingClientRect()
     return {
+      // `position` is the DEFINING property of the S49 sheet layout and the reason it is reported
+      // first. A flex term cannot express "this element left the flow", and the share below cannot
+      // either · see the warning on boardShareOfMain.
+      position: cs.position,
       flexGrow: cs.flexGrow,
       flexShrink: cs.flexShrink,
       flexBasis: cs.flexBasis,
@@ -370,8 +374,14 @@ export function cascadeFacts() {
     flexDirection: window.getComputedStyle(main).flexDirection,
     board: read(board),
     sidebar: read(side),
-    // The share the two ACTUALLY ended up with · the quantity the S47 rule exists to set, expressed
-    // as the thing a player experiences rather than as the declaration that was supposed to cause it.
+    // ⚠ NOT A DISCRIMINATOR BETWEEN THE S47 AND S49 LAYOUTS · MEASURED, after I claimed it was.
+    // It divides by the sum of both heights, and an ABSOLUTELY POSITIONED sidebar still has a
+    // height · it simply is not in the flow. So the sheet build reports 0.633 against the 3:2
+    // build's 0.588, two numbers close enough to prove nothing. I wrote "expect > 0.95" into a
+    // handoff for T3 before running it; it is 0.633 (Rule 104's corollary · a measurement asserted
+    // from expectation is a guess with a number).
+    // Use `sidebar.position` for that question. This stays because it is still the right reading of
+    // "how the column was actually divided" WHEN both children are in the column.
     boardShareOfMain: (() => {
       const b = board.getBoundingClientRect().height
       const s = side.getBoundingClientRect().height
@@ -381,10 +391,53 @@ export function cascadeFacts() {
 }
 
 const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
-export const luminance = (p) => 0.2126 * lin(p[0]) + 0.7152 * lin(p[1]) + 0.0722 * lin(p[2])
+// ── A CONTRAST RATIO THAT CANNOT BE PLAUSIBLE-BUT-WRONG (T1 S49) ─────────────────────────────────
+// In S48 an ad-hoc version of this reported 97186:1 for #C89440, because its alpha regex captured
+// the BLUE CHANNEL of `rgb(200, 148, 64)` and composited the colour against the page 64 times over.
+// I caught it only because the number was absurd. At 4.9:1 · one notch over the AA line · I would
+// have shipped it, and it would have retro-justified nine sessions of contrast claims.
+//
+// SO THE FUNCTION ASSERTS ITS OWN RANGE AND THROWS. WCAG contrast is bounded by construction:
+// luminance is in [0,1], the ratio is (L1+0.05)/(L2+0.05), so it cannot leave [1, 21]. A value
+// outside that is not a low reading or a high reading · it is proof the INPUT was not a colour, and
+// the only honest response is to refuse rather than to return. This is the same contract as
+// `measured: false` elsewhere in this file (Rule 80), in the one case where the wrong answer is a
+// number a human will believe.
+// Channels are validated too, because [0,1]-scaled floats and 0-255 ints are the mistake that makes
+// a bad ratio LOOK reasonable · 0.78 read as a channel is simply very dark, and reports 19:1.
+const channelOk = (v) => Number.isFinite(v) && v >= 0 && v <= 255
+export const luminance = (p) => {
+  if (!Array.isArray(p) || p.length < 3 || !p.slice(0, 3).every(channelOk)) {
+    throw new Error(`board probe: luminance needs [r,g,b] in 0..255, got ${JSON.stringify(p)}`)
+  }
+  // THE 0..1 CASE, WHICH IS THE DANGEROUS ONE AND THE ONLY HEURISTIC HERE. Everything else above is
+  // a proof: out of [0,255] cannot be a channel. This is not · [0.78,0.58,0.25] is a perfectly legal
+  // near-black, so I cannot reject fractional channels outright, and I must not, because compositing
+  // an alpha produces them (255*0.65 + 10*0.35 = 169.25 is a real, correct input).
+  // What is NOT plausible is all three channels at or below 1 AND at least one fractional: that is
+  // a 0..1-scaled colour, and it reports ~19:1 against a dark page instead of the true ~7:1 · a
+  // believable number in the direction of PASSING, which is the worst possible failure for a check
+  // whose whole job is to catch things that are too faint.
+  const c = p.slice(0, 3)
+  if (c.every(v => v <= 1) && c.some(v => !Number.isInteger(v))) {
+    throw new Error(
+      `board probe: ${JSON.stringify(c)} looks like 0..1 floats, not 0..255 channels · multiply by `
+      + '255. (Heuristic, not a proof: a genuine near-black with fractional channels would trip it, '
+      + 'and that is the trade · a false alarm on a colour nobody uses beats a plausible pass.)',
+    )
+  }
+  return 0.2126 * lin(p[0]) + 0.7152 * lin(p[1]) + 0.0722 * lin(p[2])
+}
 export const contrast = (a, b) => {
   const [x, y] = [luminance(a) + 0.05, luminance(b) + 0.05]
-  return x > y ? x / y : y / x
+  const r = x > y ? x / y : y / x
+  if (!(r >= 1 && r <= 21.000001)) {
+    throw new Error(
+      `board probe: contrast ${r} is outside the possible range 1..21 · the inputs were not colours `
+      + `(${JSON.stringify(a)} vs ${JSON.stringify(b)}). See S48: an alpha regex ate a blue channel.`,
+    )
+  }
+  return r
 }
 
 export async function setup({ scale = 2, inlineImages = true } = {}) {
