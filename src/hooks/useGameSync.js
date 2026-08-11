@@ -16,6 +16,7 @@ import {
   reportBackendUp, reportBackendRetrying, reportBackendDown,
   registerBackendRetry, clearBackendSource,
 } from './useConnectionHealth'
+import { nextStateVersion, adoptServerVersion, wasOvertaken } from '../lib/writeOrder'
 
 // ── Reconnect budget (T3 S26) ─────────────────────────────────────────────────────────────────────────────
 // THE BUG THIS REPLACES (measured · not theoretical): both failure paths below used to schedule
@@ -119,51 +120,35 @@ export function useGameSync(roomId, currentUserId) {
   const setSession = useCallback((id) => { sessionIdRef.current = id; setSessionId(id) }, [])
   const syncFromServerRaw = useGameStore(s => s.syncFromServer)
 
-  // ── OVERTAKE DETECTION · a lost write says so instead of deadlocking in silence (T3 S43) ──────────────
-  // MEASURED FIRST (S41 live, reproduced S42 in useGameSync.writeorder.test.js): persist is fire-and-forget
-  // (useGameActions.js:56) and pushState reads serializableState() SYNCHRONOUSLY at call time, so one turn
-  // of place·place·place·EndTurn issues FOUR overlapping UPDATEs carrying four different instants, and the
-  // row keeps whichever the server applied LAST. When that is a placement issued BEFORE the End Turn,
-  // current_seat reverts, the host has already moved on, and both players deadlock in opposite directions ·
-  // the host waiting for a joiner who is correctly waiting for the host.
+  // ── WRITE ORDERING · T2's PREDICATE, WIRED (T3 S44) ───────────────────────────────────────────────────
+  // THE DEFECT (T3 S42 · 0b40998, reproduced with zero live runs, then measured against real Postgres in
+  // tests/e2e/postgres-writeorder.e2e.js): persist is fire-and-forget and pushState reads
+  // serializableState() SYNCHRONOUSLY at call time, so place·place·place·EndTurn issues four overlapping
+  // UPDATEs carrying four different instants and the row keeps whichever landed LAST. One client losing a
+  // write to ITSELF · no opponent required, which is why it reproduced on a quiet board.
   //
-  // THIS DOES NOT FIX IT, AND THAT IS DELIBERATE. The fix is a server-side ordering guarantee (T2 · an OCC
-  // predicate on the UPDATE · shape posted to comms BEFORE this was built so their version and this counter
-  // are one value, not two). A client-side repair here would also HIDE the thing this measures, and a
-  // detector that silently heals is how a defect survives another nineteen sessions. It reports, only.
+  // MY S43 DETECTOR IS GONE AND THAT IS THE POINT. I shipped a `__seq` Lamport counter in the state jsonb
+  // to NAME the loss, and posted its shape to comms before building it precisely so this moment would be a
+  // deletion rather than an argument. T2 then shipped the real thing · migration 022's state_version column
+  // plus src/lib/writeOrder.js · so carrying both would be a second contract and a second witness that
+  // agree today and drift later (Rule 94). Theirs is also the better signal: `wasOvertaken` reads the
+  // server's own REFUSAL (zero rows affected), where mine INFERRED a loss from a counter going backwards.
+  // An authoritative no beats a clever deduction.
   //
-  // __seq IS A LAMPORT CLOCK: max(last OBSERVED, last SENT) + 1. Both terms are load-bearing. A purely
-  // per-client counter cannot order two clients · A's 5 and B's 3 are incomparable · so a detector built on
-  // one would cry overtake every time the opponent moved. But observed-only is equally wrong, and that is
-  // the version I wrote first: two pushes in one turn both read the same stale value and mint the SAME
-  // number, so the detector goes blind to exactly the self-clobber it exists for. Taking the max of both
-  // keeps this client's writes strictly increasing AND advances past anything the session has seen, with no
-  // coordination and no migration · serializableState() is the whole store and syncFromServer Object.assigns
-  // the server state back (gameStore.js:553-561), so the field rides out and back on its own.
-  const sentSeqRef = useRef(0)          // highest __seq this client has written
+  // VERIFIED LIVE BEFORE WIRING, because a predicate on a column that does not exist would 400 every write
+  // in the game (Rule 68 · a migration committed is not a deployed schema):
+  //     information_schema · state_version · bigint · NOT NULL · DEFAULT 0   ✅ applied
+  //     column_privileges  · UPDATE granted to anon AND authenticated        ✅ writable
+  const versionRef = useRef(0)
   const [overtakes, setOvertakes] = useState([])
 
-  // EVERY inbound state funnels through here · the realtime handler, the REST seed AND the rollback path
-  // all called syncFromServer directly, and a detector wired into only one of them would report a clean
-  // room while a write vanished through another (Rule 84 · a well-tested symbol is not a tested path).
-  const syncFromServer = useCallback((serverState) => {
-    const incoming = Number(serverState?.__seq ?? 0)
-    if (sentSeqRef.current > 0 && incoming < sentSeqRef.current) {
-      const event = {
-        sentSeq: sentSeqRef.current,
-        serverSeq: incoming,
-        behindBy: sentSeqRef.current - incoming,
-        currentSeat: serverState?.currentSeat ?? null,
-        turnNumber: serverState?.turnNumber ?? null,
-      }
-      setOvertakes(prev => [...prev.slice(-9), event])
-      if (import.meta.env.DEV) {
-        console.warn(`[T3] WRITE OVERTAKEN · this client wrote __seq ${event.sentSeq} and the server is ` +
-          `serving __seq ${event.serverSeq} (behind by ${event.behindBy}). A later write was overwritten ` +
-          `by an earlier one · seat ${event.currentSeat}, turn ${event.turnNumber}.`)
-      }
-    }
-    // The server still wins · this is a witness, not a gate (CLAUDE.md rule 16).
+  // EVERY inbound state funnels through here · the realtime handler, the REST re-seed AND the rollback
+  // path all called syncFromServer directly, and folding the server's version in only one of them would
+  // let this client renumber backwards through another (Rule 84 · a well-tested symbol is not a tested
+  // path). adoptServerVersion is a MAX, never an assignment: a client that has issued 7 and then receives
+  // 5 from a peer's older write must not renumber down, or its own next write fails its own predicate.
+  const syncFromServer = useCallback((serverState, serverVersion) => {
+    versionRef.current = adoptServerVersion(versionRef.current, serverVersion)
     syncFromServerRaw(serverState)
   }, [syncFromServerRaw])
 
@@ -186,13 +171,17 @@ export function useGameSync(roomId, currentUserId) {
   const fetchAndSeed = useCallback(async (targetRoomId) => {
     const { data, error } = await supabase
       .from('game_sessions')
-      .select('id, state')
+      // state_version comes along on the SEED, not just on realtime. A client that re-seeds after a
+      // transport drop and does NOT adopt the row's version keeps counting from its own stale local
+      // number, and its next write is refused by its own predicate · a reconnect would silently stop
+      // that client from moving. The re-seed is exactly where a version is most likely to have moved.
+      .select('id, state, state_version')
       .eq('room_id', targetRoomId)
       .maybeSingle()
     if (error) return { ok: false, seeded: false, error }
     if (!data) return { ok: true, seeded: false, error: null } // reachable · nothing to seed yet
     setSession(data.id)
-    if (data.state) syncFromServer(data.state)
+    if (data.state) syncFromServer(data.state, data.state_version)
     return { ok: true, seeded: true, error: null }
   }, [syncFromServer, setSession])
 
@@ -244,7 +233,7 @@ export function useGameSync(roomId, currentUserId) {
         (payload) => {
           const next = payload.new
           if (next?.id) setSession(next.id)
-          if (next?.state) syncFromServer(next.state)
+          if (next?.state) syncFromServer(next.state, next.state_version)
         }
       )
       .on('system', {}, (payload) => {
@@ -354,22 +343,17 @@ export function useGameSync(roomId, currentUserId) {
   // the event write never blocks the move (audit log is non-critical to sync).
   const pushState = useCallback(async (eventType, eventData = {}) => {
     if (!roomId) return { error: { message: 'No room' } }
-    const base = serializableState()
-    // max(last OBSERVED, last SENT) + 1 · and the second half of that max is not decoration. My first
-    // version was (observed + 1) alone, which is the classic half-a-Lamport-clock mistake and it made the
-    // detector BLIND TO ITS OWN CASE: two pushes in the same turn both read __seq 0 from the store (the
-    // server has not echoed either back yet), both minted 1, and `serverSeq < sentSeq` was 1 < 1 · false.
-    // The test caught it on the first run. Carrying the local high-water mark makes this client's own
-    // successive writes strictly increasing, which is the ordering the whole detector rests on, while the
-    // observed term keeps it session-global across clients.
-    const seq = Math.max(Number(base.__seq ?? 0), sentSeqRef.current) + 1
-    const s = { ...base, __seq: seq }
-    if (seq > sentSeqRef.current) sentSeqRef.current = seq
+    const s = serializableState()
+    // Numbered by ISSUE order, taken at the SAME moment as the snapshot · writeOrder.js says so in as many
+    // words, and it matters: a number minted later than its snapshot describes a different instant.
+    const version = nextStateVersion(versionRef.current)
+    versionRef.current = version
 
-    const { error: stateErr } = await supabase
+    const { data, error: stateErr } = await supabase
       .from('game_sessions')
       .update({
         state: s,
+        state_version: version,
         current_seat: s.currentSeat,
         turn_number: s.turnNumber,
         actions_remaining: s.actionsRemaining,
@@ -377,8 +361,26 @@ export function useGameSync(roomId, currentUserId) {
         phase: sessionPhaseColumn(s.phase), // store 'scoring' → 'finished' · else the terminal UPDATE 400s
       })
       .eq('room_id', roomId)
+      .lt('state_version', version) // ← the guarantee · a stale snapshot is refused, not applied
+      .select('state_version')      // ← REQUIRED · wasOvertaken(null) is false, so without this a refusal
+                                    //   reads as success and the whole predicate becomes invisible (T2)
 
     if (stateErr) return { error: stateErr }
+
+    // A REFUSAL IS NOT AN ERROR · it is the predicate working. The row already holds something newer, so
+    // this snapshot is stale and dropping it is correct. It is reported rather than retried: a client-side
+    // retry here would re-send the same stale instant, and a detector that silently repairs hides the
+    // thing it measures. The next legitimate action pushes a fresh snapshot anyway.
+    if (wasOvertaken(data)) {
+      const event = { version, seat: s.currentSeat, turn: s.turnNumber, eventType }
+      setOvertakes(prev => [...prev.slice(-9), event])
+      if (import.meta.env.DEV) {
+        console.warn(`[T3] WRITE REFUSED (overtaken) · state_version ${version} lost to a newer row · ` +
+          `"${eventType}" at seat ${event.seat}, turn ${event.turn}. Before migration 022 this write ` +
+          'would have CLOBBERED the newer state instead.')
+      }
+      return { error: null, overtaken: true }
+    }
 
     // Resolve the event name to a CHECK-valid event_type · accepts the DB-valid names useGameActions
     // emits today AND any legacy shorthand (see resolveDbEventType). The CHECK rejects unknown values
@@ -399,7 +401,7 @@ export function useGameSync(roomId, currentUserId) {
     } else if (eventType && !dbEventType && import.meta.env.DEV) {
       console.warn(`[T3] no game_events mapping for "${eventType}" · audit row skipped (add it to EVENT_TYPE_DB)`)
     }
-    return { error: null }
+    return { error: null, overtaken: false }
   }, [roomId])
 
   // Optimistic move · the correct order (CLAUDE.md OPTIMISTIC UPDATES):

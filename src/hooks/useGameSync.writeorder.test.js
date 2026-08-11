@@ -1,54 +1,48 @@
-// NeoTopia · ONE CLIENT'S OWN WRITES RACE EACH OTHER, AND AN END TURN CAN BE LOST (T3 S42).
+// NeoTopia · WRITE ORDERING · the defect, the predicate that closes it, and the refusal being reported.
 //
-// MEASURED LIVE FIRST, then reproduced here. Three live two-human runs died at the same place, and the
-// diagnostic named it exactly (endgame-live.e2e.js · T3 S41):
-//     the joiner · localSeat 0, localTurn 19, channel realtime:game-sync:...:joined
-//     the SERVER · column_seat 0, column_turn 19, state_seat 0, phase 'playing'
-//     the host   · believes currentSeat is 1
-// The joiner agreed with the server and was subscribed, so delivery was never involved. The HOST had
-// advanced its own store past an End Turn that never reached game_sessions, and both players then
-// deadlocked in opposite directions: the host waiting for a joiner who was correctly waiting for the host.
+// THIS FILE USED TO CHARACTERISE A LIVE DEFECT. It no longer does, and that change is the point rather
+// than an inconvenience: T3 S42 reproduced the clobber here with zero live runs, T3 S43 measured the
+// semantic against real Postgres (tests/e2e/postgres-writeorder.e2e.js · write B then A and the row holds
+// A · no version check, no merge), T2 S43 shipped migration 022's state_version column plus the shared
+// contract in src/lib/writeOrder.js, and T3 S44 wired pushState to use it. A test that still asserted
+// "the later snapshot clobbers the earlier" would now be documenting a defect that has been fixed · a
+// citation outliving the thing it cites (Rule 97), in the file best placed to notice.
 //
-// ── WHY IT CAN HAPPEN, from the code rather than from the symptom ────────────────────────────────────────
-// useGameActions.persist is FIRE AND FORGET · `const persist = (eventType) => { sync?.pushState?.(eventType) }`
-// (useGameActions.js:56) · nothing awaits it. pushState reads serializableState() SYNCHRONOUSLY at call time
-// (useGameSync.js:309) and then does a bare `.update()` on game_sessions keyed by room_id, with no sequence
-// number, no version predicate and no queue (useGameSync.js:311-321).
-// So a turn of place · place · place · End Turn issues FOUR overlapping UPDATEs, each carrying a full
-// snapshot of a DIFFERENT instant, and the row ends up holding whichever the server processed LAST. When
-// that is a placement issued before the End Turn, current_seat reverts and the turn advance is gone.
+// THE DEFECT, for the record: useGameActions.persist is fire-and-forget and pushState reads
+// serializableState() SYNCHRONOUSLY at call time, so place·place·place·EndTurn issues four overlapping
+// UPDATEs carrying four different instants. Before 022 the row kept whichever landed LAST, so a slow
+// placement issued BEFORE the End Turn overwrote it, current_seat reverted, and both players deadlocked
+// in opposite directions · ONE client losing a write to ITSELF, no opponent required.
 //
-// THIS IS A DIFFERENT CLAIM FROM simultaneousdraw.test.js, which models TWO clients colliding. Here there is
-// ONE client, one player, one turn, and no opponent acting at all · a client loses its own write to itself.
-// That is the version nothing in this repo had ever asserted, and it needs no concurrency between humans,
-// which is why it reproduces on a quiet board.
-//
-// CHARACTERIZATION, NOT APPROVAL. The fix is a server-side ordering guarantee (a sequence/version predicate
-// on the UPDATE), which is T2's lane · routed in comms rather than papered over with a client-side await,
-// because awaiting persist only narrows the window and would still lose a write to any retry or slow socket.
+// THE FIX IS THE DATABASE'S, NOT THE CLIENT'S: `.lt('state_version', n)` means the row accepts a write
+// only if it is strictly newer than what it already holds, so APPLY order is forced to equal ISSUE order.
+// The client-side alternative (awaiting persist) only narrows the window and still loses a write to any
+// retry or slow socket.
 
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 
-// Stateful Supabase mock, and the ONE thing it adds over the simultaneousdraw mock is the thing under test:
-// a matched UPDATE is APPLIED TO THE ROW AFTER A CONTROLLABLE DELAY, so the order the server processes
-// writes can differ from the order the client issued them. That is what a network does, and the existing
-// mock cannot express it because it writes the row inside then() (issue order == apply order, always).
-const db = { rows: {}, applied: [] }
+// The mock now models the PREDICATE, because that is what production does. A matched UPDATE applies only
+// when its state_version is strictly greater than the row's · and it still applies after a controllable
+// delay, so apply order can differ from issue order. Both halves are needed: without the delay the race
+// cannot be expressed, without the predicate the fix cannot be observed.
+const db = { rows: {}, applied: [], refused: [] }
 let nextDelay = () => 0
+let onSettled = null
 vi.mock('../lib/supabase', () => {
   const channel = {
-    on() { return this },
+    on(evt, _f, cb) { if (evt === 'postgres_changes') channel._pg = cb; return this },
     subscribe(cb) { Promise.resolve().then(() => cb('SUBSCRIBED')); return this },
+    _pg: null,
   }
   function makeBuilder(table) {
     const b = {
-      _payload: null,
-      _filter: null,
-      select() { return b },
+      _payload: null, _filter: null, _lt: null, _select: false,
+      select() { b._select = true; return b },
       insert() { return b },
       update(payload) { b._payload = payload; return b },
       eq(col, val) { b._filter = { col, val }; return b },
+      lt(col, val) { b._lt = { col, val }; return b },
       order() { return b },
       maybeSingle() { return Promise.resolve({ data: null, error: null }) },
       then(onF, onR) {
@@ -56,105 +50,124 @@ vi.mock('../lib/supabase', () => {
         const delay = isRowWrite ? nextDelay() : 0
         const rid = b._filter?.val
         const payload = b._payload
+        const lt = b._lt
+        const wantsRows = b._select
         return new Promise((res) => setTimeout(() => {
+          let data = wantsRows ? [] : null
           if (isRowWrite) {
-            db.rows[rid] = payload           // FULL-ROW REPLACE · faithful UPDATE semantics
-            db.applied.push(payload.current_seat)
+            const held = Number(db.rows[rid]?.state_version ?? 0)
+            const incoming = Number(payload.state_version ?? 0)
+            // `.lt('state_version', n)` · the row matches only when what it HOLDS is < n.
+            const passes = !lt || held < Number(lt.val)
+            if (passes) {
+              db.rows[rid] = payload
+              db.applied.push(incoming)
+              if (wantsRows) data = [{ state_version: incoming }]
+            } else {
+              db.refused.push(incoming)   // zero rows affected · exactly what wasOvertaken reads
+            }
+            if (onSettled) onSettled(payload, passes)
           }
-          res({ data: null, error: null })
+          res({ data, error: null })
         }, delay)).then(onF, onR)
       },
     }
     return b
   }
-  const stub = { channel: vi.fn(() => channel), removeChannel: vi.fn(), from: vi.fn((t) => makeBuilder(t)) }
+  const stub = {
+    channel: vi.fn(() => channel), removeChannel: vi.fn(), from: vi.fn((t) => makeBuilder(t)),
+    __deliver: (state, version) => channel._pg && channel._pg({ new: { state, state_version: version } }),
+  }
   return { supabase: stub, default: stub }
 })
 
+import { supabase } from '../lib/supabase'
 import { useGameSync } from './useGameSync'
 import { useGameStore } from '../store/gameStore'
 
 const ROOM = 'room-writeorder'
 const seats = () => [{ seat: 0, hand: [] }, { seat: 1, hand: [] }]
 
-describe('one client · its own writes race, and an End Turn can be lost (T3 S42 · characterization)', () => {
-  beforeEach(() => { db.rows = {}; db.applied = []; nextDelay = () => 0 })
-
-  // ── COUNTERWEIGHT, WRITTEN FIRST (Rule 90) ────────────────────────────────────────────────────────────
-  // The cheap wrong conclusion here is not a bad fix · it is believing MY MOCK. A harness that applies row
-  // writes in a silly order would "prove" a clobber that pushState never commits, and the finding would be
-  // an artefact of the instrument. So the control comes first: the SAME two pushes, issued in the SAME
-  // order, with the server applying them IN ORDER, must leave the row correct. If this one ever goes red,
-  // the mock is the defect and nothing below it means anything.
-  test('CONTROL · applied in issue order, the End Turn survives and the row holds seat 1', async () => {
-    const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
-    act(() => useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats() }))
-
-    nextDelay = () => 0 // every write applies immediately · issue order == apply order
-    await act(async () => {
-      const placement = result.current.pushState('place')          // snapshot taken NOW · seat 0
-      useGameStore.setState({ currentSeat: 1, turnNumber: 20 })    // endTurn() advances the local store
-      const endTurn = result.current.pushState('endTurn')          // snapshot taken NOW · seat 1
-      await Promise.all([placement, endTurn])
-    })
-
-    expect(db.applied, 'both writes must reach the row').toHaveLength(2)
-    expect(db.rows[ROOM].current_seat, 'in-order, the last write is the End Turn and the row holds seat 1')
-      .toBe(1)
-    expect(db.rows[ROOM].state.currentSeat).toBe(1)
+describe('one client racing itself · the predicate keeps the End Turn (T3 S42 defect · S44 fix)', () => {
+  beforeEach(() => {
+    db.rows = {}; db.applied = []; db.refused = []; nextDelay = () => 0; onSettled = null
+    useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats() })
   })
 
-  // ── THE DEFECT ────────────────────────────────────────────────────────────────────────────────────────
-  test('the placement issued BEFORE the End Turn lands AFTER it · current_seat reverts and the turn is lost',
+  // ── COUNTERWEIGHT, WRITTEN FIRST (Rule 90) ────────────────────────────────────────────────────────────
+  // A predicate has one catastrophic wrong version and T2 named it in migration 022 so nobody would
+  // "simplify" it back: the textbook `WHERE version = :base`. Every write in a burst reads base 0 before
+  // any lands, so the FIRST applies and the other three are rejected · including the End Turn. That turns
+  // "sometimes loses the last write" into "reliably loses every write after the first", which is a
+  // deterministic failure wearing the costume of a fix. So the first thing asserted is that an ordinary
+  // burst still LANDS: four writes issued in order must produce four applies and zero refusals.
+  test('CONTROL · an ordinary in-order burst is not rejected · all four writes land', async () => {
+    const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
+    await act(async () => {
+      for (let i = 0; i < 3; i++) await result.current.pushState('place')
+      useGameStore.setState({ currentSeat: 1, turnNumber: 20 })
+      await result.current.pushState('endTurn')
+    })
+    expect(db.applied, 'a normal turn must not be refused · this is the `WHERE version = base` failure')
+      .toEqual([1, 2, 3, 4])
+    expect(db.refused).toEqual([])
+    expect(db.rows[ROOM].current_seat, 'the End Turn is what the row ends up holding').toBe(1)
+    expect(result.current.overtakes, 'nothing was overtaken in an ordinary turn').toEqual([])
+  })
+
+  test('THE FIX · a placement issued BEFORE the End Turn but landing AFTER it is REFUSED, not applied',
     async () => {
       const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
-      act(() => useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats() }))
-
-      // The placement's UPDATE takes longer than the End Turn's · one slow request is all it takes, and
-      // nothing in pushState prevents it. No opponent is acting; this client is racing only itself.
+      // The exact live shape: the placement's request is the slow one.
       let call = 0
       nextDelay = () => (call++ === 0 ? 40 : 5)
 
       await act(async () => {
-        const placement = result.current.pushState('place')        // snapshot: seat 0, turn 19
+        const placement = result.current.pushState('place')        // version 1 · slow
         useGameStore.setState({ currentSeat: 1, turnNumber: 20 })  // endTurn() ran locally
-        const endTurn = result.current.pushState('endTurn')        // snapshot: seat 1, turn 20
+        const endTurn = result.current.pushState('endTurn')        // version 2 · fast
         await Promise.all([placement, endTurn])
       })
 
-      expect(db.applied, 'the server applied the End Turn first and the placement second')
-        .toEqual([1, 0])
-
-      // THE ROW NOW DISAGREES WITH THE CLIENT THAT WROTE IT, and this is the live signature exactly:
-      // server seat 0 / turn 19 while the acting client believes seat 1 / turn 20.
-      expect(db.rows[ROOM].current_seat,
-        'the placement snapshot overwrote the End Turn · the server still says it is seat 0\'s turn while ' +
-        'the host has already moved on. Both players deadlock: the host waits for a joiner who is ' +
-        'correctly waiting for the host (measured live · T3 S41 · endgame-live.e2e.js)').toBe(0)
-      expect(db.rows[ROOM].state.currentSeat).toBe(0)
-      expect(db.rows[ROOM].turn_number, 'the turn number reverts with it').toBe(19)
-      expect(useGameStore.getState().currentSeat, 'the local store is NOT rolled back · nothing tells it')
+      expect(db.applied, 'the End Turn landed first and the stale placement was turned away').toEqual([2])
+      expect(db.refused, 'the older snapshot hit `2 < 1` = false').toEqual([1])
+      // THE WHOLE POINT, in one assertion: before 022 this read 0 and the game deadlocked.
+      expect(db.rows[ROOM].current_seat, 'the turn advance SURVIVED · the server refused the stale write')
         .toBe(1)
+      expect(db.rows[ROOM].state.turnNumber).toBe(20)
     })
 
-  // A whole turn is four writes, not two · this is the shape a real turn actually has, and it shows the
-  // window is not exotic. Any ONE of the three placements landing late is enough.
-  test('a realistic turn · three placements then End Turn, with the FIRST placement slowest', async () => {
-    const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
-    act(() => useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats() }))
+  test('the refusal is REPORTED, not swallowed · overtakes names the version, seat, turn and action',
+    async () => {
+      const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
+      let call = 0
+      nextDelay = () => (call++ === 0 ? 40 : 5)
 
-    let call = 0
-    nextDelay = () => (call++ === 0 ? 60 : 5) // only the first request is slow
+      let stale = null
+      await act(async () => {
+        const placement = result.current.pushState('place')
+        useGameStore.setState({ currentSeat: 1, turnNumber: 20 })
+        const endTurn = result.current.pushState('endTurn')
+        const [p] = await Promise.all([placement, endTurn])
+        stale = p
+      })
 
-    await act(async () => {
-      const writes = [result.current.pushState('place')]
-      for (let i = 0; i < 2; i++) writes.push(result.current.pushState('place'))
-      useGameStore.setState({ currentSeat: 1, turnNumber: 20 })
-      writes.push(result.current.pushState('endTurn'))
-      await Promise.all(writes)
+      // pushState tells its own caller, AND the hook exposes it · a refusal that only console.warns is a
+      // value resting somewhere plausible with no consumer (Rules 84/85), which is how a subsystem stays
+      // unreachable for months. tests/e2e/endgame-live.e2e.js asserts this list is empty after a clean game.
+      expect(stale.overtaken, 'pushState must tell its caller the write did not land').toBe(true)
+      expect(stale.error, 'a refusal is the predicate working · it is not an error').toBeNull()
+      expect(result.current.overtakes).toHaveLength(1)
+      expect(result.current.overtakes[0]).toMatchObject({ version: 1, seat: 0, turn: 19, eventType: 'place' })
     })
 
-    expect(db.applied.at(-1), 'the slow FIRST placement is applied last, after the End Turn').toBe(0)
-    expect(db.rows[ROOM].current_seat, 'one slow request out of four loses the turn advance').toBe(0)
-  })
+  test('a client adopts the version it is SERVED and counts on from there · including on a re-seed',
+    async () => {
+      const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
+      act(() => { supabase.__deliver({ currentSeat: 0, turnNumber: 5 }, 41) })
+      await act(async () => { await result.current.pushState('place') })
+      expect(db.applied, 'observed 41 → issues 42 · a client that renumbered from 0 would be refused ' +
+        'by its own predicate for the next 41 writes').toEqual([42])
+      expect(result.current.overtakes).toEqual([])
+    })
 })

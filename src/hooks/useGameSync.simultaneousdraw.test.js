@@ -40,19 +40,29 @@ vi.mock('../lib/supabase', () => {
     const b = {
       _payload: null,
       _filter: null,
-      select() { return b },
+      _lt: null,
+      _select: false,
+      select() { b._select = true; return b },
       insert() { return b },                    // game_events audit · skipped anyway (no sessionId in this test)
       update(payload) { b._payload = payload; return b },
       eq(col, val) { b._filter = { col, val }; return b },
+      lt(col, val) { b._lt = { col, val }; return b },   // migration 022's predicate (T2 S43)
       order() { return b },
       maybeSingle() { return Promise.resolve({ data: null, error: null }) }, // fetchAndSeed → no row → no-op
       then(onF, onR) {
-        // Awaiting a finished chain resolves the write. A matched game_sessions UPDATE keyed by room_id replaces
-        // the WHOLE row — last write wins, no merge (the collision under test).
+        // A matched game_sessions UPDATE replaces the WHOLE row (no merge) · but since migration 022 it
+        // matches ONLY when the row holds a strictly older state_version. Both halves are modelled: the
+        // whole-row replace is what made the collision possible, the predicate is what now refuses it.
+        let data = b._select ? [] : null
         if (table === 'game_sessions' && b._payload && b._filter?.col === 'room_id') {
-          db.rows[b._filter.val] = b._payload
+          const held = Number(db.rows[b._filter.val]?.state_version ?? 0)
+          const passes = !b._lt || held < Number(b._lt.val)
+          if (passes) {
+            db.rows[b._filter.val] = b._payload
+            if (b._select) data = [{ state_version: b._payload.state_version }]
+          }
         }
-        return Promise.resolve({ data: null, error: null }).then(onF, onR)
+        return Promise.resolve({ data, error: null }).then(onF, onR)
       },
     }
     return b
@@ -89,33 +99,51 @@ describe('Flow simultaneous draw · whole-state-snapshot last-write-wins (T3 S17
     expect(row.state.players[1].hand.map(c => c.id)).toEqual(['B1'])
   })
 
-  test('two concurrent draws → the later snapshot CLOBBERS the earlier · the first player\'s draw is LOST', async () => {
-    const { result } = renderHook(() => useGameSync(ROOM, 'userA'))
+  // ── THIS CLAIM CHANGED, AND THE CHANGE IS THE POINT (T3 S44) ──────────────────────────────────────────
+  // Until migration 022 this test asserted that B's whole-row write CLOBBERED A's draw and that A2 was
+  // simply GONE · the simultaneous-draw hazard, and it was true when written (T3 S17). It is not true any
+  // more: T2 shipped the state_version predicate, T3 wired pushState to send it, and a second writer
+  // holding a stale version is now REFUSED instead of overwriting. Leaving the old assertion would be a
+  // citation outliving the thing it cites (Rule 97) · in the file most likely to be read as the authority
+  // on this hazard.
+  //
+  // AND THE HARNESS HAD TO CHANGE WITH IT, which is the subtler half: the old version drove BOTH players
+  // through ONE hook instance. The write counter is per-client, so one instance mints 1 then 2 and the
+  // second write passes its own predicate · the stand-in would have kept "proving" a clobber that two real
+  // clients can no longer produce. Two instances, two counters, two clients (Rule 36).
+  test('two concurrent draws → the second writer is REFUSED, not silently lost · A\'s draw survives',
+    async () => {
+      const a = renderHook(() => useGameSync(ROOM, 'userA'))
+      const b = renderHook(() => useGameSync(ROOM, 'userB'))
 
-    // Player A's client draws 'A2' and persists its full snapshot (A has [A1,A2] · B still has [B1]).
-    act(() => useGameStore.setState({
-      phase: 'playing', currentSeat: 0,
-      players: [{ seat: 0, hand: hand(['A1', 'A2']) }, { seat: 1, hand: hand(['B1']) }],
-    }))
-    await act(async () => { await result.current.pushState('draw_card', { seat: 0 }) })
-    expect(db.rows[ROOM].state.players[0].hand.map(c => c.id)).toEqual(['A1', 'A2']) // A's draw landed
+      // A draws A2 and persists its whole snapshot. A has [A1,A2]; B still has [B1].
+      act(() => useGameStore.setState({
+        phase: 'playing', currentSeat: 0,
+        players: [{ seat: 0, hand: hand(['A1', 'A2']) }, { seat: 1, hand: hand(['B1']) }],
+      }))
+      const aRes = await act(async () => await a.result.current.pushState('draw_card', { seat: 0 }))
+      expect(db.rows[ROOM].state.players[0].hand.map(c => c.id)).toEqual(['A1', 'A2'])
 
-    // Player B's client drew 'B2' CONCURRENTLY — from a snapshot read BEFORE A's write, so B's view never saw
-    // A2 (A's hand is still [A1] in B's snapshot). In Flow both writes race; the whole-row UPDATE means B's
-    // snapshot REPLACES the row. (Same instance here stands in for B's client · the collision is the overwrite.)
-    act(() => useGameStore.setState({
-      phase: 'playing', currentSeat: 1,
-      players: [{ seat: 0, hand: hand(['A1']) }, { seat: 1, hand: hand(['B1', 'B2']) }],
-    }))
-    await act(async () => { await result.current.pushState('draw_card', { seat: 1 }) })
+      // B drew B2 CONCURRENTLY, from a snapshot read BEFORE A's write · so B's view never saw A2, and B's
+      // client has observed no version either. It issues version 1 against a row already holding 1.
+      act(() => useGameStore.setState({
+        phase: 'playing', currentSeat: 1,
+        players: [{ seat: 0, hand: hand(['A1']) }, { seat: 1, hand: hand(['B1', 'B2']) }],
+      }))
+      const bRes = await act(async () => await b.result.current.pushState('draw_card', { seat: 1 }))
 
-    const finalRoster = db.rows[ROOM].state.players
-    // B's draw is present (it wrote last)…
-    expect(finalRoster[1].hand.map(c => c.id)).toEqual(['B1', 'B2'])
-    // …but A's draw 'A2' is GONE — clobbered by B's whole-row write. THIS is the simultaneous-draw hazard:
-    // the current snapshot-sync model is safe only under turn-serialised play. Fixing it is a T2 engine +
-    // persistence change (seat-isolated/atomic-merge draw · see comms), NOT a T3 receive-side event filter.
-    expect(finalRoster[0].hand.map(c => c.id), 'A2 should be lost — proving the last-write-wins collision').toEqual(['A1'])
-    expect(finalRoster[0].hand.map(c => c.id)).not.toContain('A2')
-  })
+      const roster = db.rows[ROOM].state.players
+      expect(roster[0].hand.map(c => c.id), "A's draw SURVIVES · it is no longer overwritten by a stale " +
+        'concurrent snapshot').toEqual(['A1', 'A2'])
+      expect(bRes.overtaken, "B's write was refused, and B is TOLD · zero rows affected is a signal, and " +
+        'the old behaviour gave B no way to know its move had evaporated').toBe(true)
+      expect(aRes.overtaken).toBe(false)
+
+      // HONEST ABOUT WHAT THIS DOES NOT SOLVE, because a refusal is not a merge: B's draw did not happen,
+      // and B must re-sync and retry. writeOrder.js says so in its own header · turn order makes genuinely
+      // simultaneous movers rare, it does not make them absent. The improvement is that a lost move is now
+      // REPORTED rather than silent, which is the difference between a bug and a retry.
+      expect(roster[1].hand.map(c => c.id), "B's draw is not in the row · it was refused, not merged")
+        .toEqual(['B1'])
+    })
 })
