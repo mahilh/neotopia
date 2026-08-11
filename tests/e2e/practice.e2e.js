@@ -70,7 +70,7 @@
 
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { forEachViewport, selfTestReachability, assertDiagnoseCanSee } from './measure'
+import { forEachViewport, selfTestReachability, assertDiagnoseCanSee, cascadeAt } from './measure'
 import probe from '../board-probe.mjs'
 
 // Read the storage key from its declaration rather than restating it. Importing useLocalSession here would
@@ -1061,5 +1061,51 @@ test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)
       'the game reached scoring but rendered no final record').toBeVisible({ timeout: 15_000 })
     console.log(`[practice] soft-lock RESOLVED · turn ${reached.turn} · ${humanClicks} human End Turns · ` +
       `bot held ${botTurns.length} turns · ${Math.round((Date.now() - started) / 1000)}s`)
+  })
+})
+
+// ── THE PHONE LAYOUT RULE ACTUALLY WINS (T3 S49 · T1's probe, posted S48) ───────────────────────────────
+// T1 gated their phone layout in jsdom by asserting index.css CONTAINS `flex: 3 1 0` inside the
+// max-width:600px block. That pins a STRING, and a string cannot say whether the declaration WON: a later
+// rule, a more specific selector or an inline style all beat it with the text still sitting in the file.
+// Their own probe proved the gap is real on its first run · `.game-sidebar` is authored `flex: 2 1 0` and
+// resolves to flex-shrink 0, because an inline style outranks a stylesheet rule carrying no !important.
+//
+// ⚠ AND THE LAYOUT CHANGED WHILE I WAS WRITING THIS GATE, which is the best argument for it existing.
+// T1's comms note measured an isolated worktree and reported board flex-grow 3, sidebar max-height none,
+// board share 0.588. Measured against HEAD (6652d5d/cdcab77 landed in between) the mechanism is different:
+//     320   column · board grow 1 · sidebar position ABSOLUTE, max-height 58% · share 0.633
+//     1280  row    · board grow 1 · sidebar position static, width 288        · share 0.500
+// The 3:2 flex share is gone; the sidebar became an absolutely-positioned SHEET over the board, which is
+// the better design and reaches a bigger board (0.633 against 0.588). So flex-grow is now '1' at BOTH
+// widths and cannot discriminate anything · T1's suggested `board.flexGrow === '3'` would have been simply
+// false at 320, and their desktop half would have passed while asserting nothing. A note describing a
+// layout is an artifact of the moment it was written (Rule 109 · the session's own theme, arriving inside
+// the session, from a note posted an hour earlier).
+//
+// SO IT ASSERTS THE PROPERTY, NOT THE MECHANISM. What a player actually gets is: the phone stacks, the
+// sidebar stops charging the board for space it reserves, and the board is the clear majority of the page ·
+// none of which depends on WHICH css trick delivers it. Sized from the measurement above with headroom
+// rather than pinned to it (Rule 88c): 0.633 measured, 0.55 asserted. Free · practice mints zero identities.
+test.describe('practice · the phone layout rule actually wins (T3 S49)', () => {
+  test('the board takes the larger share at 320 and the desktop is untouched at 1280', async ({ page }) => {
+    await page.goto('/practice?bots=0')
+    await page.waitForSelector('.game-board-area', { timeout: 20_000 })
+
+    const phone = await cascadeAt(page, probe, { width: 320, height: 800 }, { expect })
+    expect(phone.flexDirection, 'the phone must stack board over sidebar').toBe('column')
+    expect(phone.board.minHeight, 'min-height:0 is what lets a flex child actually shrink · without it the '
+      + 'board cannot give up space and the sheet pushes it off screen').toBe('0px')
+    expect(phone.sidebar.position, 'the sidebar must overlay rather than occupy · a sidebar in flow '
+      + 'reserves space the player scrolls through anyway and charges the board for it (Rule 83)')
+      .toBe('absolute')
+    expect(phone.boardShareOfMain, 'the board is not the clear majority of a phone screen · measured 0.633 '
+      + 'at HEAD, and this is the number a player actually experiences').toBeGreaterThan(0.55)
+
+    const desk = await cascadeAt(page, probe, { width: 1280, height: 800 }, { expect })
+    expect(desk.flexDirection, 'desktop is side by side').toBe('row')
+    expect(desk.sidebar.position, 'the phone sheet leaked past its media query and is now overlaying the '
+      + 'desktop board').toBe('static')
+    expect(desk.board.flexGrow, 'the desktop board still takes the remaining width').toBe('1')
   })
 })

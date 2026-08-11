@@ -165,3 +165,38 @@ export async function assertDiagnoseCanSee(page, { expect, factoryId = 0 } = {})
 // right home is here, where nothing runs on import.
 // The caller passes `expect` rather than this module importing @playwright/test · seedHelpers is loaded by
 // vitest-adjacent code paths too, and a Playwright import at module scope would drag the runner in.
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// THE CASCADE READ IS T1's TOO (probe.cascadeFacts · posted to comms S48, taken S49)
+//
+// WHY IT IS WORTH TAKING, and the argument is theirs, not mine: GameRoom.phone.test.jsx asserts that
+// index.css CONTAINS `flex: 3 1 0` inside the max-width:600px block. That pins a STRING. It passes if the
+// declaration is beaten later in the cascade, if a more specific selector wins, or if an inline style
+// outranks it, and jsdom has no cascade resolution for layout so it cannot close the gap from that side.
+// IT IS NOT THEORETICAL · their probe found a live divergence on its first run: `.game-sidebar` is authored
+// `flex: 2 1 0` and RESOLVES to flex-shrink 0, because an inline style on the <aside> beats a stylesheet
+// rule carrying no !important. Harmless there, and correct at 1280 where the sidebar is a fixed column.
+// The point is that a regex reported green on a declaration the page never applies.
+//
+// MY OWN CHECK IN S48 WAS THE WEAKER HALF OF THE SAME FINDING, and worth stating so the record is straight:
+// I noticed the desktop `flex: 1` comes from an INLINE STYLE (GameRoom.jsx) rather than the stylesheet, so a
+// string gate structurally cannot see the value it claims to pin at that width. They then measured what the
+// browser actually resolves at four widths, which is the half that turns an argument into a table.
+//
+// ONE IMPLEMENTATION, and it is theirs (Rule 94/95's corollary · reconcile by SUBTRACTION). This wrapper
+// adds only what a caller needs and the probe cannot do from inside the page: set the viewport, let the
+// CHILD's layout settle rather than the parent's clock (Rule 92b · consecutive stale reads are equal, so
+// "stable" can mean unchanged rather than correct), and REFUSE TO RETURN A SHAPE THAT LOOKS LIKE A
+// MEASUREMENT WHEN NOTHING WAS MEASURED. `measured:false` carries the reason and is asserted here rather
+// than in every caller, because a flexGrow of '0' reads exactly like a rule that lost (Rule 80).
+export async function cascadeAt(page, probe, { width, height = 800 }, { expect, settleMs = 300 } = {}) {
+  await page.setViewportSize({ width, height })
+  await page.waitForTimeout(settleMs)
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))))
+  const facts = await page.evaluate(probe.cascadeFacts)
+  if (expect) {
+    expect(facts.measured, `cascadeFacts could not look at ${width}px · ${facts.reason} · this is an ` +
+      'UNMEASURED read, not a layout finding').toBe(true)
+  }
+  return facts
+}
