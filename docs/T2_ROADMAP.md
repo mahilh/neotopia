@@ -6,6 +6,72 @@ correction is in the table rather than only in a commit message.
 
 ---
 
+## 0 · T2 S50 · THE LADDER WAS THE LAUNCH BLOCKER, AND THE PURGE DELETES NOTHING
+
+**Read this before section 1: it rescopes almost all of it.**
+
+### The ladder is retuned, on Mahil's explicit call
+
+S49 measured the rungs against each other for the first time and found no usable middle. Retuned in
+S50 and measured over three disjoint 40-seed blocks:
+
+| | v1 (S32-S49) | v2 (S50) |
+|---|---|---|
+| apprentice v builder | **6.3%** | **32.5%** |
+| builder v architect | **15.2%** | **34.2%** |
+| apprentice v architect | **0.0%** (0 in 80) | **13.9%** |
+
+`builder` is byte-identical · it is `DEFAULT_DIFFICULTY` and the only policy a human has played.
+`defendWorst` was measured at **zero win rate** (+3.00 margin, 50.0%) and is now labelled flavour.
+Full derivation, tradeoffs and the draw-bias response curve: `docs/LADDER_CALIBRATION.md`.
+
+### ⚠ THIS RESCOPES SECTION 1
+
+Every number in the balance table below was measured against **ladder v1 bots, in Classic, two
+players**. The token RULES are unchanged and "change nothing" stands; the effect SIZES describe games
+nobody will play again. The nightly runner re-stamps them. What survives unconditionally is the S48
+structural finding (the earn skew is redundant with skill), re-measured rung-vs-rung in S49.
+
+**Free result from the retune:** the architect's token earn advantage FELL from ~5.3 to ~2.0 per game,
+because earning tracks scoring speed and its draw bias came down. The S47 compounding concern is
+roughly **halved** with no token rule touched.
+
+### Flow mode, measured for the first time
+
+The fear was that Flow's 9 tiles would make the token subsystem near-inert. **False** · Flow grants
+tokens at 0.62 / 0.80 / 0.66 of Classic volume, spread under 0.06 across blocks. But the **ladder
+calibration does not transfer**: steps of 27.6 / 39.9 in Flow against 33.5 / 31.6 in Classic. Ordered
+in both (gated), evenly spaced only in Classic.
+
+**Four players is still unmeasured.** `bots()` is only ever called with two and `ladderRow` is
+structurally a duel.
+
+### 🔴 THE PURGE DELETES ZERO ROOMS · migration 025 written, NOT APPLIED
+
+Measured live, and it corrects the S50 brief's premise that "024 landed" (it did not · newest applied
+migration is 023):
+
+| | |
+|---|---|
+| game_rooms | **630** |
+| whose host has no profile row | **593** |
+| **reachable by the deployed purge** | **0** |
+
+Its own teardown has been printing `{"rooms_deleted":0,"profiles_deleted":0}` every run for sessions.
+It selects rooms via the profiles it then deletes, so it destroys its own selector.
+
+**And the orphaning IS the CI collision.** Run A's purge deletes run B's profiles mid-game; B's rooms
+orphan at that instant. One cause, one fix: **age-guard the profile delete**. My S49 attempt to fix
+this at the CI layer with a shared concurrency group cancelled the merge gate twice and was reverted ·
+it was never a mutex, and `.github/` needs no change.
+
+`scripts/migrations/025` does both halves and **supersedes 024** (which carried only the weaker,
+room-age half · S49 never checked that `player_profiles` has a `created_at` column. It does).
+**Needs Mahil's explicit yes.** First run destroys 593 rooms / 573 sessions / 234 of 242 game_events,
+including 177 draw-audit rows. The ledger does not cascade and is untouched.
+
+---
+
 ## 1 · THE BALANCE PICTURE, IN ONE TABLE
 
 Three sessions of measurement on bonus tokens, reconciled.

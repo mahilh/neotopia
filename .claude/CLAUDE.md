@@ -197,7 +197,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (112 · cumulative):
+PERMANENT ANTI-REGRESS RULES (113 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -524,6 +524,52 @@ have deleted the work it existed to prove. A mutation harness edits real files i
 path must be a byte copy taken before the first mutation, never version control, whose idea of "restore"
 is "discard everything you have not committed". Same family as Rule 89's tool-scans-itself: the harness
 is inside the blast radius of the thing it is testing.
+
+RULE 113 (T2 S50 · August 11 2026 · CLAIMED 112 FIRST · T3 took 112 the same night):
+⚠ NUMBERING NOTE, kept rather than tidied away because it is the second time this has happened and
+the alias is the useful artifact (T1 S43 did exactly this and wrote Rule 100 about it). I inserted
+this as 112 and the insert revealed T3's Rule 112 already in the file · they committed it into the
+SHARED WORKING TREE mid-session (ce07fed and its siblings landed under me while I worked, which is
+Rule 66's shared-tree hazard applied to CLAUDE.md rather than to code). I renumbered MINE because I
+am the one who noticed. Nothing of theirs was overwritten; both rules are intact. If a commit
+message of mine cites "Rule 112", it means this one.
+
+A THRESHOLD ENCODES A POSITIONAL ASSUMPTION ABOUT WHERE THE SUBJECT SITS RELATIVE TO THE INSTRUMENT ·
+AND DERIVING THAT THRESHOLD FROM A CONTROL MEASURED IN THE SAME RUN DOES NOT REMOVE IT.
+Retuning the bot ladder so its rungs are 33 points apart instead of 6 reddened FOUR separate files,
+and every one failed for the identical reason nobody had ever written down: that the ladder STRADDLES
+the frozen reference policy. It did (5.1 / 77.2 / 98.8) and now does not (60.0 / 66.7 / 84.8), because
+rungs pulled close to each other are necessarily close to any third party too · calibrating the ladder
+compressed its span against the yardstick from 94 points to 25. Nothing regressed. An assumption that
+was true expired.
+  112a · THIS IS RULE 111 ONE LEVEL DEEPER AND IT IS THE HARDER HALF. 111 says a constant at every call
+        site is a hidden parameter, and the tell is mechanical: grep the call sites, look at which
+        argument never varies. A positional assumption has NO call site to grep. It lives inside
+        comparisons that mention only one side · `apprentice.winPct < 40`, `architect.winPct > 80`,
+        `earnGap < 0` · and the other side of the claim is a fact about the world that nobody typed.
+  112b · AND MY OWN S49 FIX WAS NOT ENOUGH, WHICH IS THE POINT WORTH KEEPING. In S49 I replaced two
+        remembered numbers with `ctrl - 10` and `ctrl + 10`, derived from a control measured in the
+        same run, and logged it as the lesson. It removed the STALE-NUMBER failure and left the
+        STRUCTURAL one untouched: `ctrl - 10` still asserts the subject sits below the yardstick. It
+        went red on working code exactly as the original would have, while reading as "measured,
+        therefore safe" · which is worse, because it had already been improved once.
+        THE FORM THAT SURVIVES IS AN ORDERING AMONG THINGS THAT MOVE TOGETHER. `architect > builder`
+        needs no threshold, carries no claim about absolute position, and follows the ladder when the
+        ladder legitimately shifts. Where an ordering genuinely cannot be asserted, say so and gate
+        less: under v2 the reference can no longer separate apprentice from builder at ANY block these
+        gates can afford (inverted at 10 seeds on win rate, and at 40 seeds on a different offset), so
+        only architect-above-both is asserted. Assert what the instrument can see (Rule 88c).
+  112c · A REPORTER THAT APPENDS AS IT GOES WILL HAND YOU GOOD DATA OUT OF A RED RUN. My first 40-seed
+        sweep printed a complete, correct, internally-consistent table AND `Tests 4 failed (4)`. Every
+        row was a finished measurement; the tests died afterwards on a missing timeout. I read the
+        table and acted on it without registering the verdict, because the output looked exactly like
+        success. Rule 110b says read the BASELINE before trusting a mutation; this is the step before
+        that one · READ THE VERDICT BEFORE TRUSTING THE OUTPUT. They are different artifacts and only
+        one of them is an answer.
+COROLLARY, and it is the cheapest habit here: when a change reddens more than one file, do not fix
+them one at a time. Ask what single unstated fact all of them were relying on · four files failing
+four different ways is bad luck, four files failing the same way is a premise nobody wrote down, and
+it is almost always more interesting than the change that exposed it.
 
 RULE 111 (T2 S49 · August 11 2026):
 A CONSTANT THAT APPEARS AT EVERY CALL SITE OF AN EXPERIMENT IS A HIDDEN PARAMETER, AND ITS VALUE
