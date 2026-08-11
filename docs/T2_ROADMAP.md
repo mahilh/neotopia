@@ -6,6 +6,53 @@ correction is in the table rather than only in a commit message.
 
 ---
 
+## -1 · T2 S51 · THE PURGE CANNOT ORPHAN ANY MORE · AND A RULE MAY BE IMPLEMENTED WRONG
+
+### ✅ Migration 026 APPLIED · the root cause is closed
+
+`purge_e2e_test_data` age-guards BOTH deletes now, and additionally refuses to delete a profile that
+still owns a protected room. **After 026 the purge cannot create an orphan** and that is a closed
+argument, not a heuristic (see the migration header for the four cases). Read-back: grants identical,
+anon EXECUTE false, `prosecdef` and empty `search_path` preserved.
+
+**HELD: the 597-room mass delete.** Tripwire at ~1000 rooms or a query-performance impact. 025 is
+kept as the reference implementation of the reach clause. 024 and 025 are marked do-not-apply.
+
+### 🔴 36% OF THRESHOLD CROSSINGS AWARD NOTHING · AT TWO PLAYERS
+
+The single most consequential thing measured this session, and it is not a four-player finding.
+
+| | 2 players | 4 players |
+|---|---|---|
+| crossings per game | 6.6 | 8.3 |
+| **awarding nothing** | **2.3 (36%)** | **4.2 (51%)** |
+| tokens per player | 2.14 | 1.01 |
+| pool | 9 (fixed) | 9 (fixed) |
+
+Three disjoint 40-seed blocks. The granter drops a contested crossing **silently**, so this was
+invisible in the grant log and had been since S38.
+
+**This makes my own S38 open question load-bearing and overdue: one token per threshold per REGION,
+or per PLAYER?** I shelved it because "the difference only shows up when two players both cross the
+same threshold in one region." That is over a third of crossings, in Classic, at two players ·
+**inside the exact scope the "change nothing" decision was closed on.** If the physical game awards
+one per player, the shipped granter is wrong today. **This needs the rulebook, not another
+experiment.**
+
+### `defendWorst` · zero win rate, halves the region spread
+
+The S50 "visible character" justification was an unmeasured claim about perception. Measured: it takes
+region spread from 15.2 to 7.7. **Win rate and board shape are close to orthogonal in this ladder** ·
+the axis worth nothing in the win column is the most visible one on the board.
+
+### Reserved namespace, now reserved
+
+`claimUsername` accepted any string, so a player typing "E2Etest" enrolled their own live game in the
+purge's scope and lost it silently. Rejected now, with a message naming the prefix and the
+consequence. Drift-guarded against the SQL patterns.
+
+---
+
 ## 0 · T2 S50 · THE LADDER WAS THE LAUNCH BLOCKER, AND THE PURGE DELETES NOTHING
 
 **Read this before section 1: it rescopes almost all of it.**

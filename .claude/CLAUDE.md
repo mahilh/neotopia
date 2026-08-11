@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (113 · cumulative):
+PERMANENT ANTI-REGRESS RULES (114 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -543,6 +543,50 @@ have deleted the work it existed to prove. A mutation harness edits real files i
 path must be a byte copy taken before the first mutation, never version control, whose idea of "restore"
 is "discard everything you have not committed". Same family as Rule 89's tool-scans-itself: the harness
 is inside the blast radius of the thing it is testing.
+
+RULE 114 (T2 S51 · August 11 2026):
+A SILENT NO-OP ON A CONTENDED RESOURCE MAKES DEMAND UNMEASURABLE · AND THE MISSING RECORD LOOKS
+EXACTLY LIKE AN ABSENCE OF DEMAND. The bonus granter is nine lines and has been shipped since S38:
+    for (const t of SCORE_THRESHOLDS) {
+      if (prevScore < t && p.scores[regionId] >= t) {
+        const i = r.bonusPile?.findIndex(b => b.threshold === t && !b.claimed) ?? -1
+        if (i >= 0) { claim it }        // <- and no else, ever
+      }
+    }
+A player who crosses a threshold whose token is already gone gets nothing, and NOTHING ANYWHERE
+RECORDS THAT THEY CROSSED. So "tokens granted" was the only observable, and it silently conflates
+"nobody wanted one" with "somebody wanted one and there were none left". Measured for the first time
+in S51: 36% of all threshold crossings award nothing AT TWO PLAYERS, 51% at four. I had shelved the
+underlying design question in S38 with the words "the difference only shows up in a game where two
+players both cross the same threshold in one region" · which is a third of the events.
+  114a · THE TELL IS `if (found) { act }` WITH NO ELSE, on anything drawn from a finite pool: a
+        token, a seat, a lock, a rate-limit bucket, a cache slot. The EVENT happened and only the
+        OUTCOME was written down, so the log answers "how many succeeded" and cannot be asked "how
+        many tried". Any question about pressure, contention or scarcity is then unanswerable from
+        the data you have, and the answer it gives instead is a comfortable zero (Rule 80's family,
+        with the twist that here nothing is even resting at zero · the row does not exist).
+  114b · DEMAND IS USUALLY RECOVERABLE FROM A MONOTONE QUANTITY ELSEWHERE IN THE STATE, and that
+        beats instrumenting the handler. Region scores only ever increase, so a FINAL score of S in
+        a region proves precisely the thresholds <= S were crossed at some point. No re-simulation,
+        no second copy of the granter's logic to drift (Rule 45), no migration, and it works
+        retroactively on games already played. Before adding an event, look for the monotone thing
+        that already implies the event.
+  114c · AND THE ARGUMENT I MADE AGAINST ACTING WAS THE ONE NOBODY AUDITED. In S50 I told Mahil a
+        proposed delete would destroy "177 draw-audit rows from migration 021" · it was the
+        strongest objection I raised. Measured this session: 175 of those carry `event_data = {}`
+        and hold nothing, and the 2 real ones are the harness's own fixture. Wrong by a factor of
+        88. A claim that argues for CAUTION is never checked, because caution feels free and
+        checking it feels like arguing for risk · so the sloppiest number in any review is the one
+        supporting the safe option. Worse here: the conclusion was right anyway (the delete is
+        housekeeping and was correctly held), and a correct conclusion LAUNDERS the bad argument
+        under it. Audit the reasons for inaction exactly as hard as the reasons for action
+        (Rule 109's cost-asymmetry corollary, one step further: not a wrong retraction but a wrong
+        objection).
+COROLLARY, on where to spend the next probe: this whole finding cost one SQL query against state
+that had been sitting in production for six weeks, and it re-opened a question two sessions had
+called closed. When a subsystem reports nothing interesting, check whether it is CAPABLE of
+reporting the interesting thing before concluding the thing is not happening (Rule 73's sibling ·
+73 asks whether a term can matter, this asks whether an instrument can see).
 
 RULE 113 (T2 S50 · August 11 2026 · CLAIMED 112 FIRST · T3 took 112 the same night):
 ⚠ NUMBERING NOTE, kept rather than tidied away because it is the second time this has happened and
