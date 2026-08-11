@@ -187,7 +187,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (109 · cumulative):
+PERMANENT ANTI-REGRESS RULES (110 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -480,6 +480,43 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 110 (T2 S48 · August 11 2026):
+COUNTERWEIGHT-FIRST PROTECTS YOU FROM THE FAILURES YOU CAN IMAGINE. ASSERT THE THING'S DEFINING
+PROPERTY, WHICH IS THE ONE YOU NEVER THINK TO NAME BECAUSE IT IS TRUE BY CONSTRUCTION · UNTIL IT ISN'T.
+The flat-grant experiment scores one game twice: tokens as EARNED against tokens dealt FLAT. I wrote
+three counterweights first, exactly as Rule 90 says · the redistribution must move tokens, tokens must
+be granted at all, the volume must be preserved · and every one of them passed while THE FLAT ARM WAS
+NOT FLAT. It handed logical player A the odd token in every single game, worth a silent +1.5 points per
+game to whichever side was under test. I never wrote "the flat arm must be even" because that is what
+`flatDeal` MEANS, and a definition does not feel like a claim. It is the only claim in the file.
+  110a · AND THE BIAS WAS THE FIX. The first draft dealt the extra token to seat 0 always; I "improved"
+        it with a parity that alternated once per game so it would not always land on the same seat.
+        The duel flips its orientation once per game too, so the two alternations LOCKED IN PHASE and
+        the alternation became the bias it was added to prevent. A RANDOMISATION OR ALTERNATION SCHEME
+        THAT SHARES A PERIOD WITH THE THING IT IS MEANT TO BALANCE AGAINST BALANCES NOTHING · and it
+        looks more careful than the naive version it replaced. Measure the residual; never argue it.
+        (Rule 92a's two-sides-one-source, in the time domain.)
+  110b · A TEETH CHECK ON A RED BASELINE PROVES NOTHING, and I nearly logged one: four mutations all
+        went "red" in a run whose UNMUTATED baseline was already failing, so the reds were free and
+        meant nothing. Rule 100 says read the mutated run's test COUNT, not its colour · this is the
+        step before it. READ THE BASELINE FIRST. It also exposed the real defect: the bound was sized
+        at 40 seeds and the harness takes an env override, so it was correct at the block size I chose
+        and wrong at the one I debugged with.
+  110c · FIX THE INSTRUMENT, DO NOT WIDEN THE TOLERANCE THAT CAUGHT IT. The tempting patch was to
+        loosen the bound until 12 seeds passed. Instead the remainder became self-correcting (the odd
+        token goes to whichever side has had fewer), which bounds the whole-block imbalance at ONE
+        token at ANY seed count · so the wire now means the same thing at 12 as at 400. A tolerance
+        widened to accommodate a defect is a defect with permission.
+COROLLARY, and it is the same shape one layer out, in production rather than in a harness: I recorded
+in the S47 roadmap that games_played/games_won "never move · the ledger moves and the denormalised
+columns don't". THE WRITE LANDS. award_game_win returns 'awarded' only on a non-zero row_count, a live
+run logged exactly that, and then globalTeardown's purge deleted the profile row holding the increment.
+So the counters are 0 not because nothing wrote them but because EVERY WITNESS WAS DESTROYED. That path
+has a writer, a caller, a reader and a status string distinguishing success from a zero-row write · and
+no OBSERVER. Not a writer with no caller (award_game_win, S35), not a render with no gate (card art,
+S42): A CALLER WITH NO OBSERVABLE, which is worse because every individual piece is correct and tested.
+Ask of any counter you believe is broken: is the write failing, or is the evidence being deleted?
 
 RULE 109 (T3 S48 · August 11 2026):
 A FUNCTION'S DEFINITION IS THE LAST MIGRATION THAT TOUCHED IT, NOT THE ONE YOU WERE POINTED AT · AND A
