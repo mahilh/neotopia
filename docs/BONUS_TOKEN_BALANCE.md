@@ -1,6 +1,68 @@
 # DID BONUS TOKENS BREAK BALANCE?
 **T2 S39 · August 10 2026 · 360 seeds, three disjoint blocks**
 
+> ## ✅ T2 S48 · THE LAST OPEN QUESTION IS ANSWERED · the earn skew is REDUNDANT, not compounding
+> **Measured at HEAD `faa27c7` · 4 disjoint 40-seed blocks · 320 games per rung · `src/store/flatGrantBalance.test.js`**
+>
+> S47 found the skew: tokens are earned by crossing 7/13/18, so earning tracks scoring speed and the
+> architect out-earns the reference ~23x. **That left one question, and it decides whether the
+> thresholds need touching at all: is the gap an EXTRA advantage, or just another symptom of being
+> better?** Both readings fit S47's data and they license opposite decisions.
+>
+> ### The experiment · one game, scored two ways
+>
+> Same games, same tokens, same count, same grant moments · **only the recipient changes.** Threshold
+> arm: whoever crossed. Flat arm: dealt evenly. Because `botPolicy.js` contains no reference to bonus
+> state, moving a token changes **zero decisions**, so each game is played once and scored twice.
+> **This is an EXACT control** (Rule 74) · the property S39 had and the two spending sessions had to
+> give up, recoverable here for the same reason S39's was: the quantity under test is inert.
+>
+> | rung | win% as earned | win% flattened | mean Δ | **games flipped** | earn gap | margin earned → flat | token share of margin |
+> |---|---|---|---|---|---|---|---|
+> | **control** (ref v ref) | 50.0 ×4 | 50.0 ×4 | **0.0 in 4/4** | 10.0 / 80 | 0.00 | 0 → 0 | — |
+> | apprentice | 5.1–11.3 | 7.6–15.0 | −3.8 | 4.5 / 80 | −1.94 | −20.1 → −14.3 | 0.41 |
+> | builder | 68.4–77.2 | 75.0–79.5 | −4.1 | 10.5 / 80 | +0.48 | +11.5 → +10.1 | 0.14 |
+> | **architect** | 98.8–100 | 98.8–100 | **0.0 in 4/4** | **0 / 80, 4/4** | +4.94 | +59.2 → +44.4 | **0.33** |
+>
+> ### THE ANSWER
+>
+> **The architect's token surplus is a third of its entire winning margin and it decides NOTHING.**
+> ~5 extra tokens per game, ~15 points, on a 44-point lead · redistribute every one of them evenly and
+> **zero games out of 320 change hands**, in 4 of 4 blocks. Not "a small effect": an exact zero, while
+> the same instrument demonstrably flips ~10 games per 80 in the symmetric control. **The tokens are a
+> receipt for winning, not a cause of it.**
+>
+> **And where the skew does bite, it bites the opposite way to the fear.** The shipped threshold rule
+> *costs* the builder ~4.1 points of win rate and the apprentice ~3.8 (negative in 4/4 and 4/4).
+> Flattening would **help** them. So the distribution is mildly **anti**-compounding in the middle · it
+> hands the reference policy an edge against the builder, not the other way round.
+>
+> *Mechanism, so the sign is not a mystery: flattening compresses the token term toward equality, which
+> shrinks every margin. A side that wins wide and loses narrow gains from compression, and every ladder
+> rung has that shape against the reference. The **control is what makes this readable** · with
+> identical policies the compression still flips ~10 games per 80 and moves the win rate by exactly
+> 0.0, so the redistribution works and has no direction of its own.*
+>
+> ### RECOMMENDATION · change nothing. Thresholds stay at 7/13/18.
+>
+> This is the pre-committed call from `docs/T2_ROADMAP.md` §2 ("ladder unchanged → the earn gap is
+> cosmetic → change nothing"), and it is worth saying that the pre-commit was written about a
+> *different* statistic (S47's both-spend-minus-no-spend delta). What was measured is more direct, so
+> the mapping is stated rather than assumed: the compounding case required the skew to ADD to the
+> stronger player's edge, and in no rung does it. **The one thing that would reopen this is a rung
+> whose flip count is non-zero AND whose delta is positive.** Neither exists here.
+>
+> ### What I got wrong, in the experiment itself
+>
+> **My first flat deal was not flat.** It alternated the odd token's recipient once per game so it
+> "would not always land on seat 0" · but the duel flips the orientation once per game too, so the two
+> alternations **locked in phase** and logical player A received the extra token in every single game.
+> `flatGap` read **+0.50 in 12 of 12 rung-blocks** when it must read 0, worth a silent +1.5 points to
+> whichever side was under test, in the arm whose only job is to be even. Volume, movement and the
+> exactness identity all stayed green while it was wrong. **A randomisation scheme that shares a period
+> with the thing it is meant to balance against balances nothing** · and the tell was printed in my own
+> report, small enough to read past. `flatGap` is a gated counterweight now, not a report field.
+
 > ## 📊 T2 S47 · THE THREE THINGS S46 COULD NOT SEE · and they change the advice
 >
 > S46 measured **self-play**: identical policies, one spends, spender wins +7.7. That is a real number
