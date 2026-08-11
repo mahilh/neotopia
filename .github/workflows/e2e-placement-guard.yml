@@ -22,23 +22,31 @@ on:
   pull_request:
     branches: [main]
 
-# ══ SHARED WITH e2e.yml · SEE THE FULL NOTE THERE (T2 S49) ═══════════════════════════════════════
-# This group was `${{ github.workflow }}-${{ github.ref }}`, which serialises this workflow against
-# ITSELF and against nothing else. Both this and e2e.yml trigger on every push to main, both run
-# Playwright, and both therefore run global-teardown.js → purge_e2e_test_data(), which deletes rooms
-# project-wide with no status or age predicate. They were destroying each other's rooms on every
-# push · the mechanism behind this guard reddening on commits that touch no code.
+# ⚠ T2 S49 · I PUT THIS IN A SHARED GROUP WITH e2e.yml AND IT DISABLED THIS MERGE GATE. REVERTED.
 #
-# A mutex has to be as wide as the resource it protects. The purge is project-wide, so the group name
-# is a CONSTANT shared across workflows rather than an interpolation of the workflow's own name.
+# THE INTENT WAS SOUND AND THE MECHANISM WAS NOT. Both this workflow and e2e.yml fire on every push to
+# main, both run Playwright, and both therefore run global-teardown.js → purge_e2e_test_data(), which
+# deletes rooms project-wide with no status or age predicate. They do destroy each other's rooms, and
+# that is a real mechanism behind this guard reddening on commits that touch no code.
 #
-# cancel-in-progress flipped true → FALSE deliberately: a cancelled Playwright run never reaches its
-# teardown, so cancelling converts a collision into a permanently orphaned room, and production
-# already holds 571 rooms the purge can no longer reach (measured T2 S49). GitHub keeps one pending
-# run per group and cancels older pending ones itself, so a rapid push series still self-limits.
+# So I gave them one shared group with cancel-in-progress:false, and wrote into both headers that
+# "GitHub keeps one pending run per group and cancels older pending ones itself, so this self-limits."
+# That sentence is TRUE and the conclusion drawn from it was wrong. Two workflows entering one group on
+# the same push means one RUNS and one goes PENDING · and the next push cancels the pending one. This
+# guard lost that race both times:
+#     289fea1 success · 1fec38f success        (before the change)
+#     54f0686 CANCELLED · 48da08a CANCELLED    (after)
+# A merge gate that is cancelled cannot fail, which is strictly worse than the collision it was
+# fixing: a collision reddens occasionally and loudly, an absent gate is silent every time (Rule 79d ·
+# a skip is not a pass, and neither is a cancel).
+#
+# Restored to its original group and semantics. The cross-workflow collision is real and stays open;
+# the correct fix is scoping the purge itself so it cannot take a room it did not create ·
+# scripts/migrations/024, awaiting approval. A CI-level mutex was the wrong layer, and I should have
+# watched one run before writing "this works" into two files.
 concurrency:
-  group: neotopia-e2e-purge-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   placement-guard:

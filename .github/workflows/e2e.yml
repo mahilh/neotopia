@@ -20,43 +20,33 @@ on:
   pull_request:
     branches: [main]
 
-# ══ SHARED WITH e2e-placement-guard.yml ON PURPOSE · A GLOBAL MUTEX FOR A GLOBAL DESTRUCTIVE OP ══
-# (T2 S49 · the purge hazard T3 reinstated as Rule 109.)
+# ⚠ T2 S49 · THIS WAS BRIEFLY A GROUP SHARED WITH e2e-placement-guard.yml. THAT DISABLED THAT GATE.
 #
-# Every workflow that runs Playwright also runs tests/e2e/global-teardown.js, which calls
-# purge_e2e_test_data(). That function is GLOBAL: it deletes game_rooms by host-username prefix with
-# NO status and NO age predicate (migration 008 removed the filter deliberately), and game_sessions
-# cascades from game_rooms. So a teardown does not clean up "this run" · it cleans up EVERY run.
+# The reasoning: both workflows fire on every push to main, both run Playwright, and both therefore run
+# tests/e2e/global-teardown.js -> purge_e2e_test_data(), which deletes game_rooms project-wide with NO
+# status and NO age predicate (migration 008 removed the filter deliberately) while game_sessions
+# cascades from game_rooms. So they really do destroy each other's rooms on every push, and a mutex as
+# wide as the resource looked like the right shape.
 #
-# This workflow and the placement guard BOTH trigger on every push to main, so until now they ran
-# simultaneously and each one's teardown destroyed the other's rooms. That is the mechanism behind a
-# Placement Guard reddening on a docs-only commit, and it cost T3 at least one live run.
+# It is not, because of how GitHub implements it: two workflows entering one group on the SAME push
+# means one runs and one goes PENDING, and the next push cancels the pending one. The placement guard
+# lost that race on both pushes it saw and was CANCELLED · a merge gate that cannot fail. I had written
+# "GitHub cancels older pending ones itself, so this self-limits" into both headers, which is true and
+# is precisely the problem. The full retraction lives in e2e-placement-guard.yml next to the numbers.
 #
-# The correct scope for a mutex is the scope of the thing it protects. The purge is project-wide, so
-# the group is shared across workflows rather than keyed on ${{ github.workflow }} · which is what
-# both files had, and which is exactly why it did not help.
+# WHAT SURVIVES, and it is a real improvement on its own: this workflow previously had NO concurrency
+# group at all, so two pushes in quick succession ran two copies of it simultaneously and each
+# teardown deleted the other's rooms. It is now serialised against ITSELF, keyed on the ref, with
+# cancel-in-progress:true · the standard merge-gate semantic, which supersedes an obsolete run rather
+# than queueing behind it.
 #
-# cancel-in-progress: FALSE, and that is a deliberate change from the guard's previous `true`.
-# A cancelled Playwright run does not get to run its teardown, so cancelling trades a purge collision
-# for an ORPHANED ROOM · and there are already 571 rooms in production whose host profile is gone and
-# which the purge can therefore never reach again (measured T2 S49). GitHub keeps at most one pending
-# run per group and cancels older PENDING ones itself, so this self-limits: it costs a little latency
-# on a rapid series of pushes and never silently drops a teardown.
-#
-# SCOPE, STATED PRECISELY, BECAUSE "our workflows" WOULD BE WRONG. This group covers the two
-# PUSH-TRIGGERED purge callers · this file and e2e-placement-guard.yml · which is the pair that
-# collided on literally every push to main. e2e-live-nightly.yml is NOT in it, on purpose: it runs a
-# ~55-minute budget, and sharing a group would queue the merge gate behind it and block merges for an
-# hour. So a push landing during the 05:00 UTC nightly can still collide, and a local live run racing
-# CI is untouched · which is what `gh run list` before a live run is for (documented in
-# global-teardown.js).
-#
-# THIS IS A MITIGATION, NOT THE FIX. The fix is scoping the purge itself so it cannot take a room it
-# did not create · written as scripts/migrations/024, deliberately NOT applied (tonight's approval was
-# scoped to 023). Two of the three collision surfaces close here; the third closes with 024.
+# THE CROSS-WORKFLOW COLLISION STAYS OPEN and is not fixable at this layer. The fix is scoping the
+# purge so it cannot take a room it did not create · scripts/migrations/024, written and awaiting
+# approval. A local live run racing CI is untouched either way, which is what `gh run list` before a
+# live run is for (documented in global-teardown.js).
 concurrency:
-  group: neotopia-e2e-purge-${{ github.ref }}
-  cancel-in-progress: false
+  group: neotopia-e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   reconnect:
