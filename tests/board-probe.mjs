@@ -275,6 +275,61 @@ export function seedPlayedBoard({ seat = 0, scores = [128, 256, 999], store = nu
   }
 }
 
+// ── HOW BIG IS THE BOARD, AND WHAT IS IT PAYING FOR (T1 S46) ────────────────────────────────────
+// Two competent measurements of the same screen disagreed on BOTH axes for two sessions · a browser
+// audit said 288x82 and I said 288x102 · and neither was wrong. THE HEADER WRAPS ON THE LENGTH OF
+// THE INSTRUCTION STRING, and the board pays for it out of its own height:
+//     66 chars ("Click a factory to take an element · or draw a card from the Offer")
+//         instruction 2 lines · header 142px · board 288x82  · cell 6.8x5.9 · 15.5% of 44px
+//     34 chars ("No legal move left · end your turn")
+//         instruction 1 line  · header 122px · board 288x102 · cell 8.4x7.3 · 19.2% of 44px
+// 20px of header is 24% of the board's height. So a 320px gate that pins only the VIEWPORT flakes
+// the first time anybody edits a sentence · which is not hypothetical: I improved the instruction
+// copy in S44 and silently changed the board's height by a quarter, and nothing noticed.
+//
+// FALSIFIED ALONG THE WAY, so nobody re-runs it: post-resize measurement lag is NOT the cause
+// (stable at t0, 2 frames, 100/300/700/1500ms), and the board is INVARIANT to hand size, offer size
+// and mid-placement state (the sidebar's scrollHeight swings 931 -> 277 and the board does not move).
+//
+// So this returns the string and its line count ALONGSIDE the geometry. A caller that asserts on
+// `cell` without asserting on `instructionLines` is measuring a number it does not control.
+export function boardMetrics() {
+  const svg = document.querySelector('svg[role="img"]')
+  if (!svg) return { measured: false, reason: 'no board svg · the game did not mount' }
+  const container = svg.parentElement
+  const cellNode = document.querySelector('g.hex-cell polygon')
+  if (!cellNode) return { measured: false, reason: 'no hex cells · the board mounted empty' }
+
+  const sr = svg.getBoundingClientRect()
+  const vb = (svg.getAttribute('viewBox') || '').split(/\s+/).map(Number)
+  if (vb.length !== 4 || !vb[2] || !vb[3]) return { measured: false, reason: 'board has no usable viewBox' }
+  const scale = Math.min(sr.width / vb[2], sr.height / vb[3])
+  const cell = cellNode.getBoundingClientRect()
+  const header = document.querySelector('header')
+  const ins = document.querySelector('[data-testid="instruction"]')
+  const bar = document.querySelector('footer')
+  // One rendered line of the instruction, read from the element rather than assumed · its font-size
+  // and line-height are inline styles that a future edit may move.
+  const insRect = ins ? ins.getBoundingClientRect() : null
+  const lineH = ins ? Number.parseFloat(window.getComputedStyle(ins).lineHeight) || 18 : 18
+
+  return {
+    measured: true,
+    viewport: [window.innerWidth, window.innerHeight],
+    svgBox: [Math.round(sr.width), Math.round(sr.height)],
+    drawn: [+(vb[2] * scale).toFixed(1), +(vb[3] * scale).toFixed(1)],
+    cell: [+cell.width.toFixed(1), +cell.height.toFixed(1)],
+    cellPctOf44: +(100 * Math.max(cell.width, cell.height) / 44).toFixed(1),
+    // THE THING A GATE MUST PIN ALONGSIDE THE GEOMETRY.
+    instruction: ins ? ins.textContent.trim() : null,
+    instructionChars: ins ? ins.textContent.trim().length : 0,
+    instructionLines: insRect ? Math.max(1, Math.round(insRect.height / lineH)) : 0,
+    headerH: header ? Math.round(header.getBoundingClientRect().height) : null,
+    actionBarH: bar ? Math.round(bar.getBoundingClientRect().height) : null,
+    containerH: Math.round(container.getBoundingClientRect().height),
+  }
+}
+
 const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
 export const luminance = (p) => 0.2126 * lin(p[0]) + 0.7152 * lin(p[1]) + 0.0722 * lin(p[2])
 export const contrast = (a, b) => {
@@ -356,4 +411,4 @@ export async function setup({ scale = 2, inlineImages = true } = {}) {
   return { at, recognise, contrast, luminance, viewBox: [vx, vy, vw, vh], scale, background: bg, intrinsic: R.intrinsic, rasterise, width: R.w, height: R.h }
 }
 
-export default { setup, seedOneOfEach, seedPlayedBoard, reachability, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
+export default { setup, seedOneOfEach, seedPlayedBoard, reachability, boardMetrics, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
