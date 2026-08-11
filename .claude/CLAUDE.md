@@ -634,6 +634,33 @@ EASILY. A stable reading and a correct reading are different claims. Sharpens Ru
 observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
 probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
 
+RULE 102 (T2 S45 · August 11 2026):
+A FUZZER'S PLAY POLICY DECIDES WHICH STATES EXIST, SO ITS COVERAGE IS A PROPERTY OF THE POLICY AND NOT
+OF THE STATE SPACE. 150 fuzz games asserted termination and missed three soft-locks in a row, and the
+reason was never weakness: engineFuzz places whenever a placement is legal, so the tile clock always
+runs out, so the natural trigger always fires, so every terminal path that depends on the clock NOT
+advancing is unreachable BY CONSTRUCTION. playFlowStalled already sat in that file as a hand-built
+exception · the same point conceded one case at a time. Adding policies (draw-heavy, one-region,
+never-empty-a-factory) costs nothing but the policies, because termination is already the assertion.
+  102a · A POLICY MAY NEVER REFUSE TO PLAY. oneRegion declined every move outside its region; when that
+         filled it took no action with THIRTEEN legal placements on the board and could not pass, and
+         the harness reported a hang. It was FAKE · the game offered moves and the policy wanted none.
+         An adversarial driver must distinguish "the game offers nothing" from "the strategy wants
+         nothing", or it manufactures defects. Fallback to any legal action; keep the distortion, lose
+         the abstention.
+  102b · AND THE METRIC PICKED THE FIGHT TOO. My first reachability check measured tiles-at-END, which
+         is 0 for every game that finishes, and duly reported all four policies identical. maxHand
+         discriminates instantly: greedy 6, drawHeavy 29. A metric that cannot separate the arms is not
+         evidence they are the same (Rule 88's saturation in a new costume · T1's Rule 96).
+COROLLARY, AND IT CORRECTS MY OWN S44: the board that fix guards · two empty factories with tiles
+remaining · is UNREACHABLE BY LEGAL PLAY, 0 of 160 turn-samples, because refillFactoryDraft restocks a
+factory the moment a placement empties it while tiles remain. So an empty factory implies tiles are
+exhausted, which already set the trigger. The audit's lock was T1's UI gate; my engine guard is
+belt-and-braces and was not the operative fix. I had criticised endGamePhase.test.js the same session
+for a fixture describing an impossible board, and then shipped one. WHEN A GUARD IS PROVEN ONLY ON A
+CONSTRUCTED STATE, MEASURE WHETHER PLAY CAN REACH IT before claiming what it fixed · the guard can be
+worth keeping and still not be the answer.
+
 RULE 100 (T2 S44 · August 11 2026):
 WHEN A TERMINAL CONDITION IS DRIVEN BY AN ACTION, REMOVING THE ACTION REMOVES THE ENDING.
 A practice game soft-locked forever at turn 33. The engine had TWO endgame rescues and neither could
