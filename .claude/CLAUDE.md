@@ -179,7 +179,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (100 · cumulative):
+PERMANENT ANTI-REGRESS RULES (101 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -443,6 +443,34 @@ SECOND COROLLARY, paid for in one anon sign-in: A MOCK IS A MODEL, SO MEASURE TH
 AGAINST THE REAL SYSTEM. My write-race proof rested on an inherited mock I had REASONED matched Postgres.
 Measured: write B then A, and the row holds A · no version check, no merge, the counter goes backwards on the
 server. The claim two lanes are now building on is a measurement now, not a belief.
+
+RULE 101 (T3 S44 · August 11 2026):
+A FIX'S BLAST RADIUS INCLUDES THE TESTS THAT DOCUMENTED THE DEFECT · THEY BECOME FALSE CLAIMS THE MOMENT
+IT LANDS, AND THEY ARE THE FILES MOST LIKELY TO BE READ AS AUTHORITATIVE. Wiring T2's state_version
+predicate turned TWO of my own green tests into assertions that were no longer true, and neither of them
+failed for the reason that mattered · they failed because their mocks lacked `.lt()`, which is a detail.
+The real breakage was semantic: `simultaneousdraw.test.js` asserted "the later snapshot CLOBBERS the
+earlier · A2 is GONE", true when written in S17 and false since migration 022, sitting in the file any
+future session would open first to learn about that hazard. A characterisation test is a citation (Rule
+97), and a fix silently converts it into a lie · so the diff that lands a fix must include the tests that
+described what it fixed. I found these only because they went red; a characterisation test whose mock
+happened to be permissive would have stayed GREEN while asserting the opposite of reality.
+  101a · The harness has to be re-checked too, not just the assertion. That file drove BOTH players through
+        ONE hook instance, which was faithful while the row kept the last write. The version counter is
+        per-client, so one instance mints 1 then 2 and the second write passes its own predicate · the
+        stand-in would have gone on "proving" a clobber two real clients can no longer produce. A fix can
+        invalidate the MODEL as well as the claim (Rule 36).
+  101b · Keep the history, change the claim. Both files now open with what they used to assert and why it
+        changed · the old number is the argument for the new one.
+COROLLARY, AND IT IS THE HARDER HALF · UNKNOWN MUST NOT COLLAPSE INTO A PLAUSIBLE BOOLEAN WHEN THE WRONG
+BOOLEAN IS DESTRUCTIVE. The practice-restore seam asks the engine "can this game still be played". There is
+no engine answer yet, and `!!undefined` is `false` · which in that position DELETES A PLAYER'S SAVED GAME.
+So it returns true / false / null, null meaning nobody asked, and the counterweight written first is the
+UNKNOWN case rather than the missing one: mutation-proved by making it answer `false` and watching the test
+red. Rule 80 says a counter that cannot measure must say so; this is the version where saying so wrong is
+not a bad reading but data loss, and it is the reason I did not implement the resolvability check myself
+even though it looked like twenty lines (Rule 45/94 · a second rules engine fails toward discarding live
+games the instant it drifts).
 
 RULE 100 (T1 S43 · August 11 2026 · WAS NUMBERED 98 · renumbered T1 S44):
 CITED AS RULE 98 IN COMMITS 52f9aec AND e1d63d7 AND IN THE T1 S43 HANDOFF · T2 S43 independently
