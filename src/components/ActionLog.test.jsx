@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 import ActionLog from './ActionLog'
+import { PROJECT_CARDS } from '../lib/projectCards'
 
 // ── The log may have a letterbox. It may not have the board. ─────────────────────────────────────
 // Rule 83, applied to my own oldest untouched defect. This overlay is position:absolute over the
@@ -289,6 +290,40 @@ describe('what the log still does', () => {
     expect([...wrap.children].map(n => n.textContent).filter(t => t !== '·'))
       .toEqual(['entry 11', 'entry 12', 'entry 13'])
     expect(wrap.style.justifyContent).toBe('flex-end')
+  })
+
+  it('delivers the NEWEST whatever else is clipped · the three properties that make that true', () => {
+    // S40 shipped "the last three entries" as a claim I reasoned to. Measured at the four widths
+    // bottom mode actually occurs at, the typical late game delivers 1 / 2 / 3 / 3 and the three
+    // longest strings deliver 1 / 2 / 2 / 2 · so at 316, the width where this feature matters most,
+    // it is one entry and part of a second. Three is still the right MAX (clipped entries cost
+    // nothing and all three arrive when the strings are short), but the promise that holds at every
+    // width is the newest one, and it is delivered by exactly these three properties.
+    const many = Array.from({ length: 9 }, (_, i) => ({ id: i, text: `entry ${i}`, turn: 1 }))
+    const wrap = renderInBoard({ containerW: 332, containerH: 614 }, many)
+    const kids = [...wrap.children]
+
+    expect(wrap.style.overflow, 'without this the strip overflows its band and reaches the board').toBe('hidden')
+    expect(wrap.style.justifyContent, 'flex-start would clip the NEWEST instead of the oldest').toBe('flex-end')
+    // FALSE CASE that looks harmless: leave flexShrink off and flex squeezes all three entries into
+    // the width, so the player gets three unreadable stubs rather than one readable line.
+    const texts = kids.filter(n => n.textContent !== '·')
+    expect(texts.every(n => n.style.flexShrink === '0'), 'the entries must not be squeezed').toBe(true)
+    expect(kids[kids.length - 1].textContent, 'the newest must be last · it is the one that survives')
+      .toBe('entry 8')
+    expect(kids[kids.length - 1].textContent).not.toBe('·')
+  })
+
+  it('keeps the longest line the log can produce narrower than the narrowest strip', () => {
+    // The newest entry can only be lost if IT ALONE is wider than the strip. Measured: the longest
+    // line is "scored <longest card>: +12" at 212.9px against a 316px minimum strip · 40 characters
+    // at ~5.32px each. That ratio is a browser fact and jsdom cannot recompute it, but the CHARACTER
+    // COUNT is derivable right here, and it is the thing that actually changes: T2 renames cards.
+    // 316 / 5.32 = 59, so 56 leaves real headroom and still fires long before the guarantee breaks.
+    const longest = PROJECT_CARDS.reduce((a, c) => (c.name.length > a.length ? c.name : a), '')
+    const line = `scored ${longest}: +12`
+    expect(line.length, `"${line}" would overflow the 316px strip · the newest entry stops being guaranteed`)
+      .toBeLessThanOrEqual(56)
   })
 
   it('fades older turns but never to nothing', () => {

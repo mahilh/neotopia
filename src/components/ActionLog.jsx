@@ -32,8 +32,32 @@ import { Fragment, memo, useLayoutEffect, useRef, useState } from 'react'
 // SO THE RULE IS A MEASUREMENT, NOT A BREAKPOINT: take the side letterbox when it can hold a
 // legible column, else the bottom letterbox when it can hold one line, else render nothing. Both
 // are derived from the live rects every time they change, so the log can never sit over a cell.
-const MAX_ENTRIES = 10       // the column shows this many
-const MAX_BOTTOM_ENTRIES = 3 // the strip shows this many, newest last, older ones clipped left
+const MAX_ENTRIES = 10 // the column shows this many
+
+// THE STRIP SHOWS AS MANY OF THE LAST THREE AS FIT, AND ALWAYS THE NEWEST. That wording is the
+// whole point of this comment: S40 shipped this as "the last three entries" and that was a number I
+// reasoned to in the same file where I wrote a paragraph about not doing that (Rule 81). MEASURED,
+// rebuilding this exact flex row at the four widths bottom mode actually occurs at:
+//
+//                              316    396    464    596     (needs, unclipped)
+//     typical late game          1      2      3      3       439.5
+//     three longest strings      1      2      2      2       599.5
+//     turn banner + two          2      2      3      3       424.9
+//     three short draws          3      3      3      3       310.3
+//
+// So at 316 · the width where this feature matters most, because it is the one where the side
+// column cannot exist at all · the honest delivery is ONE entry and part of a second, not three.
+// THREE IS STILL THE RIGHT MAX: the extra entries cost nothing when they are clipped and they are
+// all delivered whenever the strings are short, which is most turns.
+//
+// THE GUARANTEE THAT DOES HOLD AT EVERY WIDTH, and it is structural rather than a tolerance: the
+// row is justifyContent flex-end with overflow hidden and non-shrinking children, so the OLDEST is
+// what falls off the left · the newest can only be lost if it alone is wider than the strip, and
+// the longest line the log can produce is 212.9px against a 316px minimum. The left mask is what
+// makes a clipped entry read as "there is more" instead of as a broken glyph.
+// CHECKED AND CLEAN, so it is not fixed here (Rule 81c · do not fix an unmeasured problem): the
+// leftmost visible child was a real entry in all four cases, never a stranded separator.
+const MAX_BOTTOM_ENTRIES = 3
 const MARGIN = 8
 
 // WIDTH_MIN IS MEASURED, NOT CHOSEN (Rule 81 · compute the constraint). Rendering every string the
@@ -98,7 +122,11 @@ function ActionLog({ entries = [] }) {
   const currentTurn = entries[entries.length - 1]?.turn ?? 0
   // Oldest → newest either way. In the column the newest sits at the bottom; in the strip it sits at
   // the right, and justifyContent flex-end means the OLDEST is what gets clipped when the row runs
-  // out of room. Same promise in both: whatever else goes, the latest event is on screen.
+  // out of room. Same promise in both: whatever else goes, the latest event is on screen. In the
+  // strip that promise is delivered by three properties together and every one of them is load-
+  // bearing · flex-end (clip from the left), overflow hidden (clip at all), and flexShrink 0 on the
+  // entries (or flex would squeeze all three and deliver three unreadable stubs instead of one
+  // readable line).
   const visible = entries.slice(bottom ? -MAX_BOTTOM_ENTRIES : -MAX_ENTRIES)
 
   const box = bottom
