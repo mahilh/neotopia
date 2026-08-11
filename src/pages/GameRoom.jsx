@@ -934,10 +934,28 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
           {uiPhase === 'factorySelected' && factory && (
             <div ref={stepPanelRef}>
               {/* Soul-metal lore reveals under each element on hover/focus (PLATO_BOOKS · Pillar 1) ·
-                  grows within the flow so the sidebar's overflow never clips it (Rule 4: minHeight 44px). */}
+                  grows within the flow so the sidebar's overflow never clips it (Rule 4: minHeight 44px).
+
+                  ⚠ AND ON A PHONE IT REVEALED TO NOBODY (T1 S52). `:hover` does not exist on touch and
+                  `:focus-visible` is deliberately withheld from a tap · browsers reserve it for
+                  keyboard focus · so both triggers are unreachable on the device most players use.
+                  The other channel, `title=`, is a hover tooltip too. MEASURED on a real touch
+                  viewport before changing anything (Rule 116 · a source read cannot answer this, and
+                  my own grep of index.css said the rule did not exist because it lives in this
+                  <style> block):
+                      tipOpacity "0" · tipFont "10px" · tipVisible FALSE · all four elements
+                  So the game never told a phone player what Energy or Community are. The content was
+                  written, shipped and completely unreachable · the same invisibility as card art at
+                  0/56, in a costume where nothing is even missing.
+                  `(hover: none)` is the precise question: it asks whether the PRIMARY input can
+                  hover, not whether the screen is small, so a small laptop keeps the reveal and a
+                  large tablet does not. Desktop behaviour is untouched.
+                  The 10px also goes to 12px, which is the floor the UX scan set and which the rest of
+                  this product already honours. */}
               <style>{`
                 .neo-soul-tip { max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.2s ease, opacity 0.2s ease; }
-                .neo-soul-btn:hover .neo-soul-tip, .neo-soul-btn:focus-visible .neo-soul-tip { max-height: 20px; opacity: 1; }
+                .neo-soul-btn:hover .neo-soul-tip, .neo-soul-btn:focus-visible .neo-soul-tip { max-height: 15px; opacity: 1; }
+                @media (hover: none) { .neo-soul-tip { max-height: 15px; opacity: 1; } }
                 @media (prefers-reduced-motion: reduce) { .neo-soul-tip { transition: none; } }
               `}</style>
               <div style={sectionLabel}>Select element</div>
@@ -976,7 +994,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                     title={elementSoulMetalLabel(el.type) ?? undefined}
                     onClick={() => handleElementSelect(el.type)}
                     style={{
-                      minHeight: 44, padding: '6px 14px', borderRadius: 8,
+                      minHeight: 44, padding: '4px 14px', borderRadius: 8,
                       border: '1px solid rgba(255,255,255,0.15)',
                       background: selectedElement === el.type ? 'rgba(255,255,255,0.1)' : 'transparent',
                       display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
@@ -989,7 +1007,10 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                       </span>
                       {soul && (
                         <span className="neo-soul-tip" style={{
-                          fontSize: 10, color: 'rgba(200,148,64,0.85)', letterSpacing: 0.3, whiteSpace: 'nowrap',
+                          // 12px, not 10 · the floor the UX scan set. At 10px this line was both
+                          // invisible AND under the minimum, so raising it only mattered once it
+                          // could be seen at all.
+                          fontSize: 12, lineHeight: '15px', color: 'rgba(200,148,64,0.85)', letterSpacing: 0.3, whiteSpace: 'nowrap',
                         }}>
                           {soul.metal} · {soul.virtue} · {soul.district}
                         </span>
