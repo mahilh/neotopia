@@ -215,7 +215,7 @@ export const PROJECT_CARDS = [
     description: 'Four seasons of conscious farming restore what centuries of extraction took.',
   },
   {
-    id: 'card_35', name: 'Sacred Water Tower',
+    id: 'card_35', name: 'Community Water Tower',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 0, r: 1, type: 'biofarming' }, { q: 1, r: 0, type: 'energy' }, { q: 0, r: 2, type: 'community' }],
     points: 4, illustration: 'tower', district: 5,
     description: 'Water carries memory. A NeoTopian water tower carries intention.',
@@ -233,7 +233,7 @@ export const PROJECT_CARDS = [
     description: 'What you transmit becomes the frequency of the district. Choose carefully.',
   },
   {
-    id: 'card_38', name: 'Pyramid Research Center',
+    id: 'card_38', name: 'Pyramid Power Plant',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'technology' }, { q: 0, r: 1, type: 'technology' }, { q: 1, r: -1, type: 'energy' }],
     points: 4, illustration: 'pyramid', district: 4,
     description: 'Ancient structure. Modern understanding. My grandfather stood here first.',
@@ -269,7 +269,7 @@ export const PROJECT_CARDS = [
     description: 'Power distributed with love cannot be corrupted. The grid is the covenant.',
   },
   {
-    id: 'card_44', name: 'Healing Arts Center',
+    id: 'card_44', name: 'Reiki Healing School',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 0, r: 1, type: 'community' }, { q: 1, r: 0, type: 'biofarming' }, { q: 1, r: -1, type: 'technology' }],
     points: 4, illustration: 'center', district: 2,
     description: 'The body knows how to heal. We build the conditions and step aside.',
@@ -287,13 +287,13 @@ export const PROJECT_CARDS = [
     description: 'Everything vibrates. The question is always: at what frequency are we building?',
   },
   {
-    id: 'card_47', name: 'Earth Embassy',
+    id: 'card_47', name: 'Peacemaking Circle',
     pattern: [{ q: 0, r: 0, type: 'community' }, { q: 1, r: 0, type: 'biofarming' }, { q: 0, r: 1, type: 'community' }, { q: -1, r: 1, type: 'biofarming' }],
     points: 4, illustration: 'embassy', district: 9,
-    description: 'Every piece of living land is sovereign. We are its ambassadors.',
+    description: 'No one negotiates from behind a wall. The circle has no head of the table.',
   },
   {
-    id: 'card_48', name: 'Charter Hall',
+    id: 'card_48', name: 'Open Data Hall',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: -1, type: 'community' }, { q: 0, r: 1, type: 'biofarming' }, { q: 1, r: 0, type: 'energy' }],
     points: 4, illustration: 'node', district: 1,
     description: 'Where all four forces agree: that is the center of NeoTopia.',
@@ -343,11 +343,11 @@ export const PROJECT_CARDS = [
     description: 'A deep-field array reading the sky across every frequency · the civilization listening for what comes next.',
   },
   {
-    id: 'card_55', name: 'Living City Core',
+    id: 'card_55', name: 'Grand Forum',
     pattern: [{ q: 0, r: 0, type: 'technology' }, { q: 1, r: 0, type: 'community' }, { q: 0, r: 1, type: 'biofarming' },
               { q: -1, r: 1, type: 'energy' }, { q: 0, r: -1, type: 'community' }],
     points: 5, illustration: 'core', district: 6,
-    description: 'Sacred solarpunk futurism made concrete. The city as a living mandala.',
+    description: 'Where the whole district gathers to decide. Five elements, one room, one voice at a time.',
   },
   {
     id: 'card_56', name: '2055 Horizon',
