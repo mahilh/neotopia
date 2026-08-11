@@ -68,9 +68,19 @@ import { clearSaved } from '../hooks/useLocalSession'
 //     375  26.5px                    768   39.0px
 //     414  26.5px                   1280   53.9px  UNCHANGED
 // The 6.8 -> 14.4 -> 25.8 progression is three sessions on one number. It still does NOT clear 44px
-// and cannot: the board is 720x749 user units, so at 320 it is width-bound to 32px even with no
-// chrome at all. See index.css for the arithmetic and for the one design that does reach it.
+// and cannot: the board is 828 x 865.9 user units, so at 320 it is width-bound to 27.8px even with
+// no chrome at all.  ⚠ THIS LINE SAID "720x749 ... 32px" UNTIL T1 S50 AND THAT WAS WRONG · the
+// correction to S47's wrong 44px claim carried a wrong number of its own for a session. The figure
+// is now computed by GameBoard's exported computeViewBox() and asserted in GameBoard.focus.test.jsx
+// rather than quoted anywhere.
+//
+// ── AND S50 SUPERSEDED THIS AGAIN · ONE REGION AT A TIME DOES CLEAR 44px ─────────────────────────
+// `focusRegion` scopes the viewBox to the region the player chose at step 3. Measured live on the
+// built bundle: 74.4px at 320, 87.2 at 375, 96.3 at 414, 115.7 at 600 · 0 blocked, 0 clipped in the
+// focused region, desktop unchanged at 39.0/53.9. So the sheet's 25.8px is what the board renders
+// while you are LOOKING at it, and 74.4px is what it renders when you have to TAP it.
 // The SHEET's own behaviour · which phase it is up in · lives in GameRoom.sheet.test.jsx.
+// The FOCUS behaviour lives in GameRoom.focus.test.jsx and GameBoard.focus.test.jsx.
 
 vi.mock('../lib/supabase', () => ({
   supabase: {},

@@ -605,6 +605,32 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // moves, and then the flow wins. Deps are one string, so no identity churn can cancel this (Rule 76).
   useEffect(() => { setSheetOpen(SHEET_PHASES.includes(uiPhase)) }, [uiPhase]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── REGION FOCUS · THE BOARD FOLLOWS THE SELECTION THE PLAYER HAS ALREADY MADE (T1 S50) ────────
+  // Step 3 of the 4-step placement IS "which region", so by the time the target is a hex the player
+  // has named one. The board scopes to it rather than asking a fifth question · a separate map-and-
+  // zoom view would add a click to a flow that took two sessions to make honest.
+  // MEASURED, not asserted: the whole board cannot give a phone a 44px hex at any layout (827x866
+  // user units against 320 = 27.8px ceiling). One region measures ~69px. See computeViewBox.
+  //
+  // PHONE ONLY, AND ON THE SHEET'S OWN BREAKPOINT. At 1280 the full board already renders 53.9px
+  // hexes and showing all three regions is strictly better for deciding where to place · focus is
+  // an accommodation, not an improvement. It reuses index.css's 600px rather than introducing a
+  // second threshold, because the sheet layout and this are one design and two numbers that must
+  // agree is a second contract (Rule 45).
+  // jsdom has NEITHER matchMedia NOR addEventListener on its result · verified, not assumed · so
+  // both are optional-chained and the jsdom default is `false`, i.e. the desktop board. That makes
+  // the unit gate below explicit about which branch it is in rather than silently testing one.
+  const [isPhone, setIsPhone] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 600px)')
+    if (!mq) return
+    const apply = () => setIsPhone(mq.matches)
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => mq.removeEventListener?.('change', apply)
+  }, [])
+  const focusRegion = isPhone && uiPhase === 'regionSelected' ? selectedRegion : null
+
   const cancelRef = useRef(null)
   cancelRef.current = () => {
     // Escape closes a sheet the player opened by hand, even with nothing selected · otherwise the
@@ -811,6 +837,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             it had none, so index.css could only ever address the sidebar (T1 S47). */}
         <div className="game-board-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0, position: 'relative' }}>
           <GameBoard
+            focusRegion={focusRegion}
             regions={regions}
             factories={factories}
             validTargets={validTargets}

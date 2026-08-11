@@ -118,7 +118,66 @@ const BACKDROP_BOX = {
   h: BACKDROP.fileH * BACKDROP.scale,
 }
 
+// ── REGION FOCUS · THE ONLY ROUTE TO A 44px HEX (T1 S50) ─────────────────────────────────────────
+// The three-region viewBox is 828 x 866 user units. `meet` scales by min(w/vbW, h/vbH), so on a
+// 320px phone the board is WIDTH-bound at 320/828 and every hex renders at 27.8px MAXIMUM · with no
+// header, no action bar, no padding and nothing else on the screen. 63% of Rule 4's minimum, and no
+// layout change can reach it, because the board is simply wider than the phone. The bottom sheet
+// (S49) took the measured figure from 14.4 to 25.8px and that is the ceiling of that approach.
+//
+// ⚠ I HAVE NOW GOT THIS NUMBER WRONG TWICE, and both wrong versions are in the repo's history: S47
+// said the sheet would REACH 44px (it cannot · height was never the binding constraint), and S49
+// then said the board was "720 x 749, so 32px at 320". Computed from hexUtils at the moment of
+// writing this, it is 828 x 865.9 and 27.8px. Both errors were arithmetic I did in my head about a
+// geometry that is three lines of code to evaluate (Rule 81). Hence: this file no longer states the
+// figure, it EXPORTS THE FUNCTION, and the test computes the constraint rather than quoting it.
+//
+// Scoping the viewBox to ONE region is the only thing that changes the ratio: a region's hexes are
+// 288 x 311.8 units, so the same 320px screen has ~2.6x the scale to give.
+//
+// THE LABEL STACK IS WHY THIS IS NOT JUST THE HEX BBOX. Each region draws terrain name / region
+// name / score at 4.45, 3.55 and 2.62 hex-radii ABOVE its centre · the score is the number that
+// says whether you are winning · and the topmost of those sits 173 units up while the hexes stop at
+// 155.9. A focus box built from the hexes alone clips all three, and it clips them silently,
+// because an SVG outside its viewBox does not error, it just is not there (the same invisibility
+// that let card art read 0/56 for fifteen sessions).
+const LABEL_STACK_TOP = HEX_SIZE * 4.45 + 26 / 2 + 4  // terrain caption offset + half its font + slack
+const HEX_HALF_H = Math.sqrt(3) / 2 * HEX_SIZE
+const FOCUS_PAD = HEX_SIZE * 0.3
+
+// Exported so the gate can compute the consequence instead of quoting a number, and so the two
+// branches are one function rather than two drifting copies.
+export function computeViewBox(focusRegionId = null) {
+  const focus = focusRegionId == null ? null : REGIONS.find(r => r.id === focusRegionId)
+  if (focus) {
+    const pts = hexesInRadius(focus.cq, focus.cr, focus.radius).map(h => hexToPixel(h.q, h.r))
+    const c = hexToPixel(focus.cq, focus.cr)
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y)
+    const x0 = Math.min(...xs) - HEX_SIZE - FOCUS_PAD
+    const x1 = Math.max(...xs) + HEX_SIZE + FOCUS_PAD
+    const y0 = Math.min(c.y - LABEL_STACK_TOP, Math.min(...ys) - HEX_HALF_H) - FOCUS_PAD
+    const y1 = Math.max(...ys) + HEX_HALF_H + FOCUS_PAD
+    return { minX: x0, minY: y0, width: x1 - x0, height: y1 - y0 }
+  }
+  const all = []
+  REGIONS.forEach(reg => hexesInRadius(reg.cq, reg.cr, reg.radius).forEach(h => all.push(hexToPixel(h.q, h.r))))
+  FACTORIES.forEach(f => all.push(hexToPixel(f.q, f.r)))
+  const xs = all.map(p => p.x), ys = all.map(p => p.y)
+  const pad = HEX_SIZE * 2.5
+  return {
+    minX: Math.min(...xs) - pad, minY: Math.min(...ys) - pad,
+    width: Math.max(...xs) - Math.min(...xs) + pad * 2,
+    height: Math.max(...ys) - Math.min(...ys) + pad * 2,
+  }
+}
+
+// Rendered hex WIDTH (2 x radius x scale) for a viewBox inside a box, under preserveAspectRatio
+// 'meet'. This is the quantity Rule 4 is about and the one every claim in this area should be made
+// in · not the viewBox, not the container, not the scale.
+export const hexPxIn = (vb, boxW, boxH) => 2 * HEX_SIZE * Math.min(boxW / vb.width, boxH / vb.height)
+
 export default function GameBoard({
+  focusRegion = null,       // region id · scope the viewBox to one region (phone, step 3). null = whole board
   // All props have safe defaults so board renders without T2 store
   regions = REGIONS.map(r => ({...r, hexes: {}})),
   factories = FACTORIES.map(f => ({...f, elements: []})),
@@ -134,22 +193,9 @@ export default function GameBoard({
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
 }) {
-  // Collect all positions for viewBox calculation
-  const allPositions = []
-  REGIONS.forEach(reg => {
-    hexesInRadius(reg.cq, reg.cr, reg.radius).forEach(h => {
-      allPositions.push(hexToPixel(h.q, h.r))
-    })
-  })
-  FACTORIES.forEach(f => allPositions.push(hexToPixel(f.q, f.r)))
-
-  const xs = allPositions.map(p => p.x)
-  const ys = allPositions.map(p => p.y)
-  const pad = HEX_SIZE * 2.5
-  const minX = Math.min(...xs) - pad
-  const minY = Math.min(...ys) - pad
-  const width = Math.max(...xs) - Math.min(...xs) + pad * 2
-  const height = Math.max(...ys) - Math.min(...ys) + pad * 2
+  // viewBox · whole board, or scoped to one region when the player has already chosen one (see the
+  // block above computeViewBox for why this is the only thing that reaches 44px on a phone).
+  const { minX, minY, width, height } = computeViewBox(focusRegion)
 
   const isValidTarget = (q, r) => validTargets.some(t => t.q === q && t.r === r)
   const isPatternMatch = (q, r) => patternHighlight.some(t => t.q === q && t.r === r)
@@ -163,9 +209,19 @@ export default function GameBoard({
     <svg
       viewBox={`${minX} ${minY} ${width} ${height}`}
       preserveAspectRatio="xMidYMid meet"
-      style={{width: '100%', height: '100%', maxHeight: '100%', overflow: 'visible'}}
+      // OVERFLOW MUST CLIP WHEN FOCUSED. `visible` is deliberate on the whole board (glows and the
+      // hex pulse reach past their own bbox), but with a one-region viewBox the OTHER two regions
+      // and all three factories sit outside it · and `visible` would paint them across the rest of
+      // the page and, worse, leave them hit-testable. The reachability probe in the gate is what
+      // actually holds that second half; this attribute is only how it is achieved.
+      style={{width: '100%', height: '100%', maxHeight: '100%', overflow: focusRegion == null ? 'visible' : 'hidden'}}
       role="img"
-      aria-label="NeoTopia civilization game board with 3 regions"
+      // Rule 50 · the attribute FLIPS on a permanently-mounted element, so a gate can read state
+      // from it. A testid that is always present would say nothing.
+      data-focus-region={focusRegion == null ? 'none' : String(focusRegion)}
+      aria-label={focusRegion == null
+        ? 'NeoTopia civilization game board with 3 regions'
+        : `NeoTopia game board, zoomed to ${REGIONS.find(r => r.id === focusRegion)?.name ?? 'a region'}`}
     >
       <defs>
         {/* One vertical bevel, reused by every hex. objectBoundingBox units mean each hex gets its own

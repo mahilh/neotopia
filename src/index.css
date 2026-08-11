@@ -129,15 +129,23 @@
    the share away from the sidebar entirely: the board gets ALL of `main`, and the panel comes up over
    it only when the flow needs it (GameRoom owns the WHEN · see SHEET_PHASES there).
 
-   WHAT IT REACHES, AND THE NUMBER IS THE POINT · 14.4px -> 32.0px at 320. It DOES NOT reach Rule 4's
-   44px, and nothing of this shape can. The board is 720x749 user units and `meet` scales by
-   min(w/vbW, h/vbH), so at 320 it is WIDTH-limited: 320/720 = 0.444, giving 72 * 0.444 = 32.0px even
-   with zero padding, no header at all, and the whole screen below it. A 44px hex needs a 440px-wide
-   viewport and no phone in use is that wide (iPhone Pro Max is 430). I wrote "only the bottom sheet
-   reaches 44px" in the S47 roadmap and again in the S48 close, and that was WRONG · it was reasoned
-   from the height budget, which is not the binding constraint. The only route to 44 is showing ONE
-   REGION at a time (288x312 units -> 80px at 320, measured), which is a different design and is not
-   improvised here.
+   WHAT IT REACHES, MEASURED · 14.4px -> 25.8px at 320. It does NOT reach Rule 4's 44px and nothing
+   that shows three regions at once can: the board is 828 x 865.9 user units and `meet` scales by
+   min(w/vbW, h/vbH), so at 320 it is WIDTH-limited at 72 * 320/828 = 27.8px even with zero padding,
+   no header and the whole screen below it. I wrote "only the bottom sheet reaches 44px" in the S47
+   roadmap and again in the S48 close, and that was WRONG · reasoned from the height budget, which is
+   not the binding constraint.
+
+   ⚠ AND THE CORRECTION ITSELF CARRIED A WRONG NUMBER FOR A SESSION (T1 S50, correcting T1 S49). This
+   comment said "720 x 749, so 32.0px, and a 44px hex needs a 440px viewport". The viewBox is 828 x
+   865.9 · computed from hexUtils, and confirmed by reading the rendered attribute in a browser · so
+   the ceiling is 27.8px and 44px would need 506px, not 440. Same arithmetic-in-my-head mistake as
+   the thing it was correcting (Rule 81), which is why the figure now lives in GameBoard's exported
+   computeViewBox() and is asserted by a test that DERIVES it rather than quoting it.
+
+   THE ROUTE TO 44px IS ONE REGION AT A TIME, AND IT SHIPPED IN S50 · GameBoard's `focusRegion`.
+   Measured live on the built bundle: 74.4px at 320 (169% of Rule 4), 87.2 at 375, 96.3 at 414,
+   115.7 at 600, with 0 blocked and 0 hexes of the focused region clipped. Desktop is untouched.
 
    AND THE HEADER DOES NOT NEED TO SHRINK, which is worth stating because it was the obvious next
    move and it would have bought nothing. Removing the sidebar already makes the board width-limited:
