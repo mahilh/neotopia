@@ -149,10 +149,16 @@ NOT applied — needs your yes**):
    deliberately does **not** fix the leak: that means deleting 571 rooms and 557 sessions in one
    statement, which deserves its own approval and its own dry run.
 
-**Shipped tonight without needing the DB:** the three workflows that run the purge had three different
-concurrency groups (and `e2e.yml` had none), so `e2e.yml` and the placement guard ran simultaneously on
-every push and destroyed each other's rooms. They now share one group. That is the mechanism behind a
-Placement Guard reddening on a docs-only commit.
+**I tried to fix this at the CI layer tonight and it did not work.** The three workflows that run the
+purge had three different concurrency groups (and `e2e.yml` had none), so `e2e.yml` and the placement
+guard ran simultaneously on every push and destroyed each other's rooms — that *is* the mechanism
+behind a Placement Guard reddening on a docs-only commit. But putting them in one shared group
+**cancelled the placement guard on both pushes it saw**: two workflows entering one group on the same
+push means one runs and one goes pending, and the next push cancels the pending one. A merge gate that
+is cancelled cannot fail, which is worse than the collision. **Reverted, and verified green again.**
+
+The collision is real and **stays open until 024**. It is not fixable at the CI layer. What survives
+is narrower and still worth having: `e2e.yml` is now serialised against itself, which it never was.
 
 ---
 
