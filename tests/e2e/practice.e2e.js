@@ -882,3 +882,109 @@ test.describe('practice mode · the end of the game', () => {
     console.log(`[practice] play again · turn ${mid.turnNumber}→${fresh.turnNumber} · placed ${mid.placed}→${fresh.placed}`)
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// THREE LANES SHIPPED THREE HALVES OF ONE BUG · THIS RUNS THEM IN ONE SCENARIO (T3 S45)
+//
+// T2 named this gap in their own work: "there is no test anywhere that exercises T1's button and my
+// condition in the same scenario." Each half is proven alone and the COMPOSITION was never run · the Rule
+// 65 seam, and the only lane that can drive the REAL button rather than a model of it is this one.
+//   · T1  · ActionBar unlocks End Turn when nothing is legal  (data-unlocked-by="no-legal-move")
+//   · T2  · maybeForceDeadlockEndgame sets endGameTriggered when deck+offer are empty and no placement
+//           is possible (gameStore.js:213 · called from placeElement AND endTurn)
+//   · T3  · the restore seam must not silently reinstate an unresolvable board
+// Free · practice mints zero identities, which is why this belongs on the merge gate.
+test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)', () => {
+  test('a deadlocked board unlocks End Turn and triggers the endgame · the real button, not a model',
+    async ({ page }) => {
+      await page.goto('/practice?bots=1')
+      await boardReady(page)
+
+      // The audit's exhaustion, reconstructed: nothing to draw, nothing to place. Set through the store
+      // rather than played to, because reaching it naturally took a human auditor 33 turns · the STATE is
+      // what is under test here, and every assertion below is on the real UI and the real engine.
+      await page.evaluate(() => {
+        const st = window.__neotopia_store.getState()
+        window.__neotopia_store.setState({
+          phase: 'playing', currentSeat: 0, actionsRemaining: 3, turnNumber: 33,
+          deck: [], theOffer: [],
+          factories: st.factories.map(f => ({ ...f, elements: f.elements.map(e => ({ ...e, count: 0 })) })),
+        })
+      })
+      await page.waitForTimeout(800)
+
+      // ── COUNTERWEIGHT FIRST (Rule 90) · the board must genuinely BE dead ──────────────────────────────
+      // Every assertion below is about a game with no legal action. If the state I constructed still had
+      // one, End Turn would unlock for some other reason and this test would pass while proving nothing
+      // about the soft-lock · the exact vacuity Rule 86 is about. So the engine is asked first, through
+      // its own validator, and it has to agree there is nothing to do.
+      // It asserts the deadlock's INPUTS, not a recomputation of the rules · and the first version of this
+      // block got that wrong in an instructive way. It summed getValidPlacements() across every factory and
+      // region and expected 0; it measured SIX, on a board where every factory is empty. That function
+      // answers "which hexes are geometrically legal for this factory/region pair" and does NOT look at
+      // whether the factory holds anything · T2's anyPlacementPossible checks `elements.some(count > 0)`
+      // FIRST, which is exactly the term I had dropped. Asserting on it would have been a second, wrong
+      // rules engine in the counterweight itself (Rule 45), and it would have failed in the safe direction
+      // only by luck.
+      // So: no factory holds an element, and there is nothing to draw. Those are the three facts T2's
+      // condition consumes, all directly observable, and none of them requires me to judge legality.
+      const dead = await page.evaluate(() => {
+        const g = window.__neotopia_store.getState()
+        return {
+          elementsInFactories: g.factories.reduce(
+            (n, f) => n + f.elements.reduce((m, e) => m + e.count, 0), 0),
+          deck: g.deck.length, offer: g.theOffer.length, actions: g.actionsRemaining,
+        }
+      })
+      expect(dead, 'the board is still playable · this test would be asserting nothing about a soft-lock')
+        .toEqual({ elementsInFactories: 0, deck: 0, offer: 0, actions: 3 })
+
+      // ── T1's HALF · the real control, and the reason it is unlocked ───────────────────────────────────
+      const endTurn = page.getByTestId('end-turn-btn')
+      await expect(endTurn, 'End Turn is disabled on a board with no legal move · the player is trapped')
+        .toBeEnabled({ timeout: 10_000 })
+      // The ATTRIBUTE, not just the enabled state: End Turn is also enabled at zero actions, which is the
+      // ordinary path. Asserting only "enabled" would pass on a board that unlocked for the normal reason
+      // and would never notice the escape hatch disappearing (Rule 50 · the attribute has to carry state).
+      await expect(endTurn).toHaveAttribute('data-unlocked-by', 'no-legal-move')
+
+      // A REAL click · no force. The question is whether a player can escape, and force answers a
+      // different one.
+      await endTurn.click({ timeout: 10_000 })
+
+      // ── T2's HALF · the engine noticed, on the very turn that discovered it ───────────────────────────
+      await expect.poll(async () => await page.evaluate(
+        () => !!window.__neotopia_store.getState().endGameTriggered), {
+        timeout: 10_000,
+        message: 'the deadlock did not trigger the endgame · maybeForceDeadlockEndgame (gameStore.js:213) ' +
+          'runs from endTurn, so a real End Turn on a dead board must set endGameTriggered',
+      }).toBe(true)
+      console.log('[practice] soft-lock · End Turn unlocked by no-legal-move, click accepted, endgame triggered')
+    })
+
+  // ── AND THE COMPOSITION STILL DOES NOT FINISH · MEASURED, NOT ASSUMED (T3 S45) ──────────────────────────
+  // fixme rather than a red merge gate: this is a defect in two other lanes' code, and reddening the gate
+  // for everybody is a tripwire aimed at colleagues (the S39 mistake I have now removed twice). It reports
+  // as FIXME, it does not pretend to pass, and the measurement is here so nobody re-derives it.
+  //
+  // WHAT HAPPENS, driving the real button in a browser and waiting past every relevant timeout:
+  //   human End Turn (unlocked)      -> endGameTriggered true, rounds 2, seat 1
+  //   bots play / human ends again   -> rounds 1, seat 1 (the BOT), turn 36
+  //   then NOTHING, for 162 SECONDS  -> phase still 'playing', rounds still 1, turn still 36
+  // Past TURN_TIME_LIMIT (90s), so this is permanent rather than a slow timeout · I measured to 81s first
+  // and deliberately went past the edge before calling it that (Rule 87).
+  //
+  // WHY, and it is one sentence: endGameTriggered is necessary but NOT SUFFICIENT · the two-round burn is
+  // driven by seats ENDING THEIR TURNS, and a deadlocked BOT cannot pass. T1's escape hatch is a button,
+  // which no bot presses. So the game hands to a seat that can never act, and the human cannot help
+  // because it is not their turn and their control is correctly disabled.
+  //   >>> T1 · a bot with no legal move needs the same escape the human got (useBotTurns).
+  //   >>> T2 · or the round burn should not require an actor who cannot act · a triggered endgame that
+  //            cannot complete its own countdown is the same class as the clock that could not advance.
+  // A PAGE RELOAD RESOLVES IT (phase 'scoring' on the next mount), which is the only recovery a player
+  // has and is indistinguishable from the app crashing and recovering.
+  test('a deadlocked board reaches its own ending without a reload', async ({ page }) => {
+    test.fixme(true, 'the 2-round burn hands to a bot that cannot pass · measured stuck 162s · T1/T2 · T3 S45')
+    await page.goto('/practice?bots=1')
+  })
+})
