@@ -306,13 +306,23 @@ describe('the camera follows step 3, and only step 3', () => {
     // ORDER · that is a fact about the text, not about the cascade, and it is the only part a regex
     // is the right instrument for.
     const css = fs.readFileSync(path.resolve(__dirname, '../index.css'), 'utf8')
-    const rule = css.match(/\.game-main\s*\{[^}]*overflow[^}]*\}/)?.[0] ?? ''
-    expect(rule, '.game-main has no overflow rule in index.css at all').not.toBe('')
-    expect(rule.indexOf('overflow: hidden'), 'the hidden fallback is gone · a Safari that does not ' +
-      'know clip would drop the declaration and get overflow: visible, and the sheet would spill')
-      .toBeGreaterThanOrEqual(0)
-    expect(rule.indexOf('overflow: clip'), 'clip is missing · the box is scrollable again')
-      .toBeGreaterThan(rule.indexOf('overflow: hidden'))
+    const plain = css.match(/\.game-main\s*\{\s*overflow:\s*hidden;?\s*\}/)
+    expect(plain, 'the hidden fallback rule is gone · a Safari that does not know clip gets ' +
+      'overflow: visible and the sheet spills over the board').toBeTruthy()
+    expect(css, 'the clip upgrade must be inside @supports').toMatch(
+      /@supports\s*\(\s*overflow:\s*clip\s*\)\s*\{\s*\.game-main\s*\{\s*overflow:\s*clip/)
+
+    // ⚠ AND THE FORM THIS FORBIDS IS THE ONE I SHIPPED FIRST. The textbook two-declaration
+    // progressive enhancement · `.game-main { overflow: hidden; overflow: clip }` · passes a regex
+    // over THIS FILE and then loses its fallback in the build: Lightning CSS collapses duplicate
+    // declarations of one property to the last, and the DEPLOYED stylesheet read
+    // `.game-main{overflow:clip}` with no hidden anywhere. Source-green, artifact-broken (Rule 67).
+    // Found by reading the deployed CSS, not by a test. @supports cannot be collapsed because the
+    // two rules are in different blocks, and this assertion is what stops the tidier version
+    // coming back.
+    expect(css, 'a bare duplicate-declaration form is collapsed by the minifier and loses the ' +
+      'fallback · it went to production once already').not.toMatch(
+      /\.game-main\s*\{[^}]*overflow:\s*hidden;\s*overflow:\s*clip/)
 
     // THE REGRESSION THAT WOULD SILENTLY UNDO IT: an inline `overflow` on the element beats the
     // stylesheet, so re-adding one here restores the scrollable box while index.css still reads

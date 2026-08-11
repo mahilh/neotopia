@@ -176,8 +176,23 @@
    twice · the progressive enhancement is only expressible in CSS.
    The blur in GameRoom stays: it removes the CAUSE and is correct on its own terms, since a control
    that has slid off screen should not hold focus. The onScroll reset also stays, as the belt for a
-   pre-16 Safari where this rule degrades to `hidden` and the box is scrollable again. */
-.game-main { overflow: hidden; overflow: clip; }
+   pre-16 Safari where this rule degrades to `hidden` and the box is scrollable again.
+
+   ⚠ AND THE FIRST VERSION OF THIS SHIPPED WITHOUT ITS FALLBACK · THE MINIFIER ATE IT. I wrote the
+   textbook two-declaration form, `overflow: hidden; overflow: clip`, gated it with a regex over THIS
+   FILE, went green, pushed, and then read the deployed stylesheet:
+       .game-main{overflow:clip}
+   Lightning CSS collapses duplicate declarations of one property to the last, so the entire safety
+   argument · the reason a pre-16 Safari still gets `hidden` · was removed between the source I
+   asserted on and the artifact the browser receives. A gate on the SOURCE cannot see that (Rule 67 ·
+   gate what is true WHERE the gate runs). It was found by reading the deployed CSS, not by any test.
+   `@supports` is the minifier-proof form: the two rules are in different blocks, so there is no
+   duplicate to collapse, and the condition is exactly the question being asked. VERIFIED in the
+   BUILT output, which is the only place this claim means anything. */
+.game-main { overflow: hidden; }
+@supports (overflow: clip) {
+  .game-main { overflow: clip; }
+}
 
 @media (max-width: 600px) {
   .game-main { flex-direction: column !important; position: relative; }
