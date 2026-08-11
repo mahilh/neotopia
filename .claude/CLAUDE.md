@@ -141,6 +141,24 @@ MULTIPLAYER ENDGAME PROOF · WHAT IT DOES AND DOES NOT PROVE (T3 S37/S38):
     (four-player-live) and in a real browser against bots (practice.e2e.js, ~90-115s to a natural end),
     but the composition of the two · a real multiplayer room reaching its own ending through play · has
     never run. That is the honest remaining gap, not a claim this file makes.
+    ⚠ THAT LAST SENTENCE IS TRUE OF **THIS** SPEC AND STOPPED BEING TRUE OF THE PROJECT IN S45 (corrected
+    T3 S51). A DIFFERENT spec closed it · tests/e2e/endgame-live.e2e.js, 3362f77 · which plays the ending
+    with real clicks and witnessed the TRIGGER firing live, in the same run, before the terminal state:
+        trigger  · tiles 0 · rounds 2 · turn 17          (the intermediate only refillFactoryDraft makes)
+        ending   · column_phase 'finished' · state_turn 21 · state_seat 0 · both clients agreeing
+        peer     · writeorder { overtakes: [], version: 0 } · the predicate refused nothing
+    It was read as unproven for six sessions because the entry above says "has never run" and nothing
+    contradicted it · the correcting spec was invisible (see below), so the stale claim had no opponent.
+  ⚠ AND THE CORRECTION HAS NO RUNNER, WHICH IS THE PART THAT MATTERS. endgame-live.e2e.js is in NO
+    WORKFLOW · it has never been in one · so nothing re-establishes the paragraph above and it will rot
+    exactly the way the sentence it corrects did (Rule 79 · a spec that runs nowhere cannot report its own
+    rot; Rule 97 · a citation outlives the thing it cites). It reads as wired to a substring search because
+    its name is a SUFFIX of multiplayer-endgame-live.e2e.js · that is Rule 112 and it is why this was not
+    noticed. The file carries a RUNS-NOWHERE: declaration so the merge gate stays green meanwhile.
+    STATE THIS AS: proven once, on 3362f77, and gated by nothing. Not "proven" and not "never run".
+    TO MAKE IT CHECKABLE, one line in .github/workflows/e2e.yml (T2's lane · routed S50 and S51,
+    comms/t3-s50-endgame-live-wiring.md): add tests/e2e/endgame-live.e2e.js to the existing
+    --grep "ENGINE" invocation. Costs +63ms and ZERO extra sign-ins · measured at HEAD, 10/10 deals armed.
 
 CRITICAL PATTERNS:
   sessionPhaseColumn: maps store 'scoring'→'finished'

@@ -365,9 +365,41 @@ test.describe('every E2E spec names the workflow that runs it, or says it runs n
       'evidence (Rule 97). Either wire it, or open a line in its header with RUNS-NOWHERE: followed by why ' +
       'and who owns wiring it.').toEqual([])
 
+    // ── THE COLLISION PROPERTY, ASSERTED ON THE REAL NAMES (T3 S51) ─────────────────────────────────────
+    // In S50 I closed the identity hole with a fixture holding the exact historical pair, and said in the
+    // same breath that a fixture is a MODEL: it pins the collision that existed, and it cannot notice the
+    // NEXT one. My proposal then was to ban substring collisions outright. That is the wrong gate, and
+    // measuring it is what shows why · among `*.e2e.js` files a name can only ever be contained as a
+    // SUFFIX (both end in the same 7 characters, so a prefix relationship means the names are identical),
+    // and a suffix collision is exactly what the left boundary handles. Banning it would forbid a perfectly
+    // good name to guard against a defect that no longer exists · Rule 94a, which I wrote and then nearly
+    // walked into.
+    // SO ASSERT THE PROPERTY INSTEAD OF PROHIBITING THE SHAPE: for every colliding pair that actually
+    // exists, drive the REAL classifier with a corpus naming only the longer one, and require the shorter
+    // one not to be wired by it. It re-derives itself the moment anybody renames a spec, and unlike the
+    // fixture it is measuring the names the repo really has.
+    // ⚠ AND IT IS VACUOUS WHEN THERE ARE NO COLLISIONS · a loop over an empty list asserts nothing, which
+    // is the failure mode this whole file exists to refuse (Rule 86). That is why the fixture STAYS rather
+    // than being replaced by this: the fixture always runs and always holds the historical pair, so the
+    // zero-collision case is covered by construction. Asserting `collisions.length > 0` instead would make
+    // a legitimate rename red · a tripwire to protect a guard, which is the wrong trade every time.
+    // The count is printed below so "0 collisions" is a reading rather than a silence.
+    const collisions = []
+    for (const a of specFiles) for (const b of specFiles) if (a !== b && b.includes(a)) collisions.push([a, b])
+    for (const [shorter, longer] of collisions) {
+      const probe = auditSpecWiring(
+        [{ name: shorter, header: '' }, { name: longer, header: '' }],
+        [{ name: 'probe.yml', text: `    run: npx playwright test tests/e2e/${longer}\n` }],
+      )
+      expect(probe.wired, `"${shorter}" is a substring of "${longer}", and a corpus wiring only the ` +
+        'longer one reports the shorter one as wired. That is the S50 defect · it hid endgame-live.e2e.js ' +
+        'for seven sessions · reintroduced by a weakened name boundary in auditSpecWiring.')
+        .toEqual([longer])
+    }
     console.log(`[preconditions] spec-runner audit · ${specs.length} specs across ${workflows.length} ` +
       `workflows · ${audit.wired.length} wired · ${audit.declared.length} declared · 0 silent orphans ` +
-      `· ${audit.runLines} run lines / ${audit.commentLines} comment lines`)
+      `· ${audit.runLines} run lines / ${audit.commentLines} comment lines · ${collisions.length} name ` +
+      'collision(s), each proven distinguishable')
   })
 
   // ── TEETH · THE GATE MADE TO FAIL ON PURPOSE, IN BOTH DIRECTIONS (T3 S50) ─────────────────────────────
