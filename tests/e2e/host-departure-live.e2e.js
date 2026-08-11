@@ -91,6 +91,10 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
 
   test('LIVE · the host tab dies mid-game and the peer is told nothing', async ({ browser }) => {
     test.skip(!ENV, 'no Supabase creds · nightly-class live test')
+    // The observation window alone is 45s and the lobby handshake is not free · the default 60s timeout
+    // killed the first successful run AFTER it had printed every measurement, which reads as a failed
+    // test and was a finished one.
+    test.setTimeout(180_000)
 
     const ctxHost = await browser.newContext()
     const ctxPeer = await browser.newContext()
@@ -188,6 +192,30 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
         'player is gone. There is no game_rooms subscription during a game and GameRoom renders nothing ' +
         'from presence, so the peer has no mechanism to be told. If this is now false, someone shipped ' +
         'the fix · update this test in the same commit.').toBe(false)
+
+      // THE SOFT-LOCK, MEASURED · this is the finding, and every number here came out of the run rather
+      // than out of my head (Rule 81). The departed player owns the turn and keeps it: nine samples over
+      // 45 seconds returned a byte-identical seat and turn, on a client that had just been PROVEN to be
+      // listening. There is no turn timeout anywhere in the product to rescue it · turnSecondsLeft has
+      // exactly two consumers, its own useState and a display prop · while the Tutorial and the Lobby
+      // both promise the player "90 seconds per turn". So this is not slow, it is permanent (Rule 103c ·
+      // measure past the timeout before saying permanent; 45s is already half of the 90 the UI promises
+      // and nothing exists that could fire at 90).
+      expect({ seat: peerAfter.currentSeat, turn: peerAfter.turnNumber },
+        'TODAY: the turn never leaves the departed player. The peer cannot act (correctly · it is not ' +
+        'their turn), the host cannot act (they are gone), and no timeout exists to move it on. A ' +
+        'friends-and-family game ends here, silently, the first time a phone dies.')
+        .toEqual({ seat: peerBefore.currentSeat, turn: peerBefore.turnNumber })
+
+      expect(viewAfter.myTurn, 'TODAY: the peer is left showing data-my-turn="false" forever · their own ' +
+        'controls are correctly disabled and will never re-enable').toBe('false')
+
+      // NOT A DEFECT, and worth keeping when this is fixed: the room is still 'playing', so a host whose
+      // phone comes back can rejoin (useGameRoom rejoinable = status !== 'finished'). Whatever fix lands
+      // must not "clean up" the room and take that away.
+      console.log('[host-departure] VERDICT · peer listening, host gone, turn frozen at ' +
+        `seat ${peerAfter.currentSeat}/turn ${peerAfter.turnNumber} for 45s · room still ${statusAfter} ` +
+        '(recoverable if the host returns) · nothing on screen mentions it')
     } finally {
       if (!hostClosed) await ctxHost.close()
       await ctxPeer.close()
