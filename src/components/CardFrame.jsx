@@ -132,7 +132,7 @@ export const artSlot = (size = 'hand') => {
   return { width: s.width - (s.borderW + 6) * 2, height: s.artSize }
 }
 
-export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid }) {
+export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid, innerRef = null }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -146,6 +146,7 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
 
   return (
     <div
+      ref={innerRef}
       className="project-card"
       data-testid={testid}
       onClick={onClick}
