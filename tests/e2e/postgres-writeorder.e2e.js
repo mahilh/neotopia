@@ -1,9 +1,21 @@
 // NeoTopia · DOES POSTGRES ACTUALLY DO THE THING MY MOCK SAYS IT DOES? (T3 S43)
 //
-// RUNS-NOWHERE: not in any workflow as of T3 S43. It costs one anon sign-in, so it belongs on
+// RUNS-NOWHERE: not in any workflow as of T3 S48. It costs one anon sign-in, so it belongs on
 // e2e-live-nightly.yml, and workflow wiring is T2's. Declared rather than left silent because a spec no
 // workflow runs cannot report its own rot (Rule 79) and any comment citing it as proof is a claim rather
 // than evidence (T2's Rule 97) · the preconditions spec now gates exactly this, and it caught this file.
+//
+// ⏳ T3 S48 · PROVEN GREEN AT HEAD 4008f46 AND ROUTED TO T2, one line, exact diff in
+// .claude/comms/t3-s48-nightly-wiring.md. Run before wiring, never after (Rule 79a · the S37 spec that was
+// wired blind had a stale test.fail() and would have arrived red): 1 passed in 6.4s, and the measurement
+// reproduced exactly · wrote B(seq 2, seat 1) then A(seq 1, seat 0), row holds A, current_seat 0.
+// THIS LINE STAYS UNTIL THE WORKFLOW EDIT LANDS. Deleting it in the same commit would red preconditions'
+// orphan gate for everybody, because that gate reads .github/ as it exists at the COMMIT boundary and the
+// workflow half is not mine to push (Rule 67 · gate what is true WHERE the gate runs).
+// The gate's own limit, worth knowing when pasting the diff: it matches the filename anywhere in the YAML
+// TEXT, so a spec named only in a COMMENT reads as wired. Measured across all 7 workflows in S48 · 18 of
+// 19 specs executably wired, 0 comment-only, 0 silent orphans. The hole is real and currently empty, so
+// it is recorded rather than fixed · but paste the name into the `run:` block, not just a comment.
 //
 // useGameSync.writeorder.test.js reproduces the lost End Turn against a MOCK, and a mock is a model of
 // Postgres, not Postgres. I inherited that mock from simultaneousdraw.test.js and REASONED that it matched
