@@ -187,7 +187,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (103 · cumulative):
+PERMANENT ANTI-REGRESS RULES (105 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -451,6 +451,34 @@ SECOND COROLLARY, paid for in one anon sign-in: A MOCK IS A MODEL, SO MEASURE TH
 AGAINST THE REAL SYSTEM. My write-race proof rested on an inherited mock I had REASONED matched Postgres.
 Measured: write B then A, and the row holds A · no version check, no merge, the counter goes backwards on the
 server. The claim two lanes are now building on is a measurement now, not a belief.
+
+RULE 105 (T3 S46 · August 11 2026):
+A RULE IS THE WORST PLACE TO PUT A HYPOTHESIS, BECAUSE NOTHING EVER RE-DERIVES IT. I wrote Rule 103's
+second corollary from a real symptom (a session row absent mid-run), a nearby suspicious mechanism (CI's
+purge), and a re-run that appeared to confirm it. Read one session later from the migration and the live
+schema instead of from memory, the mechanism is simply wrong: purge_e2e_test_data deletes rooms
+`where status = 'finished'` and nothing else, NOTHING has a foreign key to player_profiles so the
+unconditional profile delete cascades nowhere, and the app marks a room finished only when the HOST LEAVES.
+An in-progress room is 'playing' and was never reachable by it. The measurement stands; the explanation was
+invented to fit it, and I promoted it to permanent record the same night.
+  105a · A test that is wrong goes red one day. A COMMENT that is wrong goes red never, and a RULE that is
+        wrong is worse still · it is quoted, it compounds, and every later session treats it as settled.
+        Rules earn their place from things MEASURED, not from things that explained a measurement.
+  105b · The tell was available at the time and I did not take it: I never opened the function I was
+        accusing. One `sed` on migration 006 would have shown `status = 'finished'` in the first ten lines.
+        When routing a defect INTO another lane's code, read that code first · the cost of being wrong is
+        paid by someone else, in a file you do not own.
+  105c · Retract in the same places you claimed. The wrong version was in CLAUDE.md, in a spec header and
+        in a comms note; all three are corrected, and the corrections say what the old text said, so a
+        reader who half-remembers the old claim meets the reason it changed rather than a silent edit.
+COROLLARY, THE SAME DISCIPLINE ON A CLAIM I WANTED TO BE TRUE: I fixed two genuine driver defects tonight
+(isVisible ignoring its timeout · Rule 82, and clicks swallowed into `.catch(() => {})` · Rule 93, both in
+the file that documents those rules) and set out to show they made the driver deterministic. Under 20x CPU
+throttling the first numbers were 33% broken, 86% control, 100% fixed · a clean-looking differential. THREE
+MORE RUNS OF EACH KILLED IT: fixed 100/100/100 and control 100/100/100. The instrument does not reliably
+reproduce the failure, so "the driver is now deterministic" is unearned and is not claimed anywhere. Ship
+the fixes on their correctness, not on a differential that evaporates when you repeat it · and repeat it
+BEFORE writing it down, because a single encouraging measurement is the cheapest thing in the world to get.
 
 RULE 103 (T3 S45 · August 11 2026):
 THREE LANES CAN EACH SHIP A CORRECT HALF AND LEAVE THE BUG OPEN · AND ONLY A TEST THAT DRIVES ALL THREE
