@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (114 · cumulative):
+PERMANENT ANTI-REGRESS RULES (115 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -543,6 +543,33 @@ have deleted the work it existed to prove. A mutation harness edits real files i
 path must be a byte copy taken before the first mutation, never version control, whose idea of "restore"
 is "discard everything you have not committed". Same family as Rule 89's tool-scans-itself: the harness
 is inside the blast radius of the thing it is testing.
+
+RULE 115 (T3 S51 · August 11 2026):
+A CONTRACT THAT SPANS TWO LANES HAS NO OWNER · AND EACH LANE'S TESTS GUARD THE CONTRACT THAT LANE WAS
+THINKING ABOUT, WHICH IS NEVER THAT ONE. In S50 I reported that a player typing "E2Etest" lands inside
+purge_e2e_test_data's scope and loses their game. T2 built the fix and built it well: reservedNames.js
+refuses a claim on 'E2E'/'BotAlpha'/'BotBeta', case-insensitively, stricter than the purge on purpose,
+with a test binding the list to the migrations. Both halves correct. Composed, THE PROPERTY THAT MAKES A
+ROW SWEEPABLE IS NOW THE PROPERTY THAT MAKES IT UNCLAIMABLE, and every live spec claims its name through
+the real UI · 9 specs, 2 of them on the merge gate. Their test guards migration↔module. Mine guarded
+workflow↔spec. The contract that broke is harness↔product, and it had no test because it had no owner.
+Ask of any guard you add: what does it FORBID, and who was relying on doing that?
+  115a · A RECOMMENDATION THAT LANDS IS A CHANGE YOU NOW LIVE WITH. Rule 108 says premise-check a
+        recommendation before making it, and I did. It is not enough: the check has to run again WHEN IT
+        SHIPS, against your own lane. I proposed this fix, it was implemented correctly, and it broke the
+        thing I own · and I found out by running a test for an unrelated reason. Watch your own
+        recommendations land the way you would watch your own commits.
+  115b · A GUARD FOR A DEPENDENCY THAT HAS NOT LANDED MUST BE ARMED, NOT SILENT. reservedNames.js was
+        still UNCOMMITTED in the shared tree when I found this (Rule 66), so in CI it does not exist and
+        there is nothing to assert. A guard that simply passes in that state is indistinguishable from a
+        guard that agrees · so it PRINTS "ARMED, NOT ASSERTING" and names the comms note. A skip is not a
+        pass (Rule 79d), and the version of that mistake that costs you is the one that looks green.
+COROLLARY, and it is the reason the session produced a measurement rather than three bug reports:
+ISOLATE BEFORE YOU BELIEVE ANY LIVE FAILURE. Three attempts in the shared tree failed in three different
+places · a click timeout, a failed counterweight, a lobby timeout · while T1 hot-reloaded UI changes into
+the dev server I was driving and T2's uncommitted guard blocked my sign-in. In a detached worktree at my
+own commit, with its own port, it passed twice and produced the whole finding. Rule 82 has now been paid
+for in four separate sessions; the cost of skipping it is filing your own environment as a product defect.
 
 RULE 114 (T2 S51 · August 11 2026):
 A SILENT NO-OP ON A CONTENDED RESOURCE MAKES DEMAND UNMEASURABLE · AND THE MISSING RECORD LOOKS
