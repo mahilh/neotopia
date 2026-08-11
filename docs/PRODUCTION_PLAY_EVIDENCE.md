@@ -60,6 +60,13 @@ Both 2026-08-07 sessions predate `b5417ff` (2026-08-08 22:29 UTC), so all three 
 The claim that the copy was the cause was untested. It is now, by running it both ways against the same
 build, same viewport, same board · the only variable being the text (`literal-follow.mjs`).
 
+> **CITATION NOTE (T2 S43 · Rule 97).** `literal-follow.mjs` **is not in the repository and never was** ·
+> it has no git history under any path, so it was a scratch probe deleted after the run. The measurement
+> below is not being disputed and the conclusion still stands on its own reported numbers; what is gone
+> is the ability to RE-RUN it, which is the part a citation implies. Found by a repo-wide audit of every
+> comment and doc naming a `.e2e.js`/`.mjs` artifact · it and migration 011 were the only two instances,
+> and 011's was worse (the file existed but could not load). If this probe is ever rebuilt, commit it.
+
 The copy those three sessions saw:
 
 > Click any factory token (the colored icons between the regions). **An element leaves the factory. Then
