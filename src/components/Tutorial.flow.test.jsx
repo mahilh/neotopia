@@ -131,7 +131,33 @@ describe('the tutorial states the sequence the game actually requires', () => {
     expect(items).toHaveLength(PLACEMENT_TAPS.length)
     items.forEach((li, i) => {
       expect(li.getAttribute('data-tap')).toBe(PLACEMENT_TAPS[i].testid)
-      expect(li.textContent).toBe(PLACEMENT_TAPS[i].text)
+      // `toContain`, not `toBe`: each row also renders its ordinal and its glyph, so textContent is
+      // "2●Pick which element…". The claim is that the tap's own words are there and in this row.
+      expect(li.textContent).toContain(PLACEMENT_TAPS[i].text)
+      expect(li.textContent.startsWith(String(i + 1)), 'the row must carry its own number · the ' +
+        'order has to be visible, not only implied by stacking').toBe(true)
+      expect(li.textContent).toContain(PLACEMENT_TAPS[i].glyph)
     })
+    // ONE LIST. Step 2 previously rendered the taps TWICE · this paragraph and a separate glyph
+    // diagram · and the two disagreed about the order, which is the drift this whole change exists
+    // to remove. A second list would make the fix cosmetic.
+    expect(screen.queryAllByTestId('tutorial-taps')).toHaveLength(1)
+    expect([...document.querySelectorAll('[data-tap]')]).toHaveLength(PLACEMENT_TAPS.length)
+  })
+
+  it('the dialog card is capped and scrollable · Rule 78b, and it was live on the iPhone SE', async () => {
+    // jsdom has no layout so it cannot see a pixel of this (Rule 78's corollary) · the measurement
+    // lives in a browser and is recorded in Tutorial.jsx. What IS decidable here is that the card
+    // carries the cap at all, which is the mechanism, and it is an INLINE style so this reads the
+    // real declaration rather than a stylesheet string (the defect GameRoom.phone.test.jsx documents).
+    // MEASURED at 320x568 / 320x800 / 375x667 / 414x896, all three steps: card fits, Skip and Next
+    // both in viewport and hit-testable. Before it, step 2 was an 894px card at top -47 in an 800px
+    // window with no way to scroll to either button, and step 1 already overflowed a 320x568 phone.
+    const Tutorial = (await import('./Tutorial')).default
+    render(<Tutorial onDismiss={() => {}} />)
+    const card = screen.getByTestId('tutorial-card')
+    expect(card.style.maxHeight, 'without a cap a tall step pushes both buttons off a fixed, ' +
+      'unscrollable overlay · the player cannot dismiss the tutorial at all').toBe('100%')
+    expect(card.style.overflowY, 'a cap without a scroll just clips it instead').toBe('auto')
   })
 })

@@ -36,11 +36,34 @@ export const tutorialSeen = () => { try { return !!localStorage.getItem(KEY) } c
 //       in exactly that phase. So the hex the S30 copy tells a first-timer to look for may not be
 //       on screen, on the device most first-timers are holding.
 // The shortcut still works and is left in the product. It is discovered, not taught.
+// ⚠ AND THIS STEP ALREADY HAD A SECOND LIST OF THE SAME FOUR TAPS. The `visual: 'factory'` diagram
+// below is a numbered list too · added in S30, with glyphs showing the SHAPE the player is looking
+// for on the board · and it carried the same wrong order the paragraph did. My first draft of this
+// fix added a THIRD rendering and left the diagram alone, so one step of the tutorial said two
+// different things (Rule 45, created by the change meant to remove a drift). The diagram is the
+// better teacher, because a glyph shaped like the control beats a noun naming it. So there is one
+// list: this data, rendered once, by the diagram.
 export const PLACEMENT_TAPS = [
-  { testid: 'factory',     text: 'a factory token · the coloured icons between the regions' },
-  { testid: 'element-btn', text: 'which element to take, in the panel' },
-  { testid: 'region-btn',  text: 'which region it goes to' },
-  { testid: 'hex-valid',   text: 'a highlighted hex on the board' },
+  {
+    testid: 'factory', text: 'Tap a factory token · the coloured icons between the regions',
+    glyph: '⚡', cls: 'tut-factory',
+    style: { borderRadius: '50%', border: '2px solid rgba(226,75,74,0.7)', fontSize: 15 },
+  },
+  {
+    testid: 'element-btn', text: 'Pick which element to take, in the panel',
+    glyph: '●',
+    style: { borderRadius: 8, border: '1px solid rgba(200,148,64,0.5)', background: 'rgba(200,148,64,0.10)', color: 'rgba(200,148,64,0.95)', fontSize: 13 },
+  },
+  {
+    testid: 'region-btn', text: 'Pick which region it goes to',
+    glyph: '◆',
+    style: { borderRadius: 8, border: '1px solid rgba(29,158,117,0.6)', background: 'rgba(29,158,117,0.15)', color: 'rgba(80,210,165,0.95)', fontSize: 12 },
+  },
+  {
+    testid: 'hex-valid', text: 'Tap a highlighted hex on the board',
+    glyph: '⬡',
+    style: { borderRadius: 8, border: '1px solid rgba(127,119,221,0.6)', background: 'rgba(127,119,221,0.18)', color: 'rgba(160,152,255,0.95)', fontSize: 15 },
+  },
 ]
 
 const buildSteps = (cfg, isFlow) => [
@@ -82,8 +105,7 @@ const buildSteps = (cfg, isFlow) => [
     // executed by a test rather than read by a reviewer.
     heading: 'To place an element',
     body: `Four taps, and the panel asks for them in this order. Only a highlighted hex will accept an element, and the line at the top of the screen always says which tap it is waiting for.`,
-    taps: PLACEMENT_TAPS,
-    visual: 'factory',
+    taps: PLACEMENT_TAPS,   // `visual: 'factory'` retired · the tap list IS that diagram now
   },
   {
     heading: 'To score a project card',
@@ -121,10 +143,26 @@ export default function Tutorial({ onDismiss }) {
         padding: 24,
       }}
     >
-      <div style={{
-        background: '#0d0d18', border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 18, padding: '32px 36px', maxWidth: 440, width: '100%',
-      }}>
+      {/* THE CARD MUST NEVER BE TALLER THAN THE SCREEN IT CANNOT SCROLL (T1 S50 · Rule 78b).
+          The parent is `position: fixed` with `align-items: center`, so a card taller than the
+          viewport overflows BOTH ends and nothing can scroll to it · Skip and Next simply leave the
+          screen. Measured at 320x800 before this: step 2 rendered an 894px card at top -47, both
+          buttons out of view. And it is not only my copy that can do it · step 1 is 577px, which
+          already overflowed a real iPhone SE (320x568) before this session, so this was a live
+          defect on the smallest phone in use and nothing had said so.
+          Fixed structurally rather than by shortening the copy back: a height cap plus scroll is
+          true for every step, every viewport and every future edit, whereas trimming words is true
+          until the next person adds a sentence (Rule 111's corollary · assert the guarantee, do not
+          keep re-earning it). overscrollBehavior contains the scroll so it cannot chain to the page
+          underneath. */}
+      <div
+        data-testid="tutorial-card"
+        style={{
+          background: '#0d0d18', border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 18, padding: '32px 36px', maxWidth: 440, width: '100%',
+          maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain',
+        }}
+      >
 
         {/* Step progress bars */}
         <div style={{ display: 'flex', gap: 6, marginBottom: 24 }}>
@@ -173,58 +211,39 @@ export default function Tutorial({ onDismiss }) {
           {s.body}
         </p>
 
-        {/* A NUMBERED LIST, NOT A SENTENCE. Four taps written as prose is one 40-word line in which
-            the order is carried by the words "then" and "and" · which is how the last three versions
-            of this step managed to be wrong without looking wrong. An ordered list makes the count
-            and the sequence structural, and it is what the test reads. */}
+        {/* THE FOUR TAPS · ONE LIST, RENDERED FROM PLACEMENT_TAPS (T1 S50, reconciling S30's).
+            A vertical numbered list rather than a left-to-right flow (T1 S30's finding, kept): the
+            arrow diagram measured 19px outside the dialog at 320 because four 44px boxes and three
+            arrows cannot fit ~200px of inner width. Each tap owns a line, the glyph carries the
+            SHAPE the player is looking for on the board, and the label says what to do with it.
+            <ol>/<li> rather than divs so the order is in the markup and not only in the paint. */}
         {s.taps && (
-          <ol data-testid="tutorial-taps" style={{ margin: '0 0 24px', paddingLeft: 22 }}>
-            {s.taps.map(t => (
-              <li key={t.testid} data-tap={t.testid} style={{
-                fontSize: 14, color: 'rgba(255,255,255,0.62)', lineHeight: 1.6, marginBottom: 6,
-                fontVariantNumeric: 'tabular-nums',
-              }}>
-                {t.text}
+          <ol data-testid="tutorial-taps" style={{
+            listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9,
+            margin: '0 0 22px', padding: '13px 16px',
+            background: 'rgba(255,255,255,0.03)',
+            borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)',
+          }}>
+            {s.taps.map((t, i) => (
+              <li key={t.testid} data-tap={t.testid}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                <span style={{
+                  fontSize: 10, color: 'rgba(255,255,255,0.4)', width: 8, flexShrink: 0,
+                  fontVariantNumeric: 'tabular-nums',
+                }}>{i + 1}</span>
+                <span className={t.cls} style={{
+                  width: 28, height: 28, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  ...t.style,
+                }}>
+                  {t.glyph}
+                </span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.45 }}>
+                  {t.text}
+                </span>
               </li>
             ))}
           </ol>
-        )}
-
-        {/* Factory → Board visual (step 2 · the action they missed). */}
-        {s.visual === 'factory' && (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, marginBottom: 24,
-            padding: '14px 18px', background: 'rgba(255,255,255,0.03)',
-            borderRadius: 12, border: '1px solid rgba(255,255,255,0.07)',
-          }}>
-           {/* A NUMBERED LIST, not a left-to-right flow (T1 S30). The interaction gained a fourth step
-               and the arrow diagram stopped fitting: measured 19px outside the dialog at 320px and 57px
-               of row overflow, because the dialog only offers ~200px of inner width there and four 44px
-               boxes plus three arrows cannot live in it. This layout has no width it can outgrow · each
-               step owns a line, the glyph carries the shape the player is looking for on the board, and
-               the label says what to do with it. Re-measured at 320/360/375/414/768: zero overflow. */}
-           {[
-             { glyph: '⚡', label: 'Click a factory token', cls: 'tut-factory',
-               style: { borderRadius: '50%', border: '2px solid rgba(226,75,74,0.7)', fontSize: 15 } },
-             { glyph: '⬡', label: 'Click one of the dashed hexes it lights on the board',
-               style: { borderRadius: 8, border: '2px dashed rgba(255,255,255,0.75)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)', fontSize: 15 } },
-             { glyph: '●', label: 'Pick which element goes there',
-               style: { borderRadius: 8, border: '1px solid rgba(200,148,64,0.5)', background: 'rgba(200,148,64,0.10)', color: 'rgba(200,148,64,0.95)', fontSize: 13 } },
-             { glyph: '⬡', label: 'The hex lights up · click it to place',
-               style: { borderRadius: 8, border: '1px solid rgba(127,119,221,0.6)', background: 'rgba(127,119,221,0.18)', color: 'rgba(160,152,255,0.95)', fontSize: 15 } },
-           ].map((s, i) => (
-             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
-               <div className={s.cls} style={{
-                 width: 28, height: 28, flexShrink: 0,
-                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                 ...s.style,
-               }}>
-                 {s.glyph}
-               </div>
-               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.45 }}>{s.label}</span>
-             </div>
-           ))}
-          </div>
         )}
 
         {/* Card pattern visual (step 3) */}
