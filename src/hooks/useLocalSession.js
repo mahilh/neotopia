@@ -72,6 +72,17 @@ function readSaved() {
     return parsed
   } catch { return null }
 }
+// Ask the ENGINE whether a restored snapshot can still be played. Returns true / false / null, and null
+// means UNMEASURED rather than "probably fine" · the caller must be able to tell "the engine says this is
+// dead" from "nobody asked". T2 owns this check; the store does not expose one yet, so this resolves to
+// null today and the restore path behaves exactly as it always has.
+// Shape requested in comms: `isPracticeResolvable(state) -> boolean` on the game store.
+export function engineSaysPlayable(state) {
+  const fn = useGameStore.getState().isPracticeResolvable
+  if (typeof fn !== 'function') return null
+  try { return !!fn(state) } catch { return null } // a throwing check must not delete a player's game
+}
+
 function writeSaved(state) {
   try { sessionStorage.setItem(PRACTICE_STORAGE_KEY, JSON.stringify(state)) } catch { /* unavailable · play on */ }
 }
@@ -113,11 +124,33 @@ export function useLocalSession(active, { bots = MIN_BOTS, mode = DEFAULT_GAME_M
 
     // RESTORE FIRST. A refresh mid-practice must not silently deal a new board · that is the same
     // class of loss as the waiting room forgetting its room, and it is avoidable here for free.
+    // ── A DEAD BOARD MUST NOT BE SILENTLY REINSTATED (T3 S44) ──────────────────────────────────────
+    // MEASURED at HEAD, in a browser: a practice game with no legal action (every factory empty, offer
+    // and deck empty, three actions left · the state a real audit reached naturally at Turn 33) restores
+    // EXACTLY AS IT WAS, and End Turn is disabled before AND after the reload. The player's only escape
+    // is clearing sessionStorage['neotopia-practice-v1'] by hand, which is not an escape.
+    //
+    // I DO NOT DECIDE RESOLVABILITY HERE, and that restraint is the design rather than a gap. "Can this
+    // game still be played" is a rules question · it depends on placement legality, the completing-element
+    // rule, the offer, the deck and every bot seat · and a second implementation of it in the storage
+    // layer would be a second rules engine that drifts from the real one (Rule 45/94) and would throw
+    // away a player's game whenever it disagreed. That is a worse failure than the soft-lock.
+    // So this ASKS the engine, and takes UNKNOWN for an answer: T2 owns the terminal-state check, it does
+    // not exist yet (verified · no isResolvable/terminal export in the store at HEAD), and the exact
+    // shape needed is in comms. Until it lands the behaviour is unchanged; the day it lands this works
+    // with no edit here.
     const saved = readSaved()
     if (saved) {
-      useGameStore.getState().syncFromServer(saved)
-      setReady(true)
-      return
+      // null = the engine has no verdict. NEVER a plausible boolean · a storage layer that guessed
+      // "unplayable" would discard live games (Rule 80 · a counter that cannot measure must say so).
+      const verdict = engineSaysPlayable(saved)
+      if (verdict === false) {
+        clearSaved()          // fall through to a fresh deal rather than reinstating a game nobody can act in
+      } else {
+        useGameStore.getState().syncFromServer(saved)
+        setReady(true)
+        return
+      }
     }
 
     const n = clampBots(bots)

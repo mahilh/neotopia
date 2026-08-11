@@ -796,6 +796,24 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         }
 
         console.log(`[endgame] played · ${JSON.stringify(actions)} · ${Date.now() - started}ms`)
+
+        // ── THE WRITE-ORDER DETECTOR HAS A CONSUMER NOW (T3 S44 · P3) ────────────────────────────────
+        // I shipped overtake detection in S43 into a React state array that nothing read · the same shape
+        // as award_game_win and useBonus, a value resting somewhere plausible with no consumer, which is
+        // how a subsystem stays unreachable for months (Rules 84/85). This is the thing that watches it.
+        // A clean two-player game is turn-serialised, so NOTHING should ever be refused: every write is
+        // strictly newer than the row it lands on. A non-empty list here means either a genuine race
+        // (which is the bug this whole chain exists for) or a client renumbering backwards after a
+        // re-seed · both are worth a red, and both were invisible before.
+        for (const [i, page] of bySeat.entries()) {
+          const wo = await page.evaluate(() => window.__neotopia_writeorder ?? null)
+          expect(wo, `seat ${i} has no window.__neotopia_writeorder · the DEV seam this assertion reads ` +
+            'through is gone, so it would silently assert nothing (a skip is not a pass)').toBeTruthy()
+          expect(wo.overtakes, `seat ${i} had ${wo.overtakes?.length} write(s) REFUSED by the ` +
+            'state_version predicate during a turn-serialised game · ' + JSON.stringify(wo.overtakes))
+            .toEqual([])
+          console.log(`[endgame] seat ${i} write-order · version ${wo.version} · 0 overtaken`)
+        }
         expect(final, `the live room never reached 'scoring' within ${BUDGET_MS}ms`).toBeTruthy()
 
         // ── THE COUNTERWEIGHT'S ASSERTION ──────────────────────────────────────────────────────────────

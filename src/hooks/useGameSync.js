@@ -436,5 +436,21 @@ export function useGameSync(roomId, currentUserId) {
   // sessionId (game_sessions.id · string UUID) is exposed reactively for consumers that persist against the
   // session — T1's FinalScore passes it to recordCivilizationDetail for the Global Index (T3 S16 · unblocks the
   // wire T1 S15 refused to ship as a silent no-op · Rule 61). null until the first fetchAndSeed resolves.
+  // ── A DEV-ONLY SEAM, BECAUSE A DETECTOR WITH NO CONSUMER IS NOT WATCHED (T3 S44 · P3) ─────────────────
+  // `overtakes` is React state inside this hook, so nothing outside the component tree can see it · which
+  // is the exact shape of award_game_win (applied, invoked by nothing, 0 rows against 3 finished games)
+  // and useBonus (earnable, spendable by nobody). A value resting somewhere plausible with no consumer is
+  // how a subsystem stays unreachable for months (Rules 84/85), and I built one last session.
+  // Same gate and same lifecycle as GameRoom's window.__neotopia_store seam: DEV only, stripped from the
+  // production bundle, removed on unmount. It is NOT put in the store on purpose · store state is
+  // serialised into game_sessions on every push, so a diagnostic there would be written to the database
+  // and synced to every other player.
+  // tests/e2e/endgame-live.e2e.js asserts this is empty after a clean game · that is the consumer.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    window.__neotopia_writeorder = { overtakes, version: versionRef.current }
+    return () => { delete window.__neotopia_writeorder }
+  }, [overtakes])
+
   return { sendMove, pushState, broadcast, sessionId, overtakes }
 }
