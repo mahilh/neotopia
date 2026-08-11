@@ -117,7 +117,55 @@ export function useGameSync(roomId, currentUserId) {
   // the synchronous read inside pushState's async callback; setSession() keeps both in lockstep.
   const [sessionId, setSessionId] = useState(null)
   const setSession = useCallback((id) => { sessionIdRef.current = id; setSessionId(id) }, [])
-  const syncFromServer = useGameStore(s => s.syncFromServer)
+  const syncFromServerRaw = useGameStore(s => s.syncFromServer)
+
+  // ── OVERTAKE DETECTION · a lost write says so instead of deadlocking in silence (T3 S43) ──────────────
+  // MEASURED FIRST (S41 live, reproduced S42 in useGameSync.writeorder.test.js): persist is fire-and-forget
+  // (useGameActions.js:56) and pushState reads serializableState() SYNCHRONOUSLY at call time, so one turn
+  // of place·place·place·EndTurn issues FOUR overlapping UPDATEs carrying four different instants, and the
+  // row keeps whichever the server applied LAST. When that is a placement issued BEFORE the End Turn,
+  // current_seat reverts, the host has already moved on, and both players deadlock in opposite directions ·
+  // the host waiting for a joiner who is correctly waiting for the host.
+  //
+  // THIS DOES NOT FIX IT, AND THAT IS DELIBERATE. The fix is a server-side ordering guarantee (T2 · an OCC
+  // predicate on the UPDATE · shape posted to comms BEFORE this was built so their version and this counter
+  // are one value, not two). A client-side repair here would also HIDE the thing this measures, and a
+  // detector that silently heals is how a defect survives another nineteen sessions. It reports, only.
+  //
+  // __seq IS A LAMPORT CLOCK: max(last OBSERVED, last SENT) + 1. Both terms are load-bearing. A purely
+  // per-client counter cannot order two clients · A's 5 and B's 3 are incomparable · so a detector built on
+  // one would cry overtake every time the opponent moved. But observed-only is equally wrong, and that is
+  // the version I wrote first: two pushes in one turn both read the same stale value and mint the SAME
+  // number, so the detector goes blind to exactly the self-clobber it exists for. Taking the max of both
+  // keeps this client's writes strictly increasing AND advances past anything the session has seen, with no
+  // coordination and no migration · serializableState() is the whole store and syncFromServer Object.assigns
+  // the server state back (gameStore.js:553-561), so the field rides out and back on its own.
+  const sentSeqRef = useRef(0)          // highest __seq this client has written
+  const [overtakes, setOvertakes] = useState([])
+
+  // EVERY inbound state funnels through here · the realtime handler, the REST seed AND the rollback path
+  // all called syncFromServer directly, and a detector wired into only one of them would report a clean
+  // room while a write vanished through another (Rule 84 · a well-tested symbol is not a tested path).
+  const syncFromServer = useCallback((serverState) => {
+    const incoming = Number(serverState?.__seq ?? 0)
+    if (sentSeqRef.current > 0 && incoming < sentSeqRef.current) {
+      const event = {
+        sentSeq: sentSeqRef.current,
+        serverSeq: incoming,
+        behindBy: sentSeqRef.current - incoming,
+        currentSeat: serverState?.currentSeat ?? null,
+        turnNumber: serverState?.turnNumber ?? null,
+      }
+      setOvertakes(prev => [...prev.slice(-9), event])
+      if (import.meta.env.DEV) {
+        console.warn(`[T3] WRITE OVERTAKEN · this client wrote __seq ${event.sentSeq} and the server is ` +
+          `serving __seq ${event.serverSeq} (behind by ${event.behindBy}). A later write was overwritten ` +
+          `by an earlier one · seat ${event.currentSeat}, turn ${event.turnNumber}.`)
+      }
+    }
+    // The server still wins · this is a witness, not a gate (CLAUDE.md rule 16).
+    syncFromServerRaw(serverState)
+  }, [syncFromServerRaw])
 
   // Pull the current authoritative row: caches the session id AND seeds local state. Run on first
   // connect and on every reconnect, because Realtime may have dropped UPDATEs while disconnected
@@ -306,7 +354,17 @@ export function useGameSync(roomId, currentUserId) {
   // the event write never blocks the move (audit log is non-critical to sync).
   const pushState = useCallback(async (eventType, eventData = {}) => {
     if (!roomId) return { error: { message: 'No room' } }
-    const s = serializableState()
+    const base = serializableState()
+    // max(last OBSERVED, last SENT) + 1 · and the second half of that max is not decoration. My first
+    // version was (observed + 1) alone, which is the classic half-a-Lamport-clock mistake and it made the
+    // detector BLIND TO ITS OWN CASE: two pushes in the same turn both read __seq 0 from the store (the
+    // server has not echoed either back yet), both minted 1, and `serverSeq < sentSeq` was 1 < 1 · false.
+    // The test caught it on the first run. Carrying the local high-water mark makes this client's own
+    // successive writes strictly increasing, which is the ordering the whole detector rests on, while the
+    // observed term keeps it session-global across clients.
+    const seq = Math.max(Number(base.__seq ?? 0), sentSeqRef.current) + 1
+    const s = { ...base, __seq: seq }
+    if (seq > sentSeqRef.current) sentSeqRef.current = seq
 
     const { error: stateErr } = await supabase
       .from('game_sessions')
@@ -376,5 +434,5 @@ export function useGameSync(roomId, currentUserId) {
   // sessionId (game_sessions.id · string UUID) is exposed reactively for consumers that persist against the
   // session — T1's FinalScore passes it to recordCivilizationDetail for the Global Index (T3 S16 · unblocks the
   // wire T1 S15 refused to ship as a silent no-op · Rule 61). null until the first fetchAndSeed resolves.
-  return { sendMove, pushState, broadcast, sessionId }
+  return { sendMove, pushState, broadcast, sessionId, overtakes }
 }
