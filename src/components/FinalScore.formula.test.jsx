@@ -105,8 +105,26 @@ describe('cluster points say WHO earned them', () => {
     const split = screen.getAllByTestId('cluster-split')
     expect(split.length, 'the one cluster on this board must carry a split').toBe(1)
     const text = split[0].textContent
-    expect(text, 'my own share is named as mine').toMatch(/you\s*2/)
-    expect(text, "the opponent's share is named and attributed").toMatch(/Rival\s*1/)
+    expect(text, 'my own share is named as mine').toMatch(/you\s*·\s*2/)
+    expect(text, "the opponent's share is named and attributed").toMatch(/Rival\s*·\s*1/)
+  })
+
+  it('stays readable when a username ENDS IN A DIGIT · found in a browser, not here', () => {
+    // The default opponent is called "Bot 1", so `name + space + score` rendered "Bot 1 1" · name
+    // and number indistinguishable. My original fixture used "Rival" and could never have shown it,
+    // which is the whole argument for witnessing this on a real screen (Rule 63).
+    render(
+      <MemoryRouter>
+        <FinalScore
+          players={[players[0], { ...players[1], username: 'Bot 1' }]}
+          mySeat={0}
+          regions={[REGION_WITH_SPLIT_CLUSTER]}
+        />
+      </MemoryRouter>,
+    )
+    const text = screen.getAllByTestId('cluster-split')[0].textContent
+    expect(text, 'the score must be separated from a name that ends in a number').toMatch(/Bot 1\s*·\s*1/)
+    expect(text).not.toMatch(/Bot 1 1(?!\s*·)/)
   })
 
   it('the split adds up to the row total · the screen must not invent points', () => {
@@ -130,6 +148,48 @@ describe('cluster points say WHO earned them', () => {
     )
     const text = screen.getAllByTestId('cluster-split')[0].textContent
     expect(text, 'a player who placed nothing on this cluster must not be listed').not.toContain('Ghost')
+  })
+
+  it('names points that went to NOBODY · the pre-S35 board (witnessed live, not here)', () => {
+    // THE FAILURE I PREDICTED WHEN I SHIPPED THIS IN JSDOM AND COULD NOT HAVE CAUGHT HERE, because
+    // my fixture stamped every hex · I wrote it. Driven in a browser with placedBy stripped, the way
+    // a board synced from before S35 arrives: engine gave board 3 / seat0 0 / seat1 0, the split
+    // rendered NOTHING, and both formula lines lost their cluster term · while the row still read
+    // "+3 pts". Three points on screen that no player received, unexplained and indistinguishable
+    // from "one player earned them all".
+    render(
+      <MemoryRouter>
+        <FinalScore
+          players={players}
+          mySeat={0}
+          regions={[{ id: 0, name: 'Sacred City', hexes: {
+            '0,0': { element: 'energy' }, '1,0': { element: 'energy' }, '1,-1': { element: 'energy' },
+          } }]}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.queryAllByTestId('cluster-split'), 'nobody owns any of it, so there is no split').toHaveLength(0)
+    const un = screen.getByTestId('cluster-unclaimed')
+    expect(un.textContent, 'the row must say the points went nowhere').toMatch(/unclaimed\s*·\s*3/)
+  })
+
+  it('accounts for a PARTIALLY stamped cluster · claimed + unclaimed = the row', () => {
+    render(
+      <MemoryRouter>
+        <FinalScore
+          players={players}
+          mySeat={0}
+          regions={[{ id: 0, name: 'Sacred City', hexes: {
+            '0,0': { element: 'energy', placedBy: 0 }, '1,0': { element: 'energy' }, '1,-1': { element: 'energy', placedBy: 1 },
+          } }]}
+        />
+      </MemoryRouter>,
+    )
+    const split = screen.getByTestId('cluster-split').textContent
+    const unclaimed = screen.getByTestId('cluster-unclaimed').textContent
+    const nums = [...split.matchAll(/·\s*(\d+)/g)].map(m => Number(m[1]))
+    const un = Number(/·\s*(\d+)/.exec(unclaimed)[1])
+    expect(nums.reduce((a, b) => a + b, 0) + un, 'claimed + unclaimed must equal the cluster size').toBe(3)
   })
 
   it('says nothing about ownership when only one player earned on a cluster', () => {

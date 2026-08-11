@@ -542,6 +542,19 @@ export default function FinalScore({
                   )?.bonus ?? 0,
                 }))
                 .filter(s => s.bonus > 0)
+              // ── POINTS ON THE BOARD THAT NOBODY RECEIVED (T1 S46) ──────────────────────────────
+              // WITNESSED IN A BROWSER, which is the only reason it is here. A board synced from
+              // before S35 carries hexes with an element and NO placedBy, so getClusterDetail awards
+              // every seat 0 while the row still reads "+3 pts" · the split then renders NOTHING,
+              // which is indistinguishable from "one player earned it all". That is the exact
+              // failure I predicted when I shipped this in jsdom and could not have caught there:
+              // my fixture stamped every hex, because I wrote it.
+              // Measured live with placedBy stripped: board 3, seat0 0, seat1 0, splits [], and both
+              // formula lines lost their cluster term entirely. The screen claimed three points that
+              // went to no one and said nothing about it (Rule 80 · never resolve to a plausible
+              // nothing). Naming the remainder is the whole fix.
+              const claimed = seatSplit.reduce((n, s) => n + s.bonus, 0)
+              const unclaimed = Math.max(0, (c.bonus ?? 0) - claimed)
               return (
               <div key={`${c.regionId}-${c.element}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ width: 10, height: 10, borderRadius: '50%', background: ELEMENT_COLORS[c.element] ?? '#888', flexShrink: 0 }} />
@@ -557,15 +570,28 @@ export default function FinalScore({
                       2-player game showed "+7 pts" on a cluster that paid 5 to one player and 2 to the
                       other. The split is the whole lesson of the mechanic · it is the only place the
                       screen can say "you earned these by placing them". */}
+                  {unclaimed > 0 && (
+                    <span data-testid="cluster-unclaimed" title="placed before this game recorded who placed it" style={{
+                      fontSize: 11, fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap',
+                    }}>
+                      unclaimed <span style={{ opacity: 0.55 }}>·</span> {unclaimed}
+                    </span>
+                  )}
                   {seatSplit.length > 1 && (
                     <span data-testid="cluster-split" style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                       {seatSplit.map(s => (
+                        // A BARE SPACE IS AMBIGUOUS WHEN THE NAME ENDS IN A NUMBER, and the default
+                        // opponent is called "Bot 1". Driving this in a real browser rendered
+                        // "Bot 1 1" · name then score, indistinguishable from a name. My jsdom
+                        // fixture used "Rival" and could not have shown it. The separator makes the
+                        // number a number for every username, and the count is dimmer than the
+                        // name so the eye lands on who before how many.
                         <span key={s.seat} style={{
                           fontSize: 11, fontVariantNumeric: 'tabular-nums',
-                          color: s.mine ? 'rgba(200,148,64,0.95)' : 'rgba(255,255,255,0.32)',
-                          fontWeight: s.mine ? 700 : 500,
+                          color: s.mine ? 'rgba(200,148,64,0.95)' : 'rgba(255,255,255,0.45)',
+                          fontWeight: s.mine ? 700 : 500, whiteSpace: 'nowrap',
                         }}>
-                          {s.mine ? 'you' : s.name} {s.bonus}
+                          {s.mine ? 'you' : s.name} <span style={{ opacity: 0.55 }}>·</span> {s.bonus}
                         </span>
                       ))}
                     </span>
