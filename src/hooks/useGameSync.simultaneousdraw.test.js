@@ -8,11 +8,21 @@
 // writes the ENTIRE store to the room's SINGLE game_sessions row keyed by room_id (no per-seat partition).
 //
 // WHY THAT MATTERS FOR FLOW · in Classic the turn model serialises writes (one actor at a time → no collision).
-// Flow's SIMULTANEOUS_DRAW means BOTH players write their full snapshot to the SAME row at the same time. A
-// Postgres UPDATE is a full-row replace (no field merge), so it is LAST-WRITE-WINS: the later write clobbers the
-// earlier one and the earlier player's draw is LOST. The forge's seat-scoped-event fix cannot be "added" because
-// the offending code (an event reducer) does not exist — the real fix is an engine + persistence change owned by
-// T2 (the simultaneous-draw engine is still SCOPED OUT · see T2 S16 comms · no channel spec exists yet).
+// Flow's SIMULTANEOUS_DRAW means BOTH players write their full snapshot to the SAME row at the same time.
+//
+// ⚠ THIS HEADER USED TO END "so it is LAST-WRITE-WINS: the later write clobbers the earlier one and the earlier
+// player's draw is LOST", and that has been FALSE since migration 022 (T2 S43). I updated this file's test body
+// in S44 and left the header standing · which is Rule 101 happening to the person who wrote Rule 101, in the
+// paragraph a reader sees FIRST. Found by sweeping my own lane for claims that a hazard is open or closed
+// (T3 S45 P3), not by anything failing: a stale comment cannot go red.
+//
+// WHAT IS TRUE NOW: a Postgres UPDATE is still a full-row replace with no field merge, and that is still why
+// two snapshots collide. But `game_sessions.state_version` plus the `.lt('state_version', n)` predicate means
+// the row accepts a write only if it is strictly newer, so the second writer is REFUSED rather than applied ·
+// zero rows affected, which useGameSync surfaces through wasOvertaken. The earlier player's draw SURVIVES.
+// Still honest about the limit, because a refusal is not a merge: the refused player's draw did not happen and
+// they must re-sync and retry, and NOTHING RETRIES YET (src/lib/writeOrder.js says so in its own header). Turn
+// order makes genuinely simultaneous movers rare; it does not make them absent.
 //
 // SO THIS TEST TELLS THE TRUTH (Rule 63 · "an honest test that names the gap beats a green test that lies"):
 // it is the truthful version of the forge's intended "Both players draw without collision" test — it proves they
