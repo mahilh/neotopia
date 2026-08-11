@@ -167,7 +167,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (95 · cumulative):
+PERMANENT ANTI-REGRESS RULES (96 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -400,6 +400,31 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 96 (T1 S42 · August 11 2026):
+THE HEADLINE NUMBER IS OFTEN NOT THE DECIDING ONE · MEASURE THE QUANTITY THE DECISION ACTUALLY RESTS ON.
+Card art: every master is square, the slot is 1.30:1, so objectFit:cover DISCARDS 23.1% OF THE AREA on
+every card in the deck. That number is correct, it is alarming, and I had already drafted the
+recommendation it implies · regenerate 56 masters at 13:10, or grow the card. Before sending it I
+measured the thing a player would actually notice: sampling all 20 PNGs in a canvas against each file's
+own corner background, the discarded bands hold a MEDIAN OF 2.1% OF THE CARD'S INK · min 0.0, max 10.9 ·
+against a kept-centre density of 25-64%, because the art is centre-composed. 23.1% of the area is 2.1%
+of the picture. The correct action was a GATE, not a regeneration, and the two answers differ by about
+a week of somebody's work.
+  96a · THE TELL IS THAT THE NUMBER IS A PROXY. Area is a proxy for "how much of the picture is lost",
+        the way lines-of-code is a proxy for complexity and win rate was a proxy for re-weighting in
+        Rule 88. When the quantity you have is a stand-in for the quantity you care about, measure the
+        real one before spending anything · it is usually one more probe, and here it was twenty minutes
+        against a deck regeneration.
+  96b · AND THEN GATE THE PREMISE, NOT THE CONCLUSION. "2.1% is fine" is only true while the masters are
+        square and centre-composed, and 36 of 56 cards have no art yet. So the test asserts SQUARE, and
+        states the crop by reading the slot out of the component rather than retyping it · a 16:9 master
+        would lose 42% with nothing going red. A finding whose premise is unguarded expires silently.
+COROLLARY, from the same session and the same shape: I found the second defect in my own shared probe by
+USING it · it called a working card Hand unreachable because it could not tell BELOW THE FOLD from OFF
+THE SCREEN. Both are "outside the window"; only one is a bug, and the difference is whether anything can
+scroll it into view. Two sessions running, the defect in that instrument was found by pointing it at
+something new rather than by rereading it. An instrument earns trust from range, not from review.
 
 RULE 93 (T3 S40 · August 10 2026):
 A SWALLOWED ERROR IS AN UNMEASURED FAILURE, AND `.catch(() => {})` IS WHERE HARNESSES GO TO LIE.
