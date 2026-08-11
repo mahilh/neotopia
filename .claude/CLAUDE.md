@@ -167,7 +167,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (94 · cumulative):
+PERMANENT ANTI-REGRESS RULES (95 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -430,6 +430,33 @@ TEST process. The test env and the BROWSER env are two different contracts and o
 A 2.9-second free pre-flight (does the served app resolve the right project, and can it reach it) now
 answers that before any identity is spent. Sharpens Rule 82 with the dimension it was missing: isolate
 first, yes · but also PROVE THE ISOLATED THING WORKS before you pay for a measurement inside it.
+
+RULE 95 (T3 S41 · August 11 2026):
+A DIAGNOSTIC IS CODE, SO IT ROTS AND LIES LIKE CODE · AND THE ONE YOU WRITE TO STOP FALSE ZEROES IS THE
+ONE MOST LIKELY TO CONTAIN THEM. I built a three-way probe to settle why a live peer never saw its turn ·
+is the channel subscribed, has the row moved, did this client fail to apply it · and shipped it reading
+`window.supabase.getChannels()`. The app never puts its client on window, so it reported `channels: []`
+for every run: not "nobody is listening" but "I did not look", printed in the shape of a finding. Its
+second field looked the row up by a roomId guessed from location.pathname and reported `no row`. TWO
+FALSE ZEROES INSIDE THE INSTRUMENT WRITTEN TO REMOVE FALSE ZEROES · Rule 80 nested inside a Rule 90 fix,
+in the same session whose whole theme was that a swallowed failure is an unmeasured one. Corrected, the
+same probe answered the question completely on the next run: the peer was in exact agreement with the
+server and subscribed, so the defect was the HOST advancing past an End Turn that never persisted.
+  95a · Take every value from the source the APP uses, never from a global you hope exists. Import the
+        module; pass in the id the test already knows. A convenience read is a second contract (Rule 45).
+  95b · Distinguish UNMEASURED from measured-zero IN THE OUTPUT STRING, not in your memory of it. "NONE
+        SUBSCRIBED" and "NO ROW · UNMEASURED, not the game is missing" cost one ternary each and are the
+        difference between a diagnosis and a plausible story.
+  95c · A diagnostic earns belief the same way a test does · by being made to fail on purpose. The one
+        instrument here I DID trust was the reachability self-test, because it drops a real overlay and
+        requires 60 of 60 blocked before any all-clear counts.
+COROLLARY, and it is the better half: THE FASTEST WAY TO KILL A DUPLICATE IS TO DELETE YOUR OWN. I wrote a
+reachability probe from T1's published correction, mutation-proved it, and then deleted it when theirs
+landed mid-session · Mahil had ruled one implementation and theirs additionally carried `measured` and
+`requireInViewport`, the two halves mine was weaker on. Sunk work is not an argument. Keeping mine would
+have bought a second witness that agrees today and diverges silently later (T1's Rule 94), and what I kept
+instead was the part theirs genuinely lacked: the overlay self-test. Reconcile by SUBTRACTION, and keep
+only the delta that is real.
 
 RULE 94 (T1 S41 · August 11 2026):
 DE-DUPLICATING A CHECK REMOVES A SECOND CONTRACT AND A SECOND WITNESS. ONLY ONE OF THOSE IS A WIN.
