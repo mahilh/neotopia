@@ -64,20 +64,42 @@ export const REGION_META = [
 
 // FIX 1 · build the keys from the geometry, the way the board itself does, instead of reading an
 // index out of a map that is empty until somebody plays.
-export function seedOneOfEach(store, { seat = 0 } = {}) {
-  const els = Object.keys(ELEMENT_COLORS)
-  const regions = JSON.parse(JSON.stringify(store.getState().regions))
+//
+// SELF-CONTAINED AND OPTIONS-ONLY, for the same reason as seedPlayedBoard below · and this one was
+// found by the guard rather than by a person. Extending the serialisation test from one function to
+// a LIST caught this on its first run: it had read ELEMENT_COLORS, REGION_META and hexesInRadius off
+// module scope since S38, and it takes the store as an argument, so it could never have run in a
+// page either. Two of the three exports this file offers a page were broken the same way, which is
+// the argument for the list over the memory.
+export function seedOneOfEach({ seat = 0, store = null } = {}) {
+  const s = store || (typeof window !== 'undefined' ? window.__neotopia_store : null)
+  if (!s || typeof s.getState !== 'function') {
+    return { placed: [], trustworthy: false, reason: 'no store · pass one, or expose window.__neotopia_store' }
+  }
+  const els = ['energy', 'biofarming', 'technology', 'community']
+  const meta = [{ id: 0, cq: 0, cr: 0 }, { id: 1, cq: 8, cr: -4 }, { id: 2, cq: 4, cr: 5 }]
+  const cellsOf = (cq, cr, rad) => {
+    const out = []
+    for (let q = -rad; q <= rad; q++) {
+      for (let r = Math.max(-rad, -q - rad); r <= Math.min(rad, -q + rad); r++) out.push([cq + q, cr + r])
+    }
+    return out
+  }
+  const regions = JSON.parse(JSON.stringify(s.getState().regions))
   const placed = []
-  for (const m of REGION_META) {
-    const cells = hexesInRadius(m.cq, m.cr, 2)
+  for (const m of meta) {
+    const cells = cellsOf(m.cq, m.cr, 2)
     els.forEach((el, i) => {
       const [q, r] = cells[2 + i * 4]
       regions[m.id].hexes[`${q},${r}`] = { element: el, placedBy: seat }
       placed.push({ region: m.id, q, r, element: el })
     })
   }
-  store.setState({ regions }, false)
-  return placed
+  s.setState({ regions }, false)
+  const after = s.getState()
+  const first = placed[0]
+  const sample = first ? after.regions[first.region].hexes[`${first.q},${first.r}`] : null
+  return { placed, sampleElement: sample ? sample.element : null, trustworthy: placed.length === 12 && !!sample }
 }
 
 // ── REACHABILITY · THE RULE 78 PROBE, ONCE, FOR BOTH LANES (T1 S41) ─────────────────────────────
@@ -202,29 +224,54 @@ export function reachability({
 // click. That is the difference an identity makes over a tolerance · but it is also exactly the
 // kind of property a later change removes silently, which is why it wants a gate rather than a
 // paragraph. Three digits is past anything a real game reaches, deliberately.
-export function seedPlayedBoard(store, { seat = 0, scores = [128, 256, 999] } = {}) {
-  const els = Object.keys(ELEMENT_COLORS)
-  const state = store.getState()
+// IT COULD NOT ACTUALLY CROSS INTO A PAGE, AND I SHIPPED IT ANYWAY (fixed T1 S43, found by T3).
+// The first version took the store as an ARGUMENT and read ELEMENT_COLORS / REGION_META /
+// hexesInRadius off module scope. Both are fatal to `page.evaluate`, and in different ways: the
+// free variables arrive undefined, and a Zustand store is not serialisable as an argument at all.
+// So the late-game reachability case read as covered and was reachable only from jsdom.
+// WHAT MAKES THAT WORTH A PARAGRAPH: `reachability` right above has a test that rebuilds it from its
+// own source with the module scope stripped, precisely to catch this. I wrote that guard, then added
+// a second function to the same file and did not extend it · a guard applied to one member of a
+// class while the class grows. It is now applied to every seeder here, and the store defaults to the
+// page's own `window.__neotopia_store` so nothing needs to be passed across the boundary.
+export function seedPlayedBoard({ seat = 0, scores = [128, 256, 999], store = null } = {}) {
+  const s = store || (typeof window !== 'undefined' ? window.__neotopia_store : null)
+  if (!s || typeof s.getState !== 'function') {
+    return { placed: 0, trustworthy: false, reason: 'no store · pass one, or expose window.__neotopia_store' }
+  }
+  // Inlined rather than imported · see above. Kept identical to the module's own copies, and
+  // board-probe.reach.test.js pins them against each other so the duplicate cannot drift.
+  const els = ['energy', 'biofarming', 'technology', 'community']
+  const meta = [{ id: 0, cq: 0, cr: 0 }, { id: 1, cq: 8, cr: -4 }, { id: 2, cq: 4, cr: 5 }]
+  const cells = (cq, cr, rad) => {
+    const out = []
+    for (let q = -rad; q <= rad; q++) {
+      for (let r = Math.max(-rad, -q - rad); r <= Math.min(rad, -q + rad); r++) out.push([cq + q, cr + r])
+    }
+    return out
+  }
+
+  const state = s.getState()
   const regions = JSON.parse(JSON.stringify(state.regions))
   let placed = 0
-  for (const m of REGION_META) {
-    for (const [q, r] of hexesInRadius(m.cq, m.cr, 2)) {
+  for (const m of meta) {
+    for (const [q, r] of cells(m.cq, m.cr, 2)) {
       regions[m.id].hexes[`${q},${r}`] = { element: els[placed % els.length], placedBy: seat }
       placed++
     }
   }
-  store.setState({ regions, players: state.players.map(p => ({ ...p, scores: [...scores] })) }, false)
+  s.setState({ regions, players: state.players.map(p => ({ ...p, scores: [...scores] })) }, false)
 
   // THE READ-BACK, because a seeder that silently places nothing is the exact lie this file was
   // built to stop (Rule 75b · check the probe measured the thing it names). Read a real value back
   // out of the store rather than trusting the count we just computed.
-  const after = store.getState()
-  const sample = after.regions[REGION_META[0].id].hexes[`${REGION_META[0].cq},${REGION_META[0].cr}`]
+  const after = s.getState()
+  const sample = after.regions[meta[0].id].hexes[`${meta[0].cq},${meta[0].cr}`]
   return {
     placed,
     scores: after.players[0] ? after.players[0].scores : null,
     sampleElement: sample ? sample.element : null,
-    trustworthy: placed === 57 && !!sample && els.includes(sample.element),
+    trustworthy: placed === 57 && !!sample && els.indexOf(sample.element) !== -1,
   }
 }
 

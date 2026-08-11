@@ -69,7 +69,7 @@ describe('seeding · lie number one, closed', () => {
     // contrast for twelve cells that did not exist.
     expect(Object.keys(store.getState().regions[0].hexes)).toHaveLength(0)
 
-    const placed = probe.seedOneOfEach(store)
+    const placed = probe.seedOneOfEach({ store }).placed
 
     expect(placed).toHaveLength(12)
     for (const reg of store.peek().regions) {
@@ -82,7 +82,7 @@ describe('seeding · lie number one, closed', () => {
 
   it('puts every token inside its own region', () => {
     const store = fakeStore()
-    for (const p of probe.seedOneOfEach(store)) {
+    for (const p of probe.seedOneOfEach({ store }).placed) {
       const m = REGION_META.find(x => x.id === p.region)
       const inside = hexesInRadius(m.cq, m.cr, 2).some(([q, r]) => q === p.q && r === p.r)
       expect(inside, `${p.element} landed outside region ${p.region}`).toBe(true)
@@ -91,7 +91,7 @@ describe('seeding · lie number one, closed', () => {
 
   it('stamps a seat, so cluster ownership is measurable too', () => {
     const store = fakeStore()
-    probe.seedOneOfEach(store, { seat: 2 })
+    probe.seedOneOfEach({ store, seat: 2 })
     for (const reg of store.peek().regions) {
       for (const h of Object.values(reg.hexes)) expect(h.placedBy).toBe(2)
     }
@@ -99,8 +99,8 @@ describe('seeding · lie number one, closed', () => {
 
   it('is deterministic · two runs seed the identical board', () => {
     // Rule 32. A probe with any randomness in it makes every before/after comparison unreadable.
-    const a = JSON.stringify(probe.seedOneOfEach(fakeStore()))
-    const b = JSON.stringify(probe.seedOneOfEach(fakeStore()))
+    const a = JSON.stringify(probe.seedOneOfEach({ store: fakeStore() }).placed)
+    const b = JSON.stringify(probe.seedOneOfEach({ store: fakeStore() }).placed)
     expect(a).toBe(b)
   })
 })

@@ -254,14 +254,14 @@ describe('seedPlayedBoard · a fresh board is not the hard case', () => {
     // store has learned nothing from that · it is Rule 92 exactly, both sides from the same source.
     // So this one reads a real element back out and says so when it cannot.
     const broken = { getState: () => ({ regions: probe.REGION_META.map(m => ({ id: m.id, hexes: {} })), players: [] }), setState: () => {} }
-    const r = probe.seedPlayedBoard(broken)
+    const r = probe.seedPlayedBoard({ store: broken })
     expect(r.trustworthy, 'a seeder whose write did not land must never look successful').toBe(false)
     expect(r.sampleElement).toBeNull()
   })
 
   it('fills every hex of every region and reads one back', () => {
     const store = fakeStore()
-    const r = probe.seedPlayedBoard(store)
+    const r = probe.seedPlayedBoard({ store })
     expect(r.placed, '3 regions x 19 hexes').toBe(57)
     expect(r.trustworthy).toBe(true)
     expect(Object.keys(probe.ELEMENT_COLORS)).toContain(r.sampleElement)
@@ -275,7 +275,7 @@ describe('seedPlayedBoard · a fresh board is not the hard case', () => {
     // hex centre row and clears it only SIDEWAYS, by 44.1 · so it is a wide-enough score away from
     // being the district-name bug again. Three digits is deliberately past a real game.
     const store = fakeStore()
-    const r = probe.seedPlayedBoard(store)
+    const r = probe.seedPlayedBoard({ store })
     expect(r.scores).toEqual([128, 256, 999])
     expect(String(Math.max(...r.scores)).length,
       'a two-digit ceiling would test the number today rather than the class').toBeGreaterThanOrEqual(3)
@@ -283,13 +283,67 @@ describe('seedPlayedBoard · a fresh board is not the hard case', () => {
 
   it('stamps placedBy, so cluster ownership still reads correctly off a seeded board', () => {
     const store = fakeStore()
-    probe.seedPlayedBoard(store, { seat: 1 })
+    probe.seedPlayedBoard({ store, seat: 1 })
     const hexes = Object.values(store.getState().regions[0].hexes)
     expect(hexes.every(h => h.placedBy === 1)).toBe(true)
   })
 })
 
 describe('it can cross into a page', () => {
+  // ── EVERY function this file exports to a page, not just the one I remembered (T1 S43) ─────────
+  // T3 found that seedPlayedBoard could not cross into a page at all: it read ELEMENT_COLORS,
+  // REGION_META and hexesInRadius off module scope, and it took the STORE as an argument, which is
+  // not serialisable either. So the late-game reachability case read as covered and was reachable
+  // only from jsdom · which is the citation-rot shape T2 named in Rule 97, in my own harness.
+  // THE INTERESTING PART IS THAT THE GUARD ALREADY EXISTED. The test below it has rebuilt
+  // `reachability` from its own source since S41, for exactly this. I wrote that, then added a
+  // second page-bound function to the same file and did not extend it · a guard applied to one
+  // member of a class while the class grew. So it is a LIST now, and adding an export without
+  // adding it here is the thing that fails.
+  const PAGE_BOUND = ['reachability', 'seedPlayedBoard', 'seedOneOfEach']
+
+  it.each(PAGE_BOUND)('%s survives being serialised into a page', (name) => {
+    const fn = probe[name]
+    expect(fn, `${name} is not on the default export · a caller cannot page.evaluate it`).toBeTypeOf('function')
+    const src = fn.toString()
+    const rebuilt = new Function(`return (${src})`)()
+    expect(rebuilt.name || name).toBeTruthy()
+    // The real check: rebuilt with the module scope GONE, calling it must not throw a ReferenceError.
+    // Each is given the least input that reaches its own guard rather than a crash.
+    const call = () => {
+      if (name === 'reachability') return rebuilt({ controls: '.nothing-matches-this' })
+      const store = {
+        getState: () => ({ regions: [0, 1, 2].map(id => ({ id, hexes: {} })), players: [{ seat: 0, scores: [0, 0, 0] }] }),
+        setState: () => {},
+      }
+      return rebuilt({ store })
+    }
+    expect(call, `${name} references module scope · it would throw only in the browser`).not.toThrow()
+  })
+
+  it('every page-bound export is in that list · a new one cannot be forgotten the way mine was', () => {
+    // The counterweight to the list itself, which is otherwise a comment that ages. Anything on the
+    // default export that takes options and is meant to run in a page belongs above; this catches the
+    // NEXT function added to this file, which is exactly how seedPlayedBoard slipped through.
+    const exported = Object.keys(probe).filter(k => typeof probe[k] === 'function')
+    const notCovered = exported.filter(k => !PAGE_BOUND.includes(k) && !['setup', 'contrast', 'luminance', 'hexToPixel', 'hexesInRadius'].includes(k))
+    expect(notCovered, 'new export · add it to PAGE_BOUND or to the known-not-page-bound list').toEqual([])
+  })
+
+  it('the inlined constants still agree with the module ones · the duplicate must not drift', () => {
+    // seedPlayedBoard inlines the element list and the region centres so it can be serialised. That
+    // is a deliberate second contract (Rule 45), so it gets a test rather than a promise · the same
+    // deal hexToPixel already has in board-probe.test.js.
+    const src = probe.seedPlayedBoard.toString()
+    for (const el of Object.keys(probe.ELEMENT_COLORS)) {
+      expect(src, `element "${el}" is missing from the inlined copy`).toContain(`'${el}'`)
+    }
+    for (const m of probe.REGION_META) {
+      expect(src, `region ${m.id} centre (${m.cq},${m.cr}) drifted from REGION_META`)
+        .toContain(`cq: ${m.cq}, cr: ${m.cr}`)
+    }
+  })
+
   it('is self-contained · no module-scope reference survives serialisation', () => {
     // T3 runs this as `page.evaluate(probe.reachability, opts)`, which serialises the FUNCTION and
     // re-creates it inside the page. Any free variable from this module arrives undefined there and
