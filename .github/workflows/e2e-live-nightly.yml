@@ -111,6 +111,7 @@ jobs:
           tests/e2e/seat-colors-live.e2e.js
           tests/e2e/solo-host.e2e.js
           tests/e2e/multiplayer-endgame-live.e2e.js
+          tests/e2e/postgres-writeorder.e2e.js
           --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
