@@ -167,7 +167,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (92 · cumulative):
+PERMANENT ANTI-REGRESS RULES (93 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -400,6 +400,36 @@ by identity instead of defending a tolerance. Masking the painting out of the pl
 contrast ratio somebody has to agree is close enough. Sharpens Rule 61 (verify the value) and Rule
 75b (a probe is a claim) with the arithmetic dimension; adjacent to T2's Rule 80, where the wrong
 number came from a counter that could not measure rather than from a person who could not.
+
+RULE 93 (T3 S40 · August 10 2026):
+A SWALLOWED ERROR IS AN UNMEASURED FAILURE, AND `.catch(() => {})` IS WHERE HARNESSES GO TO LIE.
+Three defects tonight, three costumes, one shape · in every case the code CAUGHT a failure, discarded it,
+and carried on reporting a state it had never achieved:
+  93a · `offer.click(...).catch(() => {})`. CardFrame carries the art shimmer, an infinite animation, so
+        Playwright's stability wait never settles and the click TIMED OUT · then the harness waited 10s for
+        a state change that no click had ever asked for. The wire proved it: `draw RPC calls []`. Not a
+        refused draw, not a disabled card, NO CLICK AT ALL. With force:true the same line returns
+        `200 /rest/v1/rpc/draw_card_for_seat`. The swallow had been there for two sessions.
+  93b · the same `.catch` on the FACTORY click hid the tutorial overlay for a whole session. Eight live
+        runs and sixteen identities produced a hypothesis (uiPhase) that reading two files falsified in
+        minutes · and it was falsified in BOTH halves, which is what a story invented to fit a symptom
+        looks like.
+  93c · `2>/dev/null` on the migrations counter (Rule 80) is this rule one layer down. Same line of code
+        means "handles an empty dir" and "hides a wrong path".
+THE INSTRUMENT, and it costs one variable: never discard the error, RECORD it and report it as a distinct
+outcome. `let clickError = null; ...catch(e => { clickError = e.message })` turned "the offer is inert" into
+"the offer was never clicked", which are opposite findings with opposite owners.
+AND THE HALF THAT GENERALISES BEYOND TESTS · when a symptom exhausts every cause you wrote down, do not
+invent the next one. MEASURE ONE LAYER DOWN. drawStatus null, myTurn true, actions 3, card not disabled
+ruled out all three documented causes; the network listener answered it in one run. The wire is a witness
+that does not care what the DOM believes (Rule 39, applied to a click rather than a response).
+COROLLARY, paid for twice tonight: verify the ENVIRONMENT before spending anything scarce. A live run died
+on "Failed to fetch" because I started the worktree dev server with a bare `npx vite`, so Vite inherited
+the shell's AetherMind Supabase URL · a dead host · while `with-project-env` had correctly fixed only the
+TEST process. The test env and the BROWSER env are two different contracts and only the browser's matters.
+A 2.9-second free pre-flight (does the served app resolve the right project, and can it reach it) now
+answers that before any identity is spent. Sharpens Rule 82 with the dimension it was missing: isolate
+first, yes · but also PROVE THE ISOLATED THING WORKS before you pay for a measurement inside it.
 
 RULE 92 (T1 S40 · August 10 2026):
 A CHECK WHOSE TWO SIDES COME FROM THE SAME SOURCE CANNOT FAIL, AND IT FAILS SILENTLY BY AGREEING.
