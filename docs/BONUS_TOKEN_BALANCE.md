@@ -1,6 +1,65 @@
 # DID BONUS TOKENS BREAK BALANCE?
 **T2 S39 · August 10 2026 · 360 seeds, three disjoint blocks**
 
+> ## 📊 T2 S47 · THE THREE THINGS S46 COULD NOT SEE · and they change the advice
+>
+> S46 measured **self-play**: identical policies, one spends, spender wins +7.7. That is a real number
+> and it is **not the number a balance decision needs**. Three follow-ups, two disjoint 40-seed blocks
+> each.
+>
+> ### 1 · Timing does not matter · quantity does
+>
+> | plan | spends/game | vs hoarder | vs on-sight |
+> |---|---|---|---|
+> | on-sight | 1.14 | 56.0 | — |
+> | late-game (tiles ≤5) | 1.15 | 56.0 | **50.0** |
+> | hand-short (≤3) | 0.49 | **47.3** | 46.7 |
+>
+> Late-game is **indistinguishable** from on-sight (exact 50.0 head-to-head, same spend rate). The plan
+> that spends *less* is **worse than hoarding**. So **+7.7 is not a floor, it is near the ceiling** ·
+> the dumbest use of the decision is as good as the timed ones. The gradient is on how OFTEN you spend,
+> not when. (A fourth plan, "spend when hand is empty", fired 0.01 times per game · it was `never` in
+> disguise and is excluded from the finding. My first counterweight asserted `>0` and passed it.)
+>
+> ### 2 · The ladder · spendable tokens do NOT re-order skill
+>
+> Win rate vs `REFERENCE_POLICY`, neither side spending → both sides spending:
+>
+> | rung | without | with | delta (block 1 / block 2) |
+> |---|---|---|---|
+> | apprentice | 5.1 / 12.5 | 6.3 / 12.5 | **+1.2 / 0.0** |
+> | builder | 77.2 / 71.4 | 70.9 / 69.6 | **−6.3 / −1.8** |
+> | architect | 98.8 / 98.8 | 98.8 / 95.0 | **0.0 / −3.8** |
+>
+> Small, and **mostly negative · the same direction S39 found for unspent tokens.**
+>
+> **This reconciles the apparent contradiction with S46**, and the reconciliation is the finding:
+> spending pays handsomely **against someone who does not spend** (+7.7), and washes out **when
+> everyone does** (ladder deltas ≈ 0). The +7.7 is an advantage over a player who fails to use the
+> feature · it is **not a skill amplifier.**
+>
+> ### 3 · 🔴 The compounding question · EARNING is where the skew is
+>
+> | rung | tokens earned/game | reference earns | gap |
+> |---|---|---|---|
+> | apprentice | 0.25 / 0.29 | 2.96 / 3.15 | **−2.7 / −2.9** |
+> | architect | 6.55 / 6.13 | 1.25 / 1.43 | **+5.3 / +4.7** |
+>
+> Tokens are earned by crossing score thresholds at 7/13/18, so **earning is a function of scoring
+> speed** and therefore already favours the leader. Replicated across both blocks: roughly a **23×
+> spread between the ladder's ends** (architect ~6.3 tokens/game, apprentice ~0.27). At 3 points each
+> unspent that is **~15 points of final score for architect against ~0.8 for apprentice, before any
+> spending decision is taken.**
+>
+> **And the win rate cannot see it**, because architect sits at ~99% and apprentice at ~5–12%, both
+> pinned against a bound (Rule 88). That is why this is reported and gated on the **earn gap** rather
+> than on a win-rate delta · the delta is structurally incapable of expressing it.
+>
+> **For Mahil, the balance picture in one line:** the *spending* mechanism is fair (it washes out when
+> both players use it); the *earning* mechanism is steeply skewed to whoever is already ahead. If
+> anything wants rebalancing it is the 7/13/18 thresholds, not the token's effect or its 3 points.
+> **Not recommending a change · this is the evidence you asked for first.**
+
 > ## 🔴 THE SIGN INVERTED · T2 S46 · measured, 560 games
 >
 > **S39 (below): an UNSPENT token favours the WEAKER player** · apprentice −2.4, builder −3.0,
