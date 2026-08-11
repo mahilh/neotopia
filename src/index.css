@@ -107,12 +107,35 @@
    board over the sidebar so the board takes the full width. !important overrides the inline flex row + the
    288px inline sidebar width. flex stays (not height:auto) so the board keeps filling the viewport space ·
    the sidebar is capped + scrolls. dim-the-rest is data-attribute based · orthogonal to flex-direction. */
+/* ── THE BOARD WAS GETTING THE LEAST SPACE ON THE SCREEN WHERE SPACE IS SCARCEST (T1 S47) ────────
+   MEASURED at 320x568, before:
+       header 142 + board container 114 + sidebar 240 + action bar 73 = 569
+   so the board · which IS the game · rendered 288x82 with 6.8x5.9px hex cells, 15.5% of the 44px
+   minimum. A single card in the sidebar beneath it is 168px tall: TWICE the whole board.
+   THE 240px CAP WAS THE PROBLEM AND IT LOOKED LIKE A KINDNESS. The sidebar's content is 871px in a
+   239px box · it has ALWAYS been a scroll surface, showing 27% of itself. So the cap was not
+   protecting content, it was reserving space that the player scrolls through either way, and
+   charging the board for it (Rule 83 · find who pays).
+   A FLEX SHARE RATHER THAN A MAGIC NUMBER. 240px was right for one viewport height and silently
+   wrong for every other; 3:2 of whatever `main` has adapts to a 568px phone and an 812px one alike,
+   and needs no second constant when the header wraps (which moves 20px on its own · see
+   boardMetrics). min-height:0 on both is what lets a flex child actually shrink and scroll.
+   WHAT THIS REACHES, stated plainly because it is NOT the finish: the hex roughly doubles, to about
+   14px. That is still under Rule 4's 44px. The full-bleed board with the step panel as a bottom
+   sheet is the design job that gets there, and it should be designed rather than improvised. This
+   is the reversible half · one rule, no component rewrite. */
 @media (max-width: 600px) {
   .game-main { flex-direction: column !important; }
+  .game-board-area {
+    flex: 3 1 0 !important;
+    min-height: 0;
+  }
   .game-sidebar {
     width: 100% !important;
     max-width: 100% !important;
-    max-height: 240px;
+    flex: 2 1 0;
+    max-height: none;
+    min-height: 0;
     border-left: none !important;
     border-top: 1px solid rgba(255,255,255,0.06);
   }

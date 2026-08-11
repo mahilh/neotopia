@@ -781,7 +781,9 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       <div className="game-main" style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* BOARD */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0, position: 'relative' }}>
+        {/* The board area needs a NAME so the phone layout can give it a share of the column ·
+            it had none, so index.css could only ever address the sidebar (T1 S47). */}
+        <div className="game-board-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0, position: 'relative' }}>
           <GameBoard
             regions={regions}
             factories={factories}

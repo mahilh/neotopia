@@ -383,3 +383,71 @@ describe('it can cross into a page', () => {
     expect(probe.reachability).toBe(reachability)
   })
 })
+
+describe('boardMetrics asserts its own claim, not just that it runs', () => {
+  // MY OWN S46 CRITIQUE. The tests I shipped with this probe checked the UNMEASURED contract and
+  // that it survives serialisation · the plumbing. The claim it EXISTS to make · that the header's
+  // wrap and the board's height move together · was asserted nowhere: it lived in a commit message
+  // and a comms table. A future edit could break the line-count derivation, every test would stay
+  // green, and the gate I handed T3 would report a number nobody should trust. That is the same
+  // shape as the vacuous `everyHexStamped: true` I caught myself writing hours earlier.
+  //
+  // THE SPLIT IS THE HONEST ONE: jsdom has no layout, so it cannot witness the coupling. What it CAN
+  // hold is the arithmetic that turns two rects into a line count, and that is the part an edit
+  // breaks silently. The coupling itself is asserted in a browser · numbers in the commit, and the
+  // gate is T3's.
+  const stubInstruction = ({ height, lineHeight, text = 'x' }) => {
+    document.body.innerHTML = `
+      <header></header>
+      <div><svg role="img" viewBox="0 0 828 866"><g class="hex-cell"><polygon/></g></svg></div>
+      <footer></footer>
+      <div data-testid="instruction">${text}</div>`
+    const ins = document.querySelector('[data-testid="instruction"]')
+    const rects = new Map([[ins, { width: 200, height, left: 0, top: 0, right: 200, bottom: height }]])
+    Element.prototype.getBoundingClientRect = function () {
+      return rects.get(this) || { width: 100, height: 100, left: 0, top: 0, right: 100, bottom: 100 }
+    }
+    const realComputed = window.getComputedStyle
+    window.getComputedStyle = (el) => (el === ins ? { lineHeight: `${lineHeight}px` } : realComputed(el))
+    return () => { window.getComputedStyle = realComputed }
+  }
+
+  it.each([
+    [18, 18, 1, 'one line'],
+    [39, 19.5, 2, 'two lines · the real 320px case, 13px at 1.5'],
+    [58, 19.5, 3, 'three lines'],
+    // ROUND, NOT CEIL · a line box is routinely a pixel or two taller than its line-height (descenders,
+    // font metrics), so ceil() would report two lines for one. Found because the ceil mutation passed
+    // my first table and a mutation that cannot cross the threshold proves nothing (S41's lesson).
+    [20, 18, 1, 'a single line box slightly taller than its line-height is still ONE line'],
+    [34, 18, 2, 'and two short lines are still two'],
+    [0, 18, 1, 'a zero-height instruction still counts as one · never 0 lines'],
+  ])('derives %ipx / %ipx line-height as %i (%s)', (height, lineHeight, want) => {
+    const restore = stubInstruction({ height, lineHeight })
+    try {
+      expect(probe.boardMetrics().instructionLines).toBe(want)
+    } finally { restore() }
+  })
+
+  it('falls back to 18px when the line-height is not a number · never NaN lines', () => {
+    // computedStyle.lineHeight is 'normal' by default in several engines, and Number.parseFloat of
+    // that is NaN · which would make every line count NaN and every comparison in T3's gate silently
+    // false. FALSE CASE: drop the `|| 18` and this returns NaN.
+    const restore = stubInstruction({ height: 36, lineHeight: 'normal' })
+    try {
+      const n = probe.boardMetrics().instructionLines
+      expect(Number.isNaN(n), 'a NaN line count makes every assertion in the gate quietly false').toBe(false)
+      expect(n).toBe(2)
+    } finally { restore() }
+  })
+
+  it('reports the string itself, so a gate can pin what it is measuring', () => {
+    const restore = stubInstruction({ height: 39, lineHeight: 19.5, text: 'Click a factory to take an element' })
+    try {
+      const m = probe.boardMetrics()
+      expect(m.instruction).toBe('Click a factory to take an element')
+      expect(m.instructionChars).toBe(34)
+      expect(m.measured).toBe(true)
+    } finally { restore() }
+  })
+})
