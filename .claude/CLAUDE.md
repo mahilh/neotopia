@@ -174,10 +174,18 @@ ENGINE ARCHITECTURE:
             No seat = the pre-S35 board-global reading, kept for the viz and for unowned pre-S35 boards.
   Flow mode config: getModeConfig(mode) · GAME_MODES.classic + GAME_MODES.flow
 
-DB CONTRACT (migrations 001-010):
+DB CONTRACT (scripts/migrations/ · 001-023 · NOT 001-010, which is what this line said until T3 S49):
   game_sessions.phase: CHECK IN (playing|endgame|finished)
-  Migration 009: global_neotopia_index · SECURITY DEFINER · record_civilization_score
-  Migration 010: game_sessions.mode TEXT DEFAULT 'classic'
+  record_civilization_score · chain 009 > 014 > 019 · SECURITY DEFINER · writes global_neotopia_index
+  game_sessions.mode TEXT DEFAULT 'classic' (010)
+  ⚠ A MIGRATION NUMBER HERE IS A CHAIN, NOT AN ADDRESS. 5 of 16 functions are redefined by a later
+    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024, draw_card_for_seat 011>014>021,
+    record_civilization_score 009>014>019, increment_neotopia_index 004>014, rl_client_ip 013>014.
+    AND THE NEWEST FILE IS NOT NECESSARILY THE DEPLOYED BODY. Do NOT record applied-state in a comment:
+    it changes with no commit, so it is stale the moment it is true · T3 wrote "023 unapplied" into five
+    files in S49 and T2 applied it ninety minutes later. Comments carry the CHAIN (a repo fact, gated by
+    preconditions.e2e.js); ask pg_get_functiondef for what is RUNNING (Rule 109a). Last measured S49:
+    023 applied, 014 not.
 
 GAME MECHANICS:
   4-STEP PLACEMENT: factory→element-btn→region-btn→valid-hex (ALL force:true)
@@ -617,8 +625,9 @@ MEASURED AGAINST THE LIVE DATABASE (T3 S48 · pg_get_functiondef on the deployed
       (select user_id from player_profiles where username like 'E2E%'/'BotAlpha%'/'BotBeta%')
     game_sessions FKs game_rooms ON DELETE CASCADE · so a deleted 'playing' room takes its session row
       with it, which is EXACTLY the S45 symptom ("NO ROW for room_id ..." while two browsers played)
-    migration 008 is titled "extend purge_e2e_test_data() to bot-hosted rooms of ANY status" and says
-      in terms: "WHAT CHANGES vs 006: remove `and r.status = 'finished'`" (T2 S12, applied to remote)
+    MIGRATION-HISTORY · migration 008 is titled "extend purge_e2e_test_data() to bot-hosted rooms of ANY
+      status" and says in terms: "WHAT CHANGES vs 006: remove `and r.status = 'finished'`" (T2 S12,
+      applied to remote · the chain has since grown 014 and 023, both committed and UNAPPLIED)
     live-run identities are E2E%-prefixed by uniqueName(), so they are inside the scope, not outside it
 S46 RETRACTED THIS ON THE STRENGTH OF MIGRATION 006 AND WAS WRONG · 006 is the FIRST definition, not the
 current one. The symptom, the mechanism and the original warning all stand.

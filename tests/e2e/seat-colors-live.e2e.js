@@ -23,10 +23,10 @@
 // about the database contract, not about anything rendered), so nothing here depends on the dev server.
 //
 // SAFETY · everything is created under the E2E_ username prefix, hard-deleted by this file at the end, and
-// swept a second time by global-teardown.js → purge_e2e_test_data() (migrations 006/007/008), which is
-// scoped to those prefixes and can never touch a real player. Note it sweeps rooms of ANY STATUS, not only
-// finished ones (migration 008 dropped that filter) · see global-teardown.js's header for what that costs
-// a concurrent live run.
+// swept a second time by global-teardown.js → purge_e2e_test_data() (chain 006 > 008 > 014 > 023 > 024 · which
+// body is DEPLOYED is deliberately not recorded here, because it changes with no commit to this repo · see
+// global-teardown.js's header). Scoped to those prefixes, so it can never touch a real player · but note it
+// sweeps rooms of ANY STATUS, not only finished ones, and what that costs a concurrent live run.
 //
 // CI: live · nightly (e2e-live-nightly.yml). Run locally:
 //   npx playwright test tests/e2e/seat-colors-live.e2e.js

@@ -248,8 +248,12 @@ test.describe('the precondition gate · a protected deployment is not a broken b
 // IT DOES NOT DEMAND THAT EVERY SPEC BE WIRED, and that restraint is deliberate · a new spec is legitimately
 // unwired for a session or two while the lane that owns the workflow picks it up, and a gate that reds on
 // that would be a tripwire aimed at a colleague (the mistake I made in S39 and removed in S42). What it
-// demands is that the file SAY SO: either a workflow runs it, or its header declares `RUNS-NOWHERE:` with a
-// reason. The honest state is always available; the silent one is not.
+// demands is that the file SAY SO: either a workflow runs it, or its header declares the RUNS-NOWHERE
+// marker (name + colon) with a reason. The honest state is always available; the silent one is not.
+// ⚠ THE COLON IS OMITTED FROM THIS PROSE ON PURPOSE (T3 S49). The escape hatch is a plain substring, so a
+// sentence ABOUT the marker satisfies it · this file and postgres-writeorder both did, and a spec could
+// therefore be un-wired and still read as declared, purely because its header discusses the mechanism.
+// Same class as the self-scan defect below: an instrument matching text that describes the instrument.
 import { readdirSync, readFileSync } from 'node:fs'
 
 test.describe('every E2E spec names the workflow that runs it, or says it runs nowhere (T3 S43)', () => {
@@ -283,5 +287,134 @@ test.describe('every E2E spec names the workflow that runs it, or says it runs n
 
     console.log(`[preconditions] spec-runner audit · ${specs.length} specs across ${workflows.length} ` +
       'workflows · 0 silent orphans')
+  })
+})
+
+// ── STALE MIGRATION CITATIONS (T3 S49) ───────────────────────────────────────────────────────────────
+// A comment naming the migration it was written against is stale BY DEFAULT, not by accident. `create or
+// replace` means MIGRATIONS ARE A LOG, NOT A STATE: 5 of the 16 functions in scripts/migrations/ are
+// redefined by a later migration and 3 of them twice (record_civilization_score 009>014>019,
+// draw_card_for_seat 011>014>021, purge_e2e_test_data 006>008>014>023). So a citation is a claim with an
+// expiry date, and NOTHING makes it expire loudly · a wrong test goes red, a wrong comment goes red never.
+//
+// THIS EXISTS BECAUSE IT COST A REAL DEFECT. In S46 I retracted a TRUE warning about purge_e2e_test_data
+// after reading migration 006 and stopping · 008 had already dropped the status filter that 006 contained.
+// I then hand-swept the citations in S48, fixed three files, and MISSED a fourth (flow-mode-live.e2e.js),
+// which a five-second grep found while I was drafting a recommendation about hand sweeps missing things.
+// That is Rule 89 twice over, so the sweep is an instrument now and not an act of attention.
+//
+// WHAT IT ASSERTS, precisely, because the remedy is NOT "swap the number" (Rule 98a · the alarm is a fact,
+// the remedy is a guess made before the situation existed): a citation must NAME THE END OF THE CHAIN. It
+// deliberately does NOT claim the newest migration is the DEPLOYED one · migration 014 and 023 are both
+// committed and unapplied today, so for some functions the OLD number is what is actually running. Nothing
+// in this repo can tell you which (the applied-markers in the headers are inconsistent, and 021's header
+// says "unapplied" about a DIFFERENT migration · Rule 91). Only the live database can (Rule 109a). So the
+// fix is to name the chain, not to swap one number for another, and the message says so.
+//
+// PAIRING IS SAME-LINE ONLY, and that is a deliberate precision/recall trade measured rather than guessed.
+// A +/-1 line window catches one more real case and manufactures THREE false ones · it paired a citation of
+// migration 005 (rooms_delete_host) with purge_e2e_test_data from a neighbouring line. A gate that condemns
+// three working comments gets read as noise and switched off, and then it is not there on the day it is
+// right (Rule 94a · a false positive is not the safe error). The near-miss bucket is REPORTED, not gated.
+//
+// ESCAPE HATCH, the same restraint as the orphan audit above: a line that means an OLD migration on purpose
+// (quoting its title, dating a fix) says MIGRATION-HISTORY and is skipped. Either be current, or say you
+// are not · the honest state is always available, the silent one is not.
+test.describe('no comment cites a migration that a later one has replaced (T3 S49)', () => {
+  test('every migration citation names the end of its chain', async () => {
+    const migDir = new URL('../../scripts/migrations/', import.meta.url)
+    const definedIn = {}
+    for (const f of readdirSync(migDir).filter(n => n.endsWith('.sql')).sort()) {
+      const num = f.slice(0, 3)
+      const txt = readFileSync(new URL(f, migDir), 'utf8')
+      const re = /create\s+(?:or\s+replace\s+)?function\s+(?:public\.)?([a-z_0-9]+)\s*\(/gi
+      let m
+      while ((m = re.exec(txt))) {
+        const fn = m[1].toLowerCase()
+        definedIn[fn] ??= []
+        if (!definedIn[fn].includes(num)) definedIn[fn].push(num)
+      }
+    }
+    const moved = Object.keys(definedIn).filter(fn => definedIn[fn].length > 1)
+    const endOfChain = Object.fromEntries(moved.map(fn => [fn, definedIn[fn].at(-1)]))
+
+    // ── COUNTERWEIGHTS FIRST (Rule 90), because every one of them fails toward GREEN ────────────────
+    // This gate's whole output is a list that should be empty, so anything that stops it looking reports
+    // perfect health. Three ways that happens, each asserted before the finding: the SQL parser matching
+    // nothing, the corpus being empty, and the citation regex matching nothing. The third is the one that
+    // bit T2's dead-surface script and my own S48 measurement · a gate auditing zero lines is not a gate.
+    expect(Object.keys(definedIn).length, 'no functions parsed out of scripts/migrations · the CREATE ' +
+      'FUNCTION regex has drifted and this gate is auditing nothing').toBeGreaterThan(10)
+    expect(moved.length, 'no function is defined by more than one migration · either the chain-builder ' +
+      'broke or the premise of this gate has genuinely expired · check before deleting it')
+      .toBeGreaterThan(0)
+
+    // A TOOL THAT SCANS THE REPO MUST EXCLUDE ITSELF (Rule 89's corollary), and this one proved it on its
+    // FIRST RUN by condemning its own header · which names purge_e2e_test_data next to a citation of
+    // migration 005 as an EXAMPLE of a false pairing. T2's dead-surface script did exactly this too, and
+    // the failure is not cosmetic: the auditor's header is by nature full of the pattern it hunts, so it
+    // would be permanently red and the gate would be switched off within a day. Cost of the exclusion,
+    // stated rather than hidden: a genuinely stale citation written INTO this file is not caught by it.
+    const SELF = 'preconditions.e2e.js'
+    const files = []
+    const walk = (dir) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) { if (!['node_modules', 'fixtures'].includes(e.name)) walk(new URL(e.name + '/', dir)) }
+        else if (/\.(js|jsx|mjs|cjs|md)$/.test(e.name) && e.name !== SELF) files.push(new URL(e.name, dir))
+      }
+    }
+    walk(new URL('../../tests/', import.meta.url))
+    files.push(new URL('../../.claude/CLAUDE.md', import.meta.url))
+
+    let citationLines = 0
+    const stale = []
+    const nearMiss = []
+    for (const url of files) {
+      const rel = url.pathname.split('/NeoTopia/')[1] ?? url.pathname
+      const lines = readFileSync(url, 'utf8').split('\n')
+      lines.forEach((line, i) => {
+        // TWO CITATION FORMS, and the second was added because THIS GATE MISSED MY OWN FIXES (T3 S49).
+        // The first pass recognised only the word "migration". I then rewrote six comments into the form
+        // this gate asked for · `chain 006 > 008 > 014 > 023` · and every one of them became INVISIBLE to
+        // it, because none says "migration" any more. The gate went green on the exact lines it had just
+        // reddened, and a green that arrives right after your fix is the one nobody re-examines. Found by
+        // USING the instrument rather than by rereading it (Rule 96's corollary · range, not review).
+        const isChain = /(?<!\d)\d{3}(?!\d)\s*[>\/]\s*(?<!\d)\d{3}(?!\d)/.test(line)
+        if (!/\bmigrations?\b/i.test(line) && !isChain) return
+        const cited = new Set(line.match(/(?<!\d)\d{3}(?!\d)/g) ?? [])
+        if (!cited.size) return
+        citationLines++
+        const context = lines.slice(Math.max(0, i - 2), i + 3).join('\n')
+        if (/MIGRATION-HISTORY/.test(context)) return
+        const sameLine = moved.filter(fn => line.toLowerCase().includes(fn))
+        const record = (fn, bucket) => {
+          if (cited.has(endOfChain[fn])) return
+          bucket.push(`${rel}:${i + 1} · ${fn} cites ${[...cited].sort().join('/')} · the chain ends at ` +
+            `${endOfChain[fn]} (${definedIn[fn].join('>')})`)
+        }
+        if (sameLine.length) { for (const fn of sameLine) record(fn, stale); return }
+        // near-miss: the subject is on a neighbouring line. Reported, never gated · see the header.
+        const near = moved.filter(fn => lines.slice(Math.max(0, i - 1), i + 2).join('\n').toLowerCase().includes(fn))
+        if (near.length === 1) record(near[0], nearMiss)
+      })
+    }
+
+    expect(files.length, 'the corpus is empty · this gate would pass by having nothing to read')
+      .toBeGreaterThan(20)
+    expect(citationLines, 'not one line in the corpus cites a migration at all · the citation regex has ' +
+      'drifted, and a gate auditing zero lines reports perfect health (Rule 86)').toBeGreaterThan(5)
+
+    if (nearMiss.length) {
+      console.log(`[preconditions] migration citations · ${nearMiss.length} NEAR-MISS (subject on an ` +
+        `adjacent line · reported, not gated):\n  ${nearMiss.join('\n  ')}`)
+    }
+    expect(stale, `${stale.length} comment(s) cite a migration that a later one replaced:\n  ` +
+      `${stale.join('\n  ')}\n\nDO NOT simply swap the number. The newest migration is not necessarily the ` +
+      'DEPLOYED one (014 and 023 are committed and unapplied right now), and only the live database can ' +
+      'say which body is running · pg_get_functiondef, not a file (Rule 109a). Name the CHAIN, or mark ' +
+      'the line MIGRATION-HISTORY if it means an older migration deliberately.').toEqual([])
+
+    console.log(`[preconditions] migration citations · ${citationLines} cited lines across ${files.length} ` +
+      `files · ${moved.length} functions have moved · 0 stale`)
   })
 })

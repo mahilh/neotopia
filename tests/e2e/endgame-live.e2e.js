@@ -267,7 +267,8 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // migration file): no status predicate · it deletes game_rooms by host-username prefix alone, and
       // game_sessions FKs game_rooms ON DELETE CASCADE. That is exactly the symptom this comment recorded
       // (`server: NO ROW for room_id ... UNMEASURED` while two browsers were mid-game) and it is no longer
-      // unexplained. S46 retracted it after reading migration 006 · but 008 ("extend purge_e2e_test_data()
+      // unexplained. MIGRATION-HISTORY · S46 retracted it after reading migration 006 · but 008 ("extend
+      // purge_e2e_test_data()
       // to bot-hosted rooms of ANY status") had already replaced that body. 006 is the FIRST definition of
       // the function, not the current one (Rule 109).
       // SO: run `gh run list` before any live run. It costs nothing and rules out the whole class.

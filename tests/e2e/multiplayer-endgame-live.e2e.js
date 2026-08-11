@@ -615,7 +615,9 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
 
       // ITS OWN TEST, because it is its own claim and it can fail on its own (T3 S38 · P2).
       //
-      // increment_neotopia_index (migration 004) is a BARE increment · it clamps ONE call to [0,56] and
+      // increment_neotopia_index (chain 004 > 014 · which body is deployed is a question only the live DB
+      // answers, and it changes with no commit here · pg_get_functiondef, not the file · Rule 109a)
+      // is a BARE increment · it clamps ONE call to [0,56] and
       // carries no idempotency key at all. Its only guard is didRecordRef, a useRef inside FinalScore, and a
       // page reload destroys those. Every other write on that screen is protected, which is what makes this
       // an oversight rather than a design choice: record_civilization_score is UNIQUE(session_id, player_id)
