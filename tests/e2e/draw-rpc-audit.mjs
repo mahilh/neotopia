@@ -150,6 +150,47 @@ async function main() {
       survived.length === 1 && survived[0].event_data?.card_id === 'audit_offer_0',
       `rows=${survived.length}`)
 
+    // ── THE state_version PREDICATE, EXERCISED FOR REAL (T2 S44 · migration 022) ───────────────────
+    // S43 shipped this with two REPRESENTATIONS of the rule and zero executions of the real thing on
+    // any future commit: a JS model of Postgres semantics in a unit test, and a one-off DO block I ran
+    // by hand and rolled back. That is the Rule 45 shape I warned T3 about in the same handoff · two
+    // copies of a contract, and the copy that drifts is the one nobody runs. It belongs here, where a
+    // real room and session already exist and where the harness-load gate keeps it from rotting.
+    //
+    // The defect being guarded is T3's 0b40998: place·place·place·EndTurn issues four overlapping
+    // UPDATEs carrying snapshots of four different instants, and without a predicate the row keeps
+    // whichever landed LAST · so a placement composed BEFORE the End Turn can revert current_seat.
+    console.log('\n  ── the write predicate refuses a stale snapshot ──')
+
+    const writeAt = (version, seat) => client.from('game_sessions')
+      .update({ state_version: version, current_seat: seat })
+      .eq('id', sessionId)
+      .lt('state_version', version)   // ← the guarantee
+      .select('id')
+
+    const fresh = await writeAt(4, 1)   // the End Turn
+    check('a newer write applies', !fresh.error && (fresh.data?.length ?? 0) === 1,
+      fresh.error ? fresh.error.message : `rows=${fresh.data?.length}`)
+
+    const stale = await writeAt(3, 0)   // a placement composed BEFORE it, arriving after
+    check('THE FIX · a stale write is REFUSED (zero rows), not applied',
+      !stale.error && (stale.data?.length ?? 0) === 0,
+      stale.error ? stale.error.message : `rows=${stale.data?.length}`)
+
+    const { data: row } = await client.from('game_sessions')
+      .select('state_version, current_seat').eq('id', sessionId).single()
+    check('the End Turn survived · current_seat did not revert',
+      row?.state_version === 4 && row?.current_seat === 1,
+      `state_version=${row?.state_version} current_seat=${row?.current_seat}`)
+
+    // COUNTERWEIGHT · the predicate must not cost a legitimate write. Without this, "refuses
+    // everything" would pass the two checks above and be indistinguishable from a working guard ·
+    // which is precisely how I would break it while trying to harden it.
+    const next = await writeAt(5, 2)
+    check('THE COUNTERWEIGHT · a genuinely newer write still applies',
+      !next.error && (next.data?.length ?? 0) === 1,
+      next.error ? next.error.message : `rows=${next.data?.length}`)
+
   } finally {
     if (roomId) {
       await client.from('game_rooms').delete().eq('id', roomId) // cascades sessions + events
