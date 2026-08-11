@@ -259,8 +259,28 @@ export default function Tutorial({ onDismiss }) {
           </div>
         )}
 
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: 10 }}>
+        {/* THE BUTTON ROW STICKS TO THE BOTTOM OF THE CARD (T1 S51 · completing S50's fix).
+            S50 capped the card and made it scroll, which closed the DEAD END · before that, an
+            894px card in an 800px window put Skip and Next off screen with no way to reach them.
+            But a cap plus a scroll only guarantees the buttons are REACHABLE, not that they are
+            VISIBLE, and those are different claims. MEASURED on arrival, before touching anything:
+                320x568 step 2   102px below the fold   Skip/Next visibleOnArrival=FALSE, hit=FALSE
+                320x667 step 2   106px below the fold   Skip/Next visibleOnArrival=FALSE, hit=FALSE
+                375x667 step 2    23px below            visible
+                414x896 all       fully visible
+            So on the two smallest phones the player has to DISCOVER that the dialog scrolls, and
+            nothing tells them it does. Step 2 is the placement step, which is the one I lengthened
+            in S50 with the tap list · so this is partly my own doing rather than an inherited bug.
+            Sticky is the structural answer, the same shape as the cap itself: it is true for every
+            step, every viewport and any future copy, where trimming words is true until the next
+            sentence. The negative bottom offset cancels the card's 32px padding so the row sits
+            flush on the floor, and the background is the card's own so content scrolls UNDER it
+            rather than showing through. */}
+        <div style={{
+          display: 'flex', gap: 10,
+          position: 'sticky', bottom: -32, marginTop: 'auto',
+          padding: '10px 0 0', background: '#0d0d18',
+        }}>
           {!isLast ? (
             <>
               <button

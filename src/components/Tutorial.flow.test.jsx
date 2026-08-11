@@ -160,4 +160,27 @@ describe('the tutorial states the sequence the game actually requires', () => {
       'unscrollable overlay · the player cannot dismiss the tutorial at all').toBe('100%')
     expect(card.style.overflowY, 'a cap without a scroll just clips it instead').toBe('auto')
   })
+
+  it('and the buttons STICK to the card floor · reachable is not the same as visible', async () => {
+    // S50's cap closed the DEAD END: before it, an 894px card in an 800px window put Skip and Next
+    // off screen with no way to reach them. But a cap plus a scroll only makes them reachable, and
+    // MEASURED on arrival · before touching anything · they were still not VISIBLE:
+    //     320x568 step 2  102px below the fold  Skip/Next visibleOnArrival=FALSE, hit=FALSE
+    //     320x667 step 2  106px below the fold  Skip/Next visibleOnArrival=FALSE, hit=FALSE
+    // So on the two smallest phones the player had to discover the dialog scrolled, and nothing
+    // said it did. After sticky: visibleOnArrival TRUE and hit TRUE at every step and every one of
+    // 320x568 / 320x667 / 375x667 / 414x896.
+    // jsdom cannot see a pixel of that (no layout) · what it CAN hold is that the row declares the
+    // mechanism, and these are inline styles so this reads the real declaration.
+    const Tutorial = (await import('./Tutorial')).default
+    render(<Tutorial onDismiss={() => {}} />)
+    const row = screen.getByRole('button', { name: /skip/i }).parentElement
+    expect(row.style.position, 'without sticky the buttons scroll away with the content, and on a ' +
+      '320px phone they start below the fold').toBe('sticky')
+    // The card has 32px of bottom padding · a sticky row that stops above it leaves a gap the
+    // content shows through, so the offset has to cancel it exactly.
+    expect(row.style.bottom).toBe('-32px')
+    expect(row.style.background, 'a transparent sticky row lets the list scroll THROUGH the buttons')
+      .not.toBe('')
+  })
 })
