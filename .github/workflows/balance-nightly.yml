@@ -1,0 +1,96 @@
+name: Balance blocks (nightly)
+
+# THE BALANCE TABLE GETS A RUNNER  (T2 S48)
+#
+# Every figure in docs/BONUS_TOKEN_BALANCE.md was measured by hand and typed into the document. The
+# committed gates run a fraction of it (spendableBalance gates 12 seeds against a reported 40), so they
+# stay green forever while the reported table drifts. That is a citation with no runner · Rule 97, in my
+# own harness · and it is the debt the S47 roadmap logged against me.
+#
+# This job does not GATE anything and must not. Its measurements are RATES with real per-block variance
+# (S46 measured a ~9 point spread across seven disjoint blocks at two different block sizes), so a wire
+# tight enough to be informative would flake and a wire loose enough not to flake would be uninformative
+# (Rule 88c). The invariants that CAN be gated already are, on every commit, inside the three test files.
+# What this produces is EVIDENCE: a stamped JSONL artifact whose rows name the commit they came from, so
+# the next person to update the doc can diff against a measurement instead of a memory.
+#
+# NO SECRETS. NO BROWSER. NO IDENTITIES. Deliberately its own workflow rather than a job inside
+# e2e-live-nightly.yml: that one is for live-Supabase specs, it gates on a skip-guard that reads a
+# Playwright results.json this job never produces, and its concurrency group exists to protect a
+# per-IP anon sign-in budget this job does not spend. Sharing it would couple a pure-compute run to
+# three constraints that have nothing to do with it (Rule 79b · route by COST, not by convenience).
+
+on:
+  schedule:
+    - cron: '30 4 * * *'    # 04:30 UTC · ahead of e2e-live-nightly (05:00) and bot-health (06:00)
+  workflow_dispatch:
+    inputs:
+      blocks:
+        description: 'disjoint seed blocks'
+        default: '3'
+      seeds:
+        description: 'seeds per block'
+        default: '40'
+
+concurrency:
+  group: balance-nightly
+  cancel-in-progress: false
+
+jobs:
+  blocks:
+    name: Bonus-token balance · disjoint stamped blocks
+    runs-on: ubuntu-latest
+    # 3 blocks x 40 seeds measured at ~7 minutes locally on a loaded 8-core machine. 30 is headroom for
+    # a cold shared runner, sized from a measurement rather than picked (Rule 81).
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install deps
+        run: npm ci
+
+      # workflow_dispatch inputs are attacker-controlled by anyone who can press the button, so they
+      # are passed through `env:` and never interpolated into the shell command · `${{ }}` inside a
+      # `run:` is textual substitution, so a value of `3; curl ...` would execute. And they are
+      # VALIDATED as integers before use, because quoting stops injection but not nonsense.
+      - name: Run the balance blocks
+        env:
+          BLOCKS_IN: ${{ inputs.blocks }}
+          SEEDS_IN: ${{ inputs.seeds }}
+        run: |
+          BLOCKS="${BLOCKS_IN:-3}"; SEEDS="${SEEDS_IN:-40}"
+          case "$BLOCKS" in ''|*[!0-9]*) echo "::error::blocks must be an integer"; exit 1 ;; esac
+          case "$SEEDS"  in ''|*[!0-9]*) echo "::error::seeds must be an integer";  exit 1 ;; esac
+          ./scripts/run-balance-blocks.sh "$BLOCKS" "$SEEDS"
+
+      # ALWAYS UPLOAD, INCLUDING ON FAILURE. A run that dies halfway still measured the blocks it
+      # finished, and those rows are the evidence this job exists to produce · discarding them because
+      # a later block threw would be the swallowed-error shape exactly (Rule 93). The script itself
+      # writes an explicit UNMEASURED row for a block that emitted nothing, so an empty block is
+      # visible as unmeasured rather than as a zero (Rule 80).
+      - name: Upload the stamped blocks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-blocks-${{ github.run_id }}
+          path: .balance-reports/blocks.jsonl
+          if-no-files-found: error
+          retention-days: 90
+
+      # The one thing here that IS an assertion, and it is about the instrument rather than the game:
+      # a run that produced no rows at all has measured nothing while reporting a green tick, which is
+      # the failure this whole workflow exists to stop happening to the doc.
+      - name: A run that measured nothing must not report success
+        if: always()
+        run: |
+          test -s .balance-reports/blocks.jsonl || { echo "::error::no rows emitted"; exit 1; }
+          if ! grep -q '"label"' .balance-reports/blocks.jsonl; then
+            echo "::error::rows exist but none carry a label · the harnesses did not REPORT"; exit 1
+          fi
+          if grep -q '"label": *"UNMEASURED"' .balance-reports/blocks.jsonl; then
+            echo "::error::at least one block emitted no rows · see the artifact"; exit 1
+          fi
+          echo "rows: $(wc -l < .balance-reports/blocks.jsonl)"

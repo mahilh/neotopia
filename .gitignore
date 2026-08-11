@@ -44,3 +44,6 @@ dist-ssr
 /results.json          # playwright --reporter=json output (e2e-live-nightly's skip-guard reads it)
 /playwright/.cache/
 .claude/service-account-key.json
+
+# Balance measurement blocks (T2 S48 · scripts/run-balance-blocks.sh output · regenerated, never committed)
+/.balance-reports/
