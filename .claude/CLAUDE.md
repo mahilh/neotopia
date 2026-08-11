@@ -717,6 +717,52 @@ EASILY. A stable reading and a correct reading are different claims. Sharpens Ru
 observation that ordering is necessary and not sufficient, and Rule 82 with the observation that a
 probe can lie by waiting on the WRONG CLOCK as well as by not waiting at all.
 
+RULE 107 (T2 S47 · August 11 2026):
+A LATCH KEYED ON A COMPOSITE OF STATE HAS BITTEN THIS PROJECT THREE TIMES, ALWAYS THE SAME WAY: THE
+REAL STATE CHANGE WAS NOT IN THE COMPOSITE. useBotTurns.seatSignature is the single worst offender in
+the codebase and it is not because anyone was careless · each key was correct for the case in front of
+its author.
+  S33 (T1) · every bot froze permanently the first time it scored a district, because scoring changes
+             neither seat, actions nor phase. Fixed by adding hand.length and scoredCardIds.length.
+  S46 (T2) · every bot froze permanently on a DEADLOCKED board, because a player who cannot act changes
+             none of those five either · the seat cycles back, actions reset to 3, phase stays
+             'playing', and it neither draws nor scores. Fixed by adding turnNumber.
+THE PATTERN IS THAT EACH FIX ADDED THE COMPONENT THE LAST BUG NEEDED, which leaves the next one open by
+construction. A de-duplication key built by enumerating "things I can think of that change" is a
+running guess about what progress looks like, and it fails silently and permanently every time the
+guess is short · the seat simply never moves again, with no error.
+THE FIX THAT ENDS THE CLASS, rather than extending the list: key on a MONOTONE quantity that the domain
+guarantees advances (a turn counter, a sequence number, a revision), and let the composite be an
+optimisation on top. turnNumber is that here · it cannot be constant across a real turn boundary no
+matter what else is or is not true, which is exactly the property enumeration can never provide.
+Ask of any cache, memo, latch or change-detector: IS THERE A STATE IN WHICH THE SYSTEM HAS PROGRESSED
+AND MY KEY HAS NOT? If yes, that state is where it will hang, and it will hang there permanently.
+
+RULE 106 (T2 S47 · August 11 2026):
+A MEASUREMENT BETWEEN EQUALS CANNOT ANSWER A QUESTION ABOUT A LADDER, AND THE TWO ANSWERS CAN BOTH BE
+TRUE. S46 measured self-play · identical policies, one spends · and found the spender wins by +7.7,
+which read as "spending rewards skill". S47 ran the actual ladder with BOTH sides spending and the
+deltas were apprentice +1.2/0.0, builder -6.3/-1.8, architect 0.0/-3.8 · small and mostly negative,
+the same direction S39 found for UNSPENT tokens. Neither number is wrong. Spending pays handsomely
+against someone who does NOT spend, and washes out when everyone does · so +7.7 is an advantage over a
+player who fails to use a feature, NOT a skill amplifier, and those two sentences license completely
+different balance decisions. Before reporting an effect, ask WHO the comparison was against, and say
+it in the same breath as the number.
+  106a · AND THE EFFECT WAS SOMEWHERE ELSE ENTIRELY. Tokens are earned by crossing score thresholds,
+         so EARNING is a function of scoring speed and already favours the leader: architect 6.3
+         tokens/game against the reference's 1.3, apprentice 0.27 · a ~23x spread across the ladder,
+         about 15 points of score for one end and 0.8 for the other, BEFORE any decision is taken.
+         The win rate is structurally blind to it (99% and 5-12%, both pinned · Rule 88). Two sessions
+         were spent measuring the spending mechanism, which turns out to be the fair half.
+  106b · "THIS IS A FLOOR" IS A CLAIM. I said +7.7 was the value of the dumbest possible use and
+         therefore a lower bound. Measured: a late-game plan is INDISTINGUISHABLE from spend-on-sight
+         (exact 50.0 head to head) and a plan that spends less is worse than hoarding. It was close to
+         the ceiling. A bound asserted from plausibility is a guess wearing an inequality.
+COROLLARY, the third counterweight failure in three sessions and the cheapest yet: my timing heuristic
+fired 0.01 times per game · `never` in disguise · so the comparison was hoarding against hoarding. The
+guard asserted `spends > 0` and 0.01 passed. A RATE GUARD MUST BE SIZED AGAINST THE BASELINE IT IS
+COMPARED TO, NEVER AGAINST ZERO: the fix was `> 0.25 x the on-sight rate`. Same family as Rule 88b.
+
 RULE 104 (T2 S46 · August 11 2026):
 A LATCH KEYED ON STATE CANNOT SEE A TURN IN WHICH NOTHING CHANGES · AND THAT IS EXACTLY THE TURN THAT
 NEEDS IT. The soft-lock survived three correct fixes (T1's button, my terminal condition, T3's proof)
