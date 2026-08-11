@@ -675,3 +675,64 @@ test.describe('no comment cites a migration that a later one has replaced (T3 S4
       `files · ${moved.length} functions have moved · ${stale.length} stale in the gated scope`)
   })
 })
+
+// ── THE HARNESS MUST BE ABLE TO SIGN IN (T3 S51) ─────────────────────────────────────────────────────
+// A CONTRACT THAT SPANS TWO LANES HAS NO OWNER, AND THAT IS WHERE THE COMPOSED BUG LIVES (Rule 65/103).
+//
+// purge_e2e_test_data identifies harness rows BY USERNAME PREFIX ('E2E%', 'BotAlpha%', 'BotBeta%') · every
+// statement in migrations 023/025/026 selects on it. T2 is adding src/lib/reservedNames.js, which REFUSES
+// a claim on those same prefixes · correctly, because a real player typing "E2Etest" was landing inside
+// the purge's scope and losing their game (I reported that in S50; their header states the case better
+// than mine did). Both halves are right. Composed, the property that makes a row SWEEPABLE is the property
+// that makes it UNCLAIMABLE, and the live suite claims its names through the real UI.
+//
+// Measured with a control on the same commit and the same server: "E2EPROBE12345" is refused and stays on
+// the claim screen; "Probe32039" reaches /lobby with Create Room visible. 9 specs claim a reserved name
+// through the UI and two of them · game-ux and reconnect · are on the MERGE GATE, not the nightly.
+//
+// NEITHER LANE'S OWN TESTS CAN SEE THIS. reservedNames.test.js guards the migration↔module drift, which is
+// the contract its author was thinking about. Mine guarded the workflow↔spec contract. The one that breaks
+// is harness↔product, and nothing was watching it because it belongs to neither of us.
+//
+// ⚠ THIS GUARD IS ARMED, NOT ASSERTING, WHILE THE MODULE IS ABSENT. It was written while reservedNames.js
+// was still UNCOMMITTED in the shared tree (Rule 66 · a cross-lane dependency may already be half-built in
+// your working copy), so in CI it does not exist and there is nothing to check. It reds the moment the
+// module lands with the conflict unresolved. A skip is not a pass (Rule 79d), so it PRINTS which of the two
+// states it is in · a silent green here would be the exact vacuity this file exists to refuse.
+test.describe('the E2E harness can still claim a name (T3 S51)', () => {
+  test('no fixture prefix is refused by the product own reserved-name guard', async () => {
+    let reserved = null
+    try { reserved = await import('../../src/lib/reservedNames.js') } catch { /* not landed yet */ }
+    if (!reserved?.isReservedUsername) {
+      console.log('[preconditions] harness sign-in guard · ARMED, NOT ASSERTING · src/lib/reservedNames.js ' +
+        'is absent (uncommitted at the time of writing · T3 S51). This is not a pass · see ' +
+        'comms/t3-s51-URGENT-reserved-names-blocks-live-suite.md')
+      return
+    }
+
+    const specDir = new URL('.', import.meta.url)
+    const prefixes = new Set()
+    for (const f of readdirSync(specDir).filter(n => n.endsWith('.e2e.js'))) {
+      const src = readFileSync(new URL(f, specDir), 'utf8')
+      // Only specs that claim through the real interface are affected · a spec talking to Supabase
+      // directly never meets this guard.
+      if (!/runTwoHumanLobby|getByPlaceholder\(NAME_INPUT\)|enter neotopia/i.test(src)) continue
+      for (const m of src.matchAll(/uniqueName\(\s*['"]([^'"]+)/g)) prefixes.add(m[1])
+    }
+    // COUNTERWEIGHT FIRST (Rule 90): enumerate from the CODE, and prove the enumeration found something.
+    // A regex that stops matching turns this into a loop over nothing, which passes while checking nobody.
+    expect(prefixes.size, 'no uniqueName() prefixes were parsed out of any UI-claiming spec · the pattern ' +
+      'has drifted and this guard is auditing an empty set').toBeGreaterThan(3)
+
+    const refused = [...prefixes].filter(p => reserved.isReservedUsername(p)).sort()
+    expect(refused, `${refused.length} fixture prefix(es) are refused by isReservedUsername: ` +
+      `${refused.join(', ')}. Every live spec claims its name through the real UI, so those specs cannot ` +
+      'sign in at all · game-ux and reconnect are on the MERGE GATE. The purge identifies harness rows by ' +
+      'exactly these prefixes, so the harness cannot simply rename off them without leaking rows into ' +
+      'production forever. Resolve the contract, do not weaken the product guard: a build-time bypass ' +
+      '(VITE_E2E) keeps the guard strict everywhere real and lets the harness keep the prefix the purge ' +
+      'needs. See comms/t3-s51-URGENT-reserved-names-blocks-live-suite.md.').toEqual([])
+
+    console.log(`[preconditions] harness sign-in guard · ${prefixes.size} fixture prefixes, 0 refused`)
+  })
+})

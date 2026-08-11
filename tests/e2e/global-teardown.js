@@ -1,9 +1,15 @@
 // NeoTopia · Playwright globalTeardown (T3 S9) · authenticated purge of E2E/bot test data.
 // Runs ONCE after the whole suite. Calls purge_e2e_test_data() · SECURITY DEFINER, scoped to the
 // test-username prefixes E2E%/BotAlpha%/BotBeta%, so it can never touch a real player.
-// purge_e2e_test_data CHAIN 006 > 008 > 014 > 023 > 024 > 025 · a repo fact, gated by preconditions.e2e.js.
-// (The function name is on THIS line deliberately: the gate binds a citation to a function named beside
-// it, so a chain floating one line away from its subject is only reported, never gated.)
+// purge_e2e_test_data CARRIES NO VERSION NUMBER HERE ON PURPOSE, and that is a change of mind (T3 S51).
+// S49 said a comment should carry the CHAIN, because a chain is a repo fact a gate can check, unlike
+// applied-state. Both halves of that are still true and the gate still enforces it for anyone who cites a
+// number. What a session of it showed is that THE CHAIN CHURNS: this exact comment was rewritten for the
+// 5-link chain in S49, again when the next migration landed, and would have needed a third rewrite the
+// same week · each one a fresh chance to be wrong about a fact that buys the reader nothing. A citation
+// whose subject is under active development is a treadmill, and being told when you fall off it is not
+// the same as not needing to run. So: no number, nothing to go stale, and the authority named instead.
+// WHICH BODY IS RUNNING · ask pg_get_functiondef, never a file and never this line (Rule 109a).
 // WHICH BODY IS DEPLOYED IS NOT RECORDED HERE ON PURPOSE, and that restraint was bought the hard way: I
 // wrote "008 is what runs, 023 is unapplied" into five files this session and T2 applied 023 NINETY
 // MINUTES LATER, with no commit to this repo. Deployment state changes without a diff, so a comment

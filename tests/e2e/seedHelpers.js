@@ -128,7 +128,7 @@ export async function deleteRoomAsHost(sessionJson, roomId) {
 // bot's proxy counter, which counts attempts). Takes roomId, NOT room_code, on purpose — and is meant to be
 // called WHILE THE GAME IS STILL ALIVE. The bot-room race (T3 S14 Task B · diagnosed: no pg_cron purge
 // exists) is that a bot room can be deleted by a CONCURRENT E2E globalTeardown (purge_e2e_test_data sweeps
-// Bot%/E2E% rooms of ANY status · chain 006 > 008 > 014 > 023 > 024), or was never created at all (anon rate-limit at create →
+// Bot%/E2E% rooms of ANY status · ask pg_get_functiondef for the deployed body), or was never created at all (anon rate-limit at create →
 // phantom code · the S12 prod mode). Either way a POST-game `room_code → room_id → session` lookup resolves
 // to nothing and the verify silently returns null. Capture roomId from the URL during the game ("Both on
 // game board") and read here right after the last placement → the count is banked before any teardown.
