@@ -55,7 +55,21 @@ export function useDrawCard() {
         setError(rpcError.message)
         return { card: null, error: rpcError.message }
       }
-      return { card: data ?? null, error: null }
+      // A 200 WITH A NULL BODY IS A FAILURE, NOT A DRAW (T2 S40 · Rule 80).
+      // The RPC's contract is total: every path either raises (PostgREST 400, handled above) or returns
+      // the drawn card. So `200 + null` is a state this function cannot legally produce · and until now
+      // it was reported as SUCCESS with card:null, which is the worst available answer. GameRoom does
+      // `drawn?.name ?? card.name`, so a null draw still logs "drew Solar Temple" against the local
+      // card, and the hand never changes: a silent no-op wearing the costume of a completed action.
+      // T3 spent a session on "the RPC returns 200 and nothing happens", and this is the surface that
+      // makes that sentence sayable · the read-only audit found the DB untouched by every draw in that
+      // run, so no draw ever landed and nothing here said so. Name it instead of resting on null.
+      if (data == null) {
+        const msg = 'draw returned no card · the server accepted the call but drew nothing'
+        setError(msg)
+        return { card: null, error: msg }
+      }
+      return { card: data, error: null }
     } catch (e) {
       // Network / client-side throw (the RPC errors arrive as { error } above, not as throws · this is the
       // transport failing). Never let a draw crash the caller · return the failure as data.

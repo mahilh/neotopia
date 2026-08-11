@@ -91,6 +91,41 @@ describe('useDrawCard', () => {
     expect(supabase.rpc).not.toHaveBeenCalled()
   })
 
+  // T2 S40 · the 200-with-no-card surface. T3 lost a session to "the RPC returns 200 and the client
+  // still shows offer 4, actions 3"; a read-only audit of the live DB showed every session in that run
+  // still at deck 46 / offer 4 / actions 3, so no draw ever landed. The RPC's contract is total · every
+  // path raises (arrives as { error }) or returns the drawn card · so 200 + null is not a draw, and
+  // reporting it as one is a failure resting at a value that looks correct (Rule 80).
+  test('a 200 with a null body is an ERROR, not a successful draw of nothing', async () => {
+    supabase.rpc.mockResolvedValue({ data: null, error: null })
+
+    const { result } = renderHook(() => useDrawCard())
+    let out
+    await act(async () => { out = await result.current.drawCard({ sessionId: 'sess-1', seat: 0 }) })
+
+    expect(out.card).toBeNull()
+    expect(out.error, 'a null card must be NAMED · silence here is a no-op that logs as a draw')
+      .toMatch(/no card/i)
+    expect(result.current.error).toMatch(/no card/i)
+  })
+
+  // COUNTERWEIGHT (Rule 90) · the cheap wrong fix is to treat any falsy body as an error, which would
+  // also reject a legitimately-drawn card that happens to be falsy-adjacent. Pinning a real card here
+  // keeps the check to `== null` rather than `!data`, and keeps undefined covered too.
+  test('a real drawn card still succeeds · and undefined is treated as no card', async () => {
+    supabase.rpc.mockResolvedValue({ data: { id: 'card_07', name: 'Mineral Springs Baths' }, error: null })
+    const { result } = renderHook(() => useDrawCard())
+    let ok
+    await act(async () => { ok = await result.current.drawCard({ sessionId: 's', seat: 0 }) })
+    expect(ok.error).toBeNull()
+    expect(ok.card.id).toBe('card_07')
+
+    supabase.rpc.mockResolvedValue({ data: undefined, error: null })
+    let bad
+    await act(async () => { bad = await result.current.drawCard({ sessionId: 's', seat: 0 }) })
+    expect(bad.error).toMatch(/no card/i)
+  })
+
   test('isDrawing is true while the RPC is in flight and false after it settles', async () => {
     let resolveRpc
     supabase.rpc.mockImplementation(() => new Promise(r => { resolveRpc = r }))
