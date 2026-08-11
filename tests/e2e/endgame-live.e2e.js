@@ -261,14 +261,16 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // still loses steps in the UI (a later run stopped at `element-inert` · the element buttons had not
       // appeared for a move the engine offered). That is my driver, not the product · the product reached
       // its ending. Wiring this to a workflow while it is flaky would train people to ignore a red.
-      // ⚠ CORRECTED T3 S46. This said "purge_e2e_test_data sweeps E2E rooms of ANY status, so a CI run
-      // triggered by your own push DELETES this room mid-game". THE MECHANISM IS WRONG: migration 006
-      // deletes rooms `where status = 'finished'` only, nothing has a foreign key to player_profiles, and
-      // the app marks a room finished only when the HOST LEAVES · so a 'playing' room is not reachable by
-      // it. The MEASUREMENT stands and is still unexplained: `server: NO ROW for room_id ... UNMEASURED`
-      // while two browsers were mid-game. Cause unknown, and recorded as unknown.
-      // Still worth doing before a live run, for a cheaper reason than the one I invented: live runs and
-      // CI share one Supabase project, so `gh run list` costs nothing and rules out the whole class.
+      // ⚠ CORRECTED S46, RE-INSTATED S48 · THE ORIGINAL WARNING WAS RIGHT, READ IT AS WRITTEN:
+      // "purge_e2e_test_data sweeps E2E rooms of ANY status, so a CI run triggered by your own push
+      // DELETES this room mid-game." MEASURED S48 against the DEPLOYED function (pg_get_functiondef, not a
+      // migration file): no status predicate · it deletes game_rooms by host-username prefix alone, and
+      // game_sessions FKs game_rooms ON DELETE CASCADE. That is exactly the symptom this comment recorded
+      // (`server: NO ROW for room_id ... UNMEASURED` while two browsers were mid-game) and it is no longer
+      // unexplained. S46 retracted it after reading migration 006 · but 008 ("extend purge_e2e_test_data()
+      // to bot-hosted rooms of ANY status") had already replaced that body. 006 is the FIRST definition of
+      // the function, not the current one (Rule 109).
+      // SO: run `gh run list` before any live run. It costs nothing and rules out the whole class.
       test.fixme(true, 'the live room DOES reach its own ending (column_phase finished, turn 21) · the driver is not yet reliably green · T3 S45')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)

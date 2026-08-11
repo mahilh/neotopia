@@ -187,7 +187,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (108 · cumulative):
+PERMANENT ANTI-REGRESS RULES (109 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -481,22 +481,57 @@ alone would pass on a build where the bot seat was skipped entirely, so it requi
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
 
-RULE 105 (T3 S46 · August 11 2026):
-A RULE IS THE WORST PLACE TO PUT A HYPOTHESIS, BECAUSE NOTHING EVER RE-DERIVES IT. I wrote Rule 103's
-second corollary from a real symptom (a session row absent mid-run), a nearby suspicious mechanism (CI's
-purge), and a re-run that appeared to confirm it. Read one session later from the migration and the live
-schema instead of from memory, the mechanism is simply wrong: purge_e2e_test_data deletes rooms
-`where status = 'finished'` and nothing else, NOTHING has a foreign key to player_profiles so the
-unconditional profile delete cascades nowhere, and the app marks a room finished only when the HOST LEAVES.
-An in-progress room is 'playing' and was never reachable by it. The measurement stands; the explanation was
-invented to fit it, and I promoted it to permanent record the same night.
+RULE 109 (T3 S48 · August 11 2026):
+A FUNCTION'S DEFINITION IS THE LAST MIGRATION THAT TOUCHED IT, NOT THE ONE YOU WERE POINTED AT · AND A
+RETRACTION IS A CLAIM THAT ARRIVES WEARING THE COSTUME OF RIGOUR, SO NOBODY AUDITS IT.
+In S45 I warned that CI's purge deletes live rooms of any status. In S46 I "corrected" myself by reading
+migration 006, finding `where r.status = 'finished'`, and retracting · into CLAUDE.md, a spec header, a
+teardown citation and a comms note, loudly, citing Rule 105c about retracting in every place you claimed.
+`create or replace` means MIGRATIONS ARE A LOG, NOT A STATE. Two files later, `008_purge_waiting_rooms.sql`
+replaced that body and deleted the status filter · its own title is "extend purge_e2e_test_data() to
+bot-hosted rooms of ANY status". The live function has no status predicate at all. S45 was right, and the
+correction was the fabrication.
+  109a · VERIFY AGAINST THE SYSTEM OF RECORD, NOT AGAINST A FILE THAT DESCRIBES IT. One read settles it and
+        it is not `sed`: `pg_get_functiondef(oid)` on the deployed function. Rule 68 says a migration in git
+        is not a deployed schema; this is its mirror image and the more seductive one, because here the file
+        DID once describe reality and had simply been superseded. `ls scripts/migrations/` would also have
+        done it · the superseding file had the word `purge` in its NAME.
+  109b · A RETRACTION IS NOT SELF-VERIFYING. Admitting error feels like the rigorous move, so it is granted
+        the trust that the original claim had to earn · by me writing it and by everyone reading it. I gave
+        my retraction no counterweight whatsoever, having demanded one of every claim I make for ten
+        sessions. Hold a correction to the standard of the thing it corrects, or higher: it is louder, it
+        closes a question rather than opening one, and it is quoted as settled (105a, now proven on 105).
+  109c · AND THE DISPROOF WAS IN MY OWN CONSOLE OUTPUT THE WHOLE TIME. Every live run prints
+        `[teardown] purge_e2e_test_data → {"rooms_deleted":0,"profiles_deleted":0,"unfinished_rooms_deleted":0}`
+        · and `unfinished_rooms_deleted` IS NOT A KEY MIGRATION 006 RETURNS. Its return has two fields. I
+        had been reading a line that names the superseding migration, in every run, for three sessions.
+        When you believe a component is X, check the output it is ALREADY producing against X's contract
+        before opening anything · the cheapest premise check is usually the one already on your screen.
+COROLLARY, on the cost asymmetry that makes this worth a rule: a wrong claim costs the person who acts on
+it. A wrong RETRACTION costs the person who STOPS acting · T2 was told "no purge change is needed and I am
+explicitly not asking you to make one", so a real hazard was closed by my own hand, in their lane, with an
+apology attached. The bug and the fix both went silent. (Rule 108's shape, one level up: a recommendation
+nobody checks · and "there is nothing here" is a recommendation.)
+
+RULE 105 (T3 S46 · August 11 2026 · ⚠ ITS WORKED EXAMPLE IS INVERTED · SEE RULE 109, T3 S48):
+A RULE IS THE WORST PLACE TO PUT A HYPOTHESIS, BECAUSE NOTHING EVER RE-DERIVES IT. THE HEADLINE STANDS AND
+THE EXAMPLE UNDER IT DOES NOT · what follows in italics is what this rule said in S46 and it is FALSE. The
+S45 claim it "corrected" was right all along, and the correction was the thing invented to fit a reading.
+Measured live in S48 (Rule 109): purge_e2e_test_data has NO status filter, so a 'playing' room IS reachable
+by it. Kept rather than deleted because the retraction is the more instructive artifact.
+  ~~"the mechanism is simply wrong: purge_e2e_test_data deletes rooms `where status = 'finished'` and
+    nothing else ... an in-progress room is 'playing' and was never reachable by it."~~  FALSE · S48.
+  (One clause of it survived and was verified again in S48: NOTHING has a foreign key to player_profiles,
+   so the unconditional profile delete does cascade nowhere. game_sessions FKs game_ROOMS, not profiles.)
   105a · A test that is wrong goes red one day. A COMMENT that is wrong goes red never, and a RULE that is
         wrong is worse still · it is quoted, it compounds, and every later session treats it as settled.
         Rules earn their place from things MEASURED, not from things that explained a measurement.
-  105b · The tell was available at the time and I did not take it: I never opened the function I was
-        accusing. One `sed` on migration 006 would have shown `status = 'finished'` in the first ten lines.
-        When routing a defect INTO another lane's code, read that code first · the cost of being wrong is
-        paid by someone else, in a file you do not own.
+        STILL TRUE, and S48 is the proof: this wrong rule was quoted into a spec header, a teardown
+        citation and a comms note, and none of them could go red.
+  105b · ⚠ THE TELL I CLAIMED TO HAVE TAKEN WAS THE ERROR ITSELF. S46 said "I never opened the function I
+        was accusing · one `sed` on migration 006 would have shown it". I then DID that sed, and it is what
+        made me wrong: migration 008 (`008_purge_waiting_rooms.sql`) replaced 006's body and dropped the
+        status filter. Reading the numbered file I was pointed at is not reading the function. See 109.
   105c · Retract in the same places you claimed. The wrong version was in CLAUDE.md, in a spec header and
         in a comms note; all three are corrected, and the corrections say what the old text said, so a
         reader who half-remembers the old claim meets the reason it changed rather than a silent edit.
@@ -537,24 +572,26 @@ had silently dropped that term. Asserting on it would have put a second, wrong r
 guard written to stop exactly that (Rule 45). A counterweight is not paperwork: it is the assertion most
 likely to be measuring the wrong quantity, because it is the one you write while thinking about something
 else.
-SECOND COROLLARY · ⚠ CORRECTED T3 S46, AND THE CORRECTION IS THE MORE USEFUL HALF. As written in S45 this
-said "YOUR OWN PUSH CAN DESTROY YOUR OWN LIVE RUN · purge_e2e_test_data sweeps E2E rooms of ANY status, so
-the workflow your commit triggered deletes the room your local run is playing in." THE MECHANISM IS WRONG.
-Read one session later, from the migration and the live schema rather than from memory:
-    purge_e2e_test_data deletes rooms `where r.status = 'finished'` · NOT any status (migration 006)
-    nothing has a foreign key to player_profiles, so the unconditional profile delete cascades NOWHERE
-    the app marks a room 'finished' only when the HOST LEAVES (useGameRoom.js:614), not at game end
-An in-progress room is 'playing', so the purge cannot have taken it. What I actually measured stands: the
-session row was genuinely absent mid-run while two browsers were still playing ("NO ROW for room_id ...").
-THE CAUSE IS UNKNOWN and is now recorded as unknown rather than as a plausible story · which is the whole
-lesson. I had a real symptom, a nearby suspicious mechanism, and a re-run that "confirmed" it, and I wrote
-the three together into a permanent rule. A rule is exactly the wrong place for a hypothesis, because
-nothing re-derives it (Rule 101, applied to Rule 103 itself, one session later).
-WHAT REMAINS TRUE AND WORTH KEEPING: isolating the CODE in a worktree does not isolate the DATABASE, live
-runs and CI share one Supabase project, and `gh run list` before a live run costs nothing. And one real
-narrow hazard did fall out of the re-read: the purge deletes EVERY player_profiles row matching E2E% with
-no status or age filter, including profiles belonging to a run that is still going · scoped like the room
-delete or bounded by age, it would not.
+SECOND COROLLARY · ⚠ CORRECTED S46 AND RE-INSTATED S48 · THE ORIGINAL S45 TEXT WAS RIGHT.
+YOUR OWN PUSH CAN DESTROY YOUR OWN LIVE RUN. purge_e2e_test_data sweeps E2E/bot-hosted rooms of ANY
+STATUS, so the workflow your commit triggered deletes the room your local run is playing in.
+MEASURED AGAINST THE LIVE DATABASE (T3 S48 · pg_get_functiondef on the deployed function, not a file):
+    the deployed body has NO `status` predicate · it deletes game_rooms WHERE host_id IN
+      (select user_id from player_profiles where username like 'E2E%'/'BotAlpha%'/'BotBeta%')
+    game_sessions FKs game_rooms ON DELETE CASCADE · so a deleted 'playing' room takes its session row
+      with it, which is EXACTLY the S45 symptom ("NO ROW for room_id ..." while two browsers played)
+    migration 008 is titled "extend purge_e2e_test_data() to bot-hosted rooms of ANY status" and says
+      in terms: "WHAT CHANGES vs 006: remove `and r.status = 'finished'`" (T2 S12, applied to remote)
+    live-run identities are E2E%-prefixed by uniqueName(), so they are inside the scope, not outside it
+S46 RETRACTED THIS ON THE STRENGTH OF MIGRATION 006 AND WAS WRONG · 006 is the FIRST definition, not the
+current one. The symptom, the mechanism and the original warning all stand.
+STILL TRUE FROM THE S46 RE-READ, and re-verified in S48: nothing has a foreign key to player_profiles, so
+the unconditional profile delete cascades nowhere; the app marks a room 'finished' only when the HOST
+LEAVES (useGameRoom.js:614) · which makes this WORSE rather than better, because a live room is 'playing'
+and 'playing' is precisely what the purge takes. And the narrow hazard is unchanged: the profile sweep has
+no status or age filter at all.
+WHAT WAS ALWAYS TRUE AND IS THE CHEAP DEFENCE: isolating the CODE in a worktree does not isolate the
+DATABASE, live runs and CI share one Supabase project, and `gh run list` before a live run costs nothing.
 
 RULE 101 (T3 S44 · August 11 2026):
 A FIX'S BLAST RADIUS INCLUDES THE TESTS THAT DOCUMENTED THE DEFECT · THEY BECOME FALSE CLAIMS THE MOMENT
