@@ -16,6 +16,20 @@ import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
 // mode-gated to Flow AND additionally requires productionTilesRemaining<=1, which a deadlocked game
 // never reaches for precisely the same reason.
 //
+// ⚠️ SCOPE CORRECTION (T2 S45) · READ THIS BEFORE CITING S44.
+// Everything below is correct and the guard stays, but I overstated what it fixed. The board asserted
+// here · two empty factories with tiles still remaining · is UNREACHABLE BY LEGAL PLAY. Measured in
+// adversarialFuzz.test.js: 0 occurrences in 160 turn-samples across 8 seeds, and the mechanism says
+// why · refillFactoryDraft restocks a factory the moment a placement empties it, for as long as tiles
+// remain, so an empty factory implies tiles are exhausted, and the decrement that reached 0 already
+// set endGameTriggered.
+// So the audit's permanent lock was T1's UI GATE, not a missing engine terminal condition. This guard
+// is belt-and-braces: it covers Flow, a degenerate zero-tile init, and any future change that empties
+// a factory without refilling. It was not the operative fix.
+// Kept deliberately · a cheap closed-proof guard over an unreachable state is worth having, and if the
+// reachability test in adversarialFuzz ever goes non-zero this becomes load-bearing overnight. But it
+// is a CONSTRUCTED fixture, which is the same criticism I made of endGamePhase.test.js, aimed here.
+//
 // T1 is shipping the UI escape (End Turn enabled when no legal action exists). These are COMPLEMENTARY
 // and neither replaces the other: T1's lets the human out of the current turn, mine makes the game
 // recognise it is over and score. Removing either one leaves a hang · a player who can pass forever in
