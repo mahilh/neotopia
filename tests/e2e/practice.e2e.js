@@ -894,6 +894,61 @@ test.describe('practice mode · the end of the game', () => {
 //           is possible (gameStore.js:213 · called from placeElement AND endTurn)
 //   · T3  · the restore seam must not silently reinstate an unresolvable board
 // Free · practice mints zero identities, which is why this belongs on the merge gate.
+// ONE DEFINITION OF THE AUDIT BOARD, used by both soft-lock tests (T3 S47). They were inline in the
+// first test and the second needed the same state · two copies of a fixture is how the two lanes'
+// versions of this board already diverged once (Rule 45), so it is named once here.
+// ⚠ STILL A SECOND COPY OF T2's, and saying so rather than letting it be silent: their seedDeadlock is
+// module-private inside deadlockEndgame.test.js (a vitest file), so a Playwright spec cannot import it
+// and importing would register their suite. Export requested in comms; when it lands this deletes.
+async function seedAuditDeadlock(page) {
+  await page.evaluate(async () => {
+    // Fill EVERY hex in the radius, not merely the keys that already exist · a fresh board's hexes map is
+    // nearly empty, so mapping over Object.keys fills almost nothing and leaves the board playable. My
+    // first version did exactly that and measured 2 legal placements in a state meant to have none · the
+    // same number T2's fillRegion comment records from their own first draft. Two lanes, same bug.
+    const { hexesInRadius, REGIONS } = await import('/src/utils/hexUtils.js')
+    const st = window.__neotopia_store.getState()
+    const fill = (region) => {
+      const def = REGIONS.find(rd => rd.id === region.id)
+      const hexes = { ...region.hexes }
+      for (const h of hexesInRadius(def.cq, def.cr, def.radius)) {
+        hexes[`${h.q},${h.r}`] = { ...(hexes[`${h.q},${h.r}`] ?? {}), element: 'energy', placedBy: 0 }
+      }
+      return { ...region, hexes }
+    }
+    window.__neotopia_store.setState({
+      phase: 'playing', currentSeat: 0, actionsRemaining: 3, turnNumber: 33,
+      deck: [], theOffer: [],
+      productionTilesRemaining: 3, // TILES REMAIN · the clock cannot advance without a placement
+      endGameTriggered: false, endGameRoundsRemaining: 2,
+      factories: st.factories.map(f => f.id === 0
+        ? { ...f, betweenRegions: [0, 1], elements: [{ type: 'energy', count: 2 }] } // stocked, boxed in
+        : { ...f, elements: f.elements.map(e => ({ ...e, count: 0 })) }),            // empty forever
+      regions: st.regions.map(r => (r.id === 0 || r.id === 1 ? fill(r) : r)),
+    })
+  })
+  await page.waitForTimeout(800)
+}
+
+// The counterweight's reading · asked through the engine's own validator, element count FIRST, exactly as
+// T2's anyPlacementPossible does. getValidPlacements alone answers "which hexes are geometrically legal
+// for this pair" and never looks at whether the factory holds anything · it measured SIX on an empty
+// board in S45 and nearly put a second, wrong rules engine inside the guard written to prevent one.
+const readDeadlockShape = (page) => page.evaluate(() => {
+  const g = window.__neotopia_store.getState()
+  let placements = 0
+  for (const f of g.factories) {
+    if (!f.elements.some(e => e.count > 0)) continue
+    for (const rid of f.betweenRegions) placements += (g.getValidPlacements?.(f.id, rid) ?? []).length
+  }
+  return {
+    placements,
+    stockedFactories: g.factories.filter(f => f.elements.some(e => e.count > 0)).length,
+    tiles: g.productionTilesRemaining,
+    deck: g.deck.length, offer: g.theOffer.length, actions: g.actionsRemaining,
+  }
+})
+
 test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)', () => {
   test('a deadlocked board unlocks End Turn and triggers the endgame · the real button, not a model',
     async ({ page }) => {
@@ -903,46 +958,7 @@ test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)
       // The audit's exhaustion, reconstructed: nothing to draw, nothing to place. Set through the store
       // rather than played to, because reaching it naturally took a human auditor 33 turns · the STATE is
       // what is under test here, and every assertion below is on the real UI and the real engine.
-      // ── THE AUDIT'S SHAPE, NOT A DEGENERATE ONE (T3 S46) ─────────────────────────────────────────────
-      // The first version emptied every factory, which is a deadlock but the EASY one · "nothing to place
-      // because there is nothing to place with". The board the audit actually hit is harder and is the one
-      // T2's engine condition was written against (deadlockEndgame.test.js `seedDeadlock`): a factory that
-      // is STILL STOCKED but borders only regions that are 19/19 FULL, while the other factories hold
-      // nothing and can never restock, because restocking only happens on a placement. AND TILES REMAIN ·
-      // that is the whole point of the class, and my version had none of it.
-      // ⚠ I cannot import their fixture: seedDeadlock is module-private inside a vitest file, so a
-      // Playwright spec cannot reach it and importing it would register their suite. Requested an export
-      // in comms rather than keeping a second copy · until then this mirrors the shape deliberately and
-      // says so, which is the honest version of "one fixture" while there are unavoidably two (Rule 45).
-      await page.evaluate(async () => {
-        // FILL EVERY HEX IN THE RADIUS, not merely the keys that already exist. My first version mapped
-        // over Object.keys(region.hexes), which on a fresh board is nearly empty · so it filled almost
-        // nothing and the counterweight measured 2 LEGAL PLACEMENTS in a state meant to have none.
-        // T2's fillRegion carries a comment saying their first draft did exactly this and reported the
-        // same number. Two lanes, same bug, same 2 · which is the argument for one fixture rather than
-        // two, and the reason the request is in comms.
-        const { hexesInRadius, REGIONS } = await import('/src/utils/hexUtils.js')
-        const st = window.__neotopia_store.getState()
-        const fill = (region) => {
-          const def = REGIONS.find(rd => rd.id === region.id)
-          const hexes = { ...region.hexes }
-          for (const h of hexesInRadius(def.cq, def.cr, def.radius)) {
-            hexes[`${h.q},${h.r}`] = { ...(hexes[`${h.q},${h.r}`] ?? {}), element: 'energy', placedBy: 0 }
-          }
-          return { ...region, hexes }
-        }
-        window.__neotopia_store.setState({
-          phase: 'playing', currentSeat: 0, actionsRemaining: 3, turnNumber: 33,
-          deck: [], theOffer: [],
-          productionTilesRemaining: 3, // TILES REMAIN · the clock cannot advance without a placement
-          endGameTriggered: false, endGameRoundsRemaining: 2,
-          factories: st.factories.map(f => f.id === 0
-            ? { ...f, betweenRegions: [0, 1], elements: [{ type: 'energy', count: 2 }] } // stocked, boxed in
-            : { ...f, elements: f.elements.map(e => ({ ...e, count: 0 })) }),            // empty forever
-          regions: st.regions.map(r => (r.id === 0 || r.id === 1 ? fill(r) : r)),
-        })
-      })
-      await page.waitForTimeout(800)
+      await seedAuditDeadlock(page)
 
       // ── COUNTERWEIGHT FIRST (Rule 90) · the board must genuinely BE dead ──────────────────────────────
       // Every assertion below is about a game with no legal action. If the state I constructed still had
@@ -959,24 +975,7 @@ test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)
       // only by luck.
       // So: no factory holds an element, and there is nothing to draw. Those are the three facts T2's
       // condition consumes, all directly observable, and none of them requires me to judge legality.
-      const dead = await page.evaluate(() => {
-        const g = window.__neotopia_store.getState()
-        // A stocked factory now EXISTS, so "no elements anywhere" is no longer the right question · the
-        // question is whether any stocked factory can reach a hex. Asked through the engine's own
-        // validator, per factory/element, exactly as T2's anyPlacementPossible does (element count FIRST ·
-        // the term I dropped in S45 and which measured SIX on an empty board).
-        let placements = 0
-        for (const f of g.factories) {
-          if (!f.elements.some(e => e.count > 0)) continue
-          for (const rid of f.betweenRegions) placements += (g.getValidPlacements?.(f.id, rid) ?? []).length
-        }
-        return {
-          placements,
-          stockedFactories: g.factories.filter(f => f.elements.some(e => e.count > 0)).length,
-          tiles: g.productionTilesRemaining,
-          deck: g.deck.length, offer: g.theOffer.length, actions: g.actionsRemaining,
-        }
-      })
+      const dead = await readDeadlockShape(page)
       // stockedFactories 1 and tiles 3 are asserted, not incidental: they are what make this the AUDIT's
       // deadlock rather than an empty board. If a future change let the stocked factory reach a hex, or
       // let the clock advance without a placement, this reds and says which.
@@ -1006,29 +1005,69 @@ test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)
       console.log('[practice] soft-lock · End Turn unlocked by no-legal-move, click accepted, endgame triggered')
     })
 
-  // ── AND THE COMPOSITION STILL DOES NOT FINISH · MEASURED, NOT ASSUMED (T3 S45) ──────────────────────────
-  // fixme rather than a red merge gate: this is a defect in two other lanes' code, and reddening the gate
-  // for everybody is a tripwire aimed at colleagues (the S39 mistake I have now removed twice). It reports
-  // as FIXME, it does not pretend to pass, and the measurement is here so nobody re-derives it.
+  // ── AND NOW IT FINISHES · THE FOURTH HALF LANDED AND THE FIXME FLIPPED (T3 S47) ────────────────────────
+  // S45 measured this stuck: the two-round burn hands to a BOT, and a deadlocked bot could not pass, so
+  // the game sat at turn 36 / rounds 1 for 162 SECONDS · past TURN_TIME_LIMIT, permanent. Three correct
+  // fixes had left the bug open (Rule 103). T2 landed the fourth in S46 (2969d97): seatSignature came back
+  // BYTE-IDENTICAL on a deadlocked board · seat cycles back, actions reset to 3, phase still 'playing', and
+  // a player who cannot act neither draws nor scores · so the latch read the bot's turn as a StrictMode
+  // repeat and never asked it to move. Keyed on turnNumber, the only component that always advances.
   //
-  // WHAT HAPPENS, driving the real button in a browser and waiting past every relevant timeout:
-  //   human End Turn (unlocked)      -> endGameTriggered true, rounds 2, seat 1
-  //   bots play / human ends again   -> rounds 1, seat 1 (the BOT), turn 36
-  //   then NOTHING, for 162 SECONDS  -> phase still 'playing', rounds still 1, turn still 36
-  // Past TURN_TIME_LIMIT (90s), so this is permanent rather than a slow timeout · I measured to 81s first
-  // and deliberately went past the edge before calling it that (Rule 87).
-  //
-  // WHY, and it is one sentence: endGameTriggered is necessary but NOT SUFFICIENT · the two-round burn is
-  // driven by seats ENDING THEIR TURNS, and a deadlocked BOT cannot pass. T1's escape hatch is a button,
-  // which no bot presses. So the game hands to a seat that can never act, and the human cannot help
-  // because it is not their turn and their control is correctly disabled.
-  //   >>> T1 · a bot with no legal move needs the same escape the human got (useBotTurns).
-  //   >>> T2 · or the round burn should not require an actor who cannot act · a triggered endgame that
-  //            cannot complete its own countdown is the same class as the clock that could not advance.
-  // A PAGE RELOAD RESOLVES IT (phase 'scoring' on the next mount), which is the only recovery a player
-  // has and is indistinguishable from the app crashing and recovering.
-  test('a deadlocked board reaches its own ending without a reload', async ({ page }) => {
-    test.fixme(true, 'the 2-round burn hands to a bot that cannot pass · measured stuck 162s · T1/T2 · T3 S45')
+  // MEASURED, WITH THE CONTROL, because "four correct halves" was exactly as untested as three:
+  //     with T2's fix      · scoring at turn 37 in 2 SECONDS, 2 human End Turns
+  //     turnNumber removed · stuck at turn 36 / seat 1 / rounds 1 for 122s · the S45 signature exactly
+  // So it flips, and it flips because THE BOT PASSED · not because something else moved underneath.
+  test('a deadlocked board reaches its own ending without a reload · all four halves', async ({ page }) => {
+    test.setTimeout(120_000)
     await page.goto('/practice?bots=1')
+    await boardReady(page)
+    await seedAuditDeadlock(page)
+
+    // COUNTERWEIGHT FIRST (Rule 90) · the same one the test above uses, for the same reason: if the board
+    // is still playable this asserts nothing about a soft-lock, and a game that ends normally would look
+    // like a pass. It is repeated rather than shared because the two tests must be able to fail apart.
+    const dead = await readDeadlockShape(page)
+    expect(dead, 'the board is still playable · this test would be asserting nothing about a soft-lock')
+      .toEqual({ placements: 0, stockedFactories: 1, tiles: 3, deck: 0, offer: 0, actions: 3 })
+
+    // Drive it exactly as a player would: end the human's turn whenever the escape hatch offers it, and
+    // let the bot take its own. Nothing here reaches into the store · the only lever is the real button.
+    const endTurn = page.getByTestId('end-turn-btn')
+    const seatsSeen = new Set()
+    let humanClicks = 0
+    const started = Date.now()
+    let reached = null
+    while (Date.now() - started < 60_000) {
+      const s = await page.evaluate(() => {
+        const g = window.__neotopia_store.getState()
+        const b = document.querySelector('[data-testid="end-turn-btn"]')
+        return { phase: g.phase, seat: g.currentSeat, turn: g.turnNumber,
+          rounds: g.endGameRoundsRemaining, enabled: b ? !b.disabled : null }
+      })
+      if (s.phase === 'scoring') { reached = s; break }
+      seatsSeen.add(`${s.seat}@${s.turn}`)
+      if (s.seat === 0 && s.enabled) { await endTurn.click({ timeout: 10_000 }); humanClicks++ }
+      await page.waitForTimeout(300)
+    }
+
+    expect(reached, 'the deadlocked game never reached scoring · it sat in "playing". Measured stuck at ' +
+      'turn 36 / seat 1 / rounds 1 before T2 fixed the bot latch (2969d97), and 2s after · so this is the ' +
+      'bot failing to pass, which stalls the two-round burn because that burn is driven by seats ENDING ' +
+      'TURNS. endGameTriggered is necessary and not sufficient (Rule 103).').toBeTruthy()
+    expect(reached.rounds, 'it reached scoring without burning both endgame rounds').toBe(0)
+
+    // AND IT ENDED BECAUSE THE BOT TOOK ITS TURNS, not because the human clicked through alone. The bot
+    // seat has to have HELD the turn and then given it up · that is the exact thing that was frozen, and
+    // asserting only "phase === scoring" would pass on a build where seat 1 was skipped entirely.
+    const botTurns = [...seatsSeen].filter(k => k.startsWith('1@'))
+    expect(botTurns.length, `the bot seat never held a turn · seats seen: ${[...seatsSeen].join(' ')}`)
+      .toBeGreaterThanOrEqual(2)
+    expect(humanClicks, 'the human should end its own two turns, no more · a higher number means the ' +
+      'human was clicking through a game the bot was not participating in').toBeLessThanOrEqual(4)
+
+    await expect(page.getByRole('dialog', { name: /final civilization record/i }),
+      'the game reached scoring but rendered no final record').toBeVisible({ timeout: 15_000 })
+    console.log(`[practice] soft-lock RESOLVED · turn ${reached.turn} · ${humanClicks} human End Turns · ` +
+      `bot held ${botTurns.length} turns · ${Math.round((Date.now() - started) / 1000)}s`)
   })
 })
