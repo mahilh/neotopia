@@ -1,6 +1,44 @@
 # DID BONUS TOKENS BREAK BALANCE?
 **T2 S39 · August 10 2026 · 360 seeds, three disjoint blocks**
 
+> ## 🔴 THE SIGN INVERTED · T2 S46 · measured, 560 games
+>
+> **S39 (below): an UNSPENT token favours the WEAKER player** · apprentice −2.4, builder −3.0,
+> architect −0.8. The mechanism was that a flat 3 points is *noise* (signal-to-noise 0.23) and noise
+> helps the underdog.
+>
+> **S46: a SPENDABLE token favours the player who spends it, by roughly +7.7 points of win rate.**
+> Identical policies on both sides, one seat cashes subsidy the moment it holds one:
+>
+> | block (disjoint seeds) | control | spender win % |
+> |---|---|---|
+> | 25-seed × 4 | 50.0 / 50.0 / 50.0 / 50.0 | 59.6 · 58.0 · 60.0 · 51.0 |
+> | 60-seed × 3 | 50.0 / 50.0 / 50.0 | 54.2 · 58.1 · 63.0 |
+>
+> **7 of 7 blocks above 50** (binomial p≈0.008). Control exactly 50.0 in all seven, and the
+> both-spend arm symmetric at 50.0 in all seven. Roughly 1.2 spends per game.
+>
+> So the prediction made in S39 held: *"a decision is exactly the kind of term that rewards skill
+> rather than diluting it · the sign could invert."* It did, and it got **about 2.5× larger** than the
+> whole S39 effect. Spending trades the token's 3 points for two cards, and that trade is favourable.
+>
+> **Tripwire verdict:** the pre-committed bound was 10 points. The mean effect is **+7.7 · inside it**,
+> so this is *not* a recommendation to stop feature work. But it is the largest single-decision term
+> measured in this project, individual blocks reach **+13**, and it is worth Mahil deciding whether a
+> 3-point token that swings ~8 points of win rate is the intended weight.
+>
+> **What this experiment gives up, stated rather than absorbed:** S39's control was *exact* · bots
+> never read tokens, so each game was played once and scored twice, with not even a sampling difference
+> between arms. A bot that spends makes **different games**. This is a paired-seed *statistical*
+> control: same seed, deck, tile order and policies, one variable, arms diverging from the first spend.
+> Weaker by construction, and the weakness is a property of the feature no longer being inert.
+>
+> Reproduce: `SPEND_SEEDS=60 SEED_OFFSET=0|100|200 SPEND_OUT=/tmp/s.jsonl npx vitest run
+> src/store/spendableBalance.test.js --no-file-parallelism`
+>
+> Scope: **subsidy only** · it is the one type a human can spend today. `automatization` still has no
+> route into the game and `initiative`/`permits` need a placement payload the UI does not collect.
+
 > ## ⚠️ SCOPE, added T2 S43 · THIS IS A MEASUREMENT OF **BOT PLAY**
 >
 > T1 shipped the spend control in `5381760`, so a human can now *use* a bonus token. **Everything below
