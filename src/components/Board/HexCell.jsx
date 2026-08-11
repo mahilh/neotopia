@@ -68,6 +68,11 @@ export default function HexCell({
   return (
     <g
       className="hex-cell"
+      // Addressable by coordinate (T1 S51). hexesInRadius returns ABSOLUTE (q,r), so this is unique
+      // across all three regions and the factories · a test that addresses a cell by its index into
+      // querySelectorAll is silently re-pointed by any change to render order, and the question this
+      // enables (which stroke does each STATE get) is one this project has already answered wrongly.
+      data-hex={`${q},${r}`}
       data-valid={isValidTarget ? 'true' : undefined}
       // A preview hex is clickable (it takes aim at its region · GameRoom), so it advertises itself as
       // clickable. The testid stays separate from hex-valid: E2E asserting "placeable now" must never
@@ -118,6 +123,7 @@ export default function HexCell({
           strokeWidth={2}
           strokeDasharray="7 5"
           strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
         />
       )}
 
@@ -131,6 +137,7 @@ export default function HexCell({
           strokeWidth={2}
           opacity={0.7}
           style={{animation: 'hexPulse 1.4s ease-in-out infinite'}}
+          vectorEffect="non-scaling-stroke"
         />
       )}
 
@@ -138,21 +145,21 @@ export default function HexCell({
       {isCompletionCandidate && (
         <>
           <polygon points={points} fill="none" stroke="white" strokeWidth={2.5}
-            opacity={0.9} style={{animation: 'hexPulse 0.9s ease-in-out infinite'}} />
-          <polygon points={points} fill="none" stroke={regionColor} strokeWidth={1} opacity={0.6} />
+            opacity={0.9} style={{animation: 'hexPulse 0.9s ease-in-out infinite'}} vectorEffect="non-scaling-stroke" />
+          <polygon points={points} fill="none" stroke={regionColor} strokeWidth={1} opacity={0.6} vectorEffect="non-scaling-stroke" />
         </>
       )}
 
       {/* Complete pattern · green ring · "pattern is complete · score the card" */}
       {isPatternMatch && !isCompletionCandidate && (
         <polygon points={points} fill="none" stroke="rgba(30,200,100,0.8)"
-          strokeWidth={1.5} style={{animation: 'hexPulse 1.2s ease-in-out infinite'}} />
+          strokeWidth={1.5} style={{animation: 'hexPulse 1.2s ease-in-out infinite'}} vectorEffect="non-scaling-stroke" />
       )}
 
       {/* Near-miss · amber ring · "you're close" */}
       {isPartialMatch && !isPatternMatch && !isCompletionCandidate && (
         <polygon points={points} fill="none" stroke="rgba(255,180,50,0.5)"
-          strokeWidth={1} opacity={0.7} />
+          strokeWidth={1} opacity={0.7} vectorEffect="non-scaling-stroke" />
       )}
 
       {/* Selected factory pulsing ring · feedback that this factory is picked up from */}
@@ -163,6 +170,7 @@ export default function HexCell({
           stroke="rgba(255,255,255,0.9)"
           strokeWidth={2.5}
           style={{animation: 'hexPulse 1.4s ease-in-out infinite'}}
+          vectorEffect="non-scaling-stroke"
         />
       )}
 
