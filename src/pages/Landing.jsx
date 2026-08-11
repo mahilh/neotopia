@@ -24,6 +24,29 @@ const DESIGNED_DISTRICTS = Object.keys(import.meta.glob('/public/art/cards/card_
 const TOTAL_DISTRICTS = 56
 
 const BG = '#0a0a0f'
+
+// NE·OT·OP·IA · two letters per element, in board order. Mahil's colours, and they are NOT the raw
+// ELEMENT_COLORS from hexUtils: energy is #CC5522 here rather than the board's #E24B4A, because the
+// wordmark sits on #0a0a0f at 52px where the board's red is louder than the other three. Kept as an
+// explicit table for that reason · importing the board palette would silently "fix" a deliberate
+// choice the next time somebody tidies (Rule 45: a second contract, stated as one).
+//
+// ONE COLOUR DEVIATES FROM THE BRIEF, AND IT IS MEASURED RATHER THAN PREFERRED. Against #0a0a0f:
+//     NE #CC5522  4.60:1  AA        OT #1D9E75  5.83:1  AA        OP #7F77DD  5.25:1  AA
+//     IA #2244AA  2.33:1  FAIL      · below AA (4.5) and below AA-LARGE (3.0) as well
+// Three of the four were chosen well and the fourth is unreadable · at 52px it is a dark blue on a
+// near-black field, so the word would end in two letters a low-vision reader loses entirely.
+// #376DFF is the SAME HUE lifted 1.605x, the smallest multiple that clears 4.5:1, measured at
+// 4.51:1. Hue and saturation are untouched; only lightness moves, and only as far as it must.
+// Flagged to Mahil rather than done quietly: if the darker blue is wanted for brand reasons, the
+// honest fallback is #2952CE at 3.01:1, which is legal for large text only and would forbid ever
+// using this wordmark at body size.
+const WORDMARK = [
+  ['NE', '#CC5522'], // energy
+  ['OT', '#1D9E75'], // biofarming
+  ['OP', '#7F77DD'], // technology
+  ['IA', '#376DFF'], // community · brief said #2244AA (2.33:1) · lifted to clear AA. See above.
+]
 const sectionLabel = {
   fontSize: 12, letterSpacing: 4, color: 'rgba(255,255,255,0.5)', // WCAG AA (~5.3:1 on #0a0a0f) · 12px min (UX scan)
   textTransform: 'uppercase', marginBottom: 16,
@@ -76,23 +99,45 @@ export default function Landing() {
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '64px 24px',
       }}>
-        <div style={{ fontSize: 12, letterSpacing: 8, color: 'rgba(255,255,255,0.5)', marginBottom: 28, textTransform: 'uppercase' }}>
-          2055
-        </div>
-        <div style={{ fontSize: 13, letterSpacing: 10, color: 'rgba(255,255,255,0.5)', marginBottom: 28 }}>
-          NEOTOPIA
+        {/* ── THE WORDMARK IS THE GAME (T1 S45) ─────────────────────────────────────────────────
+            Eight letters, four elements, two each · NE energy, OT biofarming, OP technology, IA
+            community. The same four colours the board is played in, so the name teaches the palette
+            before the tutorial has to. Font and tracking are UNCHANGED on Mahil's instruction and he
+            is right; this is colour only.
+            AND IT WAS A SUBTITLE OF ITS OWN DATE. NEOTOPIA rendered at 13px against a 56px tagline ·
+            one pixel larger than the kicker above it. A brand that is smaller than every other
+            element on its own hero is not a brand, it is a caption. It leads now, and the "2055"
+            kicker is gone rather than repeated: it appeared here AND in the headline one line below,
+            and the headline is the one that earns it. */}
+        <div
+          data-testid="wordmark"
+          aria-label="NeoTopia"
+          style={{
+            fontSize: 'clamp(28px, 6vw, 52px)', letterSpacing: 10, marginBottom: 26,
+            fontWeight: 300, display: 'flex', justifyContent: 'center', flexWrap: 'wrap',
+          }}
+        >
+          {WORDMARK.map(([pair, color], i) => (
+            <span key={i} style={{ color }} data-wordmark-pair={pair}>{pair}</span>
+          ))}
         </div>
         <h1 style={{
-          fontSize: 'clamp(28px, 5.5vw, 56px)', fontWeight: 200, letterSpacing: -0.5,
-          color: 'rgba(255,255,255,0.95)', lineHeight: 1.15, maxWidth: 780, margin: '0 0 24px',
+          fontSize: 'clamp(22px, 4vw, 40px)', fontWeight: 200, letterSpacing: -0.5,
+          color: 'rgba(255,255,255,0.95)', lineHeight: 1.2, maxWidth: 780, margin: '0 0 20px',
         }}>
-          Every move you make becomes a building in 2055.
+          Your weakest district decides whether your world survives.
         </h1>
-        <p style={{ fontSize: 'clamp(13px, 2vw, 17px)', color: 'rgba(255,255,255,0.45)', letterSpacing: 1, maxWidth: 560, lineHeight: 1.7, margin: '0 0 12px' }}>
-          Pure strategy · No dice · Build a city together in real time
-        </p>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', letterSpacing: 2, marginBottom: 44 }}>
-          Two to four players · Browser-based · No download required
+        {/* Replaces "Pure strategy · No dice", which described the game by what it LACKS · nobody
+            ever wanted a game because it had no dice. The positive form of that claim already
+            existed on this page, buried at 16px far below the fold: "No luck mechanics. No
+            randomness. Every outcome is a decision." This is its promotion.
+            "city" -> "world" throughout · NeoTopia means new land, and the game is three regions
+            rather than one city.
+            DELETED HERE: "Two to four players · Browser-based · No download required". Six
+            comma-separated claims sat between the hero and the first button, and the lobby already
+            carries the equivalent at the moment it is actually needed. */}
+        <p style={{ fontSize: 'clamp(13px, 2vw, 17px)', color: 'rgba(255,255,255,0.6)', letterSpacing: 1, maxWidth: 560, lineHeight: 1.7, margin: '0 0 44px' }}>
+          Three regions. Four elements. Neglect nothing.
         </p>
 
         <button
@@ -150,7 +195,7 @@ export default function Landing() {
         </h2>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, maxWidth: 680, margin: '0 0 14px' }}>
           NeoTopia is a hexagonal strategy game set in the year 2055. You and up to three others build a
-          city · placing elements, completing patterns, and scoring districts.
+          world · placing elements, completing patterns, and scoring districts.
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, maxWidth: 680, margin: '0 0 14px' }}>
           Each turn you choose three times: draw a project card, or move an element from a factory into
@@ -192,7 +237,7 @@ export default function Landing() {
         </p>
         <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 18px' }}>
           Every project card in this game is named after a real district that will exist in the physical
-          NeoTopia city by 2055. When you score a Solar Temple, you are not earning five points. You are
+          NeoTopia world by 2055. When you score a Solar Temple, you are not earning five points. You are
           rehearsing the construction of a building that Mahil intends to see standing on Earth within
           his lifetime.
         </p>
@@ -227,7 +272,7 @@ export default function Landing() {
         </div>
         <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', lineHeight: 1.8, margin: 0 }}>
           When you score a project card, it joins a permanent global counter of every district ever built
-          across every game ever played. When the real city breaks ground, this is the record of everyone
+          across every game ever played. When the real world breaks ground, this is the record of everyone
           who helped design it.
         </p>
       </section>
