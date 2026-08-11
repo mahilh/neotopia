@@ -179,7 +179,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (101 · cumulative):
+PERMANENT ANTI-REGRESS RULES (103 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -443,6 +443,41 @@ SECOND COROLLARY, paid for in one anon sign-in: A MOCK IS A MODEL, SO MEASURE TH
 AGAINST THE REAL SYSTEM. My write-race proof rested on an inherited mock I had REASONED matched Postgres.
 Measured: write B then A, and the row holds A · no version check, no merge, the counter goes backwards on the
 server. The claim two lanes are now building on is a measurement now, not a belief.
+
+RULE 103 (T3 S45 · August 11 2026):
+THREE LANES CAN EACH SHIP A CORRECT HALF AND LEAVE THE BUG OPEN · AND ONLY A TEST THAT DRIVES ALL THREE
+IN ONE SCENARIO CAN SAY SO. The soft-lock had three fixes: T1 unlocked End Turn when nothing is legal, T2
+made a deadlocked game trigger its endgame, I made restore refuse to reinstate a dead board. Every half was
+proven alone, every half WORKS, and the game still never ends. Driving the real button in a browser:
+    human End Turn (unlocked · data-unlocked-by="no-legal-move")  -> endGameTriggered true, rounds 2
+    rounds burn to 1                                              -> seat 1, turn 36 · THE BOT
+    then nothing for 162 SECONDS · past TURN_TIME_LIMIT, so permanent rather than slow
+endGameTriggered is NECESSARY BUT NOT SUFFICIENT: the two-round burn is driven by seats ENDING THEIR TURNS
+and a deadlocked BOT cannot pass. T1's escape is a button and no bot presses a button; the human cannot
+help because it is not their turn and their control is correctly disabled. Each lane tested its own half
+against its own model and every model was right.
+  103a · THE COMPOSITION TEST BELONGS TO WHOEVER CAN DRIVE THE REAL CONTROL, not to whoever owns the most
+        code in it. A unit test of T1's condition and a unit test of T2's condition cannot compose; a
+        browser can. Mutation-proving it against BOTH lanes (revert either half, watch it red) is what
+        makes it a shared gate rather than a third opinion.
+  103b · CARRY IT AS FIXME, NEVER AS A RED GATE, when the remaining defect is in someone else's code.
+        Reddening the merge gate for everyone is a tripwire aimed at colleagues.
+  103c · MEASURE PAST THE TIMEOUT BEFORE SAYING "PERMANENT". I stopped at 81s first, which is inside the
+        90s turn limit and would have been an entirely different (and wrong) claim (Rule 87).
+COROLLARY · MY COUNTERWEIGHT CAUGHT ME, WHICH IS THE ONLY REASON TO WRITE IT FIRST. It summed
+getValidPlacements across every factory and region and expected 0 on a board where every factory is EMPTY ·
+it measured SIX. That function answers "which hexes are geometrically legal for this pair" and never looks
+at whether the factory holds anything; T2's anyPlacementPossible tests elements.some(count > 0) FIRST and I
+had silently dropped that term. Asserting on it would have put a second, wrong rules engine inside the
+guard written to stop exactly that (Rule 45). A counterweight is not paperwork: it is the assertion most
+likely to be measuring the wrong quantity, because it is the one you write while thinking about something
+else.
+SECOND COROLLARY, and it cost two live runs: YOUR OWN PUSH CAN DESTROY YOUR OWN LIVE RUN. global-teardown.js
+calls purge_e2e_test_data(), which sweeps E2E rooms of ANY status · so the E2E workflow triggered by the
+commit you just made DELETES the room your local run is playing in. Measured: "NO ROW for room_id ...
+UNMEASURED" while two browsers were still mid-game, with two workflow runs in flight confirmed via gh.
+Check `gh run list` for an in-flight E2E before any live run, the same way Rule 82 says build the isolated
+worktree first · isolation of the CODE does not isolate the DATABASE.
 
 RULE 101 (T3 S44 · August 11 2026):
 A FIX'S BLAST RADIUS INCLUDES THE TESTS THAT DOCUMENTED THE DEFECT · THEY BECOME FALSE CLAIMS THE MOMENT
