@@ -37,10 +37,18 @@ export const bots = (...levels) =>
 // because calculateFinalScore's token term is purely additive (best + second + 3*worst + 3*tokens +
 // cluster). base + 3*n is therefore EXACTLY the real score for n tokens, and no second scoring engine
 // exists to drift from the first.
-export function playOnce(configs, seed) {
+// T2 S50 · `mode` IS A REAL PARAMETER NOW, AND ITS ABSENCE WAS A FINDING.
+// Rule 111 says a constant that appears at every call site of an experiment is a hidden parameter
+// whose value silently qualifies every result. I wrote that rule in S49 about REFERENCE_POLICY and
+// then pointed the same grep at my own harness, which found this: `initGame` takes a 4th argument for
+// the game mode and NOT ONE balance harness has ever passed it. So every finding from S39 to S50 is
+// Classic-only, while Flow is shipped and user-selectable with 9 production tiles instead of 12.
+// Defaulting to undefined keeps every existing caller byte-identical (initGame's own default is
+// DEFAULT_GAME_MODE), so this is a widening and not a change.
+export function playOnce(configs, seed, mode) {
   useGameStore.setState(useGameStore.getInitialState(), true)
   const rng = makeRng(seed)
-  api().initGame(configs, shuffled(PROJECT_CARDS, rng), shuffled(PRODUCTION_TILES, rng))
+  api().initGame(configs, shuffled(PROJECT_CARDS, rng), shuffled(PRODUCTION_TILES, rng), mode)
   let lastPlacedKey = null
   const heldPrev = configs.map(() => 0)
   const grantOrder = []
@@ -114,7 +122,7 @@ export function flatDeal(totalTokens, extras) {
 //
 // levelA / levelB are difficulty strings OR the reference policy · this makes no assumption that one
 // of them is a "reference", which is exactly the assumption S49 exists to remove.
-export function ladderRow(levelA, levelB, seeds) {
+export function ladderRow(levelA, levelB, seeds, mode) {
   let earnedWinsA = 0, earnedWinsB = 0, flatWinsA = 0, flatWinsB = 0
   let marginEarned = 0, marginFlat = 0, flips = 0, moved = 0
   let tokensA = 0, tokensB = 0, flatA = 0, flatB = 0, totalTokens = 0, games = 0
@@ -125,7 +133,7 @@ export function ladderRow(levelA, levelB, seeds) {
     for (const swap of [false, true]) {
       const configs = bots(swap ? levelB : levelA, swap ? levelA : levelB)
       const aSeat = swap ? 1 : 0, bSeat = 1 - aSeat
-      const g = playOnce(configs, seed)
+      const g = playOnce(configs, seed, mode)
       const earnedTok = [g.seats[0].earned, g.seats[1].earned]
       const deal = flatDeal(earnedTok[0] + earnedTok[1], extras)
       const flat = []

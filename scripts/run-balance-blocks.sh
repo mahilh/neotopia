@@ -60,7 +60,7 @@ for b in $(seq 0 $((BLOCKS - 1))); do
     # reason every other seed var is: the evenness assertion is a RATE comparison and refuses to run
     # below 40 seeds rather than silently reporting a number its block cannot support.
     env "$var=$tmp" SEED_OFFSET="$OFFSET" BALANCE_SEEDS="$SEEDS" SPEND_SEEDS="$SEEDS" \
-        SPACING_SEEDS="$SEEDS" SPACING_FULL=1 \
+        SPACING_SEEDS="$SEEDS" SPACING_FULL=1 FLOW_SEEDS="$SEEDS" FLOW_OFFSET="$OFFSET" \
         npx vitest run "$spec" --no-file-parallelism >/dev/null 2>&1 || true
     if [ -s "$tmp" ]; then
       while IFS= read -r line; do
@@ -95,6 +95,10 @@ print(json.dumps(o))
   # no workflow cannot report its own rot (Rule 79) · and the two sections this unlocks are precisely
   # the ones the merge gate skips, so without this line they would run NOWHERE.
   emit ladderSpacing    SPACING_OUT src/store/ladderSpacing.test.js
+  # T2 S50 · FLOW MODE. Every balance finding from S39 to S50 was Classic-only because no harness ever
+  # passed initGame its 4th argument (Rule 111, aimed at my own instrument). This row is what stops
+  # that being true again, and it is the only experiment here that varies the MODE rather than a seed.
+  emit flowMode         FLOW_OUT    src/store/flowModeBalance.test.js
 
   # `|| true` inside emit is deliberate · a red assertion still writes its REPORT and that row is
   # evidence. It is also why the NEXT branch matters: a block that produced nothing must be visible as

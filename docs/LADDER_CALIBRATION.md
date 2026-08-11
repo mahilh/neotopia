@@ -135,8 +135,35 @@ on Mahil's explicit overrule of "evidence first" — *"0.0% and 6.3% are outside
 measurement could rescue"* — which is a statement about v1 being knowably wrong, not a claim that v2 is
 knowably right. **v2's 32.5/34.2 is a bot-calibrated ladder awaiting its first human game.**
 
-And per Rule 111, the two constants this harness still hides: every row above is **Classic mode**
-(`initGame` is never passed a 4th argument) and **two players** (`bots()` is only ever called with two).
+Per Rule 111, the two constants this harness hid: every row above is **two players**, and — until S50
+— every row was **Classic mode**, because no balance harness had ever passed `initGame` its 4th
+argument. `ladderRow` now takes a mode. **Four players is still unmeasured**: `bots()` is only ever
+called with two, and `ladderRow` is structurally a duel.
+
+### Flow mode · measured in S50, three disjoint 40-seed blocks
+
+**The worry was that Flow's 9 tiles would leave the token subsystem near-inert. It does not.** Flow
+grants tokens at a stable fraction of Classic's volume — apprentice **0.62**, builder **0.80**,
+architect **0.66**, with under 0.06 of spread between blocks. A quarter fewer tiles costs a
+proportionate slice of token volume, not a cliff, so the closed token decision transfers to Flow.
+
+**The ladder calibration does not transfer:**
+
+| | Classic v2 | Flow |
+|---|---|---|
+| apprentice vs builder | 33.5 | **27.6** |
+| builder vs architect | 31.6 | **39.9** |
+| **step gap** | **1.9** | **12.3** |
+
+Ordered in both — no rung is broken, and that is gated. But v2 was tuned to sit at ~33/33 and in Flow
+it sits at ~28/40: the bottom step is *harder* and the top step *easier*. Likely mechanism, stated as
+the hypothesis it is: apprentice's only handicap is random placement, and a game a quarter shorter
+gives fewer turns to recover from a bad placement. Untested — a decomposition sweep in Flow would
+settle it and did not run.
+
+**So every spacing number in this document is a Classic number.** The retune fixed a launch blocker in
+the mode the ladder will most likely ship in first; it did not calibrate Flow, and Flow was never
+measured before S50 at all.
 
 ---
 
