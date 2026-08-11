@@ -53,9 +53,24 @@ import { clearSaved } from '../hooks/useLocalSession'
 // inline 0 is CORRECT at 1280, where the sidebar is a fixed 288px column that must not shrink. So it
 // is left alone deliberately. The point is that a regex over index.css reported a green on a
 // declaration the page never applied, and only getComputedStyle could say so.
-// Resolved values, measured:
+// Resolved values as measured in S48, i.e. of the 3:2 layout this file used to describe:
 //     320/375/600  column · board 3/1/0px · sidebar 2/0/0px · both min-height 0 · sidebar max-height none
 //     1280         row    · board 1/1/0%  · sidebar 0/0/auto/288px wide · desktop untouched
+//
+// ── AND S49 SUPERSEDED THE LAYOUT ITSELF · THE SIDEBAR IS A BOTTOM SHEET NOW ─────────────────────
+// The board no longer has a SHARE of the phone column, it has all of it, and the panel comes up over
+// it only when the flow needs it. The two assertions below that described the 3:2 split went RED the
+// moment that landed, which is Rule 101 working: a fix's blast radius includes the tests that
+// documented what it replaced, and they become false claims rather than failing ones. Both are
+// rewritten to the new truth with the old one kept above them as the argument for it.
+// Measured after, live, seven widths, 0 of 60 controls blocked at every one:
+//     320  25.8px (58.6% of 44)      600   28.1px
+//     375  26.5px                    768   39.0px
+//     414  26.5px                   1280   53.9px  UNCHANGED
+// The 6.8 -> 14.4 -> 25.8 progression is three sessions on one number. It still does NOT clear 44px
+// and cannot: the board is 720x749 user units, so at 320 it is width-bound to 32px even with no
+// chrome at all. See index.css for the arithmetic and for the one design that does reach it.
+// The SHEET's own behaviour · which phase it is up in · lives in GameRoom.sheet.test.jsx.
 
 vi.mock('../lib/supabase', () => ({
   supabase: {},
@@ -124,18 +139,29 @@ describe('the phone rule is WRITTEN and targets the board · not that it wins (s
     expect(phoneBlock).toMatch(/\.game-main\s*\{[^}]*flex-direction:\s*column/)
   })
 
-  it('declares a flex share for the board area', () => {
-    // FALSE CASE, and the shipped one: no rule for the board at all, so it took `flex: 1` against a
-    // sidebar pinned at 240px and got whatever was left · 114px of a 568px screen.
-    expect(phoneBlock).toMatch(/\.game-board-area\s*\{[^}]*flex:\s*3\s+1\s+0/)
-    expect(phoneBlock).toMatch(/\.game-sidebar\s*\{[^}]*flex:\s*2\s+1\s+0/)
+  // ⚠ SUPERSEDED BY S49, AND THE OLD CLAIM IS KEPT HERE BECAUSE IT IS THE ARGUMENT FOR THE NEW ONE.
+  // Until S49 this asserted `flex: 3 1 0` on the board and `flex: 2 1 0` on the sidebar · the 3:2
+  // share that took the hex from 6.8px to 14.4px. The sheet removes the sidebar from the column
+  // entirely, so the board no longer has a SHARE, it has the whole of `main` (14.4px -> 25.8px).
+  // A test that still demanded 3:2 would be asserting the layout we deliberately left (Rule 101).
+  it('gives the board ALL of main, not a share of it', () => {
+    // FALSE CASE, twice over: the S16 version had no rule for the board at all (it took `flex: 1`
+    // against a 240px-pinned sidebar and got 114px of a 568px screen), and the S47 version capped it
+    // at three fifths.
+    expect(phoneBlock).toMatch(/\.game-board-area\s*\{[^}]*flex:\s*1\s+1\s+auto/)
+    expect(phoneBlock, 'the sidebar is out of the flex column now · it is a sheet')
+      .toMatch(/\.game-sidebar\s*\{[^}]*position:\s*absolute/)
+    expect(phoneBlock, 'and it must not still be claiming a share alongside being absolute')
+      .not.toMatch(/\.game-sidebar\s*\{[^}]*flex:\s*2/)
   })
 
-  it('drops the fixed 240px cap · it was right for one viewport height and wrong for the rest', () => {
+  it('caps the SHEET as a fraction of the screen, never as a magic pixel count', () => {
+    // S16 pinned the sidebar at 240px, which was right for one viewport height and silently wrong
+    // for every other. S47 removed it. S49 gives the sheet a ceiling again · but a RELATIVE one, so
+    // it adapts to a 568px phone and an 812px one alike, which is the whole lesson of the 240.
     expect(phoneBlock, 'a magic pixel cap cannot adapt to a 568px phone AND an 812px one')
       .not.toMatch(/max-height:\s*240px/)
-    expect(phoneBlock, 'and the cap must be explicitly released, not merely unset by luck')
-      .toMatch(/\.game-sidebar\s*\{[^}]*max-height:\s*none/)
+    expect(phoneBlock).toMatch(/\.game-sidebar\s*\{[^}]*max-height:\s*\d+%/)
   })
 
   it('lets both children actually shrink · min-height:0 is what makes a flex child scrollable', () => {
@@ -146,9 +172,15 @@ describe('the phone rule is WRITTEN and targets the board · not that it wins (s
     expect(phoneBlock).toMatch(/\.game-sidebar\s*\{[^}]*min-height:\s*0/)
   })
 
-  it('does not touch the desktop layout · measured unchanged at 1280', () => {
-    // 1280 renders a 53.9px cell before and after. The rule lives inside the media block, so this is
-    // structural rather than a hope · but it is the assertion that would catch somebody hoisting it.
+  // ⚠ AND THIS ONE CANNOT SEE WHAT ITS NAME SUGGESTS · T3 S48 found the sharper half of my own S48
+  // finding and they are right. The desktop value it appears to protect · the board's `flex: 1` at
+  // 1280 · IS NOT IN THE STYLESHEET AT ALL. It is an inline style on GameRoom.jsx:786, and a regex
+  // over index.css structurally cannot see it, at either width. So this asserts exactly one thing,
+  // and it is worth having: that nobody HOISTS a phone rule out of the media block. It says nothing
+  // about what desktop resolves to. That is `probe.cascadeFacts()` in a browser, posted to T3.
+  it('no phone rule escapes the media block · it does NOT pin the desktop value (see above)', () => {
+    // 1280 renders a 53.9px cell before and after, measured. That measurement is the evidence; this
+    // assertion is only the tripwire against a hoist.
     const outside = CSS.replace(phoneBlock, '')
     expect(outside, 'a board-area flex rule outside the phone block would resize every screen')
       .not.toMatch(/\.game-board-area\s*\{[^}]*flex:\s*3/)

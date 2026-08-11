@@ -585,8 +585,31 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // Handler in a ref, deps empty: this component re-renders once a second for the turn clock, and an
   // effect that re-subscribes on every render is the S35/S76 hazard. Values change, the listener
   // does not.
+  // ── THE PHONE SHEET (T1 S49) ────────────────────────────────────────────────────────────────────
+  // Below 600px the sidebar stops being a column and becomes a bottom sheet, so the board can have
+  // the whole of `main`. index.css owns the geometry; this owns WHEN it is up.
+  //
+  // IT IS FLOW-AWARE, AND THAT IS THE WHOLE DESIGN. The 4-step placement alternates between controls
+  // that live in the SHEET and a target that lives on the BOARD:
+  //     factorySelected  pick an element   -> in the sheet   -> OPEN
+  //     elementSelected  pick a region     -> in the sheet   -> OPEN
+  //     regionSelected   TAP A VALID HEX   -> on the board   -> CLOSED, always
+  //     scorePending     tap a glowing card-> in the sheet   -> OPEN
+  //     idle             look at the board                  -> CLOSED
+  // So the sheet is never up at the moment the player has to reach the board. That is not a nicety:
+  // an overlay that covers the thing you must tap is this project's most-repeated defect (Rules 78a,
+  // 87, and S39's action log, which covered 31 of 57 cells while still passing clicks through).
+  const SHEET_PHASES = ['factorySelected', 'elementSelected', 'scorePending']
+  const [sheetOpen, setSheetOpen] = useState(false)
+  // Derived on every uiPhase CHANGE, not latched · a manual tap on the handle holds until the flow
+  // moves, and then the flow wins. Deps are one string, so no identity churn can cancel this (Rule 76).
+  useEffect(() => { setSheetOpen(SHEET_PHASES.includes(uiPhase)) }, [uiPhase]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const cancelRef = useRef(null)
   cancelRef.current = () => {
+    // Escape closes a sheet the player opened by hand, even with nothing selected · otherwise the
+    // only way back to a full board is a second tap on a control they may not be looking at.
+    if (uiPhase === 'idle' && sheetOpen) { setSheetOpen(false); return true }
     if (uiPhase === 'idle' || uiPhase === 'scorePending') return false
     if (selectedFactory === null) return false
     handleFactoryClick(selectedFactory) // same id → reset()
@@ -650,6 +673,9 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       // actually asked for once bot seats exist. A test can assert the request ARRIVED here without
       // waiting on the half that consumes it.
       data-practice-bots={practiceBots}
+      // The sheet's state, as an attribute, because index.css drives the transform from it and a
+      // gate needs to read it. It FLIPS · a permanently-mounted testid proves nothing (Rule 50).
+      data-sheet={sheetOpen ? 'open' : 'closed'}
       style={{ height: '100vh', overflow: 'hidden', background: '#0a0a0f', display: 'flex', flexDirection: 'column' }}
     >
 
@@ -815,7 +841,25 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         </div>
 
         {/* SIDEBAR */}
-        <aside className="game-sidebar" style={{
+        {/* THE SHEET HANDLE · phone only (index.css hides it from 601px up). 44px tall, and it is the
+            player's manual way back to the panel when the flow has closed it · without it the sheet
+            would be reachable only by starting a placement, which is the affordance-free version of
+            the same bug this whole change is fixing. It sits INSIDE .game-main so the sheet and its
+            handle share a stacking context with the board rather than floating over the whole app. */}
+        <button
+          className="game-sheet-handle"
+          data-testid="sheet-handle"
+          aria-expanded={sheetOpen}
+          aria-controls="game-sheet"
+          onClick={() => setSheetOpen(o => !o)}
+        >
+          <span className="game-sheet-grip" aria-hidden="true" />
+          <span className="game-sheet-handle-label">
+            {sheetOpen ? 'Hide panel' : `Hand ${currentPlayer?.hand?.length ?? 0} · Offer ${theOffer.length}`}
+          </span>
+        </button>
+
+        <aside id="game-sheet" className="game-sidebar" style={{
           width: 288, borderLeft: '1px solid rgba(255,255,255,0.06)',
           display: 'flex', flexDirection: 'column', padding: 16, gap: 14, overflowY: 'auto', flexShrink: 0,
         }}>

@@ -124,21 +124,102 @@
    14px. That is still under Rule 4's 44px. The full-bleed board with the step panel as a bottom
    sheet is the design job that gets there, and it should be designed rather than improvised. This
    is the reversible half · one rule, no component rewrite. */
+/* ── THE FULL-BLEED PHONE BOARD · THE SIDEBAR BECOMES A BOTTOM SHEET (T1 S49) ────────────────────
+   S47 gave the board a 3:2 SHARE of the column, which doubled the hex from 6.8 to 14.4px. This takes
+   the share away from the sidebar entirely: the board gets ALL of `main`, and the panel comes up over
+   it only when the flow needs it (GameRoom owns the WHEN · see SHEET_PHASES there).
+
+   WHAT IT REACHES, AND THE NUMBER IS THE POINT · 14.4px -> 32.0px at 320. It DOES NOT reach Rule 4's
+   44px, and nothing of this shape can. The board is 720x749 user units and `meet` scales by
+   min(w/vbW, h/vbH), so at 320 it is WIDTH-limited: 320/720 = 0.444, giving 72 * 0.444 = 32.0px even
+   with zero padding, no header at all, and the whole screen below it. A 44px hex needs a 440px-wide
+   viewport and no phone in use is that wide (iPhone Pro Max is 430). I wrote "only the bottom sheet
+   reaches 44px" in the S47 roadmap and again in the S48 close, and that was WRONG · it was reasoned
+   from the height budget, which is not the binding constraint. The only route to 44 is showing ONE
+   REGION at a time (288x312 units -> 80px at 320, measured), which is a different design and is not
+   improvised here.
+
+   AND THE HEADER DOES NOT NEED TO SHRINK, which is worth stating because it was the obvious next
+   move and it would have bought nothing. Removing the sidebar already makes the board width-limited:
+       available height at 320x568 = 568 - 142 header - 73 bar = 353
+       height needed to STAY width-limited = 320 * 749/720 = 333
+   So there is 20px of slack, and 20px is EXACTLY what one extra wrapped line of the instruction costs
+   (S48's finding · a 66-char string wraps and takes 20px of header). One wrap is absorbed; a second
+   would make the board height-limited and start shrinking the hex again. That is why the gate pins
+   the STRING and not just the viewport. */
 @media (max-width: 600px) {
-  .game-main { flex-direction: column !important; }
+  .game-main { flex-direction: column !important; position: relative; }
+
+  /* The board takes the whole column. Padding goes to 0 · at 320 every 16px of it was 3.2px of hex,
+     and the board's own viewBox already carries margin around the outermost cells. */
   .game-board-area {
-    flex: 3 1 0 !important;
+    flex: 1 1 auto !important;
     min-height: 0;
+    padding: 0 !important;
   }
+
+  /* THE HANDLE · 44px (Rule 4), a FULL-WIDTH BAR at the foot of `main`, and the board is padded to
+     clear it. It is REQUIRED and cannot be dropped: the Offer lives in the sheet, so drawing a card ·
+     a legal action on any turn · is unreachable without a way back to the panel in idle.
+     I BUILT THE OTHER ONE FIRST AND MEASURED IT, because 44px of a 568px screen is a real price:
+         floating pill over the board, no reservation  ·  hex 27.8px  ·  1-3 of 60 cells BLOCKED in
+                                                          idle, and 1 of the 4 element buttons blocked
+                                                          when the sheet is up (the pill outranks it)
+         full-width bar, board padded to clear it      ·  hex 25.8px  ·  0 of 60 blocked, every state
+     The pill buys 2px of hex and breaks reachability in two places · and every other measurement of
+     it was green, which is the whole reason occlusion was named as the invisible failure BEFORE the
+     numbers were trusted. A control that is bigger and unreachable is not bigger (Rule 78). */
+  .game-sheet-handle {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 3;
+    display: flex; align-items: center; justify-content: center;
+    height: 44px; min-height: 44px;
+    border: none; border-top: 1px solid rgba(255,255,255,0.08);
+    background: rgba(14,14,20,0.94);
+    color: rgba(255,255,255,0.72);
+    font-size: 12px; letter-spacing: 1px;
+    cursor: pointer;
+  }
+  .game-sheet-grip {
+    width: 34px; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.35);
+    margin-right: 10px;
+  }
+
+  /* THE SHEET. `absolute` inside .game-main rather than `fixed` over the app, so it can never cover
+     the header or the action bar · the two things a player uses to understand and leave the turn.
+     It is translated fully out of the way when closed (100% of its own height PLUS the handle), so
+     nothing of it is on screen and nothing of it can take a tap meant for the board. */
   .game-sidebar {
-    width: 100% !important;
-    max-width: 100% !important;
-    flex: 2 1 0;
-    max-height: none;
+    position: absolute;
+    left: 0; right: 0; bottom: 44px;
+    z-index: 2;
+    width: auto !important;
+    max-width: none !important;
+    max-height: 58%;
     min-height: 0;
     border-left: none !important;
-    border-top: 1px solid rgba(255,255,255,0.06);
+    border-top: 1px solid rgba(255,255,255,0.10);
+    background: rgba(12,12,18,0.97);
+    box-shadow: 0 -12px 32px rgba(0,0,0,0.45);
+    transform: translateY(calc(100% + 44px));
+    transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+    overscroll-behavior: contain;
   }
+  [data-sheet='open'] .game-sidebar { transform: translateY(0); }
+
+  /* The board keeps the space the bar occupies · this reservation is what buys 0 blocked cells. */
+  .game-board-area { padding-bottom: 44px !important; }
+}
+
+/* Desktop keeps the column it has always had · the handle is phone-only furniture. */
+@media (min-width: 601px) {
+  .game-sheet-handle { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-sidebar { transition: none !important; }
 }
 
 /* ── Element placement burst · 6 particles fly 24px outward and shrink as a token lands (T1 S15) ──
