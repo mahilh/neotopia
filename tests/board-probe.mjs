@@ -330,6 +330,56 @@ export function boardMetrics() {
   }
 }
 
+// ── WHAT A STYLESHEET STRING MATCH CANNOT ANSWER (T1 S48) ────────────────────────────────────────
+// My own S47 gate asserts that index.css CONTAINS `flex: 3 1 0` inside the 600px block, and I wrote
+// in the roadmap that this pins the STRING and not the BEHAVIOUR: it passes if the rule is beaten
+// later in the cascade, if a more specific selector wins, or if an !important lands somewhere that
+// outranks it. jsdom cannot close that gap · it has no cascade resolution for layout and no viewport
+// · so the question belongs in a browser and the answer is getComputedStyle, which is the ONLY thing
+// that knows who actually won.
+//
+// Returns the RESOLVED values, not the authored ones. The caller decides what they should be at a
+// given width, because the expectation is a layout decision and this is an instrument.
+//
+// AND IT REPORTS `measured: false` RATHER THAN A PLAUSIBLE ZERO. A missing element gives a reason
+// string, never a flexGrow of 0 that reads exactly like a rule that lost (Rule 80).
+export function cascadeFacts() {
+  const board = document.querySelector('.game-board-area')
+  const side = document.querySelector('.game-sidebar')
+  const main = document.querySelector('.game-main')
+  if (!board) return { measured: false, reason: 'no .game-board-area · the board container is unclassed again' }
+  if (!side) return { measured: false, reason: 'no .game-sidebar' }
+  if (!main) return { measured: false, reason: 'no .game-main' }
+
+  const read = (el) => {
+    const cs = window.getComputedStyle(el)
+    const r = el.getBoundingClientRect()
+    return {
+      flexGrow: cs.flexGrow,
+      flexShrink: cs.flexShrink,
+      flexBasis: cs.flexBasis,
+      minHeight: cs.minHeight,
+      maxHeight: cs.maxHeight,
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+    }
+  }
+  return {
+    measured: true,
+    viewport: [window.innerWidth, window.innerHeight],
+    flexDirection: window.getComputedStyle(main).flexDirection,
+    board: read(board),
+    sidebar: read(side),
+    // The share the two ACTUALLY ended up with · the quantity the S47 rule exists to set, expressed
+    // as the thing a player experiences rather than as the declaration that was supposed to cause it.
+    boardShareOfMain: (() => {
+      const b = board.getBoundingClientRect().height
+      const s = side.getBoundingClientRect().height
+      return b + s > 0 ? +(b / (b + s)).toFixed(3) : null
+    })(),
+  }
+}
+
 const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
 export const luminance = (p) => 0.2126 * lin(p[0]) + 0.7152 * lin(p[1]) + 0.0722 * lin(p[2])
 export const contrast = (a, b) => {
@@ -411,4 +461,4 @@ export async function setup({ scale = 2, inlineImages = true } = {}) {
   return { at, recognise, contrast, luminance, viewBox: [vx, vy, vw, vh], scale, background: bg, intrinsic: R.intrinsic, rasterise, width: R.w, height: R.h }
 }
 
-export default { setup, seedOneOfEach, seedPlayedBoard, reachability, boardMetrics, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }
+export default { setup, seedOneOfEach, seedPlayedBoard, reachability, boardMetrics, cascadeFacts, hexToPixel, hexesInRadius, contrast, luminance, ELEMENT_COLORS, REGION_META }

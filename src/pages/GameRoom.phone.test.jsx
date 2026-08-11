@@ -30,6 +30,32 @@ import { clearSaved } from '../hooks/useLocalSession'
 // addressable at all, and that the rule which gives it a share still exists and still targets it.
 // The pixels are asserted in a browser, where `probe.boardMetrics` reads them, and that gate is
 // T3's. A test here that faked a rect would be measuring its own fixture.
+//
+// ── AND THE STYLESHEET HALF PINS A STRING, NOT A BEHAVIOUR (T1 S48, correcting T1 S47) ───────────
+// Said plainly because I wrote the opposite impression into the S47 handoff and then had to correct
+// it in the roadmap: every `phoneBlock` assertion below proves the rule IS WRITTEN. None of them
+// proves it WINS. All of them pass if a later rule overrides it, if a more specific selector beats
+// it, or if an !important lands somewhere that outranks it · because a regex over a stylesheet has
+// no cascade, no viewport and no specificity.
+// That is still worth having · it catches a deletion, a typo'd selector and a hoist out of the media
+// block, which are the three ways this has actually broken. But the question "does the board really
+// end up with the share" is answered by `probe.cascadeFacts()` in a browser at 320 and at 1280,
+// posted to T3 for tests/e2e/measure.js. The alarm here is precise; the proof lives where the
+// cascade does.
+//
+// AND THAT PROBE FOUND ONE ON ITS FIRST RUN, WHICH IS WHY THIS IS NOT A THEORETICAL WORRY. Measured
+// at 320, 375 and 600 on the practice board:
+//     .game-sidebar  authored `flex: 2 1 0`   ->  RESOLVED flex-shrink: 0
+// because GameRoom.jsx:820 carries an inline `flexShrink: 0` on the <aside>, and an inline style
+// beats a stylesheet rule that has no !important. So one of the terms the test below asserts is not
+// the term the browser runs. It is HARMLESS here · flex-basis is 0 and grow is 2, both of which the
+// stylesheet does win, and the measured share is 0.588 against the 0.6 the rule intends · and the
+// inline 0 is CORRECT at 1280, where the sidebar is a fixed 288px column that must not shrink. So it
+// is left alone deliberately. The point is that a regex over index.css reported a green on a
+// declaration the page never applied, and only getComputedStyle could say so.
+// Resolved values, measured:
+//     320/375/600  column · board 3/1/0px · sidebar 2/0/0px · both min-height 0 · sidebar max-height none
+//     1280         row    · board 1/1/0%  · sidebar 0/0/auto/288px wide · desktop untouched
 
 vi.mock('../lib/supabase', () => ({
   supabase: {},
@@ -92,13 +118,13 @@ describe('the board area is addressable', () => {
   })
 })
 
-describe('the phone rule gives the board a share instead of the leftovers', () => {
+describe('the phone rule is WRITTEN and targets the board · not that it wins (see header)', () => {
   it('exists at all, and only below the 600px breakpoint', () => {
     expect(phoneBlock, 'the @media (max-width: 600px) block is gone').not.toBe('')
     expect(phoneBlock).toMatch(/\.game-main\s*\{[^}]*flex-direction:\s*column/)
   })
 
-  it('gives the board area a flex share', () => {
+  it('declares a flex share for the board area', () => {
     // FALSE CASE, and the shipped one: no rule for the board at all, so it took `flex: 1` against a
     // sidebar pinned at 240px and got whatever was left · 114px of a 568px screen.
     expect(phoneBlock).toMatch(/\.game-board-area\s*\{[^}]*flex:\s*3\s+1\s+0/)

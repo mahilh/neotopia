@@ -300,7 +300,7 @@ describe('it can cross into a page', () => {
   // second page-bound function to the same file and did not extend it · a guard applied to one
   // member of a class while the class grew. So it is a LIST now, and adding an export without
   // adding it here is the thing that fails.
-  const PAGE_BOUND = ['reachability', 'seedPlayedBoard', 'seedOneOfEach', 'boardMetrics']
+  const PAGE_BOUND = ['reachability', 'seedPlayedBoard', 'seedOneOfEach', 'boardMetrics', 'cascadeFacts']
 
   it.each(PAGE_BOUND)('%s survives being serialised into a page', (name) => {
     const fn = probe[name]
