@@ -250,6 +250,21 @@ THE FIXED CI IDENTITY POOL · the project's only defect with a FINANCIAL denomin
      --status=success when you want a log · but for the opposite reason: an unfinished run has not
      written one yet. A cancelled run keeps BOTH its log and its step conclusions, which is what
      scripts/ci-receipt.cjs now reads.
+  ✅ THE TRIPWIRE HAS A READER (T2 S61) · `node scripts/pool-conversion.cjs [--since <sha>]`. Reads
+     `[pool]` lines out of CI run logs, which the purge cannot delete and which attach to a run, so
+     a run has a headSha and the window anchors to a COMMIT rather than to a clock. BROWSER AND
+     TEARDOWN ARE REPORTED SEPARATELY AND THERE IS DELIBERATELY NO COMBINED RATE · they are two
+     producers, and teardowns hit 100% in S59 while browsers were still at 0, so a blend would have
+     read as progress nobody had made. Zero gradeable lines is UNMEASURED, never 0%.
+     FIRST READING (last 12 runs, before the member-1 fix):
+       browser  3/6 REUSED · 3 minting · +3 UNMEASURED    teardown 10/10 REUSED
+       by label · game-ux host reused=3 · game-ux joiner unconverted=3 unmeasured=3
+  ⚠ DO NOT MEASURE THIS FROM game_rooms.host_id · I recommended it in S60 and it CANNOT WORK.
+     host_id really is the discriminator (a room's host is whichever identity authenticated) and the
+     rows do not survive: purge_e2e_test_data runs in globalTeardown, once per playwright
+     invocation, so 689 rooms exist all-time and exactly ONE was created after the wiring commit.
+     The 200-row probe that sold the idea was a rolling window full of old rooms (Rule 126, in my
+     own instrument, one session after I wrote the warning into the brief).
      PROVEN, anchored to the COMMIT and not to a window (Rule 126) · e2e-placement-guard successes,
      one line each, boundary exactly at 59d3bea with nothing straddling it:
        8293ea6 d014f68 59d3bea   post-env   member 0 REUSED 462b5106 · 0 minted
@@ -569,6 +584,37 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 130 (T2 S61 · August 12 2026):
+WHEN TWO PATHS PRODUCE THE SAME OUTPUT, THE ONE YOU CARE ABOUT IS UNTESTABLE · AND BOTH OF MINE
+REPORTED THEMSELVES AS PRESENT AND CORRECT.
+Seventeen mutations tonight, fifteen behaved. The two that came back GREEN were not gaps in coverage,
+they were the same defect wearing two costumes, and neither was findable by rereading:
+  130a · THE REDUNDANT GUARD. My counterweight against printing a rate from an empty sample was an
+        early return for "nothing at all", and four lines below it a second `graded === 0` branch
+        said the same thing. Deleting the first changed NO test, because the second still produced
+        UNMEASURED. Either was sufficient, so no mutation could red either, and the assertion I had
+        written FIRST and specifically to be falsifiable was the one thing in the file that could not
+        fail. Collapsing them to one gave the survivor teeth immediately.
+  130b · THE CONTROL THAT FIRED THROUGH THE WRONG PATH. My drift detector compares tokens against the
+        harness source; the control pointed it at a nonexistent root and asserted it complained. It
+        did complain · from the `file unreadable` catch, which is a different branch entirely. So the
+        control produced the RIGHT OBSERVABLE via the WRONG MECHANISM, the token comparison it
+        existed to prove was never executed once, and disabling that comparison left the suite green.
+        Rewritten against a temp tree where every file is present and readable and exactly ONE token
+        is reworded, it reds.
+THE TELL IS ONE QUESTION, ASKED OF A GREEN RESULT RATHER THAN A RED ONE: how many ways could this
+output have been produced? If more than one, the run tells you nothing about which. Rule 120 says an
+absence needs a positive control; this is the half it leaves open · a positive control has to
+exercise the MECHANISM you are about to assert the absence of, not merely provoke the same string.
+And the cost asymmetry is why it is worth a rule: a redundant guard and a wrong-path control both
+LOOK like extra rigour, so they are the two constructs least likely to be re-examined.
+COROLLARY, and it is why the whole session's arithmetic is trustworthy: the trap I DID predict was
+the intent line. A converted browser context prints both `seeded member 0` and `REUSED member 0`, so
+counting every line as an outcome would double every success · and the rate would climb toward 100%
+exactly as conversion improved, which is the direction everybody wants it to move. A bias that
+flatters the result is the one nobody audits, so I wrote its counterweight before the tally function
+existed. It reds under mutation. Predicting one trap does not cover the two you did not.
 
 RULE 129 (T2 S60 · August 12 2026):
 TWO PROPERTIES OBSERVED TOGETHER ONCE ARE NOT CAUSE AND EFFECT · AND THE CHEAPEST DISCONFIRMATION IS
