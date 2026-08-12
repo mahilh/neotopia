@@ -85,6 +85,20 @@ const PRACTICE_STORAGE_KEY = (() => {
   return m[1]
 })()
 
+// Read the same way, and for a sharper reason (T3 S58). This is one half of a CONTRACT BETWEEN TWO
+// MODULES: useLocalSession SEATS the practice human under this id, and useGameSync MATCHES on it to decide
+// whether the turn clock is running on your own turn or somebody else's. Both import the constant, so they
+// cannot disagree about its VALUE · what they can disagree about is whether the seat still carries it at
+// all, and that divergence has no unit test on either side because each file's tests build their own
+// fixture. Reading the declaration here and the seat from a LIVE store is two genuinely different sources
+// (Rule 92a), and the assertion reds exactly when producer and consumer come apart.
+const PRACTICE_HUMAN_ID = (() => {
+  const src = readFileSync(new URL('../../src/hooks/useLocalSession.js', import.meta.url), 'utf8')
+  const m = src.match(/PRACTICE_HUMAN_ID\s*=\s*['"]([^'"]+)['"]/)
+  if (!m) throw new Error('could not read PRACTICE_HUMAN_ID from src/hooks/useLocalSession.js · fix the pattern, do not hardcode the id')
+  return m[1]
+})()
+
 const DISTRICT_BUDGET_MS = 60_000
 const BOT_STALL_MS = 8_000
 const POLL_MS = 250
@@ -117,6 +131,15 @@ const humanSeat = (s) => s.players.find(p => !p.isBot)?.seat ?? 0
 // Everything a move can change. Board progress is judged on this rather than on turnNumber alone, because a
 // bot spends three actions INSIDE one turn and a turn-only measure would read two of them as a stall.
 const progress = (s) => `${s.turnNumber}:${s.currentSeat}:${s.actionsRemaining}:${s.placed}:${districts(s)}`
+// WORK, as distinct from progress: the part of the board that only a player ACTION can move (T3 S58).
+// progress() deliberately includes turn, seat and actions, all three of which endTurn changes on its own ·
+// which makes it the right measure for "is the board moving" and the wrong one for "did somebody act",
+// because the turn clock calls endTurn. Every field below is untouched by endTurn (measured across a real
+// timed-out turn), so a change in this string is an action and cannot be the clock.
+// ALL THREE FIELDS EARN THEIR PLACE, and one run proved it rather than the argument: the bot's first act
+// is usually a PLACEMENT (0:3,3:0,0 → 1:3,3:0,0) and on another run it was a DRAW (→ 0:3,4:0,0). A witness
+// watching only the board would have been blind at that sample and would have waited on the next action.
+const work = (s) => `${s.placed}:${s.players.map(p => p.hand).join(',')}:${s.players.map(p => p.districts).join(',')}`
 
 // The first-run tutorial is a modal with aria-modal="true" and it INTERCEPTS POINTER EVENTS · a fresh
 // browser context has never seen it, so every practice game in this spec opens behind it. Dismissing it is
@@ -1329,8 +1352,41 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
 // controlled: a bot cannot act on the human's seat, and the human never acts · asserted by actionsRemaining
 // staying at 3 for every sample up to the fire. If the turn moves while actions are untouched on the
 // human's own turn, the clock is the only thing in the codebase that can have done it.
-test.describe('practice · the turn clock fires in a real browser (T3 S57)', () => {
-  test('an idle practice turn ends itself · at the limit, with NO remote grace', async ({ page }) => {
+//
+// ── PHASE TWO (T3 S58) · A CLOCK THAT FIRES INTO A DEAD GAME HAS NOT HELPED ANYONE ───────────────────────
+// The S57 version broke out of its loop at the first seat change, so it proved the clock fires and NOTHING
+// about the board it left behind. That gap is not hypothetical here: a turn handed to a bot that never
+// takes it is the exact failure this project has shipped THREE times, always the same way · a de-duplication
+// latch keyed on a composite of state that the stuck case leaves byte-identical (T1 S33 bots froze on their
+// first scored district, T2 S46 froze on a deadlocked board, Rule 107). turnNumber is in seatSignature
+// today, so this SHOULD resume · and "should" is what was wrong all three times.
+//
+// AND THE FAILURE PHASE TWO CANNOT SEE, which is the whole reason it is not written as "the seat came back":
+// THE CLOCK CAN MOVE A FROZEN BOT'S TURN TOO. On the bot's seat this client is remote, so it fires again one
+// grace unit later (17.25s in Flow) and the turn returns to the human with the bot having done nothing at
+// all. A seat-movement assertion passes on that build. So the witness has to be a quantity that ONLY AN
+// ACTION can change and that endTurn cannot · elements placed, cards held, districts scored. Measured on a
+// real board: across the human's entire idle turn AND the clock's own fire, that quantity does not move
+// (0 placed, 6 cards, 0 districts, byte-identical), and 615ms into the bot's turn it does. The unchanged
+// half is the negative control and it is asserted in the same run, not remembered from this comment.
+// NOTE the deck is deliberately NOT in it: the deck DOES tick down on a turn boundary (46 to 45, measured),
+// so a witness including it would have been satisfied by the endTurn it exists to exclude.
+//
+// AND THE FROZEN BUILD WAS BUILT AND MEASURED, not argued (mutation: the bot driver made inert from turn 2):
+//     15060ms  seat 1  turn 2   placed 0  hands 3/3  districts 0/0    the clock hands the turn over
+//     33961ms  seat 0  turn 3   placed 0  hands 3/3  districts 0/0    it comes BACK · nothing happened
+// 18.9s of a dead game, and the seat is exactly where a seat-only assertion wants it. That run reds here
+// with "bot work NONE" and would have passed on any assertion phrased as "the turn returned".
+//
+// ⚠ WHAT THIS DOES NOT COVER, measured rather than assumed, because the failure message above would
+// otherwise be read as gating a class it cannot reach. Removing turnNumber from useBotTurns' latch key ·
+// the exact Rule 107 defect · leaves this test GREEN (measured, mutation M2a). The latch only freezes when
+// its key REPEATS, and a key repeats only across a bot turn in which the bot did nothing, which needs a
+// deadlocked board that ~20s of play from a fresh deck cannot reach. Extending to a second bot turn would
+// not change that: the bot's own actions move actionsRemaining, so consecutive keys differ anyway. This
+// test gates "a turn handed over by the CLOCK is actually taken", and that is all it gates.
+test.describe('practice · the turn clock fires in a real browser (T3 S57/S58)', () => {
+  test('an idle practice turn ends itself · and the game keeps playing afterwards', async ({ page }) => {
     test.setTimeout(120_000)
     await page.goto('/practice?bots=1')
     await boardReady(page)
@@ -1355,13 +1411,37 @@ test.describe('practice · the turn clock fires in a real browser (T3 S57)', () 
       'nothing but the clock can move the seat').toBe(0)
     expect(start.actionsRemaining, 'the human turn did not start with a full budget').toBe(3)
 
+    // ── THE SEAT-RESOLUTION CONTROL, MADE STRUCTURAL (T3 S58 · this REPLACES a timing bound, see below) ──
+    // The half of the practice clock that regresses silently is not whether it fires, it is WHOSE schedule
+    // it fires on: a practice human whose seat carries an id the hook does not match on is classified
+    // REMOTE, picks up the grace, and ends their own turn late rather than not at all.
+    // S57 caught that by MEASURING THE LATENESS, and the measurement was the weak part · see the note at
+    // the end of this test. The proposition itself needs no clock: assert the identity instead of defending
+    // a tolerance (Rule 111's corollary). Mutation-proven · seating the human under any other id reds this
+    // in under a second, where the timing version needed 18 seconds and a load-free machine to say so.
+    const seats = await page.evaluate(() => (window.__neotopia_store.getState().players ?? [])
+      .map(p => ({ seat: p.seat, userId: p.userId, isBot: !!p.isBot })))
+    const mine = seats.filter(p => !p.isBot)
+    expect(mine.length, `practice seated ${mine.length} humans · the seat-resolution claim below is about ` +
+      `exactly one (${JSON.stringify(seats)})`).toBe(1)
+    expect(mine[0].userId, 'the LIVE practice board seats the human under an id that useGameSync does not ' +
+      'match on, so the clock treats them as a remote client and ends their own turn one grace unit late · ' +
+      'in Classic that is 95s against a Tutorial printing 90. useLocalSession and useGameSync have come ' +
+      `apart: the declaration says '${PRACTICE_HUMAN_ID}' and the running board says '${mine[0].userId}'`)
+      .toBe(PRACTICE_HUMAN_ID)
+    expect(mine[0].seat, 'the human does not hold the seat this test is about to watch time out')
+      .toBe(start.currentSeat)
+
+    // THE NEGATIVE CONTROL FOR PHASE TWO, captured before anything has happened. Asserted at the fire.
+    const workAtStart = work(start)
+
     // Sample until the seat moves. Nothing is clicked · the whole point is that the board is idle.
     const t0 = Date.now()
     let fired = null
     const samples = []
     while (Date.now() - t0 < LIMIT_MS + GRACE_UNIT_MS * 2 + 4_000) {
       const s = await read(page)
-      samples.push({ ms: Date.now() - t0, seat: s.currentSeat, turn: s.turnNumber, actions: s.actionsRemaining })
+      samples.push({ ms: Date.now() - t0, seat: s.currentSeat, turn: s.turnNumber, actions: s.actionsRemaining, work: work(s) })
       if (s.turnNumber !== start.turnNumber || s.currentSeat !== start.currentSeat) {
         fired = samples.at(-1)
         break
@@ -1381,28 +1461,70 @@ test.describe('practice · the turn clock fires in a real browser (T3 S57)', () 
       `have moved for a reason other than the clock · ${JSON.stringify(before.slice(-3))}`).toBe(true)
 
     // NOT BEFORE the limit · a clock that fires early takes a turn off someone still reading the board.
+    // This bound is the load-ROBUST direction: contention makes a timer late, never early.
     expect(fired.ms, 'the turn ended BEFORE the budget').toBeGreaterThanOrEqual(LIMIT_MS - 1_000)
 
-    // AND THE SEAT-RESOLUTION HALF, which is the one that regresses silently: a practice human matched only
-    // on the auth uuid finds no seat, is classified REMOTE, and picks up the grace · firing LATE rather
-    // than not at all. That is invisible to "did it fire" and is exactly why this bound is here.
-    // ⚠ THE WIRE, AND WHAT IT IS WORTH · sized from measurement, not from the run that produced it
-    // (preamble §2). Five baselines: 15133 · 15127 · 15156 · 15285 · and 16670 under load, that last one
-    // during three back-to-back playwright invocations, which is the Rule 77 artifact rather than the
-    // feature. Mutating the seat fallback away fires at 18161. So the bound sits between a worst-case
-    // baseline of ~16.7s and a mutated 18.2s · a real separation, but a LOAD-SENSITIVE one, because the
-    // signal (one grace unit, 2250ms) is only slightly larger than the jitter (1s clock tick + sampling).
-    // The margin is printed above on every run so a near-miss is visible BEFORE it becomes a flake.
-    // If this ever does flake, the fix is NOT a wider bound · it is to run this assertion in Classic,
-    // where the same separation is 5000ms against the same jitter. That costs 95s and is nightly-class,
-    // which is why it is not here.
-    const marginMs = LIMIT_MS + GRACE_UNIT_MS - fired.ms
-    console.log(`[practice-clock] margin to the grace bound · ${marginMs}ms`)
-    expect(fired.ms, 'the clock fired late by roughly one grace unit · the practice human was classified as ' +
-      'a REMOTE client (no seat matched the auth id), so their own turn is being ended on somebody else\'s ' +
-      `schedule · in Classic that is 95s against a Tutorial printing 90. Margin was ${marginMs}ms; if this ` +
-      'is a small NEGATIVE number on a working build, the machine was loaded and the assertion belongs in ' +
-      'Classic rather than widened here.')
-      .toBeLessThan(LIMIT_MS + GRACE_UNIT_MS)
+    // ⚠ WHERE A TIMING BOUND USED TO BE, AND WHY IT IS GONE (T3 S58 · paying a debt I named in S57) ───────
+    // S57 asserted `fired.ms < LIMIT_MS + GRACE_UNIT_MS` (17250) to catch a human misclassified as remote,
+    // and I shipped it knowing it was load-sensitive: signal one grace unit (2250ms) against a jitter I
+    // described as "a 1s clock tick plus sampling". THE JITTER WAS BIGGER THAN THAT AND I HAD NOT MEASURED
+    // IT · which is the actual lesson, because the number I quoted was reasoned rather than computed.
+    // The clock re-anchors INSIDE its own 1s tick (useGameSync · `if (turnStartRef.current.turn !== turn)`),
+    // so on any turn after the first the deadline carries up to a full tick of anchor lag ON TOP of the tick
+    // quantisation of the fire itself. Measured on a real board, no load:
+    //     turn 1 (anchored by the effect at phase change)  14754 · 14999 · 15060 · 15953 · 15981
+    //     turn 3 (anchored by the tick)                    16120                ← 1130ms from the bound
+    //     a bot's turn, remote grace applied (M2 run)      18901                ← not 17250. Same lag.
+    // So the worst case is structurally ~17000ms against a 17250ms wire · a 250ms margin BEFORE any load,
+    // and the only reason S57 looked safe is that it happens to measure turn 1, the one anchored exactly.
+    // Even that is thinner than S57 recorded: it quoted a 15127-15285 band from five runs and the very
+    // next five reached 15981, which is Rule 87 in one line · a reported range is a sample, not a boundary.
+    // A wire that survives on which turn you sampled is a flake with a delay on it (Rule 111's corollary),
+    // and it was sitting on a job that completes about 37% of the time, where a flake is invisible.
+    // WHAT REPLACED IT is the structural seat assertion above: same proposition, zero jitter, one second.
+    // WHAT IS LOST, stated rather than left for a reader to notice (preamble §4): the LIVE witness for
+    // deleting the hook's `?? ...PRACTICE_HUMAN_ID` fallback, which S57 measured firing at 18161ms. That
+    // mutation now reds in useGameSync.turntimeout.test.js (deterministically, jsdom) and not here. The
+    // composition therefore rests on two assertions in two files rather than one wire · which is the trade,
+    // and the remaining live backstop is this loop's own budget: it would report "NEVER" past ~23.5s, an
+    // 8.5s margin rather than a 250ms one.
+
+    // ── PHASE TWO · THE BOT TAKES THE TURN THE CLOCK HANDED IT (T3 S58) ─────────────────────────────────
+    // The negative control first (Rule 90), and it is the assertion that makes everything below mean
+    // anything: the clock's own fire must NOT have moved the work quantity. If an endTurn can change this
+    // string, phase two is measuring the clock a second time and calling it a bot.
+    expect(fired.work, 'the clock\'s fire changed the very quantity phase two uses to prove a bot ACTED · ' +
+      `endTurn must be inert here or the witness is worthless (start ${workAtStart}, fire ${fired.work})`)
+      .toBe(workAtStart)
+
+    const WORK_BUDGET_MS = 10_000     // observed 615ms · 16x, and well under the 17250ms remote deadline
+    const RETURN_BUDGET_MS = 15_000   // observed 2858ms · 5x
+    const t1 = Date.now()
+    let acted = null
+    while (Date.now() - t1 < WORK_BUDGET_MS) {
+      const s = await read(page)
+      if (work(s) !== workAtStart) { acted = { ms: Date.now() - t1, seat: s.currentSeat, turn: s.turnNumber, work: work(s) }; break }
+      if (s.phase !== 'playing') break
+      await page.waitForTimeout(250)
+    }
+    console.log(`[practice-clock] bot work ${acted ? `at +${acted.ms}ms · ${workAtStart} → ${acted.work} (seat ${acted.seat}, turn ${acted.turn})` : 'NONE'}`)
+
+    // The seat and turn at the moment of observation are PRINTED and not asserted, deliberately. They add
+    // no logic · the human issues no clicks in this test and its actions held at 3 throughout, so the bot
+    // is the only agent that can have moved this · and asserting them would reintroduce exactly the
+    // sampling-race sensitivity the note above just removed.
+    expect(acted, `the clock handed the turn to a bot and the bot did nothing for ${WORK_BUDGET_MS}ms · the ` +
+      'board is frozen where it was handed over. The player will see the turn come BACK to them in about ' +
+      '19s (the clock ends the frozen bot\'s turn too) and will have played a game against an opponent ' +
+      'that never moved, which is why the seat returning is not the thing being asserted here')
+      .not.toBeNull()
+
+    // And it hands back. A bot that acts and never yields is a different bug with the same symptom.
+    await expect.poll(() => read(page).then(s => `${s.currentSeat}:${s.turnNumber > fired.turn}`), {
+      timeout: RETURN_BUDGET_MS,
+      message: `the bot acted (+${acted.ms}ms) and never gave the turn back · the human is locked out of a ` +
+        'game that is still running, and the clock cannot rescue them because it only ends the turn of ' +
+        'whoever holds it',
+    }).toBe(`${start.currentSeat}:true`)
   })
 })
