@@ -570,6 +570,53 @@ alone would pass on a build where the bot seat was skipped entirely, so it requi
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
 
+RULE 129 (T2 S60 · August 12 2026):
+TWO PROPERTIES OBSERVED TOGETHER ONCE ARE NOT CAUSE AND EFFECT · AND THE CHEAPEST DISCONFIRMATION IS
+TO ASK THE SAME OBJECT AGAIN LATER, WHICH COSTS ONE COMMAND AND NO NEW SUBJECT.
+In S59 I probed CI run 31637130091, got zero log lines, and wrote into CLAUDE.md and a commit message
+that "a CANCELLED run has ZERO log lines" · advice for the next session, phrased as a property of
+cancellation. Measured this session across six cancelled runs: FIVE have logs, 119 to 623 lines. The
+sixth has none, and it was cancelled BEFORE ITS JOB STARTED. And the decisive one needed no new
+sample at all:
+    31637130091   asked in S59, while IN PROGRESS   ->    0 log lines
+    31637130091   asked in S60, now FINISHED        ->  623 log lines
+Same run, same id, nothing changed but time. The run was BOTH cancelled AND unfinished when I looked,
+I put the first in my sentence and never noticed the second, and a log that has not been written yet
+looks exactly like a log that was destroyed.
+  129a · THE TELL IS THAT YOU CAN ONLY NAME ONE PROPERTY OF THE SAMPLE. Ask "what else was true of
+        this object when I measured it?" · in progress, first of its kind, run on a Sunday, freshly
+        deployed, cold cache. A cause you picked from a single observation is competing with every
+        other property that observation had, and you are aware of exactly one of them. Rule 122's
+        corollary says three blocks before a shape is reported and is about statistical results;
+        this is the causal-attribution sibling, where n=1 and the story is airtight because there is
+        nothing in the sample to contradict it.
+  129b · A RE-ASK BEATS A NEW SAMPLE when the property might be TRANSIENT, because it holds the
+        subject fixed. A second cancelled run would have varied ten things at once; the same run
+        five hours later varied one. Cost: one command. This is the time-domain form of Rule 74
+        (score the SAME games under both rules rather than running the experiment twice).
+  129c · AND A WRONG MECHANISM UNDER RIGHT ADVICE IS THE DURABLE HALF. "Filter on --status=success"
+        was correct and stays correct · for the opposite reason (an unfinished run has not written a
+        log, not that cancellation destroys one). Nobody re-derives a mechanism attached to advice
+        that works, so it survives indefinitely and then misleads the one session that needs it ·
+        here, the session that wanted to read a cancelled run's steps and would have concluded there
+        was nothing to read.
+SECOND HALF, AND IT IS THE ACTIONABLE ONE · A STATED LIMIT SHOULD BE COMPUTED, NOT TYPED, WHENEVER
+THE THING IT DESCRIBES CAN CHANGE. The pool step's summary must say that browser contexts are still
+minting, so nobody reads a falling identity count as the feature having landed. The obvious version
+is a sentence: "no browser context converts". The brief said so, it was true at the commit boundary,
+and it was ALREADY FALSE in the shared working tree, where T3 was building it uncommitted (Rule 66).
+So the note walks tests/ each run and picks one of three branches · including the dangerous middle,
+seeded but not asserted, which is a browser silently falling back while every spec passes. T3
+committed the wiring an hour later and the sentence changed itself. A typed limit would have been a
+false claim inside the artifact whose entire job is preventing a false claim, and it would have read
+as rigour the whole time (preamble §4 · a stated LIMIT needs the same counterweight as a finding,
+because limitations get believed harder).
+COROLLARY, from the same session and free: RUN A NEW INSTRUMENT BEFORE BELIEVING IT. The step reader's
+first execution reported "NEVER RAN · Upload report on failure" · a step carrying `if: failure()`
+that is SUPPOSED to skip on a healthy run. A gate that cries wolf on a working run is switched off
+long before the day it is right (Rule 94a), and no amount of rereading the code would have shown it;
+one execution did, immediately.
+
 RULE 128 (T2 S59 · August 12 2026):
 A GUARD THAT READS AN ARTIFACT MUST RUN WHERE THE ARTIFACT EXISTS · AND "IT PASSES EVERY TIME
 LOCALLY" IS THE SYMPTOM, NOT THE REASSURANCE.
