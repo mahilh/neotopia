@@ -43,6 +43,30 @@ jobs:
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      # ── ALL FOUR MEMBERS · THIS IS WHERE THE POOL IS WORTH THE MOST  (T2 S59) ─────────────────
+      # Found by tracing the composition an hour after T3 landed d014f68, not by planning it. Their
+      # commit converts three specs to signInPooledOrAnon · four-player-live asks for one member PER
+      # SEAT (indices 0-3), solo-host and seat-colors take member 0 · and ALL THREE run here and
+      # nowhere else. Without these lines poolCredential() returns null for every one of them, the
+      # helper falls back to signInAnonymously exactly as designed, every spec passes, and the
+      # conversion is real in the code and inert in effect. Two correct halves in two lanes with the
+      # workflow between them, which is the same seam that hid three unreachable pool members this
+      # morning (Rule 128's corollary, twice in one session, from opposite directions).
+      # four-player-live is the most sign-in-expensive spec in the repo · four permanent auth.users
+      # rows per nightly run · so this is the single highest-value place the pool applies.
+      #
+      # THE ALIAS MAP, same as e2e.yml: the harness reads E2E_POOL_EMAIL_1/_2/_3 and the repo holds
+      # E2E_POOL_JOINER/P3/P4_EMAIL. Mapped here rather than renamed anywhere, so the reconciliation
+      # lives in the workflow layer and both lanes' files stay untouched. A FIFTH member created
+      # without a line here is invisible again · `verify-pool-signin.cjs --all` is what says so.
+      E2E_POOL_EMAIL: ${{ secrets.E2E_POOL_EMAIL }}
+      E2E_POOL_PASSWORD: ${{ secrets.E2E_POOL_PASSWORD }}
+      E2E_POOL_EMAIL_1: ${{ secrets.E2E_POOL_JOINER_EMAIL }}
+      E2E_POOL_PASSWORD_1: ${{ secrets.E2E_POOL_JOINER_PASSWORD }}
+      E2E_POOL_EMAIL_2: ${{ secrets.E2E_POOL_P3_EMAIL }}
+      E2E_POOL_PASSWORD_2: ${{ secrets.E2E_POOL_P3_PASSWORD }}
+      E2E_POOL_EMAIL_3: ${{ secrets.E2E_POOL_P4_EMAIL }}
+      E2E_POOL_PASSWORD_3: ${{ secrets.E2E_POOL_P4_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
