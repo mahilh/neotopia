@@ -319,6 +319,27 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // the board is answerable rather than decorative. It never places anything · the commit is still the
   // player's own click on a lit hex once the element is chosen.
   const [aimedRegion, setAimedRegion] = useState(null)
+
+  // ── THE BOARD SAYS NO, AND NOW IT SHOWS IT (T1 S58) ─────────────────────────────────────────────
+  // The sound shipped in S55 with no visual partner: a rejected tap made a small noise and NOTHING
+  // moved. But the brief's premise ("it fires on every rejected tap") turned out to be the smaller
+  // half of the story · MEASURED through this exact composed path, the sound was firing where nothing
+  // had been refused, and staying silent where something had:
+  //     idle              tap any of 60 hexes   ->  'refused' FIRED   · nothing was attempted
+  //     factorySelected   tap a non-preview hex ->  silent            · an aim that missed
+  //     elementSelected   tap a non-preview hex ->  silent            · an aim that missed
+  //     regionSelected    tap a non-target hex  ->  'refused' fired   · the real refusal, 59 of 60 hexes
+  // In idle the board is not a placement surface · no factory is picked · so a tap there is
+  // exploratory, and answering it with a rejection buzz punishes a non-action. Sixty hexes is the
+  // biggest target on a phone screen. So the cue is scoped to the one phase where the player has
+  // committed a factory, an element AND a region and the board has then refused: uiPhase
+  // 'regionSelected'. That is a rule that can be stated · THE CUE FIRES ONLY WHERE THE UI PROMISED
+  // SOMETHING AND THEN SAID NO · rather than a list of cases someone extended once per bug.
+  // Deliberately still silent in factorySelected/elementSelected: those draw a dashed PREVIEW and
+  // never claimed the hex you tapped was live, so refusing it is not news.
+  const [refusedHex, setRefusedHex] = useState(null)
+  const refuseSeq = useRef(0)
+
   const isChoosing = uiPhase === 'factorySelected' || uiPhase === 'elementSelected'
   const reachable = useMemo(() => {
     if (!isChoosing || selectedFactory === null) return { regions: [], targets: [] }
@@ -1027,6 +1048,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             reachableTargets={reachable.targets}
             reachableRegions={reachable.regions}
             regionScores={myPlayer?.scores ?? []}
+            refusedHex={refusedHex}
             onHexClick={(q, r, rid) => {
               // Before an element is chosen the board is a preview, not a placement surface. A click on
               // a previewed hex takes aim at its region · a click anywhere else is still inert, which is
@@ -1035,12 +1057,21 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 if (reachable.targets.some(t => t.q === q && t.r === r && t.regionId === rid)) setAimedRegion(rid)
                 return
               }
+              // Read the phase BEFORE the click · handleHexClick moves it, so asking afterwards
+              // answers a question about the state the tap PRODUCED rather than the one it met.
+              const attempted = uiPhase === 'regionSelected'
               const placed = handleHexClick(q, r, rid)
-              // A refused tap gets its OWN voice. Silence on refusal is what makes a player tap
-              // again harder; this product has spent three sessions on controls that look active
-              // and do nothing.
-              playSound(placed ? 'hex-place' : 'refused')
-              if (placed) addLogEntry(`placed ${cap(placed.element)} in ${REGION_NAMES[placed.regionId]}`, ELEMENT_COLORS[placed.element])
+              if (placed) {
+                playSound('hex-place')
+                addLogEntry(`placed ${cap(placed.element)} in ${REGION_NAMES[placed.regionId]}`, ELEMENT_COLORS[placed.element])
+              } else if (attempted) {
+                // A refused tap gets its own voice AND its own picture. Silence on refusal is what
+                // makes a player tap again harder; this product has spent three sessions on controls
+                // that look active and do nothing.
+                playSound('refused')
+                refuseSeq.current += 1
+                setRefusedHex({ q, r, regionId: rid, seq: refuseSeq.current })
+              }
             }}
             onFactoryClick={(id) => { setAimedRegion(null); handleFactoryClick(id) }}
           />

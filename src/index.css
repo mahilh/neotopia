@@ -293,6 +293,54 @@
   .hex-burst { animation: none !important; opacity: 0 !important; }
 }
 
+/* ── Refused placement · the board says no, and now it SHOWS it (T1 S58) ───────────────────────────
+   The colour was measured, not chosen. Rasterising the live board and sampling all 57 play cells by
+   region, an empty hex is NOT dark · it carries a biome fill on a near-black page (backdrop 10,10,15):
+       water 37,85,98   earth 59,88,44   sand 113,96,68
+   so a dark scrim only returns the hex toward the page (contrast 1.91/1.92/2.30) and a white one is
+   both weaker AND collides with the completion candidate, which is itself a white FILL at 0.25.
+   A BLACK RING wins on every biome (2.55 / 2.62 / 3.46) and, more importantly, black is the one value
+   no signal on this board uses: every existing cue · valid target, near-miss, complete, completion
+   candidate, reachable preview · is ADDITIVE LIGHT in a hue that already means an element or a region.
+   The palette had no free hue left (red/green/purple/blue are elements AND regions, amber is the
+   near-miss, white is the completion candidate). Value was the free channel; hue was not.
+   TRANSIENCE is the second half of the distinction and it is structural: every other cue on a hex is a
+   STATE and persists, this one is gone in 340ms, so the two readings cannot be held at once. */
+/* STARTS AT FULL OPACITY, and that is a fix rather than a preference. Measured in a headless browser
+   whose animation TIMELINE does not advance · playState "running", currentTime pinned at 0 across
+   240ms of samples, with document.visibilityState reading "visible", so this is not simply a
+   backgrounded tab and I am not claiming to know the mechanism. The consequence is the point: a
+   keyframe opening at opacity 0 renders the cue INVISIBLE for its whole life wherever the clock is
+   stalled, because 0% is where a stopped animation sits. Playwright's animations:'disabled' has the
+   mirror failure · it jumps to the END state, also 0 · and that is exactly what corrupted an S57
+   measurement in two directions at once. Opening at 1 survives both, and it is better anyway: this is
+   a response to a tap, so any fade-IN is latency on the one signal whose whole job is immediacy.
+   The shake itself was verified by FORCING the clock through the Web Animations API, which measures
+   the keyframe rather than the browser's frame scheduling:
+       t=0 · 0px op 1   t=34 · -2.5px   t=102 · +2.5px   t=170 · -1.5px   t=238 · +1px op 0.75
+       t=339 · 0px op 0 */
+@keyframes hexRefuse {
+  0%   { opacity: 1;    transform: translateX(0); }
+  10%  { opacity: 1;    transform: translateX(-2.5px); }
+  30%  { opacity: 1;    transform: translateX(2.5px); }
+  50%  { opacity: 1;    transform: translateX(-1.5px); }
+  70%  { opacity: 0.75; transform: translateX(1px); }
+  100% { opacity: 0;    transform: translateX(0); }
+}
+.hex-refuse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hexRefuse 340ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The blanket rule at the top of this file kills the animation on EVERY .hex-cell polygon, and it is
+     more specific than this selector, so the shake is gone whatever we write here. Without the opacity
+     the ring would then be stuck at the keyframe-less default and say nothing. It becomes a STATIC ring
+     for the same 340ms · React unmounts it, so removal never depends on an animation that is not
+     running. Reduced motion loses the MOTION, not the information. */
+  .hex-refuse { animation: none !important; opacity: 1 !important; }
+}
+
 /* Sacred milestone overlay · fade in (first 400ms of 2500) · hold · fade out (last 400ms) · T1 S16. */
 @keyframes milestoneIn {
   0%   { opacity: 0; }

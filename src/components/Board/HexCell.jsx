@@ -15,6 +15,11 @@ export default function HexCell({
   isReachablePreview = false, // dashed · "the factory you picked could reach here" · not yet placeable
   isFactory = false,        // factory hex · distinct look
   isSelected = false,       // factory the player has picked up from · brightened ring
+  // MONOTONE, and that is the whole design (Rule 107). A refusal cue keyed on the hex's IDENTITY
+  // ("3,-1") fires once and then never again, because tapping the same wrong hex twice does not change
+  // the key · which is exactly what a frustrated player does. Every de-duplication key in this
+  // codebase that has hung did so this way. 0 means "not refused"; any increment re-fires.
+  refusedSeq = 0,
   bonusCovered = false,     // this hex has/had a bonus token
   regionColor = '#888888',
   biomeFill = null,         // T2 terrain biome empty-hex fill (per region) · overrides the flat region tint
@@ -64,6 +69,17 @@ export default function HexCell({
       return () => clearTimeout(id)
     }
   }, [element])
+
+  // Refusal flash · same shape as the burst above, and the dep is a VALUE not an identity, so the
+  // once-a-second countdown re-render cannot cancel this timer before it fires (Rule 76 · that
+  // mechanism has already killed a 2200ms overlay in shipped code).
+  const [refusing, setRefusing] = useState(false)
+  useEffect(() => {
+    if (!refusedSeq) return
+    setRefusing(true)
+    const id = setTimeout(() => setRefusing(false), 340)
+    return () => clearTimeout(id)
+  }, [refusedSeq])
 
   return (
     <g
@@ -200,6 +216,26 @@ export default function HexCell({
       {/* Bonus token indicator (small dot) */}
       {bonusCovered && !element && (
         <circle cx={x} cy={y} r={4} fill="rgba(255,215,0,0.6)" />
+      )}
+
+      {/* REFUSED · the tap the board would not take. Painted LAST so it reads over the token and every
+          state ring · a refusal that renders under the thing it is about is the S57 failure again.
+          pointerEvents none is load-bearing, not hygiene: this polygon covers the whole cell for 340ms
+          and the bot clicks these same nodes (Rule 78 · a correct control at an unreachable position is
+          still a control the player does not have). fill="none" keeps it a RING · a filled flash would
+          be the completion candidate's own vocabulary, which is the one cue that means the opposite. */}
+      {refusing && (
+        <polygon
+          className="hex-refuse"
+          data-testid="hex-refused"
+          points={points}
+          fill="none"
+          stroke="rgba(0,0,0,0.9)"
+          strokeWidth={4}
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: 'none' }}
+        />
       )}
     </g>
   )

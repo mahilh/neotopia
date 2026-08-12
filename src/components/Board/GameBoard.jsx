@@ -209,6 +209,10 @@ export default function GameBoard({
   reachableTargets = [],    // [{q,r,regionId}] PREVIEW · where the picked factory could reach (T1 S30)
   reachableRegions = [],    // region ids the picked factory borders · the others fade back
   regionScores = [],        // current player's per-region score · index = region id · shown under each label
+  // {q, r, regionId, seq} | null · the hex the board just refused. `seq` is a monotone counter, NOT a
+  // boolean or an identity: refusing the same hex twice must re-fire, and that is the property an
+  // identity key silently cannot express (Rule 107).
+  refusedHex = null,
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
 }) {
@@ -437,6 +441,8 @@ export default function GameBoard({
               // a small label · and it is also the one terrain layer that is free, because HexCell
               // resolves `element` before `biomeFill`: a hex that carries a token never renders this.
               biomeFill={TERRAIN[reg.terrain].fill}
+              refusedSeq={refusedHex && refusedHex.regionId === reg.id
+                && refusedHex.q === hex.q && refusedHex.r === hex.r ? refusedHex.seq : 0}
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
           )
