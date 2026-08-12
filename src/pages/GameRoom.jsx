@@ -631,6 +631,41 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   }, [])
   const focusRegion = isPhone && uiPhase === 'regionSelected' ? selectedRegion : null
 
+  // THE OFFER'S COLLAPSE STATE (T1 S53 · see the block at "THE OFFER" for the measurement).
+  // Default CLOSED, and `offerExpanded` folds the viewport in so desktop can never be collapsed by
+  // a stale piece of state · at 1280 there is room for all three panels and the toggle is not even
+  // rendered, so a `false` sitting in this variable must not be able to hide anything there.
+  const [offerOpen, setOfferOpen] = useState(false)
+  const offerExpanded = !isPhone || offerOpen
+
+  // ── "THERE IS MORE BELOW" · AND IT HAS TO BE TRUE IN BOTH DIRECTIONS ────────────────────────────
+  // The sheet has been a scroll surface since S47 and has never said so. Collapsing the Offer removes
+  // most of the overflow but not all of it, and an indicator that is merely decorative would be worse
+  // than none: a hint that shows when nothing is below teaches the player to ignore it, and by the
+  // time it is right nobody is looking (Rule 88c's failure mode, in the one place they are trying to
+  // orient). So it is computed from the real geometry and re-measured on scroll, on resize, and
+  // whenever the content itself changes.
+  const sheetRef = useRef(null)
+  const [sheetMore, setSheetMore] = useState(false)
+  const measureSheet = useCallback(() => {
+    const el = sheetRef.current
+    if (!el) return
+    // 8px of slack · a sub-pixel remainder is not "more content", and a hint that flickers at the
+    // bottom of a scroll is the same lie in a shorter costume.
+    setSheetMore(el.scrollHeight - el.scrollTop - el.clientHeight > 8)
+  }, [])
+  useEffect(() => {
+    measureSheet()
+    const el = sheetRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    // The CONTENT resizes without the box changing (a card drawn, the Offer expanded), so observe
+    // both · watching only the container would miss every change that matters here.
+    const ro = new ResizeObserver(measureSheet)
+    ro.observe(el)
+    for (const c of el.children) ro.observe(c)
+    return () => ro.disconnect()
+  }, [measureSheet, uiPhase, offerExpanded, sheetOpen])
+
   // ── THE SHEET DRAGS THE BOARD OFF SCREEN IF ITS BUTTON KEEPS FOCUS (T1 S50) ─────────────────────
   // MEASURED at 600x800 the moment region focus landed: `.game-board-area` at top -250 inside a
   // `.game-main` that sits at 122..736, i.e. the board had been SCROLLED UP by 372px. 6 hexes of the
@@ -925,7 +960,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
           </span>
         </button>
 
-        <aside id="game-sheet" className="game-sidebar" style={{
+        <aside id="game-sheet" className="game-sidebar" ref={sheetRef} onScroll={measureSheet} style={{
           width: 288, borderLeft: '1px solid rgba(255,255,255,0.06)',
           display: 'flex', flexDirection: 'column', padding: 16, gap: 14, overflowY: 'auto', flexShrink: 0,
         }}>
@@ -1080,10 +1115,64 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             </div>
           )}
 
-          {/* THE OFFER */}
+          {/* ── THE OFFER · COLLAPSED BY DEFAULT ON A PHONE (T1 S53) ─────────────────────────────
+              MEASURED on production at 320x568 before this, and it is why the sheet's occlusion work
+              was only half the job:
+                  idle              931px of content in a 240px window · 691px hidden · 4 of 7 cards
+                  factorySelected  1167px of content in a 240px window · 927px hidden · 0 of 7 cards
+              In factorySelected the element buttons filled the entire visible window and NOT ONE card
+              was on screen · not the Offer, not the Hand, not the Score · with no scroll affordance
+              anywhere. S49's sheet solved OCCLUSION (the board is never covered when you must tap it)
+              and I measured that property for a week without ever asking whether the panel itself was
+              legible.
+              Mahil's ruling on which of the three options: collapse the OFFER. It is the one panel a
+              player consults occasionally rather than continuously · Hand and Score are needed every
+              turn · and tabs would add a mode to a flow that took two sessions to make honest.
+              Phone only. At 1280 the sidebar has room for all three and a toggle there would be a
+              control that solves nothing.
+
+              ⚠ THE FAILURES THIS MEASUREMENT CANNOT SEE, NAMED BEFORE TRUSTING IT. "Cards visible"
+              improves fastest if the Offer simply stops working, so the number on its own is not
+              evidence of anything:
+                1 · A COLLAPSED OFFER THAT CANNOT BE OPENED. `0 of 7 visible` reads as success. The
+                    toggle is a real 44px button and its reachability is hit-tested, not assumed.
+                2 · DRAWING BECOMES IMPOSSIBLE. Drawing from the Offer is one of the two legal actions
+                    in the game. Expanding must reveal cards that are actually drawable.
+                3 · THE AFFORDANCE LIES. A "more below" hint that shows when nothing is below, or
+                    hides when something is, is worse than none · it is a Rule 88c flake in the one
+                    place the player is trying to orient. It is asserted in BOTH directions. */}
           <div>
-            <div style={sectionLabel}>The Offer</div>
-            <div data-offer style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            {/* RENDERED, NOT display:none'd, AND THAT IS THE POINT. A toggle that exists at 1280
+                with `display: none` is a control whose reality depends on a media query · the exact
+                composed answer Rule 116 is about, and my first draft of the gate duly asserted DOM
+                presence and got the wrong answer in both directions. Conditional rendering makes
+                "is it there" and "can the player use it" the same question. */}
+            {isPhone ? (
+              <button
+                type="button"
+                data-testid="offer-toggle"
+                aria-expanded={offerExpanded}
+                aria-controls="game-offer"
+                onClick={() => setOfferOpen(o => !o)}
+                style={{
+                  ...sectionLabel, marginBottom: offerExpanded ? sectionLabel.marginBottom : 0,
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  minHeight: 44, padding: 0, border: 'none', background: 'transparent',
+                  cursor: 'pointer', textAlign: 'left',
+                }}
+              >
+                <span aria-hidden="true" style={{
+                  display: 'inline-block', transition: 'transform 0.18s ease', fontSize: 9,
+                  transform: offerExpanded ? 'rotate(90deg)' : 'none',
+                }}>▶</span>
+                <span>The Offer · {theOffer.length}</span>
+              </button>
+            ) : (
+              /* Desktop keeps the plain label · no control, because there is nothing to solve. */
+              <div style={sectionLabel}>The Offer</div>
+            )}
+            <div id="game-offer" data-offer hidden={!offerExpanded}
+                 style={{ display: offerExpanded ? 'flex' : 'none', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
               {theOffer.length === 0 && (
                 <div style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, padding: '8px 0' }}>Deck empty</div>
               )}
@@ -1168,6 +1257,24 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* THE SCROLL AFFORDANCE · sticky to the sheet's floor, and only while there IS more.
+              `pointerEvents: none` so it can never take a tap meant for a card · and it is 24px of
+              gradient rather than a full-width bar precisely because Rule 87's action log taught this
+              project that a see-through overlay is judged harmless right up until it is covering
+              something. Its reachability cost is measured, not assumed.
+              marginTop: -24 keeps it out of the flow, so showing it cannot itself create the overflow
+              it is reporting · which would be a counter that manufactures its own subject. */}
+          {sheetMore && (
+            <div data-testid="sheet-more" aria-hidden="true" style={{
+              position: 'sticky', bottom: -16, marginTop: -24, height: 24, flexShrink: 0,
+              pointerEvents: 'none', display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+              background: 'linear-gradient(to bottom, rgba(10,10,15,0), rgba(10,10,15,0.92))',
+              color: 'rgba(255,255,255,0.45)', fontSize: 10, letterSpacing: 1,
+            }}>
+              ▾ more
             </div>
           )}
         </aside>
