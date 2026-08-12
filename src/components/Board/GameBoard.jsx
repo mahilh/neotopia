@@ -215,6 +215,10 @@ export default function GameBoard({
   // boolean or an identity: refusing the same hex twice must re-fire, and that is the property an
   // identity key silently cannot express (Rule 107).
   refusedHex = null,
+  // {keys:['q,r'], regionId, seq} | null · the district just completed. seq is monotone so scoring
+  // the same shape twice re-fires; the ARRAY ORDER is the pattern's own order and drives a stagger,
+  // so the district reads as assembling rather than as everything blinking at once.
+  builtDistrict = null,
   onHexClick = () => {},   // (q, r, regionId) => void
   onFactoryClick = () => {}, // (factoryId) => void
 }) {
@@ -506,6 +510,10 @@ export default function GameBoard({
               biomeFill={TERRAIN[reg.terrain].fill}
               refusedSeq={refusedHex && refusedHex.regionId === reg.id
                 && refusedHex.q === hex.q && refusedHex.r === hex.r ? refusedHex.seq : 0}
+              builtSeq={builtDistrict && builtDistrict.regionId === reg.id
+                && builtDistrict.keys.includes(key) ? builtDistrict.seq : 0}
+              builtIndex={builtDistrict && builtDistrict.regionId === reg.id
+                ? builtDistrict.keys.indexOf(key) : -1}
               onClick={(q, r) => onHexClick(q, r, reg.id)}
             />
           )

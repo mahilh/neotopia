@@ -53,6 +53,12 @@ export default function MilestoneOverlay({ mySeat = null }) {
     <div
       data-testid="milestone-overlay"
       data-milestone-owner={isMine ? 'me' : 'opponent'}
+      // ⚠ NOT A DIALOG AND NOT A TRAP, for the same measured reason as ScoreFlash: zero focusable
+      // children, pointerEvents none, and it clears itself after 2500ms.
+      // aria-hidden, and the milestone is instead spoken through GameRoom's single polite live
+      // region · a SECOND live region would compete with the first, and this celebration was
+      // previously announced by nothing at all (it is not one of the six addLogEntry sites).
+      aria-hidden="true"
       style={{
         position: 'absolute', inset: 0, zIndex: 200,
         display: 'flex', flexDirection: 'column', alignItems: 'center',

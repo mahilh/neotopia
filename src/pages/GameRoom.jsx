@@ -246,6 +246,22 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
 
   // Source 2 (turn ownership) lives below, after useGameActions supplies isMyTurn.
 
+  // Source 3 · THE SACRED MILESTONE. It was announced by nothing: it is not one of the six
+  // addLogEntry sites, and its overlay is now aria-hidden (zero focusable children, pointerEvents
+  // none, self-clearing · see MilestoneOverlay). So the one celebration the game reserves for a
+  // threshold crossing was, to a screen reader, complete silence.
+  // Through the SAME polite region rather than a second live region · two live regions compete, and
+  // the whole S61 argument for one polite voice applies here.
+  const sacredMilestone = useGameStore(s => s.sacredMilestone)
+  const lastMilestone = useRef(null)
+  useEffect(() => {
+    if (!sacredMilestone) { lastMilestone.current = null; return }
+    const id = `${sacredMilestone.milestone}:${sacredMilestone.player}`
+    if (lastMilestone.current === id) return
+    lastMilestone.current = id
+    sayRef.current(`Milestone ${sacredMilestone.milestone}`)
+  }, [sacredMilestone])
+
   // THE REFUSAL IS ASSERTIVE AND IT IS THE ONLY ONE, argued rather than measured (the brief's ask):
   //   · polite QUEUES. Placement, score, draw and turn are all confirmations of something the player
   //     did, or of a state they will meet anyway by moving. Announcing those assertively would cut
@@ -257,6 +273,16 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   //     placement it arrives after the next mistake.
   // And it is deliberately NOT an addLogEntry: a refused tap is feedback, not game history, and a
   // visible log full of refusals is noise for the sighted player who already got a ring and a sound.
+  // ── A DISTRICT ARRIVING WITH WEIGHT (T1 S62) ─────────────────────────────────────────────────
+  // In S58 I gave the board a picture for NO · a black ring on a refused tap. The board still had
+  // no picture for YES. A completed district produced a sound, a counting number and a 2.2s overlay,
+  // all of them OFF the board, while the hexes the player actually built · and was looking at · did
+  // nothing at all. That asymmetry is mine, so closing it is repair rather than decoration.
+  // Keyed on a monotone seq, not on the hex set: scoring the same shape twice must re-fire (Rule 107,
+  // the same lesson as the refusal ring and the live regions).
+  const [builtDistrict, setBuiltDistrict] = useState(null)
+  const builtSeq = useRef(0)
+
   const [refusalMessage, setRefusalMessage] = useState('')
   const refusalIdRef = useRef(0)
 
@@ -1161,6 +1187,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             reachableRegions={reachable.regions}
             regionScores={myPlayer?.scores ?? []}
             refusedHex={refusedHex}
+            builtDistrict={builtDistrict}
             onHexClick={(q, r, rid) => {
               // Before an element is chosen the board is a preview, not a placement surface. A click on
               // a previewed hex takes aim at its region · a click anywhere else is still inert, which is
@@ -1501,11 +1528,19 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                     innerRef={card.id === firstScoreableId ? scoreCardRef : undefined}
                     card={{ ...card, element: cardPrimaryElement(card) }}
                     onClick={isScoreable ? () => {
+                      // EXACTLY the scored card's pattern, not a union · buildableMatches carries
+                      // matchedHexKeys per card, and 8.5% of completions offer two cards at once
+                      // (measured S59), so celebrating patternHighlight would light hexes that
+                      // belong to a card the player did NOT score.
+                      // Captured BEFORE the call, because handleCardScore calls reset().
+                      const builtKeys = buildableMatches.find(m => m.cardId === card.id)?.matchedHexKeys ?? []
                       const scored = handleCardScore(card.id)
                       if (scored?.card) {
                         // THE PAYOFF. A player who scores a district currently gets an 11px line in
                         // error red; this is meant to be the one sound they want to hear again.
                         playSound('district-score')
+                        builtSeq.current += 1
+                        setBuiltDistrict({ keys: builtKeys, regionId: scored.regionId, seq: builtSeq.current })
                         setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })
                         addLogEntry(`scored ${scored.card.name}: +${scored.card.points}`, '#C89440')
                       }

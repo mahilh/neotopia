@@ -20,6 +20,10 @@ export default function HexCell({
   // the key · which is exactly what a frustrated player does. Every de-duplication key in this
   // codebase that has hung did so this way. 0 means "not refused"; any increment re-fires.
   refusedSeq = 0,
+  // The district that just completed. Same monotone-seq contract as refusedSeq · 0 means "not part
+  // of it", any increment re-fires. builtIndex is this hex's position in the pattern and drives the
+  // stagger, so the shape assembles in its own order.
+  builtSeq = 0, builtIndex = -1,
   bonusCovered = false,     // this hex has/had a bonus token
   regionColor = '#888888',
   biomeFill = null,         // T2 terrain biome empty-hex fill (per region) · overrides the flat region tint
@@ -93,6 +97,18 @@ export default function HexCell({
     const id = setTimeout(() => setRefusing(false), 340)
     return () => clearTimeout(id)
   }, [refusedSeq])
+
+  // District-built settle · same value-dep shape as the burst and the refusal above, so the
+  // once-a-second countdown re-render cannot cancel the timer before it fires (Rule 76).
+  // 620ms of animation plus the longest stagger, then React unmounts it · removal never depends on
+  // an animation that may not be running.
+  const [building, setBuilding] = useState(false)
+  useEffect(() => {
+    if (!builtSeq) return
+    setBuilding(true)
+    const id = setTimeout(() => setBuilding(false), 620 + Math.max(0, builtIndex) * 60 + 80)
+    return () => clearTimeout(id)
+  }, [builtSeq])
 
   const isOption = typeof optionLabel === 'string' && optionLabel.length > 0
   const [selfFocused, setSelfFocused] = useState(false)
@@ -288,6 +304,30 @@ export default function HexCell({
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
           style={{ pointerEvents: 'none' }}
+        />
+      )}
+
+      {/* DISTRICT BUILT · the board's answer to "yes", drawn as a ring that closes on the cell.
+          A NEW NODE rather than an animation on anything existing, so it cannot fight the placement
+          burst or the icon scale-in · those are separate elements with their own animations, and a
+          fast keyboard player CAN score inside the burst's 450ms (Enter to place, Enter to score),
+          which is a collision my own S59 work made reachable. They compose instead of cancelling.
+          STAGGERED by the hex's position in the pattern (60ms apart) so the district assembles in
+          the shape's own order rather than blinking at once · that stagger IS the weight.
+          Timing measured, not chosen: hexScoreFlash reaches full opacity at 15% of 2.2s = 330ms, so
+          this plays on a clear board first and finishes under a 0.45 scrim the S57 fix made
+          deliberately see-through. pointerEvents none · these are the nodes the bot clicks. */}
+      {building && (
+        <polygon
+          className="hex-built"
+          data-testid="hex-built"
+          points={points}
+          fill="none"
+          stroke="#C89440"
+          strokeWidth={3}
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          style={{ animationDelay: `${Math.max(0, builtIndex) * 60}ms`, pointerEvents: 'none' }}
         />
       )}
 

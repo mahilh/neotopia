@@ -57,7 +57,16 @@ export function ScoreFlash({ card, regionName, onDone }) {
     // still sees the district while reading the card that names it.
     // The sound is already correct at this instant (impact AND bell overlap, S55), and this timing
     // is unchanged so the visual does not fight it.
-    <div className="score-flash" style={{
+    // ⚠ NOT A DIALOG, AND NOT A FOCUS TRAP · my own S61 recommendation, killed by measuring it.
+    // This overlay has ZERO focusable children, pointerEvents none, and unmounts itself after
+    // 2200ms. Trapping focus in a container with nothing to focus is the exact failure BOOT_PREAMBLE
+    // §3 names, and it would take a keyboard player who can currently Tab freely and freeze them for
+    // 2.2 seconds with nowhere to go · a regression dressed as an accessibility fix. The alarm was
+    // right and the remedy was a guess made before the situation existed (Rule 98).
+    // aria-hidden instead, because the S61 polite live region ALREADY announces "scored {card}: +{n}"
+    // from the action log. Without this a screen reader meets the same fact twice: once as an
+    // announcement and once as an unlabelled block of text floating in the page.
+    <div className="score-flash" aria-hidden="true" style={{
       position: 'fixed', inset: 0, zIndex: 100,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'rgba(10,10,15,0.45)',

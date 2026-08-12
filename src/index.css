@@ -378,6 +378,35 @@
   .hex-refuse { animation: none !important; opacity: 1 !important; }
 }
 
+/* DISTRICT BUILT · T1 S62. The board's answer to "yes".
+   In S58 the board learned to say NO (a black ring on a refused tap) and still had no way to say
+   YES · the score lived entirely off the board, in a sound, a counting number and a 2.2s overlay,
+   while the hexes the player built did nothing. This is that asymmetry closed.
+   GOLD, and it is the one hue that is free: red/green/purple/blue are elements AND regions, amber
+   is the near-miss, white is the completion candidate, black is the refusal. #C89440 is already the
+   score colour in the action log and on the milestone, so it means "points" everywhere it appears.
+   It SETTLES rather than flashes · scales in from slightly large and lands at rest, which reads as
+   the piece arriving rather than as an alarm. */
+@keyframes districtBuilt {
+  0%   { opacity: 0;   transform: scale(1.22); }
+  35%  { opacity: 1;   transform: scale(0.97); }
+  60%  { opacity: 1;   transform: scale(1.02); }
+  100% { opacity: 0;   transform: scale(1); }
+}
+.hex-built {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: districtBuilt 620ms cubic-bezier(0.34, 1.2, 0.44, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The blanket at the top of this file already kills every .hex-cell polygon animation and is more
+     specific, so the settle is gone whatever is written here. Without the opacity it would sit at
+     the keyframe-less default and say nothing · it becomes a STATIC gold ring for the same duration
+     instead, and React unmounts it, so removal never depends on an animation that is not running.
+     Reduced motion loses the MOTION, not the information · the same contract as .hex-refuse. */
+  .hex-built { animation: none !important; opacity: 1 !important; }
+}
+
 /* Sacred milestone overlay · fade in (first 400ms of 2500) · hold · fade out (last 400ms) · T1 S16. */
 @keyframes milestoneIn {
   0%   { opacity: 0; }
