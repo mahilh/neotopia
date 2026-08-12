@@ -1174,14 +1174,18 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       svg?.focus?.()
       return {
         factoryTag: fac?.tagName?.toLowerCase() ?? null,
-        factoryTabIndex: fac?.tabIndex ?? null,
+        // reachable == a real control, or anything explicitly placed in the tab order
+        factoryKeyboardReachable: !!fac && (fac.tagName === 'BUTTON' || fac.tabIndex >= 0),
         svgTabIndex: svg?.getAttribute('tabindex'),
         svgTakesFocus: document.activeElement === svg,
       }
     })
-    expect(facts.factoryTag, 'the factory is no longer a bare <g> · if it is a button now, this whole ' +
-      'block may be out of date and that is good news').toBe('g')
-    expect(facts.factoryTabIndex, 'the factory is not reachable by Tab').toBe(-1)
+    // ASSERT THE PROPERTY, NOT THE MECHANISM. The first draft pinned the TAG (`toBe('g')`), which
+    // reds when T1 fixes this · correct · but ALSO reds if the markup changes for any unrelated reason
+    // while remaining just as inaccessible. What matters is reachability, not which element it is; I got
+    // this right for the layout cascade in S51 and dropped it here.
+    expect(facts.factoryKeyboardReachable, 'the factory is now reachable by keyboard · if that is true this ' +
+      'whole block is out of date and that is the best possible news · rewrite it to assert THAT').toBe(false)
     expect(facts.svgTakesFocus, 'the board itself refuses focus · it has no tabindex').toBe(false)
 
     // And no key does anything: step 2 never appears. Compare against the pointer control above, which
