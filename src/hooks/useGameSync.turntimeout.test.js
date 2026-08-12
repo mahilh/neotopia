@@ -222,3 +222,49 @@ describe('the turn clock enforces itself · mechanism, not outcome (T3 S52)', ()
       .toBe(before + 1)
   })
 })
+
+// ── THE MODE I DID NOT TEST, WHICH IS WHERE THE CONSTANT WAS WRONG (T3 S52) ─────────────────────────────
+// Every test above runs in the default mode. That is a hidden parameter (Rule 111): the limit never varied,
+// so it never looked like a choice, and a flat 5s-per-seat grace reads as obviously fine at 90s. Flow is
+// 15s, where the SAME constant is 33-133% of a turn · a seat-3 client would have waited 35 seconds to end
+// a 15-second turn. Found by computing the table rather than by re-reading the code.
+describe('the same clock in Flow, where the turn is 6x shorter (T3 S52)', () => {
+  const FLOW_LIMIT_MS = 15_000
+
+  const seedFlow = () => {
+    useGameStore.getState().initGame(
+      [{ userId: HOST, username: 'Host' }, { userId: PEER, username: 'Peer' }],
+      shuffleArray([...DECK]), shuffleArray([...PRODUCTION_TILES]),
+      'flow',
+    )
+  }
+
+  test('COUNTERWEIGHT · the fixture really is Flow · otherwise this whole block re-tests Classic', () => {
+    seedFlow()
+    expect(useGameStore.getState().turnTimeRemaining,
+      'initGame did not seed the Flow clock · every assertion below would silently be a second copy of ' +
+      'the Classic tests, which is exactly the blindness this block exists to remove').toBe(15)
+  })
+
+  test('the active player own client honours the SHORT limit, not the Classic one', async () => {
+    seedFlow()
+    drive(ROOM, HOST)
+    const before = turn()
+    await tick(FLOW_LIMIT_MS)
+    expect(turn(), 'a Flow turn did not end at 15s · the clock is reading a constant instead of the mode')
+      .toBe(before + 1)
+  })
+
+  test('the remote grace stays PROPORTIONAL · it cannot exceed the turn it is waiting on', async () => {
+    seedFlow()
+    drive(ROOM, PEER)                                   // seat 1 · grace = min(5000, 15000*0.15) * 2
+    const before = turn()
+    await tick(FLOW_LIMIT_MS)
+    expect(turn(), 'the remote client ended a turn at the bare limit · the active player own client must ' +
+      'get first refusal').toBe(before)
+    // 2 x 2.25s = 4.5s. With the pre-fix flat constant this needed 10s and would still be frozen here.
+    await tick(5_000)
+    expect(turn(), 'the remote grace is still the flat 5s-per-seat constant · in Flow that is 33-133% of ' +
+      'a turn, so an absent player costs more than double the turn budget every round').toBe(before + 1)
+  })
+})

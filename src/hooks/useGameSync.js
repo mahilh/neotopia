@@ -524,7 +524,16 @@ export function useGameSync(roomId, currentUserId) {
       const limitMs = getModeConfig(st.mode).TURN_TIME_LIMIT * 1000
       const mySeat = st.players?.find(p => p.userId === currentUserId)?.seat
       const isMine = mySeat != null && mySeat === st.currentSeat
-      const grace = isMine ? 0 : TURN_TIMEOUT_GRACE_MS * (1 + (mySeat ?? 0))
+      // THE GRACE IS CAPPED AS A FRACTION OF THE TURN, NOT A FLAT 5s (T3 S52 · found by premise-checking
+      // my own fix an hour after shipping it). A flat grace is a hidden parameter that silently qualifies
+      // every mode it was not measured in (Rule 111): Classic is 90s so 5s per seat is 5-22% of a turn and
+      // reads as obviously fine · FLOW IS 15s, where the same constant is 33-133%, and a seat-3 client
+      // would wait 35s to end a 15s turn. Nothing in the first draft's tests would have said so, because
+      // every one of them ran in the default mode · the constant never varied, so it never looked like a
+      // choice. Capping at 15% of the turn leaves Classic byte-identical (min(5000, 13500) = 5000) and
+      // brings Flow to 2.25s per seat.
+      const graceUnit = Math.min(TURN_TIMEOUT_GRACE_MS, limitMs * 0.15)
+      const grace = isMine ? 0 : graceUnit * (1 + (mySeat ?? 0))
       if (Date.now() - turnStartRef.current.at < limitMs + grace) return
 
       // The SAME endTurn the button calls (Rule 45 · a second turn-advance would be a second rules
