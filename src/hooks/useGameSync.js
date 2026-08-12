@@ -567,7 +567,7 @@ export function useGameSync(roomId, currentUserId) {
       // brings Flow to 2.25s per seat.
       const graceUnit = Math.min(TURN_TIMEOUT_GRACE_MS, limitMs * 0.15)
       const grace = isMine ? 0 : graceUnit * (1 + (mySeat ?? 0))
-      if (Date.now() - turnStartRef.current.at < limitMs + grace) return
+      if (performance.now() - turnStartRef.current.at < limitMs + grace) return
 
       // The SAME endTurn the button calls (Rule 45 · a second turn-advance would be a second rules
       // engine). eventData records who fired and for whom, so a timed-out turn is distinguishable from a
@@ -614,13 +614,33 @@ export function useGameSync(roomId, currentUserId) {
     // old code was built for: the effect deps are still three primitives, the handler still lives in a
     // ref, the timer is still a repeating interval re-deriving elapsed time. Nothing here is a setTimeout.
     //
+    // ⚠⚠ AND THE RE-PHASE ALONE IS A REGRESSION · THE CLOCK HAD TO CHANGE WITH IT (measured live, in a
+    // real browser, after the fake-timer suite said the fix was exact). Re-phasing puts the deadline
+    // EXACTLY on a tick, which is the single worst phase for a comparison against `Date.now()`:
+    //     setInterval is scheduled on the MONOTONIC clock · Date.now() is the WALL clock · they drift.
+    // Ticking a bare 1s interval for 90s beside the game and printing `Date.now() - at - k*1000`:
+    //     run A   min -4   56 of 94 ticks read SHORT      run B   min -1    5 of 95 short
+    //     run C   min +3    0 of 94 short                 performance.now()   0 of 94 short, EVERY run
+    // A tick reading 3ms short at the aligned deadline does not fire, and then waits a WHOLE SECOND.
+    // Measured end to end on the practice board · elapsed against a promised 90000ms:
+    //     pre-S59            uniform 0-1000 late (wherever the turn fell between ticks)
+    //     re-phase + Date    91037 · 91027 · 91001    reliably ~1000 late · WORSE, and worse by design
+    //     re-phase + perf    90079                    the residual is scheduler lateness, never early
+    // So the two halves are one fix: re-phasing without the monotonic clock converts a uniform error
+    // into a consistent full-tick one. A timer cannot fire before its scheduled MONOTONIC time, which is
+    // what makes the aligned tick reliable rather than a coin flip on clock drift (perf mimic min +0.5).
+    // ⚠ THE UNIT SUITE CANNOT SEE ANY OF THIS. vi.useFakeTimers advances Date.now() and performance.now()
+    // in lockstep, so the turn-2 exactness tests pass with EITHER clock · they passed 17/17 against the
+    // regression. The browser is the only witness here, and the source guard in the test file exists
+    // precisely because the behavioural test structurally cannot hold this claim (Rule 36).
+    //
     // THE ONCE-PER-TURN LATCH IS STILL THIS AND ONLY THIS, unchanged in substance (Rule 107). endTurn()
     // increments turnNumber, so the act of firing re-anchors the clock and the next tick measures ~0.
     // The first draft also carried a `timedOutForTurn` latch; mutation testing removed it and nothing went
     // red, because either guard alone sufficed and neither could be made to fail (Rule 86), and both keyed
     // on the same quantity so it bought no second witness either (Rule 94). Deleted then, still deleted.
     const anchor = (turn) => {
-      turnStartRef.current = { turn, at: Date.now() }
+      turnStartRef.current = { turn, at: performance.now() }
       if (intervalId !== null) clearInterval(intervalId)
       intervalId = setInterval(tick, 1_000)
     }

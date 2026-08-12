@@ -22,6 +22,8 @@
 // So the claims here are: a timer EXISTS, it ADVANCES THE TURN, and it survives the one thing that has
 // silently killed this feature before. None of those can become false without something going red.
 
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 
@@ -311,6 +313,36 @@ describe('the deadline is the same on turn 2 as on turn 1 (T3 S59)', () => {
     expect(useGameStore.getState().currentSeat, 'the seat did not move to the client under test · the ' +
       'deadline measured below would be a REMOTE one, which carries a grace and is not the promised limit')
       .toBe(1)
+  })
+
+  // ⚠ A SOURCE GUARD, IN A FILE OTHERWISE MADE OF BEHAVIOUR, AND IT IS HERE BECAUSE THE BEHAVIOUR TESTS
+  // STRUCTURALLY CANNOT HOLD THIS CLAIM. vi.useFakeTimers advances Date.now() and performance.now() in
+  // lockstep, so everything below passes with either clock · all 17 passed against the version that was
+  // ~1000ms late in a real browser. Measured there instead: setInterval is scheduled on the MONOTONIC
+  // clock and Date.now() is the WALL clock, and they drift · a bare 1s interval run beside the game read
+  // SHORT of k*1000 on 56 of 94 ticks in one run, 5 of 95 in another, 0 of 94 in a third. Under
+  // performance.now(): 0 of 94, every run, minimum +0.5ms, because a timer cannot fire before its
+  // scheduled monotonic time. Re-phasing the grid puts the deadline exactly ON a tick, so a 3ms shortfall
+  // there costs a WHOLE SECOND · which made the re-phase alone measurably worse than what it replaced
+  // (91037/91027/91001 against a promised 90000, versus 90079 once the clock changed too).
+  test('the deadline is compared on the MONOTONIC clock · the only claim here a fake timer cannot make', () => {
+    // `import.meta.url` is an http:// URL under vitest+jsdom, not file://, so `new URL` throws here
+    // and would throw in CI too · the same vantage-point trap as Rule 123a. __dirname is what this repo's
+    // other source-reading gates use, and a wrong path raises ENOENT NAMING the path rather than passing.
+    const src = fs.readFileSync(path.resolve(__dirname, 'useGameSync.js'), 'utf8')
+    // Presence anchors first (Rule 125b) · every assertion below is an ABSENCE, and an absence passes on
+    // an empty string, a renamed ref or a bad path. These two must exist for the rest to mean anything.
+    expect(src, 'the turn clock is not anchored on performance.now() · if the anchor moved, this whole ' +
+      'guard is asserting the absence of something that no longer has a home').toContain('at: performance.now()')
+    expect(src, 'the deadline comparison is not reading performance.now() against the anchor')
+      .toContain('performance.now() - turnStartRef.current.at')
+    expect(src, 'the deadline is compared on the WALL clock again. setInterval is scheduled on the ' +
+      'monotonic clock; the two drift, the re-phased grid lands the deadline exactly ON a tick, and a ' +
+      'few milliseconds short there costs a full second. Measured in a browser at ~1000ms late · the ' +
+      'fake timers in this file advance both clocks together and cannot tell you.')
+      .not.toContain('Date.now() - turnStartRef.current.at')
+    expect(src, 'the turn anchor is stamped from the wall clock again · same defect, other end')
+      .not.toContain('{ turn, at: Date.now() }')
   })
 
   for (const offset of [250, 750]) {
