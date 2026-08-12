@@ -48,7 +48,10 @@
 //
 // RUNS-NOWHERE: no workflow has ever invoked this file · routed to T2 in comms/t3-s50, t3-s60, t3-s62.
 // ⚠ AND AS OF T3 S62 IT COSTS ZERO IDENTITIES · both contexts take pool members 0 and 1, so the only
-// thing this 653-line spec now asks for is one run line. It is the composition CLAUDE.md still calls the
+// thing this 653-line spec now asks for is one run line · SUBJECT TO THE SAME CHECK ITS SIBLING JUST
+// FAILED. host-departure-live was converted in the same commit and then RUN: 2 of 3 passed, one failed
+// at 32.1s. This file has NOT been run in S62 and its stability is therefore UNMEASURED · not good, not
+// bad. Do not read the conversion as readiness (Rule 79a). It is the composition CLAUDE.md still calls the
 // honest remaining gap, proven once on 3362f77 and gated by nothing for twelve sessions
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // AND IT READ AS WIRED THE WHOLE TIME, WHICH IS THE PART WORTH RECORDING (T3 S50). The spec-runner audit in

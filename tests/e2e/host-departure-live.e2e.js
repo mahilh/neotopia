@@ -27,7 +27,16 @@
 // spec was routed to the nightly and then never wired. Both contexts now take pool members 0 and 1
 // (seedPoolCredential), so it mints nothing at all. The caller-set guard costs zero and is offline.
 // RUNS-NOWHERE: eleven sessions and counting · routed to T2 in comms/t3-s51, t3-s60 and now t3-s62.
-// THE ASK IS NOW ONE RUN LINE FOR A SPEC THAT COSTS NO IDENTITIES. Nothing else about it has changed.
+// ⚠ THE ASK IS NOT YET "WIRE IT", AND RUNNING IT IS WHY (Rule 79a · run a spec locally BEFORE adding
+// it to a workflow). Three runs against live Supabase in S62: PASS, FAIL at 32.1s, PASS. Roughly a
+// third of runs, and I did not capture the failing run's reason, so the flake is real and undiagnosed.
+// Wiring it in this state would put a ~33% flake on the nightly · a tripwire aimed at colleagues (§5),
+// and worse than leaving it unwired. THE COST OBJECTION IS GONE AND A STABILITY ONE HAS REPLACED IT,
+// which is a better problem and an honest one. What the passing runs show is that the spec still
+// describes the product correctly: "held for 45s inside the budget, then the clock ended the absent
+// player's turn after ~100s → seat 1/turn 2". That ~100s path did not exist when this was written in
+// S51 · the turn clock I shipped in S56 is what unfreezes it now · so the likeliest suspect is a
+// budget in here racing that clock rather than anything about the pool.
 // DELETE THIS DECLARATION IN THE SAME COMMIT THAT WIRES THE FILE.
 // Run locally:  node scripts/with-project-env.cjs npx playwright test tests/e2e/host-departure-live.e2e.js
 // ⚠ with-project-env is not optional · the shell exports another project's Supabase URL and it beats
