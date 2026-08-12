@@ -217,6 +217,36 @@ DB CONTRACT (scripts/migrations/ · 001-029 · NOT 001-010, which is what this l
     surface for a function every authenticated player can execute) adds identities_1d/total/nonanon
     from auth.users · the one table no purge here can touch, which is what makes it both the leak
     and an honest denominator. Read as: identities_1d ~0 -> UNMEASURED · high + orphans 0 -> real.
+    ⚠ 029 STAYS HELD (Mahil + Council, S59). It widens a prosecdef function EVERY AUTHENTICATED
+    PLAYER can EXECUTE to read the auth schema; two independent readers reached that unprompted. The
+    count is a five-second dashboard read (6,057 on Aug 12, up ~100 in two hours). Revisit only if
+    the mass-delete decision is ever blocked purely because nobody could tell idle from clean, and
+    then as a SEPARATE non-player-executable function · not as 029.
+
+THE FIXED CI IDENTITY POOL · the project's only defect with a FINANCIAL denominator (~968 new
+  identities/day against a metered MAU cap on the FREE plan · auth.users is unreachable by any purge):
+  ✅ APP HALF · src/lib/e2ePool.js + useAuth.js:72 · statically eliminated from production, asserted
+     two-sided on real artifacts. S59 added the OBSERVABLE: window.__neotopia_pool_outcome, frozen,
+     five states. The fifth is ABSENT, meaning the app never reached the decision · a persisted
+     anonymous session was adopted first, which is reachable and bypasses the pool entirely. 8 unit
+     tests, all 8 mutation-proven. THE FALLBACK IS DELIBERATE AND SILENT BY DESIGN · that is why the
+     record exists, and why a green spec suite says nothing about whether conversion happened.
+  ✅ TEARDOWN CONVERTED (S59) · global-teardown.js:51 calls signInPooledOrAnon and playwright runs
+     globalTeardown once per INVOCATION: 5 in e2e.yml + 1 in the placement guard = SIX anonymous
+     identities per push, on push AND pull_request, whatever the specs contain. Both workflows now
+     carry the pool env. Member 0 only · the teardown is a single client.
+  🔴 BROWSER HALF NOT WIRED · NOTHING calls context.addInitScript anywhere in tests/, so every
+     browser context still mints and that is the BULK of the churn (T3's lane). Do not read a drop in
+     the counter as the browsers converting · it will be the teardowns. The contract and the exact
+     assertion to write are in .claude/comms/t2-s59-pool-observable-and-the-alias-gap.md.
+  ⚠ THE SECRET NAMES DIVERGE FROM THE READER · poolCredential(index) asks for E2E_POOL_EMAIL_1/_2/_3
+     and the repo holds E2E_POOL_JOINER/P3/P4_EMAIL, so 3 of 4 users were invisible to the only code
+     that would use them. e2e.yml + e2e-placement-guard.yml MAP the aliases, so nothing needs
+     renaming · but a FIFTH member created without a mapping is invisible again. `node
+     scripts/verify-pool-signin.cjs --all` checks every member under the names the HARNESS reads,
+     with a drift guard on the convention, and exits 1 (not 2) when a user exists the code cannot see.
+  TRIPWIRE (Council) · if the identity count does not measurably drop within 24h of activation, the
+     branch is falling back silently and the instrumentation failed. That is a red, not a puzzle.
 
 GAME MECHANICS:
   4-STEP PLACEMENT: factory→element-btn→region-btn→valid-hex (ALL force:true)
@@ -519,6 +549,57 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 128 (T2 S59 · August 12 2026):
+A GUARD THAT READS AN ARTIFACT MUST RUN WHERE THE ARTIFACT EXISTS · AND "IT PASSES EVERY TIME
+LOCALLY" IS THE SYMPTOM, NOT THE REASSURANCE.
+This project has exactly two assertions about a REAL PLAYER'S BROWSER rather than about drift: one
+keeps a credential sign-in path out of it, one keeps the reserved-name bypass out of it. Both read
+`dist/assets`. `dist/` is gitignored (0 tracked files), so a CI checkout has none · and canary.yml
+ran Test BEFORE Build. Neither has ever executed on the merge gate. They pass on every developer's
+machine, every time, because a developer's dist/ is left over from the last build, and that
+reliability is precisely what made them invisible: a guard that is green everywhere you look is
+indistinguishable from a guard that runs nowhere you look. Rule 67 says gate on what is true WHERE
+THE GATE RUNS; this is the same seam with the subject ABSENT rather than stale · the gate ran
+somewhere its subject did not exist and reported on it anyway. Ask of any guard whose input is a
+build output, a deployed asset, a database row or another job's artifact: is that input PRESENT in
+the environment the gate runs in, or only in mine?
+  128a · A SKIP ANNOUNCED THROUGH A CHANNEL THE RUNNER SWALLOWS IS A PASS. Both guards skipped by
+        `console.warn(...)` then `return`, and vitest does not surface console output for a PASSING
+        test · measured by deleting dist/ and reading the output: no warning, no marker, `Tests 6
+        passed (6)`. The comment above one of them said in terms "the skip is loud, because a guard
+        that silently does not run is worse than no guard". A claim about loudness is a claim
+        (Rule 81), and it was never once checked. Route the verdict through the RUNNER · `ctx.skip()`
+        makes the summary read `5 passed | 1 skipped`, which is a number a human and a script can
+        both see. Rule 79d says a skip is not a pass; this is the version where the skip is not even
+        a skip.
+  128b · AND I HAD ALREADY WRITTEN THE FINDING DOWN, ONE FILE AWAY. The second guard asserted
+        `VITE_E2E` absent from the production bundle. Measured: 0 in BOTH builds, because Vite
+        SUBSTITUTES the name · so it was structurally unable to fail in either direction and would
+        have passed on a bundle carrying the bypass, which is the only outcome it existed to
+        prevent. e2ePool.test.js's header, which I wrote in S57, says exactly this: "a guard keyed on
+        VITE_E2E's absence passes on a leaking bundle (my own S52 finding)". I recorded the defect
+        next to the code it EXPLAINED and never carried it to the code it INDICTED, two files away
+        in the same directory. THE HABIT THIS BUYS IS ONE GREP: when you write down "X is a bad
+        discriminator", search the repo for X before closing the file. A finding is not applied
+        because it is written; Rule 105a says a wrong comment goes red never, and this is its
+        sibling · a RIGHT comment fixes nothing on its own.
+  128c · A BUILD-MODE DISCRIMINATOR MUST NOT BE THE SUBJECT OF THE ASSERTION. Rebuilding the guard,
+        I classified the artifact by asking "is BotAlpha present" · the same token the assertion is
+        ABOUT. A production bundle whose prefix had been mangled then classified ITSELF as a
+        harness build and reported UNMEASURED: better than the green it used to return and still not
+        the red it should be. Two sides of a check from one source agree by construction (Rule 92),
+        and here they were literally one string. The independent one came from a different module
+        behind a different gate, and only a mutation found the difference · `includes('BotAlpha')`
+        is also satisfied by `BotAlphaX`, so match a delimited literal, not a substring (Rule 112,
+        committed by me inside a guard I was rewriting to fix a different vacuity in the same file).
+COROLLARY, and it is the same shape in the identity pool rather than in a test: Council created FOUR
+pool users and eight secrets; `poolCredential(index)` reads `E2E_POOL_EMAIL_1/_2/_3` and the repo
+holds `E2E_POOL_JOINER/P3/P4_EMAIL`. Three of the four existed and were invisible to the only code
+that would use them, the fallback is deliberate, and the single symptom was one console line in a
+Playwright log. Neither lane was wrong · a contract spanning two lanes has no owner (Rule 115), and
+the seam that owns it here is the workflow, which is where the reconciliation went. Two correct
+halves and a naming convention nobody owned cost three quarters of a feature, silently.
 
 RULE 127 (T3 S58 · August 12 2026 · the confirming instance of T2's 126, from the other lane):
 A TIMESTAMP IS A MEASUREMENT AND IT HAS UNITS · EVERY TOOL IN THE CHAIN HANDS YOU THE NUMBER WITH THE
