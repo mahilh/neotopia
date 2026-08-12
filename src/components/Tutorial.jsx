@@ -67,7 +67,7 @@ export const PLACEMENT_TAPS = [
   },
 ]
 
-const buildSteps = (cfg, isFlow) => [
+const buildSteps = (cfg, isFlow, timed) => [
   {
     // THIS STEP OFFERED TWO EQUAL CHOICES AND THEY ARE NOT EQUAL (fixed T1 S37 · gap 1 of
     // docs/TUTORIAL_GAP_AUDIT.md, the highest-value line in it).
@@ -84,8 +84,8 @@ const buildSteps = (cfg, isFlow) => [
     // for it, and step 2 · the placement · is where the emphasis has always been.
     heading: 'Three actions per turn',
     body: isFlow
-      ? `Each turn you take three actions. Placing an element on the board is the one that builds: only a placement can score a district. Drawing a project card from the Offer gives you something to build LATER · it scores nothing on its own. In Flow mode you have ${cfg.TURN_TIME_LIMIT} seconds per turn and every player draws at the same time.`
-      : `Each turn you take three actions. Placing an element on the board is the one that builds: only a placement can score a district. Drawing a project card from the Offer gives you something to build LATER · it scores nothing on its own. You have ${cfg.TURN_TIME_LIMIT} seconds per turn.`,
+      ? `Each turn you take three actions. Placing an element on the board is the one that builds: only a placement can score a district. Drawing a project card from the Offer gives you something to build LATER · it scores nothing on its own. ${timed ? `In Flow mode you have ${cfg.TURN_TIME_LIMIT} seconds per turn and every player draws at the same time.` : `In Flow mode every player draws at the same time. On your own there is no clock · add an opponent and turns are ${cfg.TURN_TIME_LIMIT} seconds.`}`
+      : `Each turn you take three actions. Placing an element on the board is the one that builds: only a placement can score a district. Drawing a project card from the Offer gives you something to build LATER · it scores nothing on its own. ${timed ? `You have ${cfg.TURN_TIME_LIMIT} seconds per turn.` : `On your own there is no clock · add an opponent and turns are ${cfg.TURN_TIME_LIMIT} seconds.`}`,
     visual: null,
   },
   {
@@ -121,9 +121,23 @@ export default function Tutorial({ onDismiss }) {
   // Tutorial only mounts during phase 'playing' (GameRoom gate), so the mode is already seeded by then. Reading
   // a slice + a pure config accessor is consumer-only — no store mutation, no lane crossing.
   const mode = useGameStore(st => st.mode)
+  // THE SAME PREDICATE THE CLOCK USES · useGameSync ends a turn only when players.length > 1, so
+  // solo exploration has no clock by design (T3 S56 measured why: with one seat endTurn keeps seat 0,
+  // consumes no tile and resets actions to 3 · it cannot teach and cannot penalise).
+  // MEASURED at committed HEAD before writing this: practice + 1 bot ends the turn at EXACTLY 90s,
+  // and solo does not expire within 105s. So the sentence was true in a game and false on the
+  // DEFAULT practice option · PracticeStart opens on `bots: 0`, which is the first thing a
+  // first-timer meets.
+  // ⚠ THIS REVERSES MY OWN S54 DETERMINATION ("change nothing"), and the reason it is not a
+  // contradiction is that the fact changed. In S54 practice had NO clock at all, so a conditional
+  // promise would have taught a different game from the one the player was about to play. Now the
+  // clock runs in every practice mode that IS a game, and the only exemption is the one the product
+  // already calls "Free exploration · learn the board". Saying so is accurate, and the player meets
+  // the clock the moment they add an opponent.
+  const timed = useGameStore(st => (st.players?.length ?? 0) > 1)
   const cfg = getModeConfig(mode)
   const isFlow = cfg.SIMULTANEOUS_DRAW
-  const steps = buildSteps(cfg, isFlow)
+  const steps = buildSteps(cfg, isFlow, timed)
   const s = steps[step]
   const isLast = step === steps.length - 1
 
@@ -205,7 +219,7 @@ export default function Tutorial({ onDismiss }) {
             {cfg.label} mode
           </span>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontVariantNumeric: 'tabular-nums' }}>
-            {cfg.TURN_TIME_LIMIT}s per turn · {cfg.END_GAME_TILE} tiles{isFlow ? ' · draw simultaneously' : ''}
+            {timed ? `${cfg.TURN_TIME_LIMIT}s per turn` : 'no clock on your own'} · {cfg.END_GAME_TILE} tiles{isFlow ? ' · draw simultaneously' : ''}
           </span>
         </div>
 

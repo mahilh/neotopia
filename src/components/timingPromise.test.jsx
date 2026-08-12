@@ -1,39 +1,29 @@
-// THE TIMING PROMISE AUDIT · WHAT THE COPY CLAIMS vs WHAT THE PRODUCT DOES (T1 S52).
+// THE TIMING PROMISE AUDIT · WHAT THE COPY CLAIMS vs WHAT THE PRODUCT DOES.
 //
-// ── S53 · REWRITTEN, NOT DELETED, BECAUSE THE MEASUREMENT IS THE ARGUMENT (Rule 101b) ───────────
-// S52 measured that nothing enforced the promise and marked this header to be rewritten when T3
-// landed the turn timeout. It landed (47aff1a, 3318ada). The answer is now MODE-DEPENDENT, and that
-// is a sharper finding than either "it works" or "it does not".
+// ── S57 · THE PROMISE IS NOW TRUE, AND THE HEADER IS REWRITTEN RATHER THAN DELETED (Rule 101b) ───
+// S52 measured that nothing enforced it. S53 found it was mode-dependent. T3 shipped both halves in
+// S56 · the `players.length > 1` predicate and practice seat resolution together · and I verified it
+// at COMMITTED HEAD in a detached worktree, because the shared tree carried their newer uncommitted
+// edits (preamble §5):
+//     practice + 1 bot   turn ends at EXACTLY 90s   · the promise is kept
+//     solo, 0 bots       no expiry within 105s      · the carve-out, by design
+// The 90 rather than 95 is the seat fix working. I measured that divergence in S56 from the artifact
+// (practice seats carry local-human while the clock read user?.id, so Classic would have ended at
+// 95s and Flow at 17.25s) and handed it over before they shipped; this is the confirmation.
 //
-// WHAT S52 MEASURED · sat on a practice board, touched nothing:
-//     t=0s timer 90 · t=90s timer 0 · t=130s timer 0 · turnNumber and currentSeat UNCHANGED
-// WHAT S53 MEASURED · the same probe, after the timeout shipped:
-//     BYTE-FOR-BYTE THE SAME RESULT. The turn still never expires in practice.
+// ── AND THE ONE CASE THE PREDICATE EXEMPTS WAS SAYING SOMETHING FALSE ────────────────────────────
+// Solo has no clock by design. The Tutorial said "You have 90 seconds per turn" there anyway · and
+// PracticeStart OPENS ON `bots: 0`, so that is the default option and the first thing a first-timer
+// meets. The sentence is now conditional on the SAME predicate the clock uses, read from the same
+// store, so the two cannot drift.
+// ⚠ THIS REVERSES MY OWN S54 DETERMINATION ("change nothing"), and the fact changed rather than my
+// mind: in S54 practice had NO clock at all, so a conditional promise would have taught a different
+// game from the one about to be played. Now the clock runs in every practice mode that IS a game,
+// and the only exemption is the one the product already calls "Free exploration · learn the board".
 //
-// NOT A BUG IN THE TIMEOUT · A SCOPE I HAD TO READ THE ARTIFACT TO FIND. useGameSync.js:500 opens
-// with `if (!roomId || !currentUserId) return  // practice/solo has no room`, so the clock runs in a
-// real multiplayer room and nowhere else. So:
-//     multiplayer room   the promise is KEPT · T3 measured it, not me · the active player's own
-//                        client fires at exactly the limit (`grace = isMine ? 0 : ...`), so the
-//                        deadline a player experiences is 90s Classic / 15s Flow with NO grace ·
-//                        the per-seat grace is a PEER-side fallback for a dead tab
-//     practice           the promise is still FALSE, and practice is the front door · zero
-//                        sign-ins, one click from the landing page, and the mode a first-timer
-//                        actually meets
-// ⚠ AND THE COPY DOES NOT DISTINGUISH THEM. The Tutorial renders in both, and says the same sentence
-// in both. Whether that matters is a product call and the guard is T3's · flagged, not touched.
-//
-// THE NUMBER IN THE BRIEF WAS WRONG AND THE ARTIFACT SAID SO. I was told the effective deadline is
-// "90 plus a per-seat grace capped at 15% of the turn". That is the PEER fallback path. For the
-// player whose turn it is, `isMine` is true and the grace is 0. Reading the code was not optional
-// here: the sentence I was about to write into the product would have been wrong by 2.25s to 15s
-// depending on seat and mode.
-//
-// WHAT SURVIVES UNCHANGED, and it is why this file was worth writing before the fix existed: every
-// timing statement reads TURN_TIME_LIMIT from getModeConfig. That is what let T3 make Classic AND
-// Flow correct simultaneously without touching a single string of copy · a Flow turn says 15
-// because the config says 15. If any of the four had retyped "90", Flow would have been a lie from
-// the day the mode shipped.
+// WHAT SURVIVES UNCHANGED, and it is why this file was worth writing before any of it existed: every
+// timing statement reads TURN_TIME_LIMIT from getModeConfig. That is what let Classic AND Flow become
+// correct simultaneously without editing a single number.
 //
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
@@ -126,6 +116,34 @@ describe('every timing promise reads the single source', () => {
     expect(flow, 'Flow and Classic share a turn budget · then no copy can be wrong about it')
       .not.toBe(classic)
     expect(Object.keys(GAME_MODES)).toEqual(expect.arrayContaining(['classic', 'flow']))
+  })
+})
+
+describe('the promise is conditional on the CLOCK, not on a mode name', () => {
+  // The failure this prevents is a second predicate. If the Tutorial decided "is this timed?" its own
+  // way · practice-vs-multiplayer, or a bots count · it would be a second rules engine that agrees
+  // today and drifts the first time the clock's condition changes (Rule 45). Both read
+  // players.length from the same store.
+  it('the Tutorial derives it from players.length, exactly as useGameSync does', () => {
+    const tut = read('components/Tutorial.jsx')
+    expect(tut, 'the Tutorial invented its own notion of "timed"').toMatch(
+      /useGameStore\(st => \(st\.players\?\.length \?\? 0\) > 1\)/)
+    expect(tut, 'the timing sentence is unconditional again · it is false in solo, which is the ' +
+      'DEFAULT practice option').toMatch(/timed \?/)
+  })
+
+  it('and the clock uses that same predicate', () => {
+    const sync = fs.readFileSync(path.resolve(SRC, 'hooks/useGameSync.js'), 'utf8')
+    expect(sync, 'the clock no longer keys on players.length · the Tutorial is now describing a ' +
+      'condition that does not govern anything').toMatch(/players\?\.length \?\? 0\) < 2\) return/)
+  })
+
+  it('counterweight · solo really is the exempt case, not an empty distinction', () => {
+    // If the clock ran for one seat too, "no clock on your own" would be a lie in the other
+    // direction · and this whole conditional would be worse than the sentence it replaced.
+    const sync = fs.readFileSync(path.resolve(SRC, 'hooks/useGameSync.js'), 'utf8')
+    expect(sync).toMatch(/PRACTICE_HUMAN_ID/)   // seat resolution shipped with it
+    expect(sync.indexOf('< 2) return'), 'the guard is gone').toBeGreaterThan(0)
   })
 })
 
