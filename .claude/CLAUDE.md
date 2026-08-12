@@ -218,7 +218,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (123 · cumulative):
+PERMANENT ANTI-REGRESS RULES (124 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -511,6 +511,39 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 124 (T2 S56 · August 12 2026):
+A LEAK IS MEASURED IN THE UNITS YOUR CLEANUP ROUTINE HAPPENS TO OPERATE ON · AND THAT IS NOT
+NECESSARILY WHERE THE MASS IS. Three sessions running I reported "the leak" with confident numbers:
+50 player_profiles unreachable, 640 game_rooms orphaned. Both true. Tonight, while premise-checking
+leg four of an unrelated design question, I counted the table one level down:
+    auth.users   5724 total · 1237 in the last 24h · ~449/day · 5025 (88%) leaving NO TRACE at all
+Two orders of magnitude larger than the thing I had been calling the leak, growing faster than
+everything else combined, against a documented 30/hour per-IP anon budget · and the purge cannot
+touch it, because `auth.users` is not in `public` and was therefore never in the frame.
+I was not counting the leak. I was counting THE ROWS MY CLEANUP ROUTINE CAN SEE, and letting that
+define the scale of the problem. The instrument's field of view had become the measurement's units,
+silently, three times.
+  124a · THE TELL IS THAT EVERY NUMBER YOU QUOTE COMES FROM THE SAME SUBSYSTEM. Profiles and rooms are
+        both `public` tables the purge selects on; the count was really "how much of my own scope is
+        dirty". Ask once, of any accumulation: WHAT ELSE IS CREATED PER UNIT OF THE THING THAT CREATES
+        THESE? Here it was one auth identity per sign-in, and the sign-in is upstream of every row.
+  124b · IT WAS FOUND BY A PREMISE CHECK FOR A DIFFERENT QUESTION, WHICH IS THE ARGUMENT FOR RUNNING
+        THEM AT ALL. Leg four was "do flagged users exist today?" · a yes/no needed to cost a design ·
+        and the answer arrived attached to a population nobody had looked at. A premise check is
+        cheap partly because of what it finds that you were not asking about (Rule 114's corollary,
+        the other way round: there the probe was cheap, here the BYCATCH was the finding).
+  124c · AND IT CHANGES THE RECOMMENDATION, NOT JUST THE REPORT. A flag column tags rows; it does
+        nothing about 449 identities a day. Signing CI in as a FIXED POOL of pre-created users tags
+        the rows AND stops the churn, so the bigger measurement is what turns two candidate designs
+        into one. A number that does not change a decision is trivia; this one reordered the options.
+COROLLARY, from the same session's mutation run: A MUTATION APPLIED BY TEXT SUBSTITUTION CAN SILENTLY
+NO-OP, AND A GREEN RESULT THEN READS AS "THE GUARD HAS NO TEETH". My third teeth-check used `perl -pi`
+against a regex full of backslashes, the substitution never matched, and the run came back green ·
+which I was one sentence from recording as a hole in my own new guard. Re-run with the edit asserting
+that the file actually changed, and it reddened correctly. Rule 100 says read the mutated run's COUNT
+rather than its colour; this is the step before it · PROVE THE MUTATION LANDED, because an unapplied
+mutation and a toothless guard produce byte-identical output.
 
 RULE 123 (T2 S55 · August 12 2026):
 BEFORE CHOOSING WHERE TO PUT AN OBSERVATION, CHECK WHETHER THAT VANTAGE POINT IS PERMITTED TO SEE THE
