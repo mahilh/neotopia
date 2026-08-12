@@ -310,7 +310,19 @@ export default function HexCell({
           ring, which is the reason this ring is not white alone. Alignment control in the same run:
           the one occupied hex reads red-dominant at its centre, so the sampling lands where it is
           aimed. Terrain confirmed painted rather than assumed: 26% of the canvas opaque with it
-          against 1.4% without. */}
+          against 1.4% without.
+
+          ⚠ AND THAT "BECAUSE" WAS A STORY UNTIL S61, WHEN THE THIRD ARM WAS RUN. I had explained the
+          control's white pixels by the valid-target ring without ever measuring a hex that has NO
+          ring at all · a plausible cause attached to an unmeasured claim. Three arms now, one run:
+              focused (two-tone ring)     42 black   13 white
+              valid target (region ring)   8 black   17 white
+              NO RING AT ALL               0 black    0 white
+          Zero and zero. Neither channel has a floor coming from the terrain photograph, so every
+          contrast figure measured against white on this board stands. Worth stating because it could
+          easily have gone the other way, and because the WHITE counts move run to run (41/31 in S60
+          against 13/17 here) while BLACK barely does (40/8 against 42/8) · which is a second, and
+          better, reason to read the black channel and not the white one. */}
       {showFocusRing && (
         <>
           <polygon data-testid="hex-focus-ring" points={points} fill="none"

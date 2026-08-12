@@ -205,6 +205,61 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     setActionLog(prev => [...prev, { id: logIdRef.current++, text, color, turn }].slice(-30))
   }
 
+  // ── SAYING WHAT HAPPENED (T1 S61) ──────────────────────────────────────────────────────────────
+  // S59 and S60 gave a keyboard player every control: draw, factory, element, region, hex, score.
+  // Every cue they added answers WHERE YOU ARE. None answers WHAT HAPPENED. A placement lands, the
+  // listbox unmounts, focus falls to <body>, and nothing is spoken.
+  //
+  // THE POLITE REGION IS THE ACTION LOG'S NEWEST ENTRY, not a second set of strings. Six addLogEntry
+  // call sites already produce exactly the sentences this wants · "placed Energy in Sacred City",
+  // "scored Solar Commons: +3", "drew Data Grove", "Turn 4 · Alice". A parallel announcer would be a
+  // second contract that drifts the first time somebody edits one of them (Rule 45), and it would
+  // drift SILENTLY because nothing renders the difference.
+  //
+  // ⚠ A REPEATED MESSAGE IS A SILENT ONE. A live region fires on a text MUTATION, so placing Energy
+  // in Sacred City twice running writes an identical string and the second one says nothing. Every
+  // entry carries a monotone id, so the announcement is suffixed with a toggling non-breaking space
+  // keyed on id parity · inaudible, and it guarantees the mutation. This is the same defect as the
+  // S58 refusal cue keyed on hex identity, in a different costume (Rule 107).
+  //
+  // TWO SOURCES, ONE VOICE. The log covers five of the six events. The sixth · THE TURN COMING TO
+  // YOU · is not in it and could not be: the only turn entry is written by onEndTurn, so the log
+  // records the turn LEAVING and is silent when it returns. That is the half of moment four that
+  // matters, because a player who does not know it is their turn simply does nothing.
+  const politeSeq = useRef(0)
+  const [politeMsg, setPoliteMsg] = useState('')
+  const sayRef = useRef(null)
+  sayRef.current = (text) => {
+    politeSeq.current += 1
+    setPoliteMsg(text + (politeSeq.current % 2 ? '\u00A0' : ''))
+  }
+
+  // Source 1 · the newest log entry, keyed on its monotone id so nothing is announced twice and
+  // nothing is skipped when two land in one render.
+  const lastSaidId = useRef(-1)
+  useEffect(() => {
+    const newest = actionLog[actionLog.length - 1]
+    if (!newest || newest.id === lastSaidId.current) return
+    lastSaidId.current = newest.id
+    sayRef.current(newest.text)
+  }, [actionLog])
+
+  // Source 2 (turn ownership) lives below, after useGameActions supplies isMyTurn.
+
+  // THE REFUSAL IS ASSERTIVE AND IT IS THE ONLY ONE, argued rather than measured (the brief's ask):
+  //   · polite QUEUES. Placement, score, draw and turn are all confirmations of something the player
+  //     did, or of a state they will meet anyway by moving. Announcing those assertively would cut
+  //     off "choice 3 of 6" mid-word on every single arrow press, because arrowing the board is a
+  //     continuous stream of option announcements. That is the HowItWorksDemo caption decision
+  //     (deliberately not a live region · four interruptions per loop, forever) applied to the board.
+  //   · assertive INTERRUPTS, and the refusal is the one message whose value expires. The player
+  //     acted on a wrong belief and is about to act again on the same wrong belief; queued behind a
+  //     placement it arrives after the next mistake.
+  // And it is deliberately NOT an addLogEntry: a refused tap is feedback, not game history, and a
+  // visible log full of refusals is noise for the sighted player who already got a ring and a sound.
+  const [refusalMessage, setRefusalMessage] = useState('')
+  const refusalIdRef = useRef(0)
+
   // Subscribe to individual slices · avoids a full re-render on every state change.
   const phase         = useGameStore(s => s.phase)
   const actionsLeft   = useGameStore(s => s.actionsRemaining)
@@ -289,6 +344,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+
   // DEV-only · expose the live store on window for state-driven visual testing (milestones, phases).
   // The SAME instance the app uses (not a fresh dynamic-import copy) · stripped from production builds.
   useEffect(() => {
@@ -303,6 +359,22 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     handleFactoryClick, handleElementSelect, handleRegionSelect,
     handleHexClick, handleCardScore, handleDrawCard, handleEndTurn,
   } = useGameActions({ sync: transport, mySeat })
+
+  // Source 2 · TURN OWNERSHIP. Deliberately not routed through the log: the log is game HISTORY and
+  // already carries "Turn N · name" when this player ends a turn. What it cannot carry is the turn
+  // COMING BACK, because nothing writes a log entry when a bot or an opponent finishes.
+  // Silent on arrival · a live region is for CHANGES, and announcing the standing state at mount
+  // duplicates what reading the page already tells you, while destroying the property that an empty
+  // region means nothing has happened yet.
+  const lastOwner = useRef(null)
+  useEffect(() => {
+    if (phase !== 'playing') return
+    const owner = isMyTurn ? 'me' : `seat${currentSeat}`
+    if (lastOwner.current === null) { lastOwner.current = owner; return }
+    if (owner === lastOwner.current) return
+    lastOwner.current = owner
+    sayRef.current(isMyTurn ? 'Your turn' : `${currentPlayer?.username ?? 'Opponent'} is playing`)
+  }, [isMyTurn, currentSeat, phase, currentPlayer])
 
   const factory = factories.find(f => f.id === selectedFactory)
 
@@ -1111,11 +1183,45 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 playSound('refused')
                 refuseSeq.current += 1
                 setRefusedHex({ q, r, regionId: rid, seq: refuseSeq.current })
+                // NAMES THE REASON, not the event · "cannot place there" tells a player nothing they
+                // did not just learn by being refused.
+                // ⚠ AND THE ORDER MATTERS, because the commonest refusal is not the obvious one. At
+                // regionSelected 59 of 60 cells refuse (measured S58), and 40 of those are hexes in
+                // the OTHER TWO REGIONS · so a message about adjacency would be wrong for most taps.
+                // Wrong-region is therefore checked first, and the adjacency wording is the last
+                // resort rather than the default. Three readings, no fourth: this is a description of
+                // the refusal, never a second legality engine (Rule 45) · the engine already decided,
+                // and `placed` being falsy is the decision.
+                refusalIdRef.current += 1
+                const cell = regions.find(rg => rg.id === rid)?.hexes?.[`${q},${r}`]
+                const why = rid !== selectedRegion
+                  ? `Wrong region · you chose ${REGION_NAMES[selectedRegion]}`
+                  : cell?.element
+                  ? 'That hex is already taken'
+                  : 'Not next to a district in this region'
+                setRefusalMessage(why + (refusalIdRef.current % 2 ? '\u00A0' : ''))
               }
             }}
             onFactoryClick={(id) => { setAimedRegion(null); handleFactoryClick(id) }}
           />
           <ActionLog entries={actionLog} />
+
+          {/* ⚠ MOUNTED UNCONDITIONALLY, AND THAT IS THE ENTIRE CORRECTNESS ARGUMENT. A live region
+              announces a TEXT MUTATION INSIDE A NODE THAT WAS ALREADY THERE. Written the obvious way,
+              `{msg && <div aria-live="polite">{msg}</div>}`, React inserts a fresh node carrying its
+              text and most screen readers say nothing · and the DOM after the fact is byte-identical
+              to the working version, so nothing can see it but a test that holds the NODE and checks
+              it is the same object. Same family as the ScoreFlash timer that died to its own cleanup:
+              correct-looking code, invisible failure.
+              Never `display:none` or `hidden` either · both remove the node from the accessibility
+              tree, which silences it just as completely and even more invisibly. The clip technique
+              below keeps it rendered and off screen. */}
+          <div data-testid="sr-announcer" className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {politeMsg}
+          </div>
+          <div data-testid="sr-alert" className="sr-only" role="alert" aria-live="assertive" aria-atomic="true">
+            {refusalMessage}
+          </div>
           {/* Sacred milestone celebration · covers the board for 2500ms when a total crosses 7/9/13/18/27/36 */}
           <MilestoneOverlay mySeat={mySeat} />
         </div>
