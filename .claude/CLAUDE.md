@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (119 · cumulative):
+PERMANENT ANTI-REGRESS RULES (120 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,35 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 120 (T3 S53 · August 11 2026):
+WHEN THE FINDING IS AN ABSENCE, IT NEEDS A POSITIVE CONTROL IN THE SAME RUN · OTHERWISE YOU HAVE
+MEASURED A DISABLED STATE AND CALLED IT A MISSING FEATURE. An absence is the cheapest thing in the
+world to observe by accident, because everything that is switched off looks exactly like everything
+that was never built. Twice now the control was the only thing that made the finding real:
+  S51 · "the peer is told nothing when the host departs" · a peer whose websocket never connected
+        produces a byte-identical green. The control was making the host take a REAL action and
+        watching the peer observe it BEFORE the departure. It failed on the first run.
+  S53 · "the game cannot be played by keyboard" · a board that is inert BECAUSE IT IS NOT YOUR TURN
+        has zero focusables, reacts to no key and selects nothing, which is the whole finding wearing
+        the wrong cause. The control was bots=0 (the human always holds the turn) plus ONE POINTER
+        CLICK producing four element buttons. Only then does "no key produces any" mean anything.
+THE SHAPE IS ALWAYS THE SAME: prove the capability EXISTS through some other channel, in the same run,
+immediately before asserting that your channel cannot reach it. A control taken from a previous run, or
+reasoned from the code, does not do it · the state has to be the one your assertion is about.
+  120a · ACCESSIBILITY AUDITS ARE ALL OF THIS SHAPE, which is why the rule is worth the space. Every
+        finding is "there is no name / no focus / no handler", and there are always two explanations.
+        An audit without a positive control is a list of things that were switched off at the moment
+        you looked.
+  120b · AND THE CONFOUND CAN BE IN YOUR OWN KEYSTROKE. I first reported that Escape does not close
+        the modal · while focus was OUTSIDE it, which is a different and unfair measurement. Re-run
+        with focus placed inside and ASSERT THE PLACEMENT, or the result is about the harness. Escape
+        genuinely does not close it, and it genuinely DOES cancel a placement selection · two facts a
+        sloppy run collapses into one wrong sentence about a colleague's work.
+COROLLARY, the reason to report the working halves as carefully as the broken ones: the audit that says
+"the dialog IS correctly aria-modal, the sheet handle IS a real button, every chrome control IS named,
+and your Escape cancel path IS intact" is the one whose three defects get believed. A report that is
+uniformly damning reads as a position; a report that separates them reads as a measurement.
 
 RULE 119 (T2 S53 · August 11 2026):
 WHEN A SYSTEM DIVERGES FROM ITS SPEC IN TWO PLACES, CHECK WHETHER ONE DIVERGENCE GATES THE OTHER
