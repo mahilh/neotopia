@@ -1302,3 +1302,107 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       .toBe(0)
   })
 })
+
+// ── THE TURN CLOCK, IN A REAL BROWSER, FOR ZERO IDENTITIES (T3 S57) ──────────────────────────────────────
+//
+// I shipped the practice clock in S56 on unit tests alone. My own history says that is not enough: Rule
+// 103a exists because three lanes each proved a correct half and the composition still failed, and I proved
+// the MULTIPLAYER clock live in S52 for exactly this reason. This is the practice half of that.
+//
+// ZERO IDENTITIES is the property that matters right now, not just a convenience · T2 measured ~449
+// anonymous sign-ins a day against a free-plan cap, so a practice spec is the only kind that is currently
+// free in a sense beyond the harness.
+//
+// ── WHY THE MODE IS SEEDED, AND WHAT THAT COSTS THE CLAIM ────────────────────────────────────────────────
+// Practice is ALWAYS Classic through the real path: useLocalSession accepts a `mode`, and GameRoom.jsx:123
+// calls it with `{ bots }` only · there is no URL or UI route to a Flow practice game. So the honest wait
+// is ~95s, which is nightly-class, and this spec runs on the MERGE GATE. Seeding `mode: 'flow'` in the
+// store makes the same mechanism observable in ~18s.
+// WHAT THAT DOES NOT PROVE, said plainly rather than left for a reader to notice: that Classic practice
+// specifically fires at 90s. A clock that HARD-CODED 15000 would pass here. That arithmetic is covered
+// where it belongs · useGameSync.turntimeout.test.js asserts both TURN_TIME_LIMIT and the Flow limit from
+// config, in both modes. This test owns the COMPOSITION: does the clock exist in a real browser at all,
+// and is the practice human classified correctly when it fires.
+//
+// ── THE FAILURE THIS MEASUREMENT CANNOT SEE (preamble §3) ────────────────────────────────────────────────
+// Something OTHER than the clock advancing the turn would look identical. Two candidates and both are
+// controlled: a bot cannot act on the human's seat, and the human never acts · asserted by actionsRemaining
+// staying at 3 for every sample up to the fire. If the turn moves while actions are untouched on the
+// human's own turn, the clock is the only thing in the codebase that can have done it.
+test.describe('practice · the turn clock fires in a real browser (T3 S57)', () => {
+  test('an idle practice turn ends itself · at the limit, with NO remote grace', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.goto('/practice?bots=1')
+    await boardReady(page)
+
+    // Flow so the wait is ~18s rather than ~95s. Asserted, not assumed · a seed that silently failed would
+    // leave a 90s limit and this test would report "the clock never fired" on a working build.
+    const LIMIT_MS = 15_000
+    const GRACE_UNIT_MS = Math.min(5_000, LIMIT_MS * 0.15)   // 2250 · the same expression the hook uses
+    await page.evaluate(() => window.__neotopia_store.setState({ mode: 'flow' }))
+    expect(await page.evaluate(() => window.__neotopia_store.getState().mode),
+      'the mode seed did not take · the clock would still be on the 90s Classic budget and this test ' +
+      'would blame the feature for its own setup').toBe('flow')
+
+    // CONTROL FIRST (Rule 90 + 120): the clock only runs for players.length > 1 and only on a live board.
+    // Every one of these is a way this test could pass for the wrong reason.
+    const start = await read(page)
+    expect(start.phase, 'not playing · nothing below is about the clock').toBe('playing')
+    expect(await page.evaluate(() => window.__neotopia_store.getState().players.length),
+      'practice seated fewer than two players · the clock is CORRECTLY inert there, so a non-advance ' +
+      'would prove nothing (S56 · solo exploration is deliberately excluded)').toBe(2)
+    expect(start.currentSeat, 'the bot holds the opening turn · this test must start on the HUMAN so that ' +
+      'nothing but the clock can move the seat').toBe(0)
+    expect(start.actionsRemaining, 'the human turn did not start with a full budget').toBe(3)
+
+    // Sample until the seat moves. Nothing is clicked · the whole point is that the board is idle.
+    const t0 = Date.now()
+    let fired = null
+    const samples = []
+    while (Date.now() - t0 < LIMIT_MS + GRACE_UNIT_MS * 2 + 4_000) {
+      const s = await read(page)
+      samples.push({ ms: Date.now() - t0, seat: s.currentSeat, turn: s.turnNumber, actions: s.actionsRemaining })
+      if (s.turnNumber !== start.turnNumber || s.currentSeat !== start.currentSeat) {
+        fired = samples.at(-1)
+        break
+      }
+      await page.waitForTimeout(250)
+    }
+
+    console.log(`[practice-clock] fired ${fired ? `at ${fired.ms}ms → seat ${fired.seat}/turn ${fired.turn}` : 'NEVER'}` +
+      ` · limit ${LIMIT_MS} · grace unit ${GRACE_UNIT_MS} · ${samples.length} samples`)
+
+    expect(fired, 'the turn never ended on an idle practice board · the clock does not reach practice in a ' +
+      'real browser, which is what the S56 unit tests could not tell us').not.toBeNull()
+
+    // THE FAILURE THIS CONTROLS FOR: the human never acted, so nothing but the clock moved the seat.
+    const before = samples.slice(0, -1)
+    expect(before.every(s => s.actions === 3), 'an action was spent while the board sat idle · the seat may ' +
+      `have moved for a reason other than the clock · ${JSON.stringify(before.slice(-3))}`).toBe(true)
+
+    // NOT BEFORE the limit · a clock that fires early takes a turn off someone still reading the board.
+    expect(fired.ms, 'the turn ended BEFORE the budget').toBeGreaterThanOrEqual(LIMIT_MS - 1_000)
+
+    // AND THE SEAT-RESOLUTION HALF, which is the one that regresses silently: a practice human matched only
+    // on the auth uuid finds no seat, is classified REMOTE, and picks up the grace · firing LATE rather
+    // than not at all. That is invisible to "did it fire" and is exactly why this bound is here.
+    // ⚠ THE WIRE, AND WHAT IT IS WORTH · sized from measurement, not from the run that produced it
+    // (preamble §2). Five baselines: 15133 · 15127 · 15156 · 15285 · and 16670 under load, that last one
+    // during three back-to-back playwright invocations, which is the Rule 77 artifact rather than the
+    // feature. Mutating the seat fallback away fires at 18161. So the bound sits between a worst-case
+    // baseline of ~16.7s and a mutated 18.2s · a real separation, but a LOAD-SENSITIVE one, because the
+    // signal (one grace unit, 2250ms) is only slightly larger than the jitter (1s clock tick + sampling).
+    // The margin is printed above on every run so a near-miss is visible BEFORE it becomes a flake.
+    // If this ever does flake, the fix is NOT a wider bound · it is to run this assertion in Classic,
+    // where the same separation is 5000ms against the same jitter. That costs 95s and is nightly-class,
+    // which is why it is not here.
+    const marginMs = LIMIT_MS + GRACE_UNIT_MS - fired.ms
+    console.log(`[practice-clock] margin to the grace bound · ${marginMs}ms`)
+    expect(fired.ms, 'the clock fired late by roughly one grace unit · the practice human was classified as ' +
+      'a REMOTE client (no seat matched the auth id), so their own turn is being ended on somebody else\'s ' +
+      `schedule · in Classic that is 95s against a Tutorial printing 90. Margin was ${marginMs}ms; if this ` +
+      'is a small NEGATIVE number on a working build, the machine was loaded and the assertion belongs in ' +
+      'Classic rather than widened here.')
+      .toBeLessThan(LIMIT_MS + GRACE_UNIT_MS)
+  })
+})
