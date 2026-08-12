@@ -19,6 +19,15 @@ The brief is a hypothesis from someone with less context than you.
 - Never cite a migration number for current behaviour (109). create-or-replace makes migrations a
   log, not a state. Ask pg_get_functiondef.
 - Comments carry the CHAIN (checkable), never applied-state (changes with no diff).
+- ENUMERATE THE CALL SITES, READ THEM, THEN CONCLUDE — in that order, and each step catches a different
+  failure. Enumerating catches the FALSE NEGATIVE: the producer you never put in the candidate set. I
+  named a room leak on the one cleanup path I happened to be looking at, and the real one was a sibling
+  I had not listed. Reading catches the FALSE POSITIVE: a grep cannot see DELEGATION. solo-host looked
+  like it never deleted its room and it calls a helper that does. Both directions bit me in one session,
+  from the same grep, because I concluded from it before I had enumerated with it.
+- A claim you have already written down is the expensive kind to be wrong about. I put a wrong producer
+  in a commit message, a code comment and a handoff, then spent the next hour disproving myself — and
+  the evidence that would have stopped me was the enumeration I only ran afterwards.
 If the brief's premise is false, say so and do the better task. Six times now, every time worth more.
 
 ## 2 · COUNTERWEIGHT FIRST
