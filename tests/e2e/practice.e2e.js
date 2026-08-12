@@ -1275,8 +1275,12 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
   // expected-to-fail against working code, and nothing said so because the spec RAN IN NO WORKFLOW (Rule
   // 79). The marker is only safe on a spec something actually executes. This one is on the merge gate, so
   // an unexpected pass reds within minutes of the fix landing.
-  test('REQUIREMENT · Escape closes the dialog (T1 · not yet implemented)', async ({ page }) => {
-    test.fail()
+  // ✅ IMPLEMENTED T1 S55 · src/hooks/useDialogA11y.js. The marker is deleted rather than left
+  // pointing at working code · that is the S37 defect this file's own header warns about (a
+  // test.fail() attached to a defect fixed eight commits earlier, asserting expected-to-fail against
+  // a working product). Verified locally before deleting: BOTH requirements reported "Expected to
+  // fail, but passed" with the marker still in place, which is the mechanism T3 built.
+  test('REQUIREMENT · Escape closes the dialog', async ({ page }) => {
     const dialog = await modalOpenWithFocusInside(page, { expect })
     await page.keyboard.press('Escape')
     await expect(dialog, 'Escape must dismiss the dialog · it is the documented way out of a modal and ' +
@@ -1284,8 +1288,7 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       'as a cancel path; it does not reach this component.').toBeHidden({ timeout: 3_000 })
   })
 
-  test('REQUIREMENT · focus stays inside the modal while it is open (T1 · not yet implemented)', async ({ page }) => {
-    test.fail()
+  test('REQUIREMENT · focus stays inside the modal while it is open', async ({ page }) => {
     await modalOpenWithFocusInside(page, { expect })
     const escaped = []
     for (let i = 0; i < 8; i++) {

@@ -5,9 +5,10 @@
 // player before their first action and shows them, visually, the two action types — with the emphasis
 // on placing an element. It shows once ever (localStorage), only on the first turn, only on your turn.
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { getModeConfig } from '../store/gameConfig'
+import { useDialogA11y } from '../hooks/useDialogA11y'
 
 const KEY = 'neotopia_tutorial_v1'
 // Fail SAFE: if localStorage is unavailable (private mode / blocked), treat as already seen so we never
@@ -131,8 +132,17 @@ export default function Tutorial({ onDismiss }) {
     onDismiss?.()
   }
 
+  // ESCAPE AND A FOCUS TRAP (T1 S55 · T3 put both on the merge gate as failing requirements).
+  // The markup has claimed aria-modal="true" since S8 while doing neither, which is the worst of the
+  // three states: a screen reader is TOLD the rest of the page is inert and Tab then walks straight
+  // into it. Escape dismisses exactly as the buttons do · through `dismiss`, so the "seen" flag is
+  // written the same way and a player who escapes the tutorial does not meet it again next game.
+  const dialogRef = useRef(null)
+  useDialogA11y({ ref: dialogRef, active: true, onEscape: dismiss })
+
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="How to play NeoTopia"

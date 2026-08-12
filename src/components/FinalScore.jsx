@@ -11,6 +11,7 @@
 //     (Landing is at '/' since T1 S7) · the "new civilization" CTA routes to '/lobby'.
 
 import { useEffect, useState, useMemo, useRef } from 'react'
+import { useDialogA11y } from '../hooks/useDialogA11y'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
 // Namespace import (NOT a named import) for getClusterDetail · it is shipped by T2 (S17) and may land on
@@ -349,9 +350,23 @@ export default function FinalScore({
   const leave = onLeavePractice ?? (() => navigate('/'))
   const playAgain = onPlayAgain ?? leave
 
+  // THE THIRD DIALOG NOBODY HAD COUNTED (T1 S55 · found by T3). Every finished game lands here, it
+  // has claimed role="dialog" since S13, and it had neither aria-modal nor a focus trap · so Tab
+  // walked out of the end-of-game screen into a board the player can no longer act on, behind an
+  // opaque overlay, with no route back.
+  // ⚠ AND IT DELIBERATELY GETS NO ESCAPE. Escape means "dismiss without consequence"; the only
+  // dismissal this dialog has is LEAVING (navigate away / exit practice), which is an action and not
+  // a cancellation. Wiring a destructive exit to a key people press reflexively is a worse defect
+  // than the one being fixed. The reachable controls · Play Again and Leave · are what the trap now
+  // guarantees a keyboard user can actually get to.
+  const dialogRef = useRef(null)
+  useDialogA11y({ ref: dialogRef, active: true })
+
   return (
     <div
+      ref={dialogRef}
       role="dialog"
+      aria-modal="true"
       aria-label="NeoTopia final civilization record"
       style={{
         position: 'fixed', inset: 0, zIndex: 300, overflowY: 'auto',
