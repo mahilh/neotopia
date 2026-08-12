@@ -8,7 +8,7 @@
 import { useState, useRef } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { getModeConfig } from '../store/gameConfig'
-import { useDialogA11y } from '../hooks/useDialogA11y'
+import { useDialogA11y } from '../utils/useDialogA11y'
 
 const KEY = 'neotopia_tutorial_v1'
 // Fail SAFE: if localStorage is unavailable (private mode / blocked), treat as already seen so we never

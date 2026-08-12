@@ -11,7 +11,7 @@
 //     (Landing is at '/' since T1 S7) · the "new civilization" CTA routes to '/lobby'.
 
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { useDialogA11y } from '../hooks/useDialogA11y'
+import { useDialogA11y } from '../utils/useDialogA11y'
 import { playSound } from '../utils/sound'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
