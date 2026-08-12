@@ -1745,3 +1745,8 @@ with a DIFFERENT set including one of my own · the give-away being that the set
 average was 19 on 8 cores. Serial (--no-file-parallelism) it was 450/450. Before routing a red to a
 lane, check `uptime`: wall-clock-bounded tests lose under contention and the failure moves around,
 which is the signature. Pairs with Rule 33 (unit tests and live E2E never concurrently).
+
+
+## BOOT PREAMBLE
+Read .claude/BOOT_PREAMBLE.md before the first tool call of every session. It is the operational
+distillation of this rulebook · lanes, premise gates, counterweight ordering, instrument discipline.
