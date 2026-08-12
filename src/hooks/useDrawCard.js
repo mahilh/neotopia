@@ -1,5 +1,5 @@
 // NeoTopia · useDrawCard (T3 S22). The client-side wiring for the ATOMIC seat-scoped draw RPC
-// (migration 011 · draw_card_for_seat · DEPLOYED + VERIFIED live this session · supabase 20260630104754).
+// (draw_card_for_seat · chain 011>014>021 · DEPLOYED + VERIFIED live · supabase 20260630104754).
 //
 // WHY THIS EXISTS (T3 S17 finding · migration 011 header): game state syncs as a WHOLE-STATE snapshot, so two
 // clients drawing at the "same time" each read → mutate → write-back and the second CLOBBERS the first (a draw

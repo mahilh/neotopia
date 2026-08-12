@@ -192,18 +192,18 @@ ENGINE ARCHITECTURE:
             No seat = the pre-S35 board-global reading, kept for the viz and for unowned pre-S35 boards.
   Flow mode config: getModeConfig(mode) · GAME_MODES.classic + GAME_MODES.flow
 
-DB CONTRACT (scripts/migrations/ · 001-026 · NOT 001-010, which is what this line said until T3 S49):
+DB CONTRACT (scripts/migrations/ · 001-027 · NOT 001-010, which is what this line said until T3 S49):
   game_sessions.phase: CHECK IN (playing|endgame|finished)
   record_civilization_score · chain 009 > 014 > 019 · SECURITY DEFINER · writes global_neotopia_index
   game_sessions.mode TEXT DEFAULT 'classic' (010)
   ⚠ A MIGRATION NUMBER HERE IS A CHAIN, NOT AN ADDRESS. 5 of 16 functions are redefined by a later
-    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024>025>026, draw_card_for_seat 011>014>021,
+    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024>025>026>027, draw_card_for_seat 011>014>021,
     record_civilization_score 009>014>019, increment_neotopia_index 004>014, rl_client_ip 013>014.
     AND THE NEWEST FILE IS NOT NECESSARILY THE DEPLOYED BODY. Do NOT record applied-state in a comment:
     it changes with no commit, so it is stale the moment it is true · T3 wrote "023 unapplied" into five
     files in S49 and T2 applied it ninety minutes later. Comments carry the CHAIN (a repo fact, gated by
     preconditions.e2e.js); ask pg_get_functiondef for what is RUNNING (Rule 109a). Last measured S50:
-    023 and 026 applied · 014, 024, 025 NOT. 026 is the deployed body: it age-guards BOTH deletes and
+    023 and 026 applied · 014, 024, 025, 027 NOT. 026 is the deployed body: it age-guards BOTH deletes and
     refuses to delete a profile that still owns a protected room, so the purge CANNOT ORPHAN a room.
     024 and 025 are superseded and must not be applied · 025 is kept only as the reference
     implementation of the REACH clause (the 597-room mass delete), HELD behind a tripwire at ~1000.
@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (122 · cumulative):
+PERMANENT ANTI-REGRESS RULES (123 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,39 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 123 (T2 S55 · August 12 2026):
+BEFORE CHOOSING WHERE TO PUT AN OBSERVATION, CHECK WHETHER THAT VANTAGE POINT IS PERMITTED TO SEE THE
+THING · AN OBSERVER WITHOUT PRIVILEGE REPORTS ABSENCE, NOT "I CANNOT SEE".
+I set out to make a permanent data leak visible · 49 of 71 player_profiles carry no reserved prefix
+and can never be swept · and the obvious home was scripts/healthcheck.cjs: it already runs every
+thirty minutes with credentials, already renders a summary, and already opens and closes alert issues.
+One query settled it:
+    player_profiles has exactly one RLS policy · profiles_own · ALL (user_id = auth.uid())
+OWN-ROW ONLY. A client counting profiles sees ITS OWN and nothing else, so the metric would have
+reported 1, or 0, forever · in the workflow whose entire job is noticing things. The leak would have
+been invisible AND certified as measured, which is worse than not measuring it (Rule 80, in the
+alerting path). game_rooms is world-readable but the ORPHAN count needs a join to player_profiles, so
+it fails for the same reason.
+The only component in the system with the privilege to see it is a SECURITY DEFINER function, and one
+already runs on every CI job and prints its result · so the counter belongs in the purge's own receipt
+(027) and nowhere else.
+  123a · THE CHECK IS ONE QUERY AND IT COMES BEFORE THE DESIGN, NOT AFTER IT. `pg_policies` for a
+        table, or the equivalent permission read for whatever the thing is. I have now twice
+        designed an instrument and then discovered its vantage point (S51's `import.meta.env` in a
+        Node loader, this). Both times the fix was cheap because I checked before shipping; neither
+        would have been cheap after.
+  123b · "IT ALREADY RUNS AND HAS CREDENTIALS" IS ABOUT COST, NOT ABOUT CAPABILITY, and it is the
+        argument that makes you skip 123a. An existing scheduled job is the tempting home for any new
+        metric precisely because the plumbing is free · which is exactly when nobody asks whether the
+        job's identity can read the rows.
+COROLLARY, and it is an error I MADE rather than caught: THE MOST RECENT CHANGE IS THE MOST SALIENT
+CANDIDATE, AND SALIENCE IS NOT EVIDENCE. In S54 I measured "33 of 34 rooms created since 026 are
+orphaned" and framed it as a second mechanism that had appeared. Widening the window from 4 hours to
+30 showed 176 of 177 rooms orphaned, spanning many hours BEFORE 026 was applied. Nothing appeared;
+it had always been like that, and I looked at a window that started where my own change did. When a
+defect surfaces just after you ship something, the window you measure it in should be chosen from the
+DEFECT's timeline, not from your own.
 
 RULE 122 (T2 S54 · August 11 2026):
 A SELF-CRITIQUE IS A CLAIM, AND IT IS GRANTED THE TRUST THAT RIGOUR EARNS RATHER THAN THE TRUST IT HAS

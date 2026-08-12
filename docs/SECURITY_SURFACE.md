@@ -125,7 +125,7 @@ Row 8 is the finding in one number. `Landing.jsx:65` and `FinalScore.jsx:127` bo
 | **Grant** | `has_column_privilege('authenticated','game_sessions','state','UPDATE') = TRUE` |
 | **Severity** | Critical (game integrity: deck, hands, scores, turn order) |
 
-**Why the RPC limit does not cover it.** Migration 011's `draw_card_for_seat` exists precisely to
+**Why the RPC limit does not cover it.** `draw_card_for_seat` (chain 011>014>021) exists precisely to
 make draws atomic (`FOR UPDATE` + server-side deck mutation), and migration 014 would rate-limit it
 in three tiers. But `state` holds the deck, every hand, every region and `current_seat`, and it can
 be overwritten wholesale without touching the RPC. An attacker who holds any seat can deal
