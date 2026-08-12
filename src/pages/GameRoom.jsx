@@ -635,13 +635,20 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // measuring · the writer-with-no-caller shape this project has now found six times
   // (award_game_win, useBonus, games_played, getFinalScore, and these two, which I created myself).
   //
-  // ⚠ THE FAILURE THE MEASUREMENT CANNOT SEE, NAMED BEFORE TRUSTING IT: both of these describe a
-  // STATE ("a pattern is complete", "you hold a token"), and a sound fired on a state re-fires on
-  // every render. This component re-renders ONCE A SECOND for the turn countdown, so a level-
-  // triggered version would play sixty times a minute and the 40ms debounce would not touch it ·
-  // it only swallows bursts. Both are therefore EDGE-triggered against a ref holding the previous
-  // value, which is the same lesson as Rule 107: key on something that actually changes, and
-  // compare against what you last saw rather than against a condition that stays true.
+  // ⚠ WHICH GUARD IS LOAD-BEARING, STATED, BECAUSE I GOT THIS WRONG ONCE AND GATED THE WRONG ONE.
+  // These describe STATES ("a pattern is complete", "you hold a token"), and a sound fired on a
+  // state would re-fire on every render · this component re-renders ONCE A SECOND for the countdown.
+  // THE DEP ARRAY IS WHAT PREVENTS THAT, and it is sufficient on its own: buildableMatches is
+  // useState and the other deps are numbers, so every dep is identity-stable and React does not
+  // re-run these effects on a tick. I wrote five tests to gate the refs below and made all three
+  // call sites level-triggered; nothing reddened, because there was nothing left to break.
+  // THE REFS ARE DEFENCE FOR ONE CASE THE DEPS DO NOT COVER: a state update carrying a NEW ARRAY
+  // with the SAME CONTENTS. buildableMatches is recomputed after every placement, so a second
+  // placement that leaves the same card completable hands the effect a new identity and a level
+  // check would fire a duplicate. That case is real and no test in this repo can construct it ·
+  // buildableMatches is local to useGameActions. It is UNCOVERED, deliberately, and recorded here
+  // rather than behind a green assertion that passes for the wrong reason (Rule 86).
+  // If you change these effects: the dep array is the guard, the ref is the belt.
   //
   // card-complete is the one that matters most, and the reason is my own S52 measurement: a player
   // who completes a pattern gets an 11px line in error red while a BOT got a full-screen starburst.

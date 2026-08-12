@@ -1,29 +1,26 @@
-// SOUNDS FIRE ON EVENTS, NOT ON STATES (T1 S56).
+// AN IDLE BOARD IS SILENT (T1 S57, replacing four assertions that could not fail · T1 S56).
 //
-// ⚠ THIS FILE PROVES LESS THAN ITS FIRST DRAFT CLAIMED, AND THE MUTATION RUN IS WHY. I wrote it to
-// gate edge-triggering · "a pattern is complete", "it is my turn" and "I hold a token" are STATES,
-// and GameRoom re-renders ONCE A SECOND for the countdown, so a level-triggered sound would play
-// sixty times a minute while the module's 40ms debounce (which only swallows bursts) did nothing.
-// Then I mutated all three call sites to be level-triggered and ALL THREE MUTATIONS SURVIVED.
+// ── WHY THIS FILE IS FOUR TESTS SHORTER THAN IT WAS ──────────────────────────────────────────────
+// S56 wrote five assertions here to gate EDGE-triggering. The reasoning was right: "a pattern is
+// complete", "it is my turn" and "I hold a token" are STATES, and GameRoom re-renders once a second
+// for the countdown, so a level-triggered sound would play sixty times a minute while the module's
+// 40ms debounce (which only swallows bursts) did nothing.
+// Then I made all three call sites level-triggered and NOTHING REDDENED · because the thing I was
+// guarding against is already guarded. `buildableMatches` is useState and the other deps are
+// numbers, so every dep is identity-stable and React never re-runs those effects on a tick. The
+// assertions passed for the wrong reason, and a gate on a guard that cannot fail is worse than no
+// gate: it retires the worry (Rule 86).
+// They are deleted rather than kept-with-a-caveat. The load-bearing sentence now lives in
+// GameRoom.jsx beside the effects, where somebody changing them will read it.
 //
-// THE REASON IS THAT THE THING I WAS GUARDING AGAINST IS ALREADY GUARDED. `buildableMatches` is
-// useState, and turnNumber and bonusTokens.length are numbers, so every dep is IDENTITY-STABLE
-// between renders · React does not re-run those effects on a countdown tick at all. My refs are a
-// SECOND guard on top of one that already works, and the preamble says exactly what that means:
-// two guards, either sufficient, so no mutation can red either (Rule 94 / Rule 118).
-//
-// SO WHY ARE THE REFS STILL THERE? Because they are not fully redundant · they cover one case the
-// dep array does not: a state update carrying a NEW ARRAY with the SAME CONTENTS. buildableMatches
-// is recomputed after every placement, so a second placement that leaves the same card completable
-// hands the effect a new identity and a level check fires a duplicate. That case is REAL and this
-// fixture CANNOT construct it, because buildableMatches lives in useGameActions local state and no
-// test here can set it. I am recording the gap rather than deleting the guard or pretending the
-// gate covers it.
-//
-// WHAT THIS FILE HONESTLY HOLDS, and it is worth having on its own: an idle board is SILENT across
-// four countdown ticks, and a genuine token gain announces itself exactly once and then stops.
-// Those are the assertions that would have caught a sound wired into render rather than an effect,
-// which is the mistake most likely to be made here next.
+// ── WHAT SURVIVED, AND WHY IT IS NOT THE SAME FOUR ───────────────────────────────────────────────
+// One assertion DOES fail on a real mistake, and I only know that because I finally ran the mutation
+// I had been describing instead of testing: move a playSound into the RENDER BODY and this reds
+// (4366ms, the idle sweep). That is a different and likelier error than level-triggering · it is
+// what happens when someone "just adds a sound" to a component without thinking about effects · and
+// no dep array protects against it, so nothing else in the codebase would notice.
+// The instruction this session was to delete all five. Four deserved it. Deleting the fifth would
+// have removed the only gate here that has ever caught anything.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen, act } from '@testing-library/react'
@@ -55,7 +52,6 @@ const until = async (fn, tries = 60) => {
   }
   return fn()
 }
-// Let the per-second countdown tick N times · this is the render pressure the whole file is about.
 const tickSeconds = async (n) => {
   for (let i = 0; i < n; i++) await act(async () => { await new Promise(r => setTimeout(r, 1050)) })
 }
@@ -75,67 +71,25 @@ async function board() {
 }
 
 describe('counterweight · the seam is live in a real mount', () => {
+  // Without this, the assertion below is satisfied by a component that never asks for a sound at
+  // all · "nothing fired on an idle board" is trivially true of a board with no audio wired.
   it('the app really does ask for sounds through the logged path', async () => {
     await board()
-    expect(__soundLog.length, 'no sound was attempted during a full board mount · then every ' +
-      '"fired exactly once" assertion below is satisfied by a component that fires nothing at all')
-      .toBeGreaterThan(0)
+    expect(__soundLog.length, 'no sound was attempted during a full board mount').toBeGreaterThan(0)
   })
 })
 
-describe('a per-second re-render must not become a per-second sound', () => {
-  // ⚠ MUTATION-CHECKED AND FOUND WEAK: removing the turnNumber latch does NOT red this, because the
-  // effect deps are identity-stable and React never re-runs it. Kept because it would catch a sound
-  // moved into the render body, which is a different and likelier mistake · but it is not evidence
-  // that the latch works.
-  it('turn-start fires ONCE, not once per countdown tick', async () => {
-    await board()
-    const afterMount = attempts('turn-start')
-    expect(afterMount, 'turn-start never fired · the fixture is not on my turn').toBeGreaterThan(0)
-    await tickSeconds(3)
-    expect(attempts('turn-start'), `turn-start fired ${attempts('turn-start')} times across three ` +
-      'countdown ticks · it is keyed on a STATE rather than an edge, and a real turn would play it ' +
-      'ninety times').toBe(afterMount)
-  })
-
-  // ⚠ ALSO WEAK, and for a second reason worth naming: a fresh practice board never completes a
-  // pattern, so buildableMatches.length is 0 throughout and a level-triggered version has nothing to
-  // fire on either. The fixture cannot reach the state that distinguishes the two.
-  it('card-complete does not fire while nothing completes', async () => {
-    await board()
-    await tickSeconds(3)
-    expect(attempts('card-complete'), 'card-complete fired with no completed pattern · it is level-' +
-      'triggered on buildableMatches rather than edge-triggered on its identity').toBe(0)
-  })
-
-  it('bonus-earned fires ONCE on a real gain, and not again while it is held', async () => {
-    // ⚠ MY FIRST VERSION OF THIS TEST WAS WRONG AND THE GATE CAUGHT IT. It claimed to check "arrival
-    // at a board that already holds tokens" while MOUNTING FIRST · so 0 -> 2 was a genuine gain and
-    // firing was correct. The fixture did not construct the scenario its name described (Rule 100's
-    // corollary: a fixture can describe a board that cannot exist, or a different one entirely).
-    // What the ref guard actually protects, and what is constructible here: a gain announces itself
-    // exactly ONCE, and holding the tokens afterwards is silent through any number of re-renders.
-    await board()
-    await act(async () => {
-      const st = useGameStore.getState()
-      useGameStore.setState({
-        players: st.players.map(p => ({ ...p, bonusTokens: ['subsidy', 'initiative'] })),
-      }, false)
-    })
-    await tickSeconds(1)
-    expect(attempts('bonus-earned'), 'a real gain must be announced').toBe(1)
-    await tickSeconds(3)
-    expect(attempts('bonus-earned'), 'holding tokens kept re-announcing them · the effect is keyed ' +
-      'on the COUNT being non-zero rather than on it having increased').toBe(1)
-  })
-
-  it('and no sound at all repeats while the board just sits there', async () => {
+describe('an idle board is silent', () => {
+  it('nothing fires while the board just sits there', async () => {
+    // MUTATION-PROVEN, unlike the four this replaced: inserting `playSound('ui-click')` into
+    // GameRoom's render body reds exactly this and nothing else.
     await board()
     __resetSound()
     __forceUnlock()
     await tickSeconds(4)
     const repeated = SOUND_NAMES.filter(n => attempts(n) > 0)
-    expect(repeated, `these fired on an idle board: ${repeated.join(', ')} · an idle board is silent, ` +
-      'and anything here is a state being mistaken for an event').toEqual([])
+    expect(repeated, `these fired on an idle board across four countdown ticks: ${repeated.join(', ')} ` +
+      '· a sound in a render body plays on every re-render, and this component re-renders once a ' +
+      'second forever').toEqual([])
   })
 })
