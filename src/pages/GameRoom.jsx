@@ -910,6 +910,23 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         {/* The board area needs a NAME so the phone layout can give it a share of the column ·
             it had none, so index.css could only ever address the sidebar (T1 S47). */}
         <div className="game-board-area" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, minHeight: 0, minWidth: 0, position: 'relative' }}>
+          // MY score, not the CURRENT player's (T1 S54).
+          // MEASURED first, because the brief and my own S53 recommendation both assumed the
+          // player could not read a score without scrolling, and that is false: all three region
+          // numbers are on screen at every phone width in idle · 12px at 320, 16 at 375, 18 at
+          // 414 · and the focused region renders its own at 33-47px in regionSelected. The
+          // sheet's Score panel is a DUPLICATE of that, and in practice (no opponent) it is an
+          // exact one. So the score was never below the fold; only the COMPARISON was.
+          // What is actually wrong is whose number it is. `currentPlayer` is the player whose
+          // TURN it is, so in a real room this readout silently becomes the OPPONENT's for the
+          // whole of their turn, in the same position, in the same colour, with nothing saying
+          // so · a number that changes owner without announcing it is worse than one that is
+          // missing, because it is read and believed. `myPlayer` already falls back to
+          // currentPlayer (line 240), so solo and practice are byte-identical.
+          // ⚠ THE BLIND SPOT, NAMED BEFORE TRUSTING THE MEASUREMENT: practice is exactly the mode
+          // where this change is INVISIBLE · myPlayer IS currentPlayer with one seat, so every
+          // live probe I can run without minting identities shows no difference at all. A green
+          // browser run is not evidence here. The gate constructs the two-seat state directly.
           <GameBoard
             focusRegion={focusRegion}
             regions={regions}
@@ -922,7 +939,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             factoriesPulse={factoriesPulse}
             reachableTargets={reachable.targets}
             reachableRegions={reachable.regions}
-            regionScores={currentPlayer?.scores ?? []}
+            regionScores={myPlayer?.scores ?? []}
             onHexClick={(q, r, rid) => {
               // Before an element is chosen the board is a preview, not a placement surface. A click on
               // a previewed hex takes aim at its region · a click anywhere else is still inert, which is
