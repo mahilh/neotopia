@@ -158,6 +158,50 @@ Per Rule 111, the two constants this harness hid: every row above is **two playe
 argument. `ladderRow` now takes a mode. **Four players is still unmeasured**: `bots()` is only ever
 called with two, and `ladderRow` is structurally a duel.
 
+### ⚠ WHAT A FLOW RETUNE WOULD ACTUALLY TAKE (T2 S53 · reported, deliberately not done)
+
+The divergence below is real and unresolved. Costed rather than fixed, because retuning two ladders on
+a session's tail is the same mistake as running an experiment whose question a document had already
+closed.
+
+**First, the thing that sizes the urgency:** `DIFFICULTY_SELECTABLE` is still `false` and there is no
+picker anywhere in `src/components` or `src/pages` (verified at the artifact, not from memory).
+Practice runs at `builder` in both modes. **So no player can currently pick a rung in either mode, and
+nobody can experience the divergence.** It becomes real on the day the picker ships, not before.
+
+**Second, the thing that sizes the severity:** Flow's steps are 27.6 / 39.9 against Classic's
+33.5 / 31.6. Uneven, but *both are inside a playable band*. v1's were 6.3 / 15.2, which was a launch
+blocker because one win in sixteen teaches nothing. **This is a polish item and it should not be
+priced like the last one.**
+
+**What it would cost, in order, and the first item is the one people will want to skip:**
+
+1. **Measure the drawBias response curve IN FLOW.** The Classic slope (~0.86 points of margin per 0.01
+   of bias) **cannot be assumed to carry** · the fact that the ladder did not transfer is itself the
+   evidence that the axis behaves differently under a 9-tile clock. Tuning Flow off the Classic slope
+   would be Rule 111 again: a constant lifted from one context into another without checking.
+2. **A mode-aware `POLICIES` table**, i.e. `POLICIES[mode][level]` and a mode argument threaded through
+   `resolvePolicy`. That permanently **doubles the tuning surface**: every future balance question is
+   asked twice, and every answer can disagree with itself.
+3. **Re-pin the decision fingerprints.** `botPolicyIdentity.test.js` passes no mode, so it pins Classic
+   only. A mode-aware table needs a second set of fixtures or the Flow policies ship unpinned · which
+   is the state Classic was in before S50 and the reason the ladder rotted unnoticed.
+4. **Re-run the ladder and token blocks in Flow** so `docs/` carries Flow numbers rather than Classic
+   numbers with a caveat.
+5. **Decide what `REFERENCE_POLICY` means per mode.** It is frozen, correctly · but a yardstick frozen
+   in Classic is not automatically a yardstick in Flow, and its *distances* to the rungs are already
+   mode-dependent. Either it is one instrument measured separately per mode, or Flow needs its own,
+   and adding `reference_v2` is exactly what `botPolicy.js`'s own header says to do rather than tuning
+   the original.
+
+**The alternative worth naming, because it may be the right answer:** accept the divergence and scope
+the labels. A player picks a mode *and* a difficulty and experiences one combination; they never run
+Classic-builder and Flow-builder side by side. The consistency concern is real but second-order, and
+one honest sentence in the picker ("difficulty is tuned for Classic") costs nothing against a
+permanent doubling of the tuning surface. **My recommendation is to do step 1 only** · measure the
+Flow curve, which is cheap and is a prerequisite for every other option · and then decide, rather than
+committing to a mode-aware table before knowing whether the axis even behaves the same way.
+
 ### Flow mode · measured in S50, three disjoint 40-seed blocks
 
 **The worry was that Flow's 9 tiles would leave the token subsystem near-inert. It does not.** Flow

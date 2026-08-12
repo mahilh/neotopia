@@ -189,6 +189,108 @@ describe('reserved usernames · the namespace the purge owns', () => {
       'the migration chain AND to that list · never just to the producer.').toEqual([])
   })
 
+  // ══ THE SINK · WATCH WHAT REACHES THE WRITE, NOT WHO CALLS IT (T2 S53) ══════════════════════════
+  // MY OWN S52 CRITIQUE, ACTED ON. The producer guard above enumerates by CALL SHAPE ·
+  // `uniqueName('X')` and `enterLobbyWithRetry(ctx, \`X…\`)`. A new spec that claims a raw string, or
+  // a helper I have not met, is invisible to it, AND the vacuity counterweight cannot see that either,
+  // because the shapes it does know still match. It is an enumeration that reads as complete because
+  // it enumerates what I thought of · Rule 100's own failure mode, and the same shape as the
+  // two-party-guard-on-a-three-party-contract one session earlier.
+  //
+  // THE GENERAL FORM: there is ONE sink and an unbounded number of ways to reach it. Every path that
+  // matters ends at a write of `username` into `player_profiles`. So enumerate the WRITES · a closed,
+  // greppable set · and require every one of them to be CLASSIFIED. A site that is neither guarded
+  // nor deliberately exempted reds, which is the property no producer-shaped guard can have.
+  //
+  // WHY CLASSIFICATION AND NOT "MUST BE GUARDED". Two of the four live sites are in T3's
+  // useGameRoom.js and are correct WITHOUT a check: the username they write has already been through
+  // claimUsername, so they are safe by PROVENANCE. Demanding a redundant guard there would redden
+  // working code in someone else's lane, and a gate that reports failures on a working board gets read
+  // as noise and switched off (Rule 94a / 103b). So each site is named, with the reason it is safe.
+  const USERNAME_SINKS = {
+    // file :: how many writes it may contain, and why each is safe
+    'src/hooks/useAuth.js': {
+      writes: 2,
+      why: 'claimUsername · both the UPDATE and the INSERT sit behind the reserved-prefix check',
+      requiresGuard: true,
+    },
+    'src/hooks/useGameRoom.js': {
+      writes: 2,
+      why: 'T3 · best-effort backstop upserts. SAFE BY PROVENANCE, not by a check: the value is the ' +
+        'already-claimed `username` from useAuth state, which cannot be reserved because claimUsername ' +
+        'refused it and the localStorage restore path drops it. If either of those two guards is ever ' +
+        'removed, THESE become unguarded writes and this entry is the note that says so.',
+      requiresGuard: false,
+    },
+  }
+
+  const findUsernameWrites = () => {
+    const hits = {}
+    const walk = (rel) => {
+      const abs = join(process.cwd(), rel)
+      let entries = []
+      try { entries = readdirSync(abs, { withFileTypes: true }) } catch { return }
+      for (const e of entries) {
+        const child = `${rel}/${e.name}`
+        if (e.isDirectory()) { walk(child); continue }
+        if (!/\.(js|jsx)$/.test(e.name) || /\.test\./.test(e.name)) continue
+        const src = readFileSync(join(process.cwd(), child), 'utf8')
+        // A write is an insert/upsert/update on player_profiles that carries a username field.
+        const n = [...src.matchAll(/from\(\s*['"]player_profiles['"]\s*\)[\s\S]{0,200}?\.(insert|upsert|update)\([\s\S]{0,200}?username/g)].length
+        // ⚠ \b AND A CALL PAREN, NOT A BARE SUBSTRING · T3's Rule 112, which I then committed myself.
+        // The first version of this line was `/isReservedUsername/.test(src)` and the mutation that
+        // renames the guard to `isReservedUsernameXX` LEFT IT GREEN, because the new name contains the
+        // old one. A substring match is an identity check with no boundary, and the instrument built
+        // on one hid the exact case it exists to find. Requiring a word boundary AND an open paren
+        // means the guard must actually be CALLED, not merely mentioned in a comment.
+        if (n) hits[child] = { count: n, guarded: /\bisReservedUsername\s*\(/.test(src) }
+      }
+    }
+    walk('src')
+    return hits
+  }
+
+  it('the sink scanner finds the known writes (vacuity guard)', () => {
+    const found = findUsernameWrites()
+    const total = Object.values(found).reduce((s, h) => s + h.count, 0)
+    expect(total, 'ZERO username writes were found anywhere in src/ · the scanner regex has drifted ' +
+      'away from how the code writes a profile, so the classification check below is iterating an ' +
+      'empty set and passes no matter what anyone ships').toBeGreaterThanOrEqual(4)
+  })
+
+  it('every write of a username into player_profiles is CLASSIFIED', () => {
+    const found = findUsernameWrites()
+    const problems = []
+    for (const [file, hit] of Object.entries(found)) {
+      const spec = USERNAME_SINKS[file]
+      if (!spec) {
+        problems.push(`${file} writes a username to player_profiles (${hit.count} site(s)) and is ` +
+          'NOT classified in USERNAME_SINKS')
+        continue
+      }
+      if (hit.count > spec.writes) {
+        problems.push(`${file} now has ${hit.count} username writes, classified for ${spec.writes} · ` +
+          'the new one has not been reasoned about')
+      }
+      if (spec.requiresGuard && !hit.guarded) {
+        problems.push(`${file} is classified as guarded but no longer references isReservedUsername`)
+      }
+    }
+    // And a file that has STOPPED writing is worth knowing about too · a classification that no longer
+    // describes anything is the citation rot this project keeps finding (Rule 97).
+    for (const file of Object.keys(USERNAME_SINKS)) {
+      if (!found[file]) problems.push(`${file} is classified in USERNAME_SINKS but no longer writes a ` +
+        'username · delete the entry rather than leaving a guard pointed at nothing')
+    }
+
+    expect(problems, `${problems.length} unclassified or drifted username sink(s):\n  ` +
+      `${problems.join('\n  ')}\n\nEvery path that can put a name into player_profiles ends here. ` +
+      'A write that has not been classified is one a player can reach with a reserved prefix · which ' +
+      'puts their room, their session and every game_event cascading from it inside ' +
+      'purge_e2e_test_data\'s delete scope, silently. Either guard it with isReservedUsername, or add ' +
+      'it to USERNAME_SINKS with the reason it is safe without one.').toEqual([])
+  })
+
   it('the error message names the offending prefix and the consequence', () => {
     const msg = reservedUsernameError('E2Etest')
     expect(msg).toContain('E2E')

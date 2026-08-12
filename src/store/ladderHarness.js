@@ -52,6 +52,16 @@ export function playOnce(configs, seed, mode) {
   let lastPlacedKey = null
   const heldPrev = configs.map(() => 0)
   const grantOrder = []
+  // T2 S53 · THE CROSSING SEQUENCE, in the order the crossings happen.
+  // Recorded so one game can be scored under ALTERNATE award rules offline. The bots read no bonus
+  // state (asserted live in bonusBalance.test.js premise B, and botPolicy.js has zero references), so
+  // changing WHO gets a token changes no decision · the game is identical and only the scoring
+  // differs. That makes a rule comparison an EXACT control rather than a paired-seed statistical one
+  // (Rule 74), the same property that made S48's flat-grant experiment decisive.
+  // Final scores alone are not enough here: they give the SET of crossings but not their ORDER, and
+  // every first-come-first-served rule is decided by order.
+  const crossings = []
+  const scorePrev = configs.map(() => ({}))
 
   for (let i = 0; i < 4000 && api().phase === 'playing'; i++) {
     const s = api(); const seat = s.currentSeat
@@ -59,6 +69,21 @@ export function playOnce(configs, seed, mode) {
       const held = s.players.find(x => x.seat === k)?.bonusTokens.length ?? 0
       for (let n = heldPrev[k]; n < held; n++) grantOrder.push(k)
       heldPrev[k] = held
+    }
+    // Sample every seat's per-region score and record any threshold it has just passed. This is the
+    // DEFINITION of a crossing (prev < t <= now), not a copy of the granter's award logic · and the
+    // counterweight in pileDepth.test.js proves the derivation by replaying the SHIPPED rule against
+    // it and requiring it to reproduce the real token counts exactly (Rule 36).
+    for (let k = 0; k < configs.length; k++) {
+      const sc = s.players.find(x => x.seat === k)?.scores ?? {}
+      for (const [regionId, v] of Object.entries(sc)) {
+        const before = scorePrev[k][regionId] ?? 0
+        const now = v ?? 0
+        if (now > before) {
+          for (const t of [7, 13, 18]) if (before < t && now >= t) crossings.push({ seat: k, regionId, threshold: t })
+          scorePrev[k][regionId] = now
+        }
+      }
     }
     const a = chooseBotAction({
       state: api(), seat, difficulty: configs[seat].difficulty,
@@ -76,9 +101,21 @@ export function playOnce(configs, seed, mode) {
   for (let k = 0; k < configs.length; k++) {
     const held = st.players.find(x => x.seat === k)?.bonusTokens.length ?? 0
     for (let n = heldPrev[k]; n < held; n++) grantOrder.push(k)
+    // Final sweep for crossings too · a crossing caused by the LAST scoring action of the game would
+    // otherwise be missed, for the same reason the token sweep above exists.
+    const sc = st.players.find(x => x.seat === k)?.scores ?? {}
+    for (const [regionId, v] of Object.entries(sc)) {
+      const before = scorePrev[k][regionId] ?? 0
+      const now = v ?? 0
+      if (now > before) {
+        for (const t of [7, 13, 18]) if (before < t && now >= t) crossings.push({ seat: k, regionId, threshold: t })
+        scorePrev[k][regionId] = now
+      }
+    }
   }
   return {
     grantOrder,
+    crossings,
     // T2 S51 · `scores` and `pileClaimed` are ADDITIVE and exist for the four-player experiment.
     // The bonus granter drops a contested crossing SILENTLY · gameStore.js:487 does
     // `if (i >= 0) { claim }` with no else · so a player who crosses 7 in a region whose subsidy is
