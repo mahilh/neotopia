@@ -630,6 +630,45 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     mq.addEventListener?.('change', apply)
     return () => mq.removeEventListener?.('change', apply)
   }, [])
+  // ── card-complete AND bonus-earned · THE TWO SOUNDS THAT SHIPPED AND NEVER PLAYED (T1 S56) ─────
+  // I wired eight of ten last session and found the gap while writing the handoff, not while
+  // measuring · the writer-with-no-caller shape this project has now found six times
+  // (award_game_win, useBonus, games_played, getFinalScore, and these two, which I created myself).
+  //
+  // ⚠ THE FAILURE THE MEASUREMENT CANNOT SEE, NAMED BEFORE TRUSTING IT: both of these describe a
+  // STATE ("a pattern is complete", "you hold a token"), and a sound fired on a state re-fires on
+  // every render. This component re-renders ONCE A SECOND for the turn countdown, so a level-
+  // triggered version would play sixty times a minute and the 40ms debounce would not touch it ·
+  // it only swallows bursts. Both are therefore EDGE-triggered against a ref holding the previous
+  // value, which is the same lesson as Rule 107: key on something that actually changes, and
+  // compare against what you last saw rather than against a condition that stays true.
+  //
+  // card-complete is the one that matters most, and the reason is my own S52 measurement: a player
+  // who completes a pattern gets an 11px line in error red while a BOT got a full-screen starburst.
+  // The sound is the cheapest half of fixing that asymmetry.
+  const prevMatchIds = useRef('')
+  useEffect(() => {
+    if (phase !== 'playing') return
+    // The IDENTITY of the set, not its size · going from one completable card to a different one is
+    // a new thing to hear about, and 1 -> 1 would be silent on a length check.
+    const ids = buildableMatches.map(m => m.cardId).sort().join(',')
+    const had = prevMatchIds.current
+    prevMatchIds.current = ids
+    // Only on the RISING edge, and only for MY board · a pattern completing on the opponent's turn
+    // is their event, not mine.
+    if (ids && ids !== had && isMyTurn) playSound('card-complete')
+  }, [buildableMatches, isMyTurn, phase])
+
+  const prevBonusCount = useRef(null)
+  useEffect(() => {
+    const n = myPlayer?.bonusTokens?.length ?? 0
+    const before = prevBonusCount.current
+    prevBonusCount.current = n
+    // `before === null` is the first observation · a player rejoining a game already holding two
+    // tokens must not be told they just earned them.
+    if (before !== null && n > before) playSound('bonus-earned')
+  }, [myPlayer?.bonusTokens?.length])
+
   // TURN-START · only when it becomes MINE, and keyed on turnNumber so it cannot re-fire on an
   // unrelated re-render (this app re-renders every second for the countdown · Rule 76/107).
   const lastAnnouncedTurn = useRef(null)

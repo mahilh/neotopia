@@ -83,6 +83,77 @@ describe('counterweight · every named sound has a real file behind it', () => {
   })
 })
 
+describe('every NAME has a CALLER · the gate that catches the seventh instance', () => {
+  // MY OWN S55 CRITIQUE, and it is three lines of value out of proportion to its size: the gate I
+  // wrote asserted every FILE has a name. It did not assert every NAME has a caller, so I shipped
+  // card-complete and bonus-earned · loaded, budgeted, and never played · and found them while
+  // writing the handoff rather than while measuring.
+  // WHAT IT PROTECTS: this project has now found a writer with no caller SIX times · award_game_win
+  // (S35), useBonus (S37), games_played, getFinalScore (S84's audit), and these two, which I created
+  // myself. Every one of them rested at a value that looked correct, which is why none of them threw.
+  // A dead sound is the purest case: it is silent, and silence is the expected state of a sound that
+  // has not been triggered yet.
+  const CALLERS = ['../pages/GameRoom.jsx', '../components/FinalScore.jsx', '../components/ActionBar.jsx',
+                   '../components/Tutorial.jsx', '../pages/Lobby.jsx', '../pages/Landing.jsx']
+
+  // ⚠ THE REGEX IS THE WHOLE RISK, AND I HAVE ALREADY SHIPPED THIS EXACT BUG (Rule 112, S52): a
+  // naive /playSound\('([a-z-]+)'\)/ misses `playSound(placed ? 'hex-place' : 'refused')` and would
+  // report BOTH of those dead while they are the most-fired sounds in the game. So: find every
+  // playSound( call, take its argument text, and pull EVERY quoted literal out of it.
+  const callersOf = (src) => {
+    const found = new Set()
+    for (const m of src.matchAll(/playSound\(/g)) {
+      let i = m.index + m[0].length, depth = 1, arg = ''
+      while (i < src.length && depth > 0) {
+        const c = src[i]
+        if (c === '(') depth++
+        else if (c === ')') { depth--; if (!depth) break }
+        arg += c; i++
+      }
+      for (const lit of arg.matchAll(/'([a-z-]+)'/g)) found.add(lit[1])
+    }
+    return found
+  }
+
+  const wired = () => {
+    const all = new Set()
+    for (const rel of CALLERS) {
+      const f = path.resolve(__dirname, rel)
+      if (!fs.existsSync(f)) continue
+      for (const n of callersOf(fs.readFileSync(f, 'utf8'))) all.add(n)
+    }
+    return all
+  }
+
+  it('counterweight · the scanner can find a ternary call site', () => {
+    // If this cannot see the ternary form, the gate reports the two most-played sounds as dead and
+    // whoever reads it deletes them.
+    const fake = "playSound(placed ? 'hex-place' : 'refused')\nplaySound('ui-click')"
+    expect([...callersOf(fake)].sort()).toEqual(['hex-place', 'refused', 'ui-click'])
+  })
+
+  it('counterweight · it is reading real files with real call sites', () => {
+    const w = wired()
+    expect(w.size, 'the scanner found no call sites at all · then "every name is called" would be ' +
+      'false for everything and this gate would red for the wrong reason, or worse, someone would ' +
+      'relax it').toBeGreaterThan(5)
+  })
+
+  it('no sound is loaded, budgeted and never played', () => {
+    const w = wired()
+    const dead = SOUND_NAMES.filter(n => !w.has(n))
+    expect(dead, `these sounds ship and never play: ${dead.join(', ')} · either wire them or take ` +
+      'them out of the bundle, but do not pay for a file nobody hears').toEqual([])
+  })
+
+  it('and nothing is played that has no file', () => {
+    // The mirror. A typo in a call site is silent · playSound("hex_place") logs `unknown` and the
+    // player hears nothing, which is exactly what a correctly-quiet moment sounds like.
+    const bogus = [...wired()].filter(n => !SOUND_NAMES.includes(n))
+    expect(bogus, `called but not declared: ${bogus.join(', ')}`).toEqual([])
+  })
+})
+
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 // THE DECISIONS
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
