@@ -218,7 +218,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (124 · cumulative):
+PERMANENT ANTI-REGRESS RULES (125 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -511,6 +511,37 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 125 (T2 S57 · August 12 2026):
+A DISCRIMINATOR YOU DID NOT AUTHOR IS NOT YOUR FINGERPRINT · BASELINE THE TOKEN AGAINST THE ARTIFACT
+BUILT WITHOUT YOUR CHANGE, BEFORE YOU BUILD A GUARD ON IT.
+I added a password sign-in behind `VITE_E2E` and needed to prove it cannot reach a player. The obvious
+check is "`signInWithPassword` must be absent from the production bundle". Measured in a detached
+worktree at HEAD, before my change existed: ALREADY THERE, 1 file. It is the Supabase SDK's own method
+name, bundled whether or not any app code calls it. The guard would have reported a leak on a
+permanently clean bundle · which is not a safe error, it is a gate that gets read as noise and
+switched off, and the day it is right nobody is listening (Rule 94a).
+The other tempting token is the flag itself, and it fails the opposite way: Vite SUBSTITUTES
+`import.meta.env.VITE_E2E`, so the name reads 0 in BOTH builds and a guard on its absence passes on a
+leaking bundle (my own S52 finding, re-confirmed).
+WHAT WORKS IS A STRING LITERAL YOU OWN, because it survives minification and is emitted only if the
+branch referencing it survives. Verified two-sided on real artifacts before the test was written:
+    VITE_E2E=true npm run build  ->  __neotopia_e2e_pool : 1    the branch is retained
+    npm run build                ->  __neotopia_e2e_pool : 0    the branch is dropped
+and then the guard was reddened by building a leaking bundle on purpose, not by a mutation.
+  125a · THE TELL IS WHETHER YOU COULD HAVE DELETED THE TOKEN. If the string belongs to a dependency,
+        a framework, or the language, its presence says nothing about YOUR code · you cannot remove
+        it and it cannot vary with your change. Ask: if I reverted my diff entirely, would this token
+        still be there? That is a one-command question (build at HEAD in a worktree) and it is the
+        whole check.
+  125b · AND AN ABSENCE-ONLY GUARD NEEDS A PRESENCE ANCHOR IN THE SAME RUN. "X is not in the bundle"
+        passes on an empty directory, a failed build, or a path typo. Assert something of yours that
+        MUST be there (`BotAlpha`, a shipped literal) in the same assertion block · the same vacuity
+        counterweight reservedNames.test.js already carries, and the reason both files can be trusted.
+COROLLARY, and it is why this rule is not just about bundles: the same mistake is available anywhere
+you pick an observable to stand for your change · a log line a library also emits, a table a framework
+also writes, a metric the platform also increments. The question is always "would this exist without
+me", and the answer is always one control away.
 
 RULE 124 (T2 S56 · August 12 2026):
 A LEAK IS MEASURED IN THE UNITS YOUR CLEANUP ROUTINE HAPPENS TO OPERATE ON · AND THAT IS NOT
