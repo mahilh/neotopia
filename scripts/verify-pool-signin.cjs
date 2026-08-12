@@ -140,11 +140,83 @@ const mask = (email) => {
   return `${local.slice(0, 3)}${'*'.repeat(Math.max(0, local.length - 3))}@${domain || '?'}`
 }
 
+// ── THE STEP SUMMARY · MY OWN S59 CRITIQUE  (T2 S60) ────────────────────────────────────────────
+// "A green step conclusion is compatible with 0/4 members resolving. I leaned on that conclusion
+// mid-session and had to go to the log to learn the real verdict." That is the not-red-versus-green
+// confusion the receipt exists to end, sitting inside my own workflow step: this script exits 0 on
+// UNMEASURED by design (a fork PR has no secrets and must not red a gate it cannot fix), so the
+// step's own conclusion cannot carry the number.
+// $GITHUB_STEP_SUMMARY is rendered on the run page and, like the step conclusions the receipt now
+// reads, SURVIVES what a log does not · it is attached to the run rather than streamed into it.
+function summary(md) {
+  const p = process.env.GITHUB_STEP_SUMMARY
+  if (!p) return                       // local runs · stdout already carries everything
+  try { fs.appendFileSync(p, md + '\n') } catch { /* a summary is a courtesy, never a gate */ }
+}
+
+// ── THE SCOPE LINE · P3, AND IT IS MEASURED RATHER THAN ASSERTED ────────────────────────────────
+// The danger named by the Council: "if the counter falls for the wrong reason, someone will declare
+// victory on the metered denominator." Node-side teardown and seat sign-ins convert today; BROWSER
+// contexts are a different producer and, until the harness seeds a credential into a page, they
+// still mint one identity each · and they are the bulk. A fall in auth.users is the teardowns.
+//
+// Measured from the checked-out tree at run time rather than stated once, so the sentence changes
+// itself the day the harness wires it instead of rotting into a false limit (§4 · a stated LIMIT
+// needs the same counterweight as a stated finding, because limitations get believed harder).
+// MEASURED AT HEAD 4f4cc15: 0 · and T3's uncommitted work in the shared tree already contains it,
+// so this transition is days away, not months (Rule 66).
+function browserWiring(root) {
+  const hits = { seeds: [], asserts: [] }
+  const walk = (dir) => {
+    let entries = []
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) { walk(p); continue }
+      if (!/\.(js|mjs|cjs|ts)$/.test(e.name)) continue
+      let t = ''
+      try { t = fs.readFileSync(p, 'utf8') } catch { continue }
+      const rel = path.relative(root, p)
+      // The SEED is the operative thing · addInitScript alone could be seeding anything, so both
+      // the hook and the pool key must be present in the same file for it to count.
+      if (t.includes('addInitScript') && /E2E_POOL_KEY|__neotopia_e2e_pool/.test(t)) hits.seeds.push(rel)
+      if (/E2E_POOL_OUTCOME_KEY|__neotopia_pool_outcome/.test(t)) hits.asserts.push(rel)
+    }
+  }
+  walk(path.join(root, 'tests'))
+  return hits
+}
+
+function scopeNote(w) {
+  if (!w.seeds.length) {
+    return ['**SCOPE · this covers NODE-SIDE sign-ins only, and they are not the bulk.**',
+      '',
+      'No file under `tests/` seeds a pool credential into a browser context (`addInitScript` +',
+      'the pool key), so **every browser context still mints a permanent identity**. `useAuth`',
+      'takes its `no-credential` branch and says so in the page console, which does not reach this',
+      'log. A fall in the `auth.users` count is the TEARDOWNS converting, **not** the browsers ·',
+      'do not read it as the feature having landed.']
+  }
+  return ['**SCOPE · browser wiring is PRESENT, and its result is not measured here.**',
+    '',
+    `Seeded by: ${w.seeds.map(s => '`' + s + '`').join(', ')}`,
+    w.asserts.length
+      ? `Outcome asserted in: ${w.asserts.map(s => '`' + s + '`').join(', ')} · the per-context ` +
+        'verdict lives in those specs, not in this step.'
+      : '⚠ Nothing reads `__neotopia_pool_outcome`, so a browser that silently fell back to ' +
+        'anonymous would pass every spec. Seeding without asserting is the silent state this ' +
+        'observable exists to end.']
+}
+
 const fail = (msg) => { console.error(`FAIL · ${msg}`); process.exit(1) }
 const unmeasured = (msg) => {
   console.error(`UNMEASURED · ${msg}`)
   console.error('  This is NOT a pass. The pool question stays open and exits 2 so no reader, and')
   console.error('  no workflow step, can mistake a missing credential for a working one.')
+  // The step exits 0 on this path (a fork PR cannot read secrets and must not red a gate it cannot
+  // fix), so the SUMMARY is the only place a reader can learn that nothing was verified.
+  summary(`### Fixed CI identity pool\n\n**UNMEASURED · nothing was verified.**\n\n${msg}\n\n` +
+    'This is not a pass. The step exits 0 so a fork PR is not reddened for secrets it cannot read.')
   process.exit(2)
 }
 
@@ -212,6 +284,9 @@ async function main() {
     console.log(`OK · negative control · wrong password rejected with HTTP ${res.status} ` +
                 `(${json.error_code || json.error || 'no code'})`)
     console.log('  So a green POSITIVE run below is a measurement and not a function that returns OK.')
+    summary('### Fixed CI identity pool\n\n' +
+      `**Negative control PASSED** · a deliberately wrong password was rejected (HTTP ${res.status}, ` +
+      `${json.error_code || json.error || 'no code'}), so the check below is capable of failing.`)
     return
   }
 
@@ -249,6 +324,38 @@ async function main() {
       }
     }
     const good = rows.filter(r => r.ok).length
+
+    // ── THE SUMMARY · A COUNT NEVER TRAVELS WITHOUT ITS SCOPE ────────────────────────────────────
+    // Same invariant as the receipt's step reader, for the same reason: "4/4" on its own is read as
+    // "the feature works", and the feature is four Node sign-ins out of a population dominated by
+    // browser contexts. The scope block is appended unconditionally, in the same write, so there is
+    // no code path that emits the number alone.
+    summary([
+      '### Fixed CI identity pool',
+      '',
+      `**${good}/${POOL_SIZE} members reachable and REUSED** (checked under the env names the ` +
+      '_harness_ reads, not the names the secrets happen to have).',
+      '',
+      // A shortfall must SAY it is not a pass, in the summary, next to the number. The step's own
+      // conclusion cannot carry this · it exits 0 on UNMEASURED by design, which is the whole
+      // reason this block exists. Caught by running it: the 0/4 case rendered "0/4 members
+      // reachable and REUSED" with no verdict beside it, which is a count wearing a result's
+      // clothes · the same defect as the receipt's ratio, in the artifact written to fix it.
+      ...(good < POOL_SIZE ? [
+        `**This is NOT a pass.** ${POOL_SIZE - good} member(s) could not be resolved. A member the ` +
+        'harness cannot read is not a smaller pool, it is a SILENT one: `signInPooledOrAnon` falls ' +
+        'back to `signInAnonymously`, every spec still passes, and the identity churn continues ' +
+        'unobserved.', '',
+      ] : []),
+      '| member | verdict | identity |',
+      '|---|---|---|',
+      ...rows.map(r => r.ok
+        ? `| ${r.i} | REUSED | ${mask(r.user.email)} · created ${r.ageHours}h before this run |`
+        : `| ${r.i} | ${r.unreachable ? 'UNREACHABLE' : 'FAILED'} | ${String(r.why).split('\n')[0].slice(0, 110)} |`),
+      '',
+      ...scopeNote(browserWiring(path.join(__dirname, '..'))),
+    ].join('\n'))
+
     console.log('')
     console.log(`  ${good}/${POOL_SIZE} members reachable and reused.`)
     if (good < POOL_SIZE) {
@@ -284,4 +391,9 @@ async function main() {
   console.log('  a separate claim with a separate proof.')
 }
 
-main().catch((e) => fail(`${e.message}`))
+// Run only when run · requiring this file used to execute a live sign-in and call process.exit,
+// which makes the pure logic untestable. The scope note is the line that prevents someone declaring
+// victory on the metered denominator, so it is the last thing that should rest on a hand check.
+if (require.main === module) main().catch((e) => fail(`${e.message}`))
+
+module.exports = { scopeNote, browserWiring, harnessEnv, conventionAgrees, mask }

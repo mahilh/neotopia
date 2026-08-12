@@ -147,6 +147,113 @@ function classify(run) {
   }
 }
 
+// ── WHAT A CANCELLED RUN STILL KNOWS  (T2 S60) ──────────────────────────────────────────────────
+// A cancelled run is UNMEASURED and stays UNMEASURED · that is Council Decision 1 and nothing here
+// touches it. But "UNMEASURED" was doing two jobs: a run cancelled while queued verified NOTHING,
+// and a run cancelled at its last step verified almost everything, and the receipt printed the same
+// sentence for both. On 31637130091 nine work steps had completed green, including the pool
+// credential check, and only the practice-mode specs were cut · that is a materially different
+// state from "no verdict at all" and this tool was discarding it.
+//
+// ⚠ AND IT CORRECTS SOMETHING I PUBLISHED IN S59. I wrote, into CLAUDE.md and a commit message,
+// "a CANCELLED run has ZERO log lines". Measured across six cancelled runs tonight: five have logs
+// (119-623 lines) and one has none. The one that has none was cancelled BEFORE ITS JOB STARTED and
+// has no steps either. THE SAME RUN, 31637130091, read 0 lines in S59 and reads 623 now · nothing
+// about it changed except that it finished. The log was missing because the run was IN PROGRESS
+// when I asked, and I attributed it to the cancellation sitting next to it. A confound between two
+// properties that co-occurred in my single sample, generalised into a rule (Rule 122's corollary ·
+// three blocks before a shape is reported, and I reported one).
+// The ADVICE survives and the MECHANISM was wrong, which is the more dangerous half to get wrong:
+// filter on --status=success when you want a log, not because cancellation destroys it, but because
+// an unfinished run has not written one yet.
+// Names of steps the workflow itself declares CONDITIONAL. Without this the reader cries "NEVER RAN"
+// about `Upload report on failure`, which carries `if: failure()` and is SUPPOSED to skip on every
+// healthy run · a false positive on correct behaviour, in a tool whose credibility is the only thing
+// it has. A gate that reports a problem on a working run gets read as noise and switched off, and
+// the day it is right nobody is listening (Rule 94a · and it appeared on the very first execution
+// of this feature, which is the argument for running a new instrument before believing it).
+// Parsed textually from the same file the expected set came from · steps are `      - ` at six
+// spaces and their keys sit at eight, so a step block is everything up to the next six-space dash.
+function conditionalStepNames(file) {
+  const out = new Set()
+  let text
+  try { text = readFileSync(join(__dirname, '..', '.github', 'workflows', file), 'utf8') } catch { return out }
+  for (const block of text.split(/\n {6}- /).slice(1)) {
+    const body = block.split(/\n {6}- /)[0]
+    if (!/\n {8}if:/.test('\n' + body)) continue
+    const m = body.match(/^\s*name:\s*(.+)$/m)
+    if (m) out.add(m[1].trim())
+  }
+  return out
+}
+
+function stepDetail(databaseId, conditional = new Set()) {
+  if (!databaseId) return null
+  let raw
+  try { raw = sh('gh', ['run', 'view', String(databaseId), '--json', 'jobs']) }
+  catch { return { unavailable: 'gh run view --json jobs failed' } }
+  let jobs
+  try { jobs = JSON.parse(raw).jobs || [] } catch { return { unavailable: 'unparseable jobs JSON' } }
+
+  const steps = jobs.flatMap(j => j.steps || [])
+  // steps=0 is the genuine nothing-happened case: the run was cancelled before its job started.
+  // Distinguished rather than folded in, because "no steps" and "steps I could not read" are
+  // different failures and only one of them is about this repo (Rule 95b).
+  if (!steps.length) return { neverStarted: true }
+
+  // GitHub's own bookkeeping is not the workflow's work · a green "Complete job" verifies nothing,
+  // and counting it would pad every ratio printed below toward looking finished.
+  const own = steps.filter(s => !/^(Set up job|Complete job|Post |Post Run )/.test(s.name || ''))
+  // A conditional step that skipped is not a step that was PREVENTED from running · it declined.
+  // Excluded from both the numerator and the denominator so the ratio stays honest in both
+  // directions: counting it as never-run inflates the alarm, counting it as green inflates the
+  // reassurance, and only dropping it does neither.
+  const graded = own.filter(s => !conditional.has(s.name))
+  return {
+    total:   graded.length,
+    green:   graded.filter(s => s.conclusion === 'success'),
+    notRun:  graded.filter(s => s.conclusion === 'skipped'),
+    stopped: graded.filter(s => s.conclusion === 'cancelled'),
+    failed:  graded.filter(s => s.conclusion === 'failure'),
+    conditionalSkipped: own.length - graded.length,
+  }
+}
+
+// Render the detail as lines under a verdict. NEVER returns a sentence a reader could take as a
+// pass · every branch either names what did not run, or says in terms that a complete-looking step
+// list is still not a workflow verdict.
+// THE INVARIANT THIS FUNCTION EXISTS TO HOLD, and it is asserted by its test rather than promised
+// here: EVERY non-empty rendering names something that did not complete. A ratio on its own ("8 of
+// 9 green") is read as a pass by every habit a human has, and this file's entire subject is refusing
+// to let an absence read as a pass · its counterweight has already failed once by printing
+// "PASS · all 0 expected workflows". A partial-step reader is that same shape one level down.
+function stepLines(d, indent) {
+  const pad = ' '.repeat(indent)
+  if (!d) return []
+  if (d.unavailable) return [`${pad}step detail UNAVAILABLE (${d.unavailable}) · the verdict above stands`]
+  if (d.neverStarted) return [`${pad}the job never started · NOTHING ran, not one step`]
+
+  const out = []
+  const halted = d.stopped[0] || d.failed[0]
+  out.push(`${pad}${d.green.length} of ${d.total} steps completed green` +
+    (d.conditionalSkipped ? ` (${d.conditionalSkipped} conditional step(s) not counted)` : ''))
+
+  if (halted) {
+    out.push(`${pad}DID NOT COMPLETE · "${(halted.name || '').slice(0, 52)}"`)
+  }
+  if (d.notRun.length) {
+    out.push(`${pad}NEVER RAN · ${d.notRun.map(s => (s.name || '').slice(0, 40)).join(' | ')}`)
+  }
+  if (!halted && !d.notRun.length) {
+    // The vacuous case, and it is the one a partial reader gets wrong: a run cancelled during its
+    // post-job bookkeeping has every graded step green and nothing skipped, so the detail alone
+    // looks exactly like success. GitHub's verdict belongs to the RUN, not to its steps.
+    out.push(`${pad}every graded step is green · but the RUN did not complete, and a green step`)
+    out.push(`${pad}list is NOT a workflow verdict. Still unmeasured.`)
+  }
+  return out
+}
+
 function main() {
   const sha = sh('git', ['rev-parse', shaArg || 'HEAD'])
   const short = sha.slice(0, 7)
@@ -181,12 +288,28 @@ function main() {
     return { ...w, run: mine, ...classify(mine) }
   })
 
+  // Step detail for every row that is not a clean PASS · a pass has nothing to add, and this costs
+  // one `gh run view` per remaining row. Fetched for FAIL too: "which step failed" is the first
+  // question a red provokes and it is the same call.
+  for (const r of rows) {
+    if (r.run && r.verdict !== 'PASS') r.detail = stepDetail(r.run.databaseId, conditionalStepNames(r.file))
+  }
+
   const failures  = rows.filter(r => r.verdict === 'FAIL')
   const unmeasured = rows.filter(r => !r.measured)
 
   if (JSON_OUT) {
-    console.log(JSON.stringify({ sha, isTip, rows: rows.map(r =>
-      ({ workflow: r.name, verdict: r.verdict, measured: r.measured, url: r.run?.url || null })) }, null, 2))
+    console.log(JSON.stringify({ sha, isTip, rows: rows.map(r => ({
+      workflow: r.name, verdict: r.verdict, measured: r.measured, url: r.run?.url || null,
+      // Deliberately NOT a bare ratio. A consumer reading `{green: 8, total: 9}` and nothing else
+      // would rebuild the exact misreading this is here to prevent, so the names of the steps that
+      // did not run travel with the numbers and `measured` above is still the only verdict.
+      steps: r.detail && !r.detail.unavailable && !r.detail.neverStarted ? {
+        green: r.detail.green.length, total: r.detail.total,
+        neverRan: r.detail.notRun.map(s => s.name),
+        stoppedAt: (r.detail.stopped[0] || r.detail.failed[0] || {}).name || null,
+      } : (r.detail?.neverStarted ? { jobNeverStarted: true } : null),
+    })) }, null, 2))
   } else {
     console.log(`CI RECEIPT · ${short}${isTip ? '  (TIP of origin/main)' : '  (superseded · not the tip)'}`)
     console.log(`  expected set · ${expected.length} push-triggered workflows, enumerated from ` +
@@ -206,6 +329,10 @@ function main() {
       } else {
         console.log(`  UNMEASURED  ${pad}${r.verdict.toLowerCase()}`)
       }
+      // The detail is INDENTED UNDER the verdict, never beside it · the verdict is the claim and
+      // the steps are evidence about how far it got. Printing "8 of 9 green" on the verdict line
+      // would put a pass-shaped number where a reader scans for the verdict.
+      for (const line of stepLines(r.detail, 14)) console.log(line)
     }
     console.log('')
     if (failures.length) {
@@ -226,4 +353,13 @@ function main() {
   process.exit(failures.length ? 1 : (unmeasured.length ? 2 : 0))
 }
 
-main()
+// ── RUN ONLY WHEN RUN, EXPORT ALWAYS  (T2 S60) ──────────────────────────────────────────────────
+// This called main() at module level, so requiring the file EXECUTED it · found by accident when a
+// throwaway probe's `require()` printed a full CI receipt and exited. That makes the pure logic
+// untestable, and untestable is how the "PASS · all 0 expected workflows" hole survived to be found
+// by a hand-run mutation rather than by the suite. stepLines now carries an invariant (every
+// non-empty rendering names something that did not complete) and an invariant nobody can run is a
+// comment (Rule 105a).
+if (require.main === module) main()
+
+module.exports = { stepLines, stepDetail, conditionalStepNames, classify, expectedWorkflows }

@@ -239,9 +239,17 @@ THE FIXED CI IDENTITY POOL · the project's only defect with a FINANCIAL denomin
      four members · four-player-live asks by seat). ⚠ I first published SIX, from
      `grep -c "playwright test"`, and one of those matches is PROSE in e2e.yml's own header. A grep
      counts text; a log counts events. The `[pool]` lines are greppable per run and are the honest
-     conversion denominator · `gh run view <id> --log | grep '\[pool\]'`, and note that a CANCELLED
-     run has ZERO log lines, so filter on --status=success or you will measure nothing and call it a
-     finding.
+     conversion denominator · `gh run view <id> --log | grep '\[pool\]'`.
+     ⚠ AND THE MECHANISM I GAVE HERE WAS WRONG (corrected T2 S60). This said "a CANCELLED run has
+     ZERO log lines". Measured across six cancelled runs: FIVE have logs (119-623 lines) and one
+     does not, and that one was cancelled before its job started. The same run, 31637130091, read 0
+     lines in S59 and reads 623 now · nothing changed except that it FINISHED. The log was missing
+     because the run was IN PROGRESS when I asked, and I attributed it to the cancellation sitting
+     next to it. One sample, two co-occurring properties, generalised into a rule (Rule 122's
+     corollary · three blocks before a shape is reported). The ADVICE survives · filter on
+     --status=success when you want a log · but for the opposite reason: an unfinished run has not
+     written one yet. A cancelled run keeps BOTH its log and its step conclusions, which is what
+     scripts/ci-receipt.cjs now reads.
      PROVEN, anchored to the COMMIT and not to a window (Rule 126) · e2e-placement-guard successes,
      one line each, boundary exactly at 59d3bea with nothing straddling it:
        8293ea6 d014f68 59d3bea   post-env   member 0 REUSED 462b5106 · 0 minted
