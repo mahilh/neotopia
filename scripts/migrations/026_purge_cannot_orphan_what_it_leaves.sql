@@ -49,6 +49,20 @@
 --   mass delete stops being housekeeping and becomes the fix. The reference implementation of the
 --   reach clause is in 025 and should be applied ON TOP of this body, not instead of it.
 --
+--   ⚠ RE-SITED T2 S56, ON MAHIL'S INSTRUCTION AND MY OWN REASONING · THE LEVEL WAS THE WRONG SUBJECT.
+--   A count of orphaned rooms is ACTIVITY-DRIVEN: it climbs in a busy week and stalls in a quiet one,
+--   independently of severity, so ~1000 fires on how much CI ran rather than on how much it hurts.
+--   Worse, while the producer was open the mass delete was cleaning up after a running tap.
+--   WATCH THE DERIVATIVE, NOT THE LEVEL. T3 closed the producer in a7322de (two DELETEs discarded
+--   inside `catch {}` in deleteRoomAsHost), so the honest signal is now:
+--       rooms_orphaned STILL RISING across successive runs  ->  a producer is open. Diagnose, do not delete.
+--       rooms_orphaned FLAT and non-zero                    ->  inert garbage. Housekeeping, on its own schedule.
+--   Migration 027 prints `rooms_orphaned` on every CI job, so the derivative is now readable without a
+--   query. Measured at the moment 027 was applied: 640 rooms orphaned, 50 profiles unreachable.
+--   A harm threshold (lobby room-read latency, or total game_rooms · what the app actually queries)
+--   should replace the count entirely once a few runs of 027 output exist to size it from · sizing it
+--   now would be a wire picked from a run I have not done (Rule 88c).
+--
 -- AND THE EVIDENCE ARGUMENT AGAINST THE MASS DELETE IS GONE · I raised it in S50 and it was wrong.
 -- I reported "177 draw-audit rows from migration 021"; measured, 175 of those carry `event_data = '{}'`
 -- and only 2 carry the audit payload, both of them the E2E harness's own `audit_offer_0` fixture. The

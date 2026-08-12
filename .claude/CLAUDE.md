@@ -203,10 +203,12 @@ DB CONTRACT (scripts/migrations/ · 001-027 · NOT 001-010, which is what this l
     it changes with no commit, so it is stale the moment it is true · T3 wrote "023 unapplied" into five
     files in S49 and T2 applied it ninety minutes later. Comments carry the CHAIN (a repo fact, gated by
     preconditions.e2e.js); ask pg_get_functiondef for what is RUNNING (Rule 109a). Last measured S50:
-    023 and 026 applied · 014, 024, 025, 027 NOT. 026 is the deployed body: it age-guards BOTH deletes and
+    023, 026 and 027 applied · 014, 024, 025 NOT. 027 is the deployed body (026 plus two read-only counters); it age-guards BOTH deletes and
     refuses to delete a profile that still owns a protected room, so the purge CANNOT ORPHAN a room.
     024 and 025 are superseded and must not be applied · 025 is kept only as the reference
-    implementation of the REACH clause (the 597-room mass delete), HELD behind a tripwire at ~1000.
+    implementation of the REACH clause (the mass delete, now 640 rooms), HELD. The tripwire was
+    RE-SITED S56 from a level (~1000) to the DERIVATIVE: rooms_orphaned still rising means a producer
+    is open (diagnose), flat means inert garbage (housekeeping). 027 prints it every CI run.
 
 GAME MECHANICS:
   4-STEP PLACEMENT: factory→element-btn→region-btn→valid-hex (ALL force:true)

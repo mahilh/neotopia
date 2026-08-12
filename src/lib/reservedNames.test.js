@@ -291,6 +291,85 @@ describe('reserved usernames · the namespace the purge owns', () => {
       'it to USERNAME_SINKS with the reason it is safe without one.').toEqual([])
   })
 
+  // ══ THE TEST-SIDE SINK · THIRD INSTANCE OF MY OWN LESSON (T2 S56) ═══════════════════════════════
+  // S52 I wrote: "there is one sink and an unbounded number of ways to reach it", moved the guard to
+  // the sink INSIDE src/ where the writes are a closed set, and left the TEST side enumerated by
+  // producer CALL SHAPE. S55 measured the cost: 50 of 71 profiles unreachable by the purge, with
+  // prefixes (A11yEsc, Probe320, T3PRB*, test) that appear as literals NOWHERE in the repo because
+  // they are constructed dynamically. My guard could not see one of them. Third instance of the same
+  // lesson · the first two were the two-party guard on a three-party contract, and the producer guard
+  // itself.
+  //
+  // THE ENUMERATION POINT IS NOT THE PRODUCER, IT IS THE HELPER BOUNDARY. Measured: every single
+  // `.fill()` on the claim input takes a PARAMETER, never a literal ·
+  //     getByPlaceholder(NAME_INPUT).fill(name | hostName | joinerName | username)
+  // so the value always arrives from a caller, and the callers ARE a closed, greppable set. Requiring
+  // every one of them to route through `uniqueName()` makes the namespace unforgettable on the test
+  // side, because uniqueName's own prefixes are already checked against the SQL above. A dynamically
+  // built string cannot slip past a rule about WHICH FUNCTION produced it.
+  const CLAIM_CALLERS = [
+    // helper, and how the name reaches it
+    { re: /\bclaimName\s*\(\s*[A-Za-z0-9_.]+\s*,\s*([^)]+?)\s*\)/g, what: 'claimName(page, NAME)' },
+    { re: /\benterLobbyWithRetry\s*\(\s*[A-Za-z0-9_.]+\s*,\s*([^,)]+)/g, what: 'enterLobbyWithRetry(ctx, NAME)' },
+    { re: /\b(?:hostName|joinerName)\s*:\s*([^,}\n]+)/g, what: 'runTwoHumanLobby({ hostName/joinerName })' },
+  ]
+
+  // A name is SAFE if it is produced by uniqueName(), or is a literal already inside the namespace.
+  // Anything else · a variable, a template, a concatenation · cannot be proven and must be reported.
+  const nameIsSafe = (expr) => {
+    const e = expr.trim()
+    if (/^uniqueName\s*\(/.test(e)) return true
+    const lit = e.match(/^['"`]([^'"`]*)['"`]$/)
+    if (lit) return isSweptByPurge(lit[1])
+    return null                       // unresolvable · a parameter or an expression
+  }
+
+  const scanClaimCallers = () => {
+    const out = []
+    const walk = (rel) => {
+      const abs = join(process.cwd(), rel)
+      let entries = []
+      try { entries = readdirSync(abs, { withFileTypes: true }) } catch { return }
+      for (const e of entries) {
+        const child = `${rel}/${e.name}`
+        if (e.isDirectory()) { walk(child); continue }
+        if (!/\.(js|mjs)$/.test(e.name)) continue
+        const src = readFileSync(join(process.cwd(), child), 'utf8')
+        for (const { re, what } of CLAIM_CALLERS) {
+          for (const m of src.matchAll(new RegExp(re))) {
+            // Skip the helper DEFINITIONS · `async function claimName(page, name)` is not a call.
+            const line = src.slice(0, m.index).split('\n').length
+            const text = src.split('\n')[line - 1] ?? ''
+            if (/\bfunction\b|=>\s*\{?\s*$/.test(text) && /\(\s*\w+\s*,\s*\w+\s*\)/.test(text)) continue
+            out.push({ file: child, line, what, expr: m[1], safe: nameIsSafe(m[1]) })
+          }
+        }
+      }
+    }
+    walk('tests'); walk('scripts')
+    return out
+  }
+
+  it('the claim-caller scanner finds real call sites (vacuity guard)', () => {
+    const hits = scanClaimCallers()
+    expect(hits.length, 'ZERO claim-helper calls found anywhere in tests/ or scripts/ · the patterns ' +
+      'have drifted away from how specs claim a name, so the check below is auditing an empty set and ' +
+      'passes no matter what anyone ships').toBeGreaterThan(3)
+    expect(hits.some(h => h.safe === true), 'not one call site resolved to a SAFE name · the resolver ' +
+      'is broken, so "everything is unresolvable" would be the finding rather than the instrument')
+      .toBe(true)
+  })
+
+  it('no claim-helper call passes a name that is provably OUTSIDE the namespace', () => {
+    const bad = scanClaimCallers().filter(h => h.safe === false)
+      .map(h => `${h.file}:${h.line} ${h.what} <- ${h.expr}`)
+    expect(bad, `${bad.length} claim call(s) pass a literal name the purge can NEVER delete:\n  ` +
+      `${bad.join('\n  ')}\n\nThat identity's profile, room, session and every game_event cascading ` +
+      'from it stay in production permanently, with no symptom · 50 profiles and 640 rooms are already ' +
+      'in that state (docs/ORPHAN_DIAGNOSIS.md). Route the name through uniqueName(), or add its ' +
+      'prefix to RESERVED_USERNAME_PREFIXES **and** to the migration chain.').toEqual([])
+  })
+
   it('the error message names the offending prefix and the consequence', () => {
     const msg = reservedUsernameError('E2Etest')
     expect(msg).toContain('E2E')

@@ -45,6 +45,13 @@
 //   COUNCIL TRIPWIRE: IF THE PREFIX SCHEME COLLIDES A SECOND TIME, THE FLAG COLUMN STOPS BEING A
 //   DESTINATION AND BECOMES THE FIX. One collision is a bug; two is the design telling you.
 //
+//   ⚠ SECOND STRIKE RECORDED S55 · 50 of 71 profiles carry no reserved prefix and can never be swept.
+//   AND THE DESTINATION ITSELF IS NOW IN QUESTION · docs/TEST_IDENTITY_DESIGN.md (S56) measures that a
+//   flag column SET BY THE HARNESS reproduces the exact failure it was chosen to end: a producer has
+//   to remember to set it instead of remembering to name itself. The version that cannot be forgotten
+//   stamps the row from the CREDENTIAL (a trigger reading auth.jwt()'s app_metadata, which a client
+//   has zero grants to forge). Verified buildable; costed; not built. Mahil's call.
+//
 // SOPHIA'S DISSENT, RECORDED BECAUSE IT MAY WELL BE RIGHT: every new live spec is a new producer in
 // this namespace, so a second collision is closer to certain than to unlikely. The counter-argument
 // is that the S52 leak guard now makes a new producer fail LOUDLY at commit time rather than silently
