@@ -326,3 +326,87 @@ describe('a stale payload is refused, and the newer board survives (T3 S54)', ()
     a.unmount(); b.unmount()
   })
 })
+
+// ── APPLY ORDERING · THE HALF THE PREDICATE CANNOT PROTECT (T3 S55) ──────────────────────────────────────
+//
+// migration 022 orders WRITES. Nothing orders APPLIES, and they are different problems with the same
+// costume. `versionRef` folds every server version in through adoptServerVersion · a MAX, so this client's
+// outgoing numbering can never go backwards · and then `syncFromServerRaw(serverState)` runs
+// UNCONDITIONALLY. The version gates what we SEND and not what we ACCEPT.
+//
+// WHY THAT IS REACHABLE IN ORDINARY PLAY, and it is not an exotic race: fetchAndSeed is an awaited REST
+// read with two triggers that fire exactly when the network is unhappy (reconnect, and visibilitychange ·
+// "a backgrounded tab often has its WS suspended, esp. mobile · 65% of play"). Issue the read at T0, let a
+// newer realtime frame land at T1, and the T0 snapshot resolves at T2 and is assigned over it. The client
+// has now silently regressed · and its NEXT push persists that regression to the row carrying a correctly
+// incremented version, which `.lt` accepts because the write really is newer. The predicate is working
+// exactly as designed and the board still loses placements.
+//
+// THIS IS THE MECHANISM BEHIND THE S54 OBSERVATION I flagged and did not claim: a persisted board went
+// 3 placements -> 2 as state_version went 3 -> 4, one client writing. The engine is not the cause ·
+// measured this session, 120 games under four adversarial policies (maxHand 6 greedy vs 29 for the rest,
+// so the states greedy cannot reach were covered), 17,004 observations, ZERO decreases.
+describe('apply ordering · a stale snapshot must not overwrite a newer one (T3 S55)', () => {
+  const boardWith = (n) => [{
+    id: 'r1',
+    hexes: Object.fromEntries(Array.from({ length: n }, (_, i) => [`${i},0`, { element: 'energy' }])),
+  }]
+  const placedNow = () => (useGameStore.getState().regions ?? [])
+    .reduce((n, r) => n + Object.values(r.hexes ?? {}).filter(h => h?.element).length, 0)
+
+  beforeEach(() => {
+    db.rows = {}; db.applied = []; db.refused = []; nextDelay = () => 0; onSettled = null
+    useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats(), regions: [] })
+  })
+
+  // COUNTERWEIGHT FIRST (Rule 90 + 120): if delivery does not work at all, "the board did not regress" is
+  // true for the most boring possible reason and this whole block is measuring a disconnected mock.
+  test('CONTROL · a delivered snapshot IS applied', async () => {
+    const h = renderHook(() => useGameSync(ROOM, 'userA'))
+    await act(async () => { supabase.__deliver({ regions: boardWith(3), turnNumber: 20 }, 3) })
+    expect(placedNow(), 'nothing was applied · the realtime channel in this harness is not connected, so ' +
+      'every regression assertion below would pass by never receiving anything').toBe(3)
+    h.unmount()
+  })
+
+  test('an OLDER snapshot delivered after a newer one does not regress the board', async () => {
+    const h = renderHook(() => useGameSync(ROOM, 'userA'))
+    await act(async () => { supabase.__deliver({ regions: boardWith(3), turnNumber: 20 }, 3) })
+    expect(placedNow()).toBe(3)
+
+    // The late REST re-seed resolving with what the row held BEFORE · lower version, fewer placements.
+    await act(async () => { supabase.__deliver({ regions: boardWith(2), turnNumber: 19 }, 2) })
+
+    expect(placedNow(), 'a snapshot at version 2 overwrote one at version 3 · the client has silently ' +
+      'lost a placement, and its next push will persist that loss to the row with a HIGHER version, which ' +
+      'the .lt predicate accepts. Ordering writes does not order applies.').toBe(3)
+    expect(useGameStore.getState().turnNumber, 'the turn went backwards with the board').toBe(20)
+    h.unmount()
+  })
+
+  // THE BUG THE FIX WOULD HAVE INTRODUCED, closed in the same commit. Versions are per-ROW: carry the
+  // watermark into a new room and every frame whose version is lower than the last room's gets refused,
+  // which freezes the client completely · a strictly worse failure than the regression being prevented
+  // (Rule 94a). A fresh room starts at 1, so this is not a corner case, it is the SECOND room of every
+  // session. Untested, it would have been a guard nobody proved.
+  test('the watermark resets on room change · a new room low versions still apply', async () => {
+    const h = renderHook(({ room }) => useGameSync(room, 'userA'), { initialProps: { room: ROOM } })
+    await act(async () => { supabase.__deliver({ regions: boardWith(3), turnNumber: 20 }, 9) })
+    expect(placedNow()).toBe(3)
+
+    await act(async () => { h.rerender({ room: 'room-second' }) })
+    await act(async () => { supabase.__deliver({ regions: boardWith(1), turnNumber: 2 }, 1) })
+
+    expect(placedNow(), 'a fresh room first frame was refused because the watermark from the PREVIOUS room was still held · the client is now permanently deaf in every room after its first').toBe(1)
+    h.unmount()
+  })
+
+  test('and a NEWER snapshot still applies · the guard must not freeze the client', async () => {
+    const h = renderHook(() => useGameSync(ROOM, 'userA'))
+    await act(async () => { supabase.__deliver({ regions: boardWith(2), turnNumber: 19 }, 2) })
+    await act(async () => { supabase.__deliver({ regions: boardWith(4), turnNumber: 21 }, 5) })
+    expect(placedNow(), 'a newer snapshot was rejected · an over-strict guard stops the client receiving ' +
+      'anything, which is worse than the regression it prevents (Rule 94a)').toBe(4)
+    h.unmount()
+  })
+})

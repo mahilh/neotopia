@@ -156,8 +156,34 @@ export function useGameSync(roomId, currentUserId) {
   // let this client renumber backwards through another (Rule 84 · a well-tested symbol is not a tested
   // path). adoptServerVersion is a MAX, never an assignment: a client that has issued 7 and then receives
   // 5 from a peer's older write must not renumber down, or its own next write fails its own predicate.
+  // ── AND THE VERSION GATES WHAT WE ACCEPT, NOT ONLY WHAT WE SEND (T3 S55) ────────────────────────────
+  // migration 022 orders WRITES. Nothing ordered APPLIES, and they are different problems wearing the
+  // same costume: this wrapper folded the server version into versionRef (outgoing numbering) and then
+  // called syncFromServerRaw UNCONDITIONALLY, so any snapshot that arrived was assigned over whatever
+  // the client already held · newer or not.
+  // REACHABLE IN ORDINARY PLAY, not exotic: fetchAndSeed is an awaited REST read with two triggers that
+  // fire exactly when the network is unhappy (reconnect, and visibilitychange · "a backgrounded tab often
+  // has its WS suspended, esp. mobile · 65% of play"). Issue the read at T0, let a newer realtime frame
+  // land at T1, and the T0 snapshot resolves at T2 and overwrites it. The client silently regresses, and
+  // its NEXT push persists that regression carrying a correctly incremented version · which `.lt` accepts,
+  // because the write really is newer. The predicate does its job and the board still loses placements.
+  // That is the mechanism behind the S54 observation (a persisted board went 3 placements to 2 as
+  // state_version went 3 to 4, one client writing) · reproduced deterministically in writeorder.test.js.
+  // The engine was ruled out first: 120 games under four adversarial policies, 17,004 observations, zero
+  // decreases, so this was the remaining half rather than a guess.
+  const appliedVersionRef = useRef(0)
   const syncFromServer = useCallback((serverState, serverVersion) => {
+    // The adopt stays FIRST and unconditional. It is a MAX and it is about our outgoing numbering, which
+    // must reflect the newest thing the server has told us even when we decline the payload · moving it
+    // inside the guard would let a client renumber backwards through a skipped frame (Rule 84).
     versionRef.current = adoptServerVersion(versionRef.current, serverVersion)
+    const v = Number(serverVersion)
+    if (Number.isFinite(v) && v > 0) {
+      if (v <= appliedVersionRef.current) return   // stale or replayed · applying it would regress us
+      appliedVersionRef.current = v
+    }
+    // An UNVERSIONED call is deliberately still applied: sendMove's rollback passes a local snapshot with
+    // no version, and gating that would strand a client on a state the server rejected.
     syncFromServerRaw(serverState)
   }, [syncFromServerRaw])
 
@@ -344,6 +370,11 @@ export function useGameSync(roomId, currentUserId) {
         channelRef.current = null
       }
       setSession(null) // clear ref + reactive state on room change/unmount
+      // AND RESET THE APPLY WATERMARK WITH IT. Versions are per-ROW, so carrying a high watermark into a
+      // new room would silently refuse every frame whose version happens to be lower · a fresh room starts
+      // at 1, so the guard added above would freeze the client completely. The bug the fix would have
+      // introduced, closed in the same commit.
+      appliedVersionRef.current = 0
     }
   }, [roomId, connect, fetchAndSeed, setSession, clearRetry, scheduleReconnect])
 
