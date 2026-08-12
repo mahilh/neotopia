@@ -178,14 +178,60 @@ async function main() {
 
   // 2 · the built JS bundle resolves. Catches a broken/partial deploy that still serves index.html.
   await stage('bundle_loads', true, async (signal) => {
-    const { text } = await req(PROD_URL, { redirect: 'follow' }, signal)
-    const m = text.match(/<script[^>]+src="([^"]+\.js)"/i)
-    if (!m) throw fail('no <script src="*.js"> found in the served HTML')
-    const assetUrl = new URL(m[1], PROD_URL).toString()
-    const { res, text: js, status } = await req(assetUrl, {}, signal)
-    if (!res.ok) throw fail(`bundle ${m[1]} returned ${status}`, status)
-    if (js.length < 1000) throw fail(`bundle ${m[1]} was suspiciously small (${js.length} bytes)`, status)
-    return { status, asset: m[1], bytes: js.length }
+    // T2 S58 · A 200 IS NOT A FILE. This stage failed at 17:33 on 2026-08-12 with "bundle
+    // /assets/index-BEya1_Tk.js was suspiciously small (458 bytes)" and production was entirely
+    // healthy · the SAME asset hash served 633,751 bytes of real JavaScript minutes later.
+    // MEASURED, not inferred: a deliberately nonexistent asset on this origin returns
+    //     status 200 · content-type text/html · 458 bytes
+    // byte-for-byte the failure. So the check had fetched an asset that did not exist AT THAT
+    // INSTANT (index.html was already the new deployment's, the asset had not yet propagated) and
+    // an SPA rewrite handed it index.html with a 200. `res.ok` cannot see that, and the size
+    // heuristic saw it without being able to say what it was.
+    //
+    // TWO FIXES, and the second matters more than the first:
+    //  1 · assert the CONTENT-TYPE. That turns "suspiciously small" into the actual diagnosis, and
+    //      it holds for a 3MB HTML error page too, which the size floor never would.
+    //  2 · ONE retry, re-reading index.html · because during a deploy promotion two consecutive
+    //      requests can land on different deployments, and this runs every 30 minutes against a
+    //      repo where three lanes push all evening. A monitor that reds on every deploy is the
+    //      chronic false red this file's own header is about (Rule 49), and bot-health was ignored
+    //      for 32 runs for exactly that reason.
+    // THE RETRY IS REPORTED, NEVER SILENT. `recoveredAfterRetry` goes in the receipt, so a race
+    // that becomes CHRONIC is visible as a number instead of being absorbed into a green (Rule 80 ·
+    // a check that hides its own near-misses is measuring less than it claims).
+    const readBundle = async () => {
+      const { text } = await req(PROD_URL, { redirect: 'follow' }, signal)
+      const m = text.match(/<script[^>]+src="([^"]+\.js)"/i)
+      if (!m) return { err: 'no <script src="*.js"> found in the served HTML' }
+      const assetUrl = new URL(m[1], PROD_URL).toString()
+      const { res, text: js, status } = await req(assetUrl, {}, signal)
+      const ctype = res.headers.get('content-type') || ''
+      if (!res.ok) return { err: `bundle ${m[1]} returned ${status}`, status }
+      if (/text\/html/i.test(ctype)) {
+        return {
+          err: `bundle ${m[1]} returned HTML, not JavaScript (${js.length} bytes, ${ctype}) · this ` +
+               'is the SPA fallback, so THE ASSET DOES NOT EXIST at this origin. Either a deploy is ' +
+               'mid-propagation or the built index.html references an asset that was never uploaded',
+          status,
+        }
+      }
+      if (js.length < 1000) {
+        return { err: `bundle ${m[1]} was ${js.length} bytes of ${ctype} · served as script but far ` +
+                      'too small to be this app', status }
+      }
+      return { status, asset: m[1], bytes: js.length }
+    }
+
+    let out = await readBundle()
+    let recoveredAfterRetry = false
+    if (out.err) {
+      await new Promise(r => setTimeout(r, 4000))
+      const second = await readBundle()
+      if (second.err) throw fail(second.err, second.status)
+      out = second
+      recoveredAfterRetry = true
+    }
+    return { ...out, recoveredAfterRetry }
   })
 
   // 3 · Supabase PostgREST answers. Distinguishes "Supabase is down / project paused" from

@@ -62,6 +62,12 @@
 -- the auth schema is not somewhere a public-facing function has reached before in this project.
 -- I judge the risk low and I am not the right person to accept it silently (Rule 44's spirit · a
 -- SECURITY DEFINER reachable by a player is a surface, and every widening of it is a decision).
+-- ⚠ AN INDEPENDENT AUTOMATED SECURITY REVIEW OF THE PUSHED COMMIT FLAGGED THIS FILE FOR
+--   INFORMATION-DISCLOSURE, unprompted, reaching the same conclusion as the paragraph above. Two
+--   independent readers is the argument for keeping it held rather than for arguing it down · and
+--   it is recorded here because the next session will otherwise meet a clean-looking migration with
+--   no memory of why it was not applied (Rule 97 · a citation outlives the thing it cites, so the
+--   reason has to live beside the artifact).
 -- THE NARROWER ALTERNATIVE if the answer is no: return the counts only to `postgres`/service callers
 -- and NULL otherwise. It costs one `current_user` branch and makes the number invisible to the CI
 -- teardown, which is the only place it is read · so it is strictly worse unless the disclosure is
