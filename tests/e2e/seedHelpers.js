@@ -119,12 +119,21 @@ export async function deleteRoomAsHost(sessionJson, roomId) {
     const host = createClient(url, key, { auth: { storageKey: 'neotopia-e2e-host-cleanup', persistSession: false } })
     const { error: serr } = await host.auth.setSession({ access_token, refresh_token })
     if (serr) return
-    // ── THIS USED TO SWALLOW BOTH RESULTS, AND IT HAS BEEN LEAKING ROOMS FOR THE WHOLE PROJECT (T3 S55) ──
-    // MEASURED against production while T2 was diagnosing a room leak: 632 orphaned rooms, and 611 of them
-    // have NO room_players rows at all · 70 of the 73 created in the last twelve hours. Their shape is not
-    // "created before a profile existed" (that predicts a room WITH a seat and no profile, which is 21 of
-    // 632) · it is a room that was marked finished and then never deleted. That is exactly the pair of
-    // statements below.
+    // ── THIS USED TO SWALLOW BOTH RESULTS · KEPT, BUT MY S55 DIAGNOSIS WAS WRONG AND IS CORRECTED HERE ──
+    // MEASURED against production while T2 was diagnosing a room leak: 632 orphaned rooms, 611 with NO
+    // room_players rows at all. Their shape is not "created before a profile existed" (that predicts a room
+    // WITH a seat and no profile · 21 of 632). It is a room marked finished and never deleted.
+    // ⚠ AND I THEN NAMED THIS FUNCTION AS THE PRODUCER, WHICH IT IS NOT (corrected T3 S56). I proved the
+    // SHAPE and wrote an unscoped consequence beside it, and the proof made the neighbour look checked ·
+    // which is Rule 122 exactly, committed the same night T2 wrote it. Measured since, twice, mirroring
+    // this path precisely (sign in, serialise, SECOND client, setSession, then both statements with
+    // .select()): setSession clean, auth.uid() matches, UPDATE 1 row, DELETE 1 row, room gone. Repeated
+    // against a room carrying a room_players AND a game_sessions row so the cascade was real. Token TTL is
+    // 3600s, so the expiry theory was never plausible either.
+    // WHAT THE ROWS ACTUALLY SAY · 118 of the 121 rooms created in 24h are finished · 0 seats · 1 SESSION.
+    // They started a game, lost their seats, were marked finished, and nothing reaped them. Which caller
+    // leaves that is still open, and the instrumentation below is what will name it rather than a third
+    // round of reasoning (preamble §4 · stop deriving and look at what the rows are).
     // AND CHECKING `error` WOULD NOT HAVE CAUGHT IT. A DELETE that matches ZERO ROWS · because RLS
     // (host_id = auth.uid() AND status = 'finished') did not match, most plausibly an access_token that
     // expired during a long spec · returns no error at all. Zero rows affected reads as success, which is
@@ -139,8 +148,8 @@ export async function deleteRoomAsHost(sessionJson, roomId) {
     if (!ok) {
       console.warn(`[teardown] deleteRoomAsHost LEFT ROOM ${roomId} BEHIND · update matched ` +
         `${updated?.length ?? 0} row(s), delete matched ${deleted?.length ?? 0}` +
-        `${delErr ? ` · ${delErr.message}` : ' · no error, so RLS matched nothing (auth.uid() or status)'}` +
-        ' · this is the room-leak producer, not a cosmetic warning')
+        `${delErr ? ` · ${delErr.message}` : ' · no error, so RLS matched nothing'}` +
+        ' · RLS was measured working on this exact path in S56, so a zero here is a NEW fact worth reading')
     }
     return ok
   } catch (e) {
