@@ -24,6 +24,11 @@ import { poolCredential } from './seedHelpers'
 // Imported, never retyped · a hand-copied '__neotopia_e2e_pool' would be a second contract that agrees
 // today and drifts silently (Rule 45), and T2's bundle guard already turns on that exact string.
 import { E2E_POOL_KEY, E2E_POOL_OUTCOME_KEY, POOL_OUTCOME } from '../../src/lib/e2ePool'
+// Re-exported so a SPEC never has to import e2ePool itself. That is not tidiness: e2ePool reaches
+// './reservedNames' with no extension, and any file that imports it becomes unloadable under raw node
+// ESM · which is how I reddened harnessIntegrity in S60. Keeping the blast radius to this one module
+// means a future spec cannot repeat it by copying an import line.
+export { E2E_POOL_KEY }
 
 // seedHelpers signs in NODE clients. A browser mints through the app's own useAuth, and browser
 // bursts were 78% of the measured churn · so the node conversions were the cheap half and this is the

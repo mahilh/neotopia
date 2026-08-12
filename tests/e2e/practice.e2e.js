@@ -72,6 +72,9 @@ import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { forEachViewport, selfTestReachability, assertDiagnoseCanSee, cascadeAt } from './measure'
 import probe from '../board-probe.mjs'
+// The pool harness folded in below · poolBrowser re-exports the key so this file never imports
+// src/lib/e2ePool, which is unloadable under raw node ESM and would red harnessIntegrity (T3 S60).
+import { seedPoolCredential, reportPoolOutcome, E2E_POOL_KEY } from './poolBrowser'
 
 // Read the storage key from its declaration rather than restating it. Importing useLocalSession here would
 // drag React into Playwright's Node loader; a second copy of the string would be a second contract, which is
@@ -1526,5 +1529,119 @@ test.describe('practice · the turn clock fires in a real browser (T3 S57/S58)',
         'game that is still running, and the clock cannot rescue them because it only ends the turn of ' +
         'whoever holds it',
     }).toBe(`${start.currentSeat}:true`)
+  })
+})
+
+// ── THE POOL HARNESS, FOLDED IN (T3 S61) ──────────────────────────────────────────────────────────
+// This was tests/e2e/pool-harness.e2e.js for one session and it RAN NOWHERE, because the workflows
+// list specs explicitly and .github/ is not my lane. I have been the largest single producer of
+// declared orphans in this repo · 2 of the 4 in one session · and the pattern is always the same: a
+// cheap guard of mine waits on somebody else's file. This spec already runs on the merge gate, already
+// navigates /practice, and already mints nothing, which is exactly what the harness needs. Folding it
+// deletes the dependency instead of filing it (Rule 79 · a spec that runs nowhere cannot report its
+// own rot, and mine could not).
+//
+// WHY IT BELONGS IN A PRACTICE SPEC RATHER THAN BESIDE THE SPECS IT SERVES: it needs a real ORIGIN for
+// localStorage and NO authentication, and /practice is the only route in the product that is both.
+//
+// COST · +2.2s on a 2m46s step, and zero identities. The credential seeded is SYNTHETIC.
+//
+// ⚠ WHAT THIS CANNOT PROVE, said before the results (preamble §3): that the APP then reuses the
+// identity. That needs a real credential and a route running useAuth, and it is asserted per-page by
+// reportPoolOutcome inside game-ux.e2e.js · which did report REUSED on its first CI run.
+
+const FAKE = 9
+const FAKE_EMAIL = 'e2e-harness-probe@example.invalid'
+const FAKE_PASSWORD = 'not-a-real-password'
+
+test.describe('the pool harness · what can be proven without a credential', () => {
+
+  // ── COUNTERWEIGHT FIRST (Rule 90) ───────────────────────────────────────────────────────────────
+  // Everything else in this file passes trivially if seedPoolCredential claims nothing at all. The
+  // tripwire is the only assertion that requires the bookkeeping to exist, so it is written first with
+  // nothing else to hide behind · and it is deliberately the case with NO credential present, because
+  // the claim is about what the SPEC INTENDS and must red on a laptop with no secrets.
+  test('TRIPWIRE · two live contexts may never hold the same pool member', async ({ browser }) => {
+    const a = await browser.newContext()
+    const b = await browser.newContext()
+    try {
+      await seedPoolCredential(a, { index: 0, label: 'holder' })
+      await expect(
+        seedPoolCredential(b, { index: 0, label: 'thief' }),
+        'a second live context claimed member 0 and nothing stopped it · seat resolution is by userId, ' +
+        'so both browsers would resolve to the SAME seat and each would believe it holds the other\'s ' +
+        'turn. That is a broken spec wearing the costume of a saving, and it is the one failure mode ' +
+        'the Council named as mine to prevent.',
+      ).rejects.toThrow(/TRIPWIRE/)
+    } finally { await a.close(); await b.close() }
+  })
+
+  test('COUNTERWEIGHT · a closed context RELEASES its member · sequential reuse must stay silent', async ({ browser }) => {
+    // The tempting implementation is a claim that is never released, which passes the test above and
+    // then reddens every file whose second test reuses member 0. A guard that condemns correct code
+    // gets read as noise and switched off, and the day it is right nobody is listening (Rule 94a).
+    const first = await browser.newContext()
+    await seedPoolCredential(first, { index: 0, label: 'first' })
+    await first.close()
+    const second = await browser.newContext()
+    await seedPoolCredential(second, { index: 0, label: 'second' })   // must NOT throw
+    await second.close()
+  })
+
+  test('two live contexts with DIFFERENT members are exactly what the pool is for', async ({ browser }) => {
+    const a = await browser.newContext()
+    const b = await browser.newContext()
+    try {
+      await seedPoolCredential(a, { index: 0, label: 'host' })
+      await seedPoolCredential(b, { index: 1, label: 'joiner' })
+    } finally { await a.close(); await b.close() }
+  })
+
+  // ── THE WRITE ACTUALLY REACHES THE PAGE ─────────────────────────────────────────────────────────
+  test('the seed lands in localStorage under the key the APP reads, before any app script runs', async ({ browser }) => {
+    process.env[`E2E_POOL_EMAIL_${FAKE}`] = FAKE_EMAIL
+    process.env[`E2E_POOL_PASSWORD_${FAKE}`] = FAKE_PASSWORD
+    const ctx = await browser.newContext()
+    try {
+      const seed = await seedPoolCredential(ctx, { index: FAKE, label: 'write-probe' })
+      expect(seed.seeded, 'poolCredential did not resolve a credential this test had just put in the ' +
+        'env · the resolution path, not the seeding path, is broken').toBe(true)
+
+      const page = await ctx.newPage()
+      // /practice mints no identity by construction · this needs a real ORIGIN for localStorage, not
+      // an app that authenticates. about:blank would have an opaque origin and no storage at all.
+      await page.goto('/practice?bots=0')
+      const raw = await page.evaluate((k) => localStorage.getItem(k), E2E_POOL_KEY)
+      expect(raw, `nothing was written to "${E2E_POOL_KEY}". addInitScript is the only hook that runs ` +
+        'BEFORE the app reads it, so a credential written any later is a credential the app never ' +
+        'sees · which is indistinguishable from no pool at all, and green either way.').not.toBeNull()
+      const parsed = JSON.parse(raw)
+      expect(parsed.email, 'the seeded email is not the one asked for').toBe(FAKE_EMAIL)
+      expect(parsed.index, 'the seeded record does not carry its member index · the app publishes this ' +
+        'back in the outcome record and it is how a two-context spec is audited').toBe(FAKE)
+    } finally {
+      await ctx.close()
+      delete process.env[`E2E_POOL_EMAIL_${FAKE}`]
+      delete process.env[`E2E_POOL_PASSWORD_${FAKE}`]
+    }
+  })
+
+  // ── THE READING IS HONEST WHEN THERE IS NOTHING TO READ ─────────────────────────────────────────
+  test('with nothing seeded, the outcome is UNMEASURED · never a plausible pass', async ({ browser }) => {
+    // Rule 80, in the place it costs most: if this reported success on a page that never ran the pool
+    // branch, every converted spec would certify a conversion that had not happened, and the identity
+    // counter (the only other witness) cannot tell a browser from a teardown.
+    const ctx = await browser.newContext()
+    try {
+      const page = await ctx.newPage()
+      await page.goto('/practice?bots=0')
+      const v = await reportPoolOutcome(page, { seeded: false, index: 0, label: 'unseeded-probe' })
+      expect(v.asserted, 'reportPoolOutcome ASSERTED on a page where nothing was seeded · it must ' +
+        'report UNMEASURED, because "the app did not reuse" and "we never asked it to" are different ' +
+        'facts and only one of them is a defect').toBe(false)
+      expect(v.outcome, 'the practice route published a pool outcome · it runs no useAuth at all, so ' +
+        'either the route now authenticates (a real regression, and an identity per practice game) or ' +
+        'this probe is reading something that is not the app\'s record').toBeNull()
+    } finally { await ctx.close() }
   })
 })

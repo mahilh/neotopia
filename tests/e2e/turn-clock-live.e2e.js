@@ -27,9 +27,25 @@
 // NOT reachable and the cheap version of this spec does not exist today. Verified by reading the route
 // rather than assumed · useLocalSession accepts a mode, App.jsx never passes one.
 //
-// RUNS-NOWHERE: new this session · ~100s is too slow for a per-push job and .github/ is T2's lane ·
-// routed in comms/t3-s60-for-t2-the-browser-half-is-wired.md, recommended for e2e-live-nightly.
+// RUNS-NOWHERE: e2e-live-nightly · .github/ is T2's lane, routed in comms/t3-s60 and t3-s61.
 // DELETE THIS DECLARATION IN THE SAME COMMIT THAT WIRES THE FILE.
+//
+// ⚠ WHY IT DOES NOT FOLD INTO practice.e2e.js, and the question was asked directly (T3 S61). That spec
+// is the natural host · same route, zero identities, already wired · and it runs ONLY on the merge
+// gate (e2e.yml:218), where its step already costs 2m46s. Adding ~100s is +60% ON EVERY PUSH for a
+// single assertion. Measured, not estimated, from a successful run's step timestamps.
+// The SECOND reason was a limit I nearly stated without checking (preamble §4). Under a 6x CPU
+// throttle, modelling a contended runner:
+//     idle          excess   48ms   worst sampling gap 112ms   PASS
+//     6x throttle      -              worst gap 501ms          UNMEASURED, correctly refused
+//     S59 regression excess 1054ms                             RED
+// So it does not flake under contention · it REPORTS the contention and declines to judge · but a
+// spec that may decline on a busy runner gates nothing on a per-push job, while costing 100s there.
+// The nightly is where a decline costs nobody a push.
+// THE CHEAP VERSION HAS ONE BLOCKER WITH A NAMED OWNER: PracticeRoute (src/App.jsx, T1's lane) reads
+// only `bots`, though useLocalSession already accepts a `mode`. A `?mode=flow` practice game is 15s
+// per turn, which would make this ~20s AND shrink its exposure to contention by 5x. That is an ask of
+// T1, not an assumption about them.
 
 import { test, expect } from '@playwright/test'
 
@@ -53,7 +69,7 @@ const readPromisedLimitMs = async (page) => {
   return n * 1000
 }
 
-const SAMPLE_MS = 25          // the recorder's period · the floor on how precisely a transition is dated
+const SAMPLE_MS = 25          // the recorder's REQUESTED period · not necessarily the one it achieves
 const LATE_BUDGET_MS = 500    // 6x the measured 79ms residual, half the 1001ms defect · separates them
 
 const read = (page) => page.evaluate(() => {
@@ -75,11 +91,21 @@ test.describe('the turn deadline, on a real clock (T3 S60)', () => {
     // dump, and performance.now() rather than Date.now() for the same reason the product uses it.
     await page.evaluate((ms) => {
       window.__rec = []
+      // THE RECORDER MEASURES ITS OWN RESOLUTION, because its requested period is not the one it gets.
+      // Every sample records the gap since the previous one, so the WORST gap over the run is the real
+      // floor on how precisely any transition below can be dated (Rule 81 · derive the constraint, do
+      // not assume it). Under a 6x CPU throttle a 25ms interval is nowhere near 25ms, and sizing the
+      // tolerance from the nominal reported a working clock as firing 51ms EARLY.
+      window.__gapMax = 0
+      let prev = performance.now()
       window.__recTimer = setInterval(() => {
+        const now = performance.now()
+        if (now - prev > window.__gapMax) window.__gapMax = now - prev
+        prev = now
         const st = window.__neotopia_store.getState()
         const last = window.__rec[window.__rec.length - 1]
         if (!last || last.turn !== st.turnNumber || last.seat !== st.currentSeat) {
-          window.__rec.push({ t: Math.round(performance.now()), turn: st.turnNumber, seat: st.currentSeat })
+          window.__rec.push({ t: Math.round(now), turn: st.turnNumber, seat: st.currentSeat })
         }
       }, ms)
     }, SAMPLE_MS)
@@ -110,7 +136,17 @@ test.describe('the turn deadline, on a real clock (T3 S60)', () => {
     expect(measuredTurn, 'the board never handed the turn back to the human · nothing was measured, ' +
       'and an unmeasured run must not read as a pass').not.toBeNull()
 
-    const rec = await page.evaluate(() => { clearInterval(window.__recTimer); return window.__rec })
+    const { rec, gapMax } = await page.evaluate(() => {
+      clearInterval(window.__recTimer)
+      return { rec: window.__rec, gapMax: Math.round(window.__gapMax) }
+    })
+    // A PROBE ASSERTS ITS OWN OUTPUT RANGE (preamble §3). If the recorder could not keep up, this run
+    // cannot tell 36ms from 1054ms and must say UNMEASURED rather than produce a verdict · which is the
+    // difference between a spec that flakes on a contended runner and one that reports the contention.
+    expect(gapMax, `the recorder's worst sampling gap was ${gapMax}ms against a ${LATE_BUDGET_MS}ms ` +
+      'budget · this machine was too contended for the measurement to mean anything, so the run is ' +
+      'UNMEASURED rather than a pass or a fail. This is an environment finding, not a product one.')
+      .toBeLessThan(LATE_BUDGET_MS / 2)
     const startIdx = rec.findIndex(r => r.turn === measuredTurn)
     const endIdx = rec.findIndex(r => r.turn === measuredTurn + 1)
     expect(startIdx, `turn ${measuredTurn} never appears in the recorder`).toBeGreaterThanOrEqual(0)
@@ -124,7 +160,7 @@ test.describe('the turn deadline, on a real clock (T3 S60)', () => {
     const LIMIT_MS = await readPromisedLimitMs(page)
     const elapsed = rec[endIdx].t - rec[startIdx].t
     console.log(`[turn-clock] turn ${measuredTurn} ran ${elapsed}ms against a promised ${LIMIT_MS}ms · ` +
-      `excess ${elapsed - LIMIT_MS}ms (recorder period ${SAMPLE_MS}ms)`)
+      `excess ${elapsed - LIMIT_MS}ms (recorder asked for ${SAMPLE_MS}ms, worst gap ${gapMax}ms)`)
 
     // NEVER EARLY · firing before the deadline takes a turn from a player who can still see time left,
     // and that is the dangerous direction (Rule 100a). One recorder period of slack, because the dating
