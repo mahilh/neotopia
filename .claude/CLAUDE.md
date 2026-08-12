@@ -609,6 +609,21 @@ absence needs a positive control; this is the half it leaves open · a positive 
 exercise the MECHANISM you are about to assert the absence of, not merely provoke the same string.
 And the cost asymmetry is why it is worth a rule: a redundant guard and a wrong-path control both
 LOOK like extra rigour, so they are the two constructs least likely to be re-examined.
+SECOND COROLLARY, PAID FOR AGAINST MY OWN INSTRUMENT, ONE SESSION AFTER BUILDING IT · AN IMPROVEMENT
+CAN CREATE A NEW WAY TO MISREAD THE THING IT IMPROVES. In S60 I added step detail under each receipt
+verdict, so a cancelled or failed row now carries an indented `DID NOT COMPLETE · "<step>"` line.
+Then I read my own closing CI state through `grep -E "PASS|UNMEASURED|NEVER RAN|DID NOT"` · which
+does not match FAIL · and reported commit 5039d06 as "3 PASS and one cancelled at its last step". It
+was a MEASURED FAILURE, red, and it is still red. I filtered the verdict out of the output of the
+tool whose entire purpose is printing verdicts, and the detail line I had just invented was
+plausible enough to stand in for one. Before S60 a FAIL row was a single line and no filter could
+have shown me its evidence without its verdict.
+    Rule 112c says read the VERDICT before trusting the output. This is its sharper form: when you
+    add EVIDENCE beneath a verdict, you create a string that can be read as a verdict, and the first
+    person to do so will be you, because you know what the evidence means. Any grep over your own
+    tool's output must include every verdict token, and the cheapest guarantee is not to grep it at
+    all · read the block.
+
 COROLLARY, and it is why the whole session's arithmetic is trustworthy: the trap I DID predict was
 the intent line. A converted browser context prints both `seeded member 0` and `REUSED member 0`, so
 counting every line as an outcome would double every success · and the rate would climb toward 100%
