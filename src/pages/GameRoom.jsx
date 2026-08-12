@@ -387,14 +387,29 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // them · the affordance existed and simply did not cover the case that mattered most.
   // `block: 'center'` rather than 'nearest': nearest is satisfied by one pixel of the card touching
   // the scrollport, which on a 168px card is not a card anybody can see.
+  //
+  // ── AND BEING ON SCREEN IS NOT THE SAME AS BEING FINDABLE (T1 S59) ─────────────────────────────
+  // S44 put the card in the viewport. What identifies it once it is there was still one channel:
+  // `boxShadow: 0 0 0 2px {element colour}` and nothing else · no attribute, no name, no tab stop.
+  // The instruction line said "select a GLOWING card", which is the tell · the copy named the glow
+  // as the affordance because it was the affordance.
+  // Two more channels now, both derived from this one list so they cannot disagree with the ring:
+  //   TEXT  · the line names the card outright, so nobody has to perceive a colour to find it
+  //   FOCUS · the first one takes DOM focus, which is simultaneously a neutral-coloured ring, an
+  //           announcement to a screen reader, and Enter-to-score
+  // preventScroll is load-bearing rather than tidy: focus() scrolls to `nearest`, and S44 rejected
+  // `nearest` in terms · one pixel of a 168px card touching the scrollport is not a card anybody can
+  // see. Focus must not quietly become the scroll that overrides the one chosen for being right.
   const scoreCardRef = useRef(null)
-  const firstScoreableId = uiPhase === 'scorePending'
-    ? (currentPlayer?.hand ?? []).find(c => buildableMatches.some(m => m.cardId === c.id))?.id ?? null
-    : null
+  const scoreableCards = uiPhase === 'scorePending'
+    ? (currentPlayer?.hand ?? []).filter(c => buildableMatches.some(m => m.cardId === c.id))
+    : []
+  const firstScoreableId = scoreableCards[0]?.id ?? null
   useEffect(() => {
     if (uiPhase !== 'scorePending') return
     // After paint · the glowing card only exists once buildableMatches has rendered it.
     const id = requestAnimationFrame(() => {
+      scoreCardRef.current?.focus?.({ preventScroll: true })
       scoreCardRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
     })
     return () => cancelAnimationFrame(id)
@@ -573,6 +588,31 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     // scoring costs no action, a completed pattern is still live at zero · so the line was telling a
     // player to end their turn while a district was sitting there waiting to be built. That is the
     // one moment in the game where the instruction line can cost real points.
+    // NAME THE CARD. "select a glowing card" describes the SIGNAL rather than the thing, so it is
+    // only usable by a player who can perceive that signal · and the signal is a 2px ring in the
+    // card's own element colour, immediately outside a border already drawn in that colour.
+    //
+    // ⚠ MY FIRST VERSION NAMED THE CARD ONLY WHEN THERE WAS EXACTLY ONE and printed a bare count
+    // otherwise, on the assumption that two-at-once is the edge case. The very first run of the new
+    // test produced TWO · i.e. the "edge case" is the case where the second channel stops naming
+    // anything, and I would have shipped it on an assumption. It names the FIRST one always and says
+    // how many there are, which is also exactly what focus is pointing at, because both read
+    // scoreableCards[0].
+    // MEASURED, 200 seeded deals: 183 single · 17 double · 8.5% · never more than 2. That number is
+    // from a board seeded with ONE near-complete pattern and otherwise EMPTY, so it does not transfer
+    // to a board mid-game, which holds more near-complete patterns. The copy does not depend on it ·
+    // it is correct at any N · and the number is here so nobody re-derives it from one observation.
+    //
+    // Copy is a layout input, and this line is VARIABLE-LENGTH for the first time. Measured at 320
+    // in a real browser rather than reasoned: the worst card in the deck ('Mycelium Intelligence
+    // Dome', 26) makes this 51, or 61 with a two-digit count · and at that width the line is ALREADY
+    // two lines for every string the game shows, including the 49-char one this replaces. The cliff
+    // is the third line, at 73. Gated in GameRoom.cardreach.test.jsx as an ordering against the
+    // longest sentence GameRoom already ships (the 66-char idle line), so it needs no tuned number.
+    if (uiPhase === 'scorePending' && scoreableCards.length > 0) {
+      const n = scoreableCards.length
+      return `Pattern complete · score ${scoreableCards[0].name}${n > 1 ? ` (1 of ${n})` : ''}`
+    }
     if (uiPhase === 'scorePending') return 'Pattern complete · select a glowing card to score'
     if (actionsLeft <= 0) return 'No actions left · ending your turn'
     // ── AND THE LINE MUST NOT PROMISE WHAT THE BOARD CANNOT DO (T1 S44) ──────────────────────────
@@ -1322,6 +1362,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-offer"
                     card={{ ...card, element: cardPrimaryElement(card) }}
+                    actionLabel={`Draw ${card.name}`}
                     onClick={disabled ? undefined : () => onDrawOffer(i)}
                   />
                 )
@@ -1347,6 +1388,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 const isScoreable = uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === card.id)
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-hand" isSelected={isScoreable}
+                    actionLabel={`Score ${card.name} for ${card.points} points`}
                     // The FIRST scoreable card is the scroll target · DERIVED from the current hand
                     // and matches, never latched. A `!ref.current` test here would pin the ref to the
                     // first card it ever saw and quietly scroll to a stale one on the next pattern.

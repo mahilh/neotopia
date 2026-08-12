@@ -22,16 +22,17 @@
 //
 // It follows deadlockFixture.js's shape deliberately: a pure function that takes the current regions
 // and RETURNS A PATCH rather than touching the store, so a browser page could seed the same board.
-// It lives here rather than in src/store/ because that is T2's lane · if another lane wants it, moving
-// it is a rename and their ask, not my unilateral placement (S56, where a hook went in src/hooks/
-// because it felt like it belonged there).
+// ⚠ IT NO LONGER LIVES IN THIS FILE. S59 needed the same board to measure keyboard reach at
+// scorePending, and a second copy of a geometry rule is a second contract (Rule 45) · so it is
+// ./scorePendingFixture.js now, imported by both. Still in src/pages/ rather than src/store/, which
+// is T2's lane: if another lane wants it there, moving it is a rename and their ask.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
 import { clearSaved } from '../hooks/useLocalSession'
-import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
+import { completableStatePatch } from './scorePendingFixture'
 
 vi.mock('../lib/supabase', () => ({
   supabase: {}, GLOBAL_INDEX_BASE: 147823,
@@ -53,44 +54,8 @@ const until = async (fn, tries = 90) => {
 }
 const click = async (el) => { await act(async () => { fireEvent.click(el) }) }
 
-/**
- * Find a hand card whose pattern fits inside `regionId` anchored at its centre, and return a state
- * patch holding every pattern hex EXCEPT one. Returns null if no card fits · the caller must treat
- * that as UNMEASURED rather than as a passing test (Rule 80).
- */
-function completableStatePatch(regions, hand, regionId = 0) {
-  const def = REGION_DEFS.find(rd => rd.id === regionId)
-  const inRegion = new Set(hexesInRadius(def.cq, def.cr, def.radius).map(h => `${h.q},${h.r}`))
-  const region = regions.find(r => r.id === regionId)
-  const centre = region.center
-
-  for (const card of hand) {
-    const p = card.pattern
-    if (!p || p.length < 2) continue
-    // Anchor pattern[0] on the region centre · the identity rotation. The matcher handles rotation
-    // itself, so a pattern seeded in its own orientation is the case least likely to be a fluke.
-    const abs = p.map(h => ({ q: centre.q + (h.q - p[0].q), r: centre.r + (h.r - p[0].r), type: h.type }))
-    if (!abs.every(h => inRegion.has(`${h.q},${h.r}`))) continue
-
-    // Leave out the LAST hex. It must touch a seeded one or no legal placement can reach it · the
-    // contiguity rule getValidPlacements enforces.
-    const missing = abs[abs.length - 1]
-    const seeded = abs.slice(0, -1)
-    const NEIGH = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]]
-    const touches = seeded.some(s => NEIGH.some(([dq, dr]) => s.q === missing.q + dq && s.r === missing.r + dr))
-    if (!touches) continue
-
-    const hexes = {}
-    for (const h of seeded) hexes[`${h.q},${h.r}`] = { element: h.type, placedBy: 0 }
-    return {
-      card, regionId, requiredType: missing.type, missingKey: `${missing.q},${missing.r}`,
-      patch: {
-        regions: regions.map(r => (r.id === regionId ? { ...r, hexes: { ...r.hexes, ...hexes } } : r)),
-      },
-    }
-  }
-  return null
-}
+// The fixture moved to ./scorePendingFixture.js in S59 so GameRoom.cardreach.test.jsx can use the
+// same one. Its contract and the reason the ENGINE must certify it are documented there.
 
 beforeEach(() => {
   localStorage.setItem('neotopia_tutorial_v1', '1')

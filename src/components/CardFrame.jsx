@@ -9,7 +9,7 @@
 //   <CardFrame card={card} size="offer" />  (offer row · ~160px wide)
 //   <CardFrame card={card} size="full" />   (scored/modal · ~240px wide)
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import ElementIcon from './Board/ElementIcon'
 import { toRomanNumeral } from '../utils/romanNumeral'
 
@@ -132,7 +132,21 @@ export const artSlot = (size = 'hand') => {
   return { width: s.width - (s.borderW + 6) * 2, height: s.artSize }
 }
 
-export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid, innerRef = null }) {
+// ── A CARD THAT CAN BE ACTED ON IS A CONTROL, AND IT DERIVES THAT FROM ONE PLACE (T1 S59) ────────
+// `cursor: pointer` was already derived from the presence of `onClick`, and it was the ONLY thing
+// that was. So a card the player can act on advertised itself on a channel a touch device does not
+// have, and carried no role, no name and no tab stop · measured on the real GameRoom at scorePending,
+// the scoreable card's entire attribute list was class / data-testid / style.
+//
+// Role, tab stop, keyboard activation and accessible name now come from the SAME prop the cursor
+// does. That is deliberate: two derivations of "is this interactive" is a second contract (Rule 45),
+// and this is the exact seam where it would drift · a caller who passes a handler and forgets a flag
+// would get a control that looks clickable and is unreachable, which is Rule 78 with extra steps.
+//
+// Enter fires on keydown and Space on keyUP, which is what a native <button> does. Space is the one
+// that matters: held down it auto-repeats, and on the Offer that is a second draw. preventDefault on
+// its keydown also stops the page scrolling under the player.
+export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid, innerRef = null, actionLabel = null }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -144,12 +158,33 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
 
   const artUrl = `/art/cards/${card.id}.png`
 
+  const interactive = typeof onClick === 'function'
+  const spaceHeld = useRef(false)
+  const onKeyDown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); onClick(e) }
+    // Swallow Space's page-scroll here and remember it, so a keyup that began somewhere else cannot
+    // activate a card the player never pressed.
+    else if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); spaceHeld.current = true }
+  }
+  const onKeyUp = (e) => {
+    if ((e.key === ' ' || e.key === 'Spacebar') && spaceHeld.current) { spaceHeld.current = false; onClick(e) }
+  }
+
   return (
     <div
       ref={innerRef}
       className="project-card"
       data-testid={testid}
       onClick={onClick}
+      {...(interactive ? {
+        role: 'button',
+        tabIndex: 0,
+        // The accessible name is the ACTION, not the card face. Without it the name is whatever the
+        // frame SVG concatenates to · measured live: "Copper Arc Substation☉△☉△⚡ ENERGYII◆ NEO…",
+        // corner runes and a Roman numeral included.
+        'aria-label': actionLabel || card.name || card.id,
+        onKeyDown, onKeyUp,
+      } : {})}
       style={{
         width: s.width,
         height: s.height,

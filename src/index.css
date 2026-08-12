@@ -437,3 +437,19 @@
 @media (prefers-reduced-motion: reduce) {
   .art-reveal { transition: none !important; } /* !important to match the other reduced-motion guards above */
 }
+
+/* Focused card · T1 S59. A card the player can act on is now a role=button with a tab stop, and this
+   is the ring that says where they are. It is deliberately :focus and NOT :focus-visible: the game
+   moves focus PROGRAMMATICALLY onto the scoreable card the moment a pattern completes, and
+   :focus-visible is a heuristic about how focus ARRIVED · after a tap it can decline to match, which
+   would silently delete the visual half of this change on exactly the device it matters most on.
+   WHITE, because the card's own selected glow is `0 0 0 2px {element colour}` on a border already
+   drawn in that colour, so an element-hued ring would be a fourth ring of a hue already there. White
+   is unused anywhere on a card. outline does not participate in layout, so it draws into the hand's
+   8px flex gap and moves nothing · the alternative (a border) would resize every card on focus.
+
+   ⚠ AND I NEARLY UNDID IT IN THE NEXT LINE. The first draft added
+   `.project-card:focus:not(:focus-visible) { outline-color: rgba(255,255,255,0.75) }` to soften the
+   ring when focus did not arrive from a key · which is precisely the programmatic case the paragraph
+   above argues must be visible. One rule, full strength. */
+.project-card:focus { outline: 3px solid #ffffff; outline-offset: 2px; }
