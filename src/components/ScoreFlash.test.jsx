@@ -54,3 +54,52 @@ describe('ScoreFlash dismisses itself', () => {
     expect(done).not.toHaveBeenCalled()
   })
 })
+
+// ── THE CELEBRATION MUST NOT HIDE ITS OWN SUBJECT (T1 S57) ───────────────────────────────────────
+// MEASURED over a real board at 375x667, sampled at the animation's PEAK: 114 of 114 hex cells under
+// the scrim, 69 of them fully behind the panel · including the district that had just been built.
+// Same family as Rule 78a (this component covering the practice exit) and Rule 87 (the action log
+// covering 31 of 57 cells while passing clicks through).
+//
+// ⚠ AND THE FIRST MEASUREMENT WAS COMPROMISED IN BOTH DIRECTIONS. I screenshotted with Playwright's
+// `animations: 'disabled'`, which JUMPS an animation to its END state · and hexScoreFlash ends at
+// opacity 0. So the image showed no flash at all, while getBoundingClientRect happily measured the
+// rect of an invisible element. Two readings, opposite errors, one cause: the probe chose a moment
+// without saying so. Sampling at 800ms (the 15%-85% plateau) fixed both.
+//
+// WHAT THE MEASUREMENT REFRAMED: on a phone the board FILLS the screen, so no 222px panel position
+// avoids it · relocating only changes WHICH region is hidden. The fix is legibility THROUGH the
+// flash, not relocation.
+describe('the board is still visible through the celebration', () => {
+  const flash = () => {
+    render(<ScoreFlash card={DECK[20]} regionName="Sacred City" onDone={() => {}} />)
+    return document.querySelector('.score-flash')
+  }
+
+  it('counterweight · the panel is still opaque enough to read', () => {
+    // The lazy version of this fix is to keep lightening until the board is perfect and the card is
+    // unreadable · which trades one invisible thing for another. The panel carries the card name,
+    // the points and the description, and it sits over a lit board.
+    const el = flash()
+    const panel = el.querySelector('div')
+    const a = panel.style.background.match(/[\d.]+\)$/)
+    expect(a, 'the panel lost its background entirely').toBeTruthy()
+    expect(parseFloat(a[0]), 'the card panel is too transparent to read over a lit board')
+      .toBeGreaterThanOrEqual(0.85)
+  })
+
+  it('the scrim lets the board through', () => {
+    const el = flash()
+    const m = el.style.background.match(/[\d.]+\)$/)
+    expect(m, 'the scrim is gone or not an rgba').toBeTruthy()
+    expect(parseFloat(m[0]), 'the scrim is back above 0.5 · at 0.72 the district a player just ' +
+      'built was invisible behind the card describing it').toBeLessThanOrEqual(0.5)
+  })
+
+  it('and it still cannot take a tap · it covers the whole board', () => {
+    // pointerEvents:none is what keeps a 2.2s overlay from eating a placement. Rule 87 is the
+    // warning attached to it: that property makes an overlay LOOK harmless, so its coverage never
+    // gets questioned. Here the coverage is now measured and the transparency is the fix.
+    expect(flash().style.pointerEvents).toBe('none')
+  })
+})

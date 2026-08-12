@@ -45,16 +45,28 @@ export function ScoreFlash({ card, regionName, onDone }) {
   const districtName = DISTRICT_NAMES[card.district] ?? regionName
 
   return (
+    // ⚠ THE CELEBRATION WAS HIDING ITS OWN SUBJECT (measured T1 S57).
+    // Rendered over a real board at 375x667 and sampled at the animation's PEAK: 114 of 114 hex
+    // cells under the scrim and 69 of them fully behind the panel · including the district that had
+    // just been built. Same family as Rule 78a (this component covering the practice exit) and
+    // Rule 87 (the action log covering 31 of 57 cells while passing clicks through).
+    // WHAT THE MEASUREMENT REFRAMED, and it is why the fix is not "move the panel": on a phone the
+    // board FILLS the screen, so there is no position a 222px panel can take that does not sit on
+    // it. Relocating would only change which region is hidden. The answer is to make the board
+    // READABLE THROUGH the flash · scrim 0.72 -> 0.45 and the panel 0.95 -> 0.90 · so the player
+    // still sees the district while reading the card that names it.
+    // The sound is already correct at this instant (impact AND bell overlap, S55), and this timing
+    // is unchanged so the visual does not fight it.
     <div className="score-flash" style={{
       position: 'fixed', inset: 0, zIndex: 100,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(10,10,15,0.72)',
+      background: 'rgba(10,10,15,0.45)',
       animation: 'hexScoreFlash 2.2s ease forwards',
       pointerEvents: 'none',
     }}>
       <div style={{
         maxWidth: 360, padding: '36px 32px', borderRadius: 20, textAlign: 'center',
-        background: 'rgba(10,10,15,0.95)',
+        background: 'rgba(10,10,15,0.90)',
         border: `1px solid ${accent}60`,
         boxShadow: `0 0 60px ${accent}30`,
       }}>
