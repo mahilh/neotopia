@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (120 · cumulative):
+PERMANENT ANTI-REGRESS RULES (121 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,30 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 121 (T3 S53, written S54 · August 11 2026):
+A FINDING WITHOUT A DENOMINATOR IS A FACT THAT CANNOT BE PRIORITISED · SEVERITY IS NOT PRIORITY, AND
+THE MISSING TERM IS ALWAYS THE SAME ONE: WHO DOES IT REACH.
+I audited the game screen and found something severe in kind · the game cannot be STARTED without a
+pointer, and the board is one unnamed image to a screen reader. Then I ranked it against the liveness
+message and ranked it on HOW HARD EACH FIX IS, because that was the number I happened to have. For a
+friends-and-family beta the population reached by the keyboard finding may genuinely be ZERO, and I did
+not say so anywhere in the report I sent the lane that would act on it. A severity with no population
+is a fact; a priority needs both, and the one you are missing is almost never the severity.
+  121a · THE COST FALLS ON THE READER, NOT THE WRITER, WHICH IS WHY IT IS WORTH A RULE. I still knew the
+        finding was real. The person deciding what to build next inherited a severe-sounding item with
+        no way to weigh it, and the only number in the report was difficulty · so difficulty is what the
+        ranking used. Mahil had done the same thing one level up, scoring the accessibility TRACK on its
+        own number without asking how many beta players it reaches. Same omission, two lanes, one night.
+  121b · AND A DENOMINATOR IS OFTEN CHEAP OR HONESTLY UNAVAILABLE · BOTH ARE ANSWERS. "37 rooms have ever
+        been created against 40 profiles" is one query. "Practice makes zero backend calls BY DESIGN, so
+        its usage is unmeasurable from here" is also an answer and a better one than silence, because it
+        tells the reader the number does not exist rather than letting them assume nobody looked (Rule
+        80 · a counter that cannot measure must say so).
+COROLLARY, and it is the reason this is not just about reports: the same omission makes a GATE wrong.
+A test that fails for a case no user can reach is a tripwire; one that passes for a case every user hits
+is a lie. Before sizing a gate, ask what fraction of real traffic its subject is on · that is the same
+question, aimed at the wire instead of the roadmap.
 
 RULE 120 (T3 S53 · August 11 2026):
 WHEN THE FINDING IS AN ABSENCE, IT NEEDS A POSITIVE CONTROL IN THE SAME RUN · OTHERWISE YOU HAVE
