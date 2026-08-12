@@ -171,3 +171,88 @@ describe('one client racing itself · the predicate keeps the End Turn (T3 S42 d
       expect(result.current.overtakes).toEqual([])
     })
 })
+
+// ── TWO CLIENTS RACING EACH OTHER · THE TURN TIMEOUT'S UNTESTED HALF (T3 S53) ────────────────────────────
+//
+// I shipped the turn clock in S52 and wrote "concurrent fires are SAFE BY CONSTRUCTION" into both the code
+// comment and the commit message. Neither of my two harnesses could test it:
+//   · useGameSync.turntimeout.test.js mocks supabase with `lt() { return b }` · it IGNORES the predicate
+//     and accepts every write, so a double-apply would look identical to a single one.
+//   · host-departure-live.e2e.js has exactly ONE client left after the host departs · nobody to race with.
+// So the claim rested entirely on migration 022's own tests, which prove THE PREDICATE WORKS · a different
+// claim from MY TWO WRITERS COMPOSE WITH IT SAFELY. That is Rule 115 (a contract spanning two lanes has no
+// owner) and I walked into it while adding a second writer to a seam someone else had made safe for one.
+// It lives HERE rather than in a new file because this mock already models `.lt` faithfully; a second copy
+// would be the second contract this suite keeps warning about (Rule 45).
+//
+// ⚠ THE HONEST LIMIT OF A UNIT HARNESS, stated because the last person to get this wrong was me (Rule 101a:
+// "that file drove BOTH players through ONE hook instance, which was faithful while the row kept the last
+// write"). Two renderHook instances share ONE Zustand store, so this file CANNOT express two clients whose
+// local state has diverged. What it can express is the thing the claim actually needs: two independent
+// version counters issuing writes at the same instant, and the row accepting exactly one. The divergent-
+// store case is the live spec's job and it needs a second surviving client to have it.
+describe('two clients time out at the same instant · exactly one write is accepted (T3 S53)', () => {
+  beforeEach(() => {
+    db.rows = {}; db.applied = []; db.refused = []; nextDelay = () => 0; onSettled = null
+    useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats() })
+  })
+
+  // COUNTERWEIGHT FIRST (Rule 90): "exactly one applied" is also what a totally broken write path produces
+  // if the first write lands and everything else errors · and it is what a harness that silently drops
+  // writes produces too. So prove a LONE timeout write lands before asserting that a second one does not.
+  test('CONTROL · one client timing out alone lands its write', async () => {
+    const a = renderHook(() => useGameSync(ROOM, 'userA'))
+    await act(async () => { await a.result.current.pushState('endTurn', { reason: 'turn_timeout' }) })
+    expect(db.applied, 'a single timeout write did not reach the row · every count below is meaningless')
+      .toEqual([1])
+    expect(db.refused).toEqual([])
+  })
+
+  test('two independent clients firing together · one applies, one is REFUSED', async () => {
+    const a = renderHook(() => useGameSync(ROOM, 'userA'))
+    const b = renderHook(() => useGameSync(ROOM, 'userB'))
+
+    // Both hooks hold their OWN versionRef starting at 0, so both mint state_version 1 · exactly what two
+    // real clients do when neither has seen the other's write yet (Rule 99's two-term clock: the observed
+    // term has nothing in it). Issued inside one act() so they are genuinely in flight together.
+    await act(async () => {
+      await Promise.all([
+        a.result.current.pushState('endTurn', { reason: 'turn_timeout' }),
+        b.result.current.pushState('endTurn', { reason: 'turn_timeout' }),
+      ])
+    })
+
+    expect(db.applied.length, 'both timeout writes were accepted · the row took two writes for one expired ' +
+      'turn. With divergent client state that is a clobber, which is the whole reason migration 022 exists')
+      .toBe(1)
+    expect(db.refused.length, 'the losing write was not refused · it either errored (a different failure) ' +
+      'or silently applied').toBe(1)
+    expect(db.rows[ROOM].state_version, 'the row does not hold the winning version').toBe(1)
+
+    a.unmount(); b.unmount()
+  })
+
+  // THE NEGATIVE DIRECTION (Rule 99a), and it is the half that would make this feature worse than useless:
+  // a predicate that wedges the room after a race turns a recoverable stall into a permanent one. The
+  // refused client must be able to write again once it has adopted what it was served.
+  test('the room is not wedged · the refused client writes again after adopting the served version', async () => {
+    const a = renderHook(() => useGameSync(ROOM, 'userA'))
+    const b = renderHook(() => useGameSync(ROOM, 'userB'))
+    await act(async () => {
+      await Promise.all([
+        a.result.current.pushState('endTurn', { reason: 'turn_timeout' }),
+        b.result.current.pushState('endTurn', { reason: 'turn_timeout' }),
+      ])
+    })
+    expect(db.applied.length).toBe(1)
+
+    // The winner's row reaches every client through postgres_changes · that is how the loser learns.
+    await act(async () => { supabase.__deliver({ phase: 'playing', currentSeat: 1, turnNumber: 20 }, 1) })
+    await act(async () => { await b.result.current.pushState('place') })
+
+    expect(db.applied.length, 'the refused client can no longer write · it adopted the served version and ' +
+      'its next write STILL lost, so that seat is now mute for the rest of the game. A wedged client is a ' +
+      'worse outcome than the stall this feature was built to end').toBe(2)
+    a.unmount(); b.unmount()
+  })
+})
