@@ -192,18 +192,18 @@ ENGINE ARCHITECTURE:
             No seat = the pre-S35 board-global reading, kept for the viz and for unowned pre-S35 boards.
   Flow mode config: getModeConfig(mode) · GAME_MODES.classic + GAME_MODES.flow
 
-DB CONTRACT (scripts/migrations/ · 001-027 · NOT 001-010, which is what this line said until T3 S49):
+DB CONTRACT (scripts/migrations/ · 001-028 · NOT 001-010, which is what this line said until T3 S49):
   game_sessions.phase: CHECK IN (playing|endgame|finished)
   record_civilization_score · chain 009 > 014 > 019 · SECURITY DEFINER · writes global_neotopia_index
   game_sessions.mode TEXT DEFAULT 'classic' (010)
   ⚠ A MIGRATION NUMBER HERE IS A CHAIN, NOT AN ADDRESS. 5 of 16 functions are redefined by a later
-    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024>025>026>027, draw_card_for_seat 011>014>021,
+    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024>025>026>027>028, draw_card_for_seat 011>014>021,
     record_civilization_score 009>014>019, increment_neotopia_index 004>014, rl_client_ip 013>014.
     AND THE NEWEST FILE IS NOT NECESSARILY THE DEPLOYED BODY. Do NOT record applied-state in a comment:
     it changes with no commit, so it is stale the moment it is true · T3 wrote "023 unapplied" into five
     files in S49 and T2 applied it ninety minutes later. Comments carry the CHAIN (a repo fact, gated by
     preconditions.e2e.js); ask pg_get_functiondef for what is RUNNING (Rule 109a). Last measured S50:
-    023, 026 and 027 applied · 014, 024, 025 NOT. 027 is the deployed body (026 plus two read-only counters); it age-guards BOTH deletes and
+    023, 026, 027 and 028 applied · 014, 024, 025 NOT. 028 is the deployed body (026 plus four read-only counters, incl. the 24h DERIVATIVE the re-sited tripwire reads); it age-guards BOTH deletes and
     refuses to delete a profile that still owns a protected room, so the purge CANNOT ORPHAN a room.
     024 and 025 are superseded and must not be applied · 025 is kept only as the reference
     implementation of the REACH clause (the mass delete, now 640 rooms), HELD. The tripwire was

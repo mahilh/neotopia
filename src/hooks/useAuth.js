@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { reportBackendUp, reportBackendDown, registerBackendRetry, getBackendHealth } from './useConnectionHealth'
 import { isReservedUsername, reservedUsernameError } from '../lib/reservedNames'
+import { readPoolCredential } from '../lib/e2ePool'
 
 const USERNAME_KEY = 'neotopia_username'
 const CLAIMED_KEY  = 'neotopia_username_claimed'
@@ -51,6 +52,42 @@ export function useAuth() {
       if (!mounted || inFlight) return
       inFlight = true
       try {
+        // T2 S57 · THE FIXED CI POOL. Under VITE_E2E only, and only when the harness has seeded a
+        // credential for THIS browser context, sign in as a pre-created pool user instead of minting
+        // a new anonymous identity. Measured justification: ~449 anon users a day, 88% leaving no
+        // trace, on a FREE plan where anonymous sign-ins count toward a hard MAU cap and the purge
+        // cannot reach auth.users at all. Ten reused rows instead of ~13.5k a month.
+        //
+        // WHY IT CANNOT REACH A PLAYER, and why the check is written exactly this way: Vite
+        // substitutes `import.meta.env.VITE_E2E` statically, so a production build compiles this to
+        // `if (false && ...)` and drops the branch entirely · `signInWithPassword` then appears
+        // NOWHERE in the bundle, which is what e2ePool.test.js asserts against dist/. That is the
+        // only honest discriminator: VITE_E2E itself reads 0 in BOTH builds because the substitution
+        // removes the name, so a guard keyed on the flag's presence would pass on a leaking bundle
+        // (my own S52 finding, re-verified tonight).
+        //
+        // FALLS THROUGH, NEVER FAILS CLOSED: no credential means the ordinary anonymous path, so a
+        // developer running `npm run dev` and any spec the harness has not seeded behave exactly as
+        // before. A pool that is absent is not an error.
+        if (import.meta.env.VITE_E2E) {
+          const pool = readPoolCredential()
+          if (pool) {
+            const { data: pd, error: pe } = await supabase.auth.signInWithPassword({
+              email: pool.email, password: pool.password,
+            })
+            if (!mounted) return
+            if (!pe && pd?.user) {
+              setAuthError(null); setUser(pd.user); setIsLoading(false)
+              reportBackendUp(HEALTH_SOURCE)
+              return
+            }
+            // A configured pool that will not authenticate is a HARNESS defect and must be loud ·
+            // silently falling through would mint the anonymous user this exists to prevent and the
+            // saving would quietly stop happening with every test still green (Rule 93).
+            console.error('[e2e-pool] sign-in FAILED for a seeded credential · falling back to ' +
+              'anonymous, so this run still mints an identity:', pe?.message ?? 'no user returned')
+          }
+        }
         const { data, error } = await supabase.auth.signInAnonymously()
         if (!mounted) return
         if (error) {
