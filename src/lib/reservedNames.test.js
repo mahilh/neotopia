@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { RESERVED_USERNAME_PREFIXES, isReservedUsername, reservedUsernameError } from './reservedNames'
+import { RESERVED_USERNAME_PREFIXES, isReservedUsername, isSweptByPurge, reservedUsernameError } from './reservedNames'
 
 // The purge's definition is a CHAIN, not a file (Rule 109) · `create or replace` means the last
 // migration that touched the function wins. So take the highest-numbered migration that defines
@@ -23,6 +23,16 @@ import { RESERVED_USERNAME_PREFIXES, isReservedUsername, reservedUsernameError }
 // be an unapplied file (025 is, today). That is the right subject for this guard · it must go red when
 // someone WRITES a new prefix, not thirty minutes later when they apply it. Applied-state belongs to
 // pg_get_functiondef and never to a test (Rule 109a).
+/** Read a producer's identity prefixes out of the source it is declared in. */
+function collectProduced(producer) {
+  const dir = join(process.cwd(), producer.dir)
+  let files = []
+  try { files = readdirSync(dir).filter(producer.match) } catch { return [] }
+  const out = new Set()
+  for (const f of files) for (const n of producer.extract(readFileSync(join(dir, f), 'utf8'))) out.add(n)
+  return [...out]
+}
+
 function prefixesFromLatestPurgeMigration() {
   // RESOLVED FROM cwd, NOT FROM import.meta.url, and the reason is worth recording because the
   // obvious form fails in a non-obvious way: under vitest's JSDOM environment `import.meta.url` is an
@@ -121,6 +131,62 @@ describe('reserved usernames · the namespace the purge owns', () => {
       'bypass is reachable in a real browser, so any player can claim a name inside ' +
       'purge_e2e_test_data\'s delete scope and lose their game. This is the one assertion in this ' +
       'file that is about a real person rather than about drift.').toBe(false)
+  })
+
+  // ══ THE THIRD EDGE OF A THREE-PARTY CONTRACT (T2 S52) ═══════════════════════════════════════════
+  // MY OWN S51 CRITIQUE, ACTED ON. This file guarded the JS predicate against the SQL patterns · two
+  // parties · and read as complete. The contract has THREE: the SQL that deletes, this predicate that
+  // refuses, and THE HARNESS THAT PRODUCES NAMES IN THE NAMESPACE. The unwatched edge is what broke
+  // the merge gate in S51, and T3 wrote the missing check afterwards in THEIR file, guarding THEIR
+  // specs. This is the half I own, and it is deliberately the OPPOSITE direction to theirs:
+  //
+  //   T3's (tests/e2e/preconditions.e2e.js) · "is a fixture prefix REFUSED by the claim path?"
+  //        fails LOUDLY · the harness cannot sign in and the merge gate goes red within minutes.
+  //   MINE (here)                            · "is every produced name REACHABLE BY THE PURGE?"
+  //        fails SILENTLY and forever · the identity is created, never swept, and joins the 597
+  //        orphaned rooms nobody can delete. Nothing goes red, ever.
+  //
+  // Keeping both is not duplication (Rule 94): they catch opposite failures and only one of them has
+  // a symptom. Sophia's S52 dissent is the reason this is worth automating rather than remembering ·
+  // every new spec is a new producer in this namespace, so the next collision is a matter of time.
+  //
+  // ⚠ AND IT USES isSweptByPurge, NOT isReservedUsername. See the note on that function: the
+  // player-facing predicate is deliberately case-INsensitive and would wave through a lowercase
+  // 'e2ehost' that the case-SENSITIVE SQL can never match. Using the generous predicate for the leak
+  // question is precisely the bug this edge exists to catch, so the check would have contained it.
+  const PRODUCERS = [
+    { label: 'uniqueName() in live specs', dir: 'tests/e2e',
+      match: (f) => f.endsWith('.e2e.js'),
+      extract: (src) => [...src.matchAll(/uniqueName\(\s*['"]([A-Za-z0-9_]+)/g)].map(m => m[1]) },
+    { label: 'bot-simulate identities', dir: 'scripts',
+      match: (f) => f === 'bot-simulate.js',
+      extract: (src) => [...src.matchAll(/enterLobbyWithRetry\([^,]+,\s*`([A-Za-z0-9_]+)/g)].map(m => m[1]) },
+  ]
+
+  it('every producer is enumerated from the code and actually found (vacuity guard)', () => {
+    for (const p of PRODUCERS) {
+      const found = collectProduced(p)
+      expect(found.length, `the "${p.label}" producer matched NOTHING in ${p.dir}. Its regex has ` +
+        'drifted away from the code, so the leak check below is iterating an empty list and passes ' +
+        'no matter what anyone ships (Rule 100b · enumerate from the code, and prove you did)')
+        .toBeGreaterThan(0)
+    }
+  })
+
+  it('every identity this repo creates is REACHABLE BY THE PURGE · the silent-leak edge', () => {
+    const leaks = []
+    for (const p of PRODUCERS) {
+      for (const name of collectProduced(p)) {
+        if (!isSweptByPurge(name)) leaks.push(`${p.label}: "${name}"`)
+      }
+    }
+    expect(leaks, `${leaks.length} produced identity prefix(es) are OUTSIDE what ` +
+      `purge_e2e_test_data can match: ${leaks.join(', ')}. Every row they create · profile, room, ` +
+      'session, and every game_event cascading from it · is unreachable by the cleanup and stays in ' +
+      'production permanently. This failure has NO symptom: the spec passes, the game plays, and the ' +
+      'rows simply accumulate (597 orphaned rooms already exist from a different version of exactly ' +
+      'this mistake). Either use a prefix in RESERVED_USERNAME_PREFIXES, or add the new prefix to ' +
+      'the migration chain AND to that list · never just to the producer.').toEqual([])
   })
 
   it('the error message names the offending prefix and the consequence', () => {

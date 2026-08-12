@@ -71,6 +71,30 @@ export function isReservedUsername(name) {
 }
 
 /**
+ * Would purge_e2e_test_data ACTUALLY delete a row with this username?
+ *
+ * ⚠ THIS IS NOT `isReservedUsername` WITH THE ARGUMENT THE OTHER WAY UP, AND USING THAT ONE HERE
+ * WOULD BE A SILENT LEAK. The two functions answer opposite questions and therefore need opposite
+ * strictness, which is the whole reason both exist (T2 S52):
+ *
+ *   isReservedUsername  · "may a PLAYER claim this?"      · answer NO generously  · case-INsensitive
+ *   isSweptByPurge      · "can the CLEANUP reach this?"   · answer YES only truly · case-SENSITIVE
+ *
+ * Postgres `like 'E2E%'` is case sensitive. So a harness that produced `e2ehost` would be waved
+ * through by isReservedUsername (which says "reserved, close enough, refuse a player") while the
+ * purge could never match it · a test identity that lives in production forever. Erring strict is
+ * correct for the player-facing question and is EXACTLY WRONG for this one: here an over-generous
+ * answer means a row nobody can delete.
+ *
+ * Mirrors the SQL character for character. If the migration ever moves to `ilike`, this relaxes with
+ * it and reservedNames.test.js's drift guard is what will notice.
+ */
+export function isSweptByPurge(name) {
+  const n = String(name ?? '')
+  return RESERVED_USERNAME_PREFIXES.some(p => n.startsWith(p))
+}
+
+/**
  * The message a PERSON sees. Named rather than inlined because the whole point of the fix is that the
  * player is TOLD, instead of having their name silently accepted and their game silently destroyed ·
  * so this string is the deliverable, not a detail.

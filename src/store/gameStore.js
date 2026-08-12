@@ -476,9 +476,24 @@ export const useGameStore = create(immer((set, get) => ({
       //
       // Each entry is claimable ONCE per region, which preserves the scarcity the shift() implied: the
       // first player to reach 7 in Sacred City takes its Subsidy and nobody else can.
-      // OPEN QUESTION FOR MAHIL, deliberately not guessed: whether the physical game has one token per
-      // threshold per region (what this does) or one per threshold PER PLAYER. Flagged in comms · the
-      // difference only shows up in a game where two players both cross the same threshold in one region.
+      // ✅ ANSWERED T2 S52, FROM THE PRINTED RULEBOOK · one token per threshold PER REGION, shared.
+      // This was flagged in S38 as an open question and shelved on the grounds that "the difference
+      // only shows up in a game where two players both cross the same threshold in one region." S51
+      // measured that case: it is 36% of all crossings at two players and 51% at four, so the
+      // shelving REASON was wrong even though the shelved ANSWER turned out right.
+      // Rulebook page 6, "Gaining Bonuses": "when your Score Marker reaches or passes by positions 7,
+      // 13 or 18, gain the token on top of the pile of the corresponding Region, IF ANY." Singular,
+      // shared pile, and "if any" is what licenses a crossing that awards nothing. This granter is
+      // faithful on that point. Do not re-open it from the 36% alone · see docs/BONUS_TOKEN_BALANCE.md.
+      //
+      // ⚠ TWO THINGS THE SAME SENTENCE DISAGREES WITH, unresolved and NOT guessed at (Rule 32):
+      //   · it says the token ON TOP OF THE PILE · stack order · and this code matches the crossing to
+      //     its own threshold instead. S38's Rule 85 made that change citing the repo markdown's
+      //     threshold->token mapping; the printed book states an ORDERING, which points the other way.
+      //   · setup step 8 builds 3 stacks of FOUR tiles. createRegionBonusPile builds THREE, so the
+      //     game holds 9 tokens where the printed one holds 12 · every scarcity figure S51 measured is
+      //     against a pool a quarter too small. The 4th is probably 'automatization', still blocked on
+      //     docs/BONUS_HEX_DATA_REQUEST.md.
       //
       // A single card can cross two thresholds at once (5 -> 15 takes both 7 and 13). That is intended
       // and the loop already handled it.

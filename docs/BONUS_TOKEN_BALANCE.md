@@ -1,6 +1,59 @@
 # DID BONUS TOKENS BREAK BALANCE?
 **T2 S39 · August 10 2026 · 360 seeds, three disjoint blocks**
 
+> ## ✅ T2 S52 · THE S38 OPEN QUESTION IS CLOSED BY THE PRINTED RULEBOOK, NOT BY A MEASUREMENT
+> **Do not reopen this from the numbers below. It was settled by a document.**
+>
+> S51 measured that **36% of threshold crossings award nothing at two players** (51% at four), because
+> the pile holds one token per threshold per region and the second player to cross finds it gone. That
+> looked like it might be a rule implemented wrongly, and I said it needed the rulebook rather than
+> another experiment.
+>
+> **Mahil read it. Page 6, "Gaining Bonuses":**
+>
+> > *"In a Score Track, when your Score Marker reaches or passes by positions 7, 13 or 18, gain the
+> > token on top of the pile of the corresponding Region, **if any**."*
+>
+> Singular, from a **shared regional pile**, and the phrase **"if any"** exists precisely to cover
+> exhaustion. So the shipped per-region granter is **faithful to the printed game**: a crossing that
+> awards nothing is the physical game's behaviour, not a defect. 51% at four players is the same
+> mechanic under more demand.
+>
+> **A well-designed experiment was cancelled on this.** I had proposed scoring identical games under
+> per-region and per-player rules as an exact control (bots read no bonus state, so it would have been
+> exact rather than statistical). It was the right experiment for an open question and the wrong thing
+> to run once the question had a documented answer. Recorded because "the experiment was good" is not
+> a reason to run it.
+>
+> ### ⚠ AND THE SAME QUOTATION DISAGREES WITH THE SHIPPED CODE ON TWO OTHER POINTS
+> Surfaced rather than acted on. **No code changed** · I do not have the printed rulebook, only this
+> quotation of it, and baking guessed game data is Rule 32. But the quote settles one question while
+> contradicting the implementation on two more, and that should not be lost inside the good news.
+>
+> | | printed rulebook (p6 + setup step 8) | `docs/NEOTOPIA_GAME_RULEBOOK.md:115-125` | shipped code |
+> |---|---|---|---|
+> | award rule | *"the token **on top of the pile**"* · stack order | each threshold maps to a **specific** token | threshold → specific token |
+> | pile depth | **3 stacks of 4 tiles**, one per Region | 3 tokens (7/13/18) | 3 tokens |
+>
+> **1 · STACK ORDER vs THRESHOLD MATCHING.** S38's Rule 85 deliberately moved the granter *away* from
+> `bonusPile.shift()` to threshold matching, and its stated reason was "where a rulebook states a
+> mapping, the mapping is the source and the ordering is the guess." It cited the repo markdown. The
+> printed rulebook states an **ordering**, so on the primary source that reasoning points the other
+> way. Observable difference: under top-of-pile a player who crosses 18 first takes whatever tile is
+> on top, not the 18-tile.
+>
+> **2 · FOUR TILES PER REGION, NOT THREE.** Setup step 8 builds stacks of 4. We build 3. That is
+> **12 tokens in the game rather than 9**, which directly changes every scarcity number S51 measured ·
+> the 36% and 51% are computed against a pool a quarter smaller than the printed one. The fourth tile
+> is very likely `automatization`, still blocked on the bonus-hex coordinates
+> (`docs/BONUS_HEX_DATA_REQUEST.md`, now on its 14th request).
+>
+> **WHAT WOULD SETTLE BOTH, and it is one photograph each:** setup step 8 (how many tiles per stack,
+> and are they distinct types or copies), and whether the stacks are built in a fixed order or
+> shuffled. If they are shuffled, top-of-pile and threshold-matching are genuinely different games and
+> the choice is a real one; if they are stacked 7/13/18 in order, the two rules coincide for the first
+> claimant and differ only for the second · which is exactly the 36%.
+
 > ## ⚠ SCOPE STAMP · T2 S50 · EVERY NUMBER BELOW WAS MEASURED AGAINST LADDER v1, WHICH NO LONGER EXISTS
 > S50 retuned the bot difficulty ladder (`docs/LADDER_CALIBRATION.md`): apprentice and architect both
 > moved, builder is byte-identical. **The bonus-token RULES are unchanged** · thresholds stay 7/13/18,
