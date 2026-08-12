@@ -1125,25 +1125,36 @@ test.describe('practice · the phone layout rule actually wins (T3 S49)', () => 
 // IS NOT YOUR TURN reads identically to a board that is keyboard-inaccessible · zero focusables, no
 // reaction to any key, nothing selectable. So the live-and-playable-by-POINTER case is established before
 // a single keyboard claim is made. bots=0 is chosen for exactly that reason: the human always holds the turn.
+
+// THE CONTROL, EXTRACTED SO EVERY FINDING CARRIES IT (T3 S53 · fixing my own Rule 120 in the commit that
+// wrote it). The first draft put the control in ONE test and the three findings in three others. Rule 120
+// says the positive control must be in the SAME RUN as the assertion it licenses · a separate green test
+// proves the board was live in ITS run, not in yours. If bots=0 ever stops starting in a playing phase,
+// each finding below would pass for the wrong reason while the control test stayed green beside it.
+async function boardIsLiveAndPointerPlayable(page, { expect }) {
+  const live = await page.evaluate(() => {
+    const g = window.__neotopia_store?.getState?.()
+    return {
+      myTurn: document.querySelector("[data-my-turn]")?.getAttribute("data-my-turn"),
+      phase: g?.phase, actions: g?.actionsRemaining,
+      stocked: (g?.factories ?? []).reduce((n, f) => n + f.elements.reduce((m, e) => m + e.count, 0), 0),
+    }
+  })
+  expect(live.phase, "not in a playing phase · nothing measured here is about accessibility").toBe("playing")
+  expect(live.myTurn, "it is not our turn · an inert board produces every inaccessible reading in this " +
+    "file for a completely different reason (Rule 120)").toBe("true")
+  expect(live.actions, "no actions left · the flow could not be started by any input device").toBeGreaterThan(0)
+  expect(live.stocked, "every factory is empty · there is nothing to place").toBeGreaterThan(0)
+  return live
+}
+
 test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () => {
 
   test('COUNTERWEIGHT · the board is live, it is our turn, and a POINTER can start the flow', async ({ page }) => {
     await page.goto('/practice?bots=0')
     await boardReady(page)
 
-    const live = await page.evaluate(() => {
-      const g = window.__neotopia_store?.getState?.()
-      return {
-        myTurn: document.querySelector('[data-my-turn]')?.getAttribute('data-my-turn'),
-        phase: g?.phase, actions: g?.actionsRemaining,
-        stocked: (g?.factories ?? []).reduce((n, f) => n + f.elements.reduce((m, e) => m + e.count, 0), 0),
-      }
-    })
-    expect(live.phase, 'not in a playing phase · nothing below measures accessibility').toBe('playing')
-    expect(live.myTurn, 'it is not our turn · an inert board would produce every "inaccessible" reading ' +
-      'in this file for a completely different reason').toBe('true')
-    expect(live.actions, 'no actions left · the flow could not be started by any input device').toBeGreaterThan(0)
-    expect(live.stocked, 'every factory is empty · there is nothing to place').toBeGreaterThan(0)
+    await boardIsLiveAndPointerPlayable(page, { expect })
 
     // A REAL pointer click must produce the second step. This is the positive control: the flow works.
     expect(await page.locator('[data-testid^="element-"]').count()).toBe(0)
@@ -1155,6 +1166,7 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
   test('TODAY · the four-step placement flow cannot be STARTED without a pointer', async ({ page }) => {
     await page.goto('/practice?bots=0')
     await boardReady(page)
+    await boardIsLiveAndPointerPlayable(page, { expect })
 
     const facts = await page.evaluate(() => {
       const fac = document.querySelector('[data-testid^="factory"]')
@@ -1183,6 +1195,7 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
   test('TODAY · the board is one unnamed image · no hex, region or factory has an accessible name', async ({ page }) => {
     await page.goto('/practice?bots=0')
     await boardReady(page)
+    await boardIsLiveAndPointerPlayable(page, { expect })
 
     const board = await page.evaluate(() => {
       const svg = document.querySelector('svg[aria-label*="NeoTopia"]')
@@ -1245,6 +1258,7 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
     // AND THE HALF THAT WORKS, measured so the report is precise rather than damning: T1's S44 Escape
     // cancel path is intact · it just does not reach the dialog.
     await dismissTutorial(page)
+    await boardIsLiveAndPointerPlayable(page, { expect })
     await page.locator('[data-testid^="factory"]').first().click({ force: true })
     await expect.poll(() => page.locator('[data-testid^="element-"]').count(), { timeout: 5_000 })
       .toBeGreaterThan(0)
