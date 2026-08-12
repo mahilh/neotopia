@@ -60,11 +60,18 @@ jobs:
       # predecessors have landed, and the instrument runs BEFORE this does any work: the verify step
       # below reds on a dead credential before npm ci, so activation cannot proceed on a broken pool.
       #
-      # WHAT THIS ACTUALLY CONVERTS, counted rather than rounded: tests/e2e/global-teardown.js:51
-      # calls signInPooledOrAnon(), and playwright runs globalTeardown once per INVOCATION. This
-      # workflow has FIVE invocations, so it mints five anonymous identities per push today, on push
-      # AND pull_request, whatever the specs contain. With these two lines they become five reuses of
-      # one pre-existing user. Member 0 only · the teardown is a single client and needs nothing more.
+      # WHAT THIS ACTUALLY CONVERTS, and the number is MEASURED rather than counted: run
+      # 31634871378 (78210b3, before these lines) carries exactly FOUR
+      #   [pool] teardown · NO CREDENTIAL for member 0 · minting anonymously
+      # lines · one per playwright invocation, since global-teardown.js:51 calls signInPooledOrAnon
+      # and playwright runs globalTeardown once per INVOCATION. So this workflow mints four permanent
+      # anonymous identities per push, on push AND pull_request, whatever the specs contain, and with
+      # these two lines they become four reuses of one pre-existing user. Member 0 · single client.
+      # ⚠ I FIRST WROTE FIVE, from `grep -c "playwright test"`. One of those five matches is PROSE in
+      # this file's own header ("it previously ran `npx playwright test`") · the real steps are four.
+      # A grep counts TEXT and a log counts EVENTS, and when both are available the log is the one
+      # that happened (Rule 81 · a number you reasoned to is a claim, and this one reached a commit
+      # message before the measurement corrected it. Same instrument, same session, as 128b.)
       #
       # WHAT IT DOES NOT CONVERT, said plainly so a drop in the counter is not over-credited: the
       # BROWSER contexts still mint. Nothing calls context.addInitScript to seed a credential into a

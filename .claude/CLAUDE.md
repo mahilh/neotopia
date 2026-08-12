@@ -232,9 +232,21 @@ THE FIXED CI IDENTITY POOL · the project's only defect with a FINANCIAL denomin
      tests, all 8 mutation-proven. THE FALLBACK IS DELIBERATE AND SILENT BY DESIGN · that is why the
      record exists, and why a green spec suite says nothing about whether conversion happened.
   ✅ TEARDOWN CONVERTED (S59) · global-teardown.js:51 calls signInPooledOrAnon and playwright runs
-     globalTeardown once per INVOCATION: 5 in e2e.yml + 1 in the placement guard = SIX anonymous
-     identities per push, on push AND pull_request, whatever the specs contain. Both workflows now
-     carry the pool env. Member 0 only · the teardown is a single client.
+     globalTeardown once per INVOCATION. MEASURED from the logs of two successful pre-change runs,
+     not counted from the yml: FOUR `[pool] teardown · NO CREDENTIAL` lines in e2e.yml + ONE in the
+     placement guard = FIVE permanent anonymous identities per push, on push AND pull_request,
+     whatever the specs contain. All three E2E workflows now carry the pool env (the nightly gets all
+     four members · four-player-live asks by seat). ⚠ I first published SIX, from
+     `grep -c "playwright test"`, and one of those matches is PROSE in e2e.yml's own header. A grep
+     counts text; a log counts events. The `[pool]` lines are greppable per run and are the honest
+     conversion denominator · `gh run view <id> --log | grep '\[pool\]'`, and note that a CANCELLED
+     run has ZERO log lines, so filter on --status=success or you will measure nothing and call it a
+     finding.
+     PROVEN, anchored to the COMMIT and not to a window (Rule 126) · e2e-placement-guard successes,
+     one line each, boundary exactly at 59d3bea with nothing straddling it:
+       8293ea6 d014f68 59d3bea   post-env   member 0 REUSED 462b5106 · 0 minted
+       c3e6120 648bb9b d5418a7 78210b3 202eabd   PRE-env   NO CREDENTIAL · minting anonymously
+     462b5106 is e2ehost@neotopia.test, the identity Mahil created by hand. 5/5 before, 3/3 after.
   🔴 BROWSER HALF NOT WIRED · NOTHING calls context.addInitScript anywhere in tests/, so every
      browser context still mints and that is the BULK of the churn (T3's lane). Do not read a drop in
      the counter as the browsers converting · it will be the teardowns. The contract and the exact
