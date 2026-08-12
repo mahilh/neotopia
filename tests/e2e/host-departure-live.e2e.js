@@ -91,10 +91,10 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
 
   test('LIVE · the host tab dies mid-game and the peer is told nothing', async ({ browser }) => {
     test.skip(!ENV, 'no Supabase creds · nightly-class live test')
-    // The observation window alone is 45s and the lobby handshake is not free · the default 60s timeout
+    // The observation window is now 45s inside the budget plus ~100s past it and the lobby handshake is not free · the default 60s timeout
     // killed the first successful run AFTER it had printed every measurement, which reads as a failed
     // test and was a finished one.
-    test.setTimeout(180_000)
+    test.setTimeout(360_000)
 
     const ctxHost = await browser.newContext()
     const ctxPeer = await browser.newContext()
@@ -162,10 +162,16 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
 
       await ctxHost.close()
       hostClosed = true
-      console.log('[host-departure] host context closed · watching the peer for 45s')
+      console.log('[host-departure] host context closed · watching the peer')
 
+      // ⚠ THE MEANING OF THIS WINDOW CHANGED IN S52 AND THE NUMBER DID NOT · which is exactly the rot I
+      // criticised in my own S51 write-up: "if someone adds a 120s timeout tomorrow, my spec still passes
+      // at 45s while its own comment becomes false." Someone did, and it was me. In S51 a frozen board at
+      // 45s meant NOTHING WILL EVER HAPPEN. Today it means WE ARE STILL INSIDE THE BUDGET the UI prints ·
+      // Classic is 90s, and a remote client adds GRACE*(1+seat) before it will end someone else's turn.
+      // So the window is now split, and the second half is the assertion that could not exist before.
       const samples = []
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 9; i++) {                       // 45s · INSIDE the budget
         await peer.waitForTimeout(5000)
         samples.push({ t: (i + 1) * 5, ...(await read(peer)) })
       }
@@ -193,29 +199,54 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
         'from presence, so the peer has no mechanism to be told. If this is now false, someone shipped ' +
         'the fix · update this test in the same commit.').toBe(false)
 
-      // THE SOFT-LOCK, MEASURED · this is the finding, and every number here came out of the run rather
-      // than out of my head (Rule 81). The departed player owns the turn and keeps it: nine samples over
-      // 45 seconds returned a byte-identical seat and turn, on a client that had just been PROVEN to be
-      // listening. There is no turn timeout anywhere in the product to rescue it · turnSecondsLeft has
-      // exactly two consumers, its own useState and a display prop · while the Tutorial and the Lobby
-      // both promise the player "90 seconds per turn". So this is not slow, it is permanent (Rule 103c ·
-      // measure past the timeout before saying permanent; 45s is already half of the 90 the UI promises
-      // and nothing exists that could fire at 90).
+      // ── HALF ONE · INSIDE THE BUDGET, THE BOARD HOLDS ─────────────────────────────────────────────────
+      // This is the S51 measurement and it still holds · but it now means something completely different,
+      // and that is the whole reason this file had to change in the same commit as the fix (Rule 101).
+      // In S51 this said "no timeout exists, so this is permanent". Today it says "the clock has not run
+      // out yet", which is what a promised 90-second turn is SUPPOSED to look like at 45 seconds. The
+      // assertion is unchanged; the claim under it is the opposite.
       expect({ seat: peerAfter.currentSeat, turn: peerAfter.turnNumber },
-        'TODAY: the turn never leaves the departed player. The peer cannot act (correctly · it is not ' +
-        'their turn), the host cannot act (they are gone), and no timeout exists to move it on. A ' +
-        'friends-and-family game ends here, silently, the first time a phone dies.')
+        'the turn moved BEFORE the budget the UI prints · a player who stepped away for forty seconds ' +
+        'just lost their turn, which is the exact harm the timeout must not cause')
         .toEqual({ seat: peerBefore.currentSeat, turn: peerBefore.turnNumber })
 
-      expect(viewAfter.myTurn, 'TODAY: the peer is left showing data-my-turn="false" forever · their own ' +
-        'controls are correctly disabled and will never re-enable').toBe('false')
+      expect(viewAfter.myTurn, 'the peer is not yet on turn · correct while the budget is unspent')
+        .toBe('false')
 
-      // NOT A DEFECT, and worth keeping when this is fixed: the room is still 'playing', so a host whose
-      // phone comes back can rejoin (useGameRoom rejoinable = status !== 'finished'). Whatever fix lands
-      // must not "clean up" the room and take that away.
-      console.log('[host-departure] VERDICT · peer listening, host gone, turn frozen at ' +
-        `seat ${peerAfter.currentSeat}/turn ${peerAfter.turnNumber} for 45s · room still ${statusAfter} ` +
-        '(recoverable if the host returns) · nothing on screen mentions it')
+      // ── HALF TWO · PAST THE DEADLINE, THE BOARD UNFREEZES ITSELF ──────────────────────────────────────
+      // THE ASSERTION THAT COULD NOT EXIST BEFORE S52, and the one that makes this a mechanism check
+      // rather than an observation. The peer holds seat 1, so its grace is GRACE*(1+1) on top of the
+      // Classic 90s; the poll runs well past that and stops the moment the seat moves, so a fix that
+      // fires EARLIER than the budget is caught by half one and a fix that never fires is caught here.
+      // Nobody is present to press anything · the only client left is not the one whose turn it is.
+      const deadlineMs = 90_000 + 10_000
+      console.log(`[host-departure] past ${(deadlineMs / 1000)}s · waiting for the clock to unfreeze it`)
+      let unfroze = null
+      const startedWaiting = Date.now() - 45_000        // the 45s already observed counts toward the budget
+      while (Date.now() - startedWaiting < deadlineMs + 30_000) {
+        const now = await read(peer)
+        if (now.turnNumber !== peerBefore.turnNumber || now.currentSeat !== peerBefore.currentSeat) {
+          unfroze = { ...now, afterMs: Date.now() - startedWaiting }
+          break
+        }
+        await peer.waitForTimeout(5000)
+      }
+
+      expect(unfroze, 'THE BOARD NEVER UNFROZE. The active player is gone, the only client left cannot ' +
+        'act because it is not their turn, and the turn clock did not end the turn · so the game is over ' +
+        'without ending. This is the S51 measurement returning, and it means useGameSync turn timeout is ' +
+        'not running in a real room (it is unit-proven in useGameSync.turntimeout.test.js, so suspect the ' +
+        'wiring, not the arithmetic · Rule 103a, a composition needs a browser).').not.toBeNull()
+
+      console.log('[host-departure] VERDICT · peer listening, host gone · held for 45s inside the budget, ' +
+        `then the clock ended the absent player's turn after ~${Math.round(unfroze.afterMs / 1000)}s → ` +
+        `seat ${unfroze.currentSeat}/turn ${unfroze.turnNumber} · room still ${statusAfter} ` +
+        '(recoverable if the host returns)')
+
+      // NOT A DEFECT, and worth keeping: the room is still 'playing', so a host whose phone comes back can
+      // rejoin (useGameRoom rejoinable = status !== 'finished'). No fix should tidy the room away.
+      expect(statusAfter, 'the room was closed · a returning phone can no longer rejoin its own game')
+        .toBe('playing')
     } finally {
       if (!hostClosed) await ctxHost.close()
       await ctxPeer.close()

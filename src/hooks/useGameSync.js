@@ -17,6 +17,15 @@ import {
   registerBackendRetry, clearBackendSource,
 } from './useConnectionHealth'
 import { nextStateVersion, adoptServerVersion, wasOvertaken } from '../lib/writeOrder'
+import { getModeConfig } from '../store/gameConfig'
+
+// ── THE TURN CLOCK, MADE REAL (T3 S52) ────────────────────────────────────────────────────────────────────
+// A remote client waits this long PAST the limit before ending someone else's turn, staggered by seat so
+// the common case has exactly one writer. The active player's OWN client fires at the limit with no grace ·
+// that is the promise the Tutorial and the Lobby have always printed. The stagger is not load-bearing:
+// state_version (migration 022) already refuses the loser of any race, and the winner's write reaches every
+// client through postgres_changes. It just means the refusal is rare rather than routine.
+export const TURN_TIMEOUT_GRACE_MS = 5_000
 
 // ── Reconnect budget (T3 S26) ─────────────────────────────────────────────────────────────────────────────
 // THE BUG THIS REPLACES (measured · not theoretical): both failure paths below used to schedule
@@ -451,6 +460,82 @@ export function useGameSync(roomId, currentUserId) {
     window.__neotopia_writeorder = { overtakes, version: versionRef.current }
     return () => { delete window.__neotopia_writeorder }
   }, [overtakes])
+
+  // ── THE 90 SECONDS THE UI HAS ALWAYS PROMISED (T3 S52 · council ruling: timeout FIRST) ─────────────────
+  //
+  // MEASURED IN S51, IN A BROWSER, TWICE: close the host's tab mid-game and the peer's store is BYTE
+  // IDENTICAL at nine 5s samples across 45 seconds · same seat, same turn, same actionsRemaining · on a
+  // client that had just been PROVEN to be listening. The departed player owned the turn and kept it,
+  // because `turnSecondsLeft` in GameRoom had exactly two consumers, its own useState and a display prop.
+  // It counted down to 0 and enforced nothing, while the Tutorial and the Lobby both told the player
+  // "90 seconds per turn". This is therefore a CORRECTION, not a feature: the promise already shipped.
+  //
+  // WHY ANY CLIENT MAY END SOMEONE ELSE'S TURN. Forfeit was ruled out because it needs a detection signal
+  // that does not exist (GameRoom never mounts usePresence), and a timeout deliberately needs none: it is
+  // a function of the clock alone, so it unfreezes the board whether the absent player is disconnected,
+  // backgrounded, or simply asleep. Two clients firing at once is SAFE by construction · pushState carries
+  // `.lt('state_version', version)`, so the second write is refused rather than applied (T2, migration
+  // 022), and the winner's snapshot reaches the loser through postgres_changes and reconciles it. The
+  // seat stagger below makes that race rare; it is not what makes it correct.
+  //
+  // RULE 76 IS THE HAZARD HERE AND IT HAS ALREADY KILLED THIS EXACT FEATURE ONCE · a setTimeout inside a
+  // useEffect is cancelled by its own cleanup whenever a dep identity churns, and this app re-renders once
+  // a second for the countdown. The first draft of GameRoom's auto-end-turn died that way with nothing in
+  // the console. So: the deps are two primitives, the handler lives in a ref, and the timer is a repeating
+  // 1s INTERVAL that re-derives elapsed time from a ref rather than a single long timeout. Re-creating the
+  // interval is therefore harmless · it cannot lose the deadline, only re-check it.
+  const turnStartRef = useRef({ turn: null, at: 0 })
+
+  const pushStateRef = useRef(pushState)
+  pushStateRef.current = pushState
+
+  // The interval EXISTS only while a game is actually being played. Gating it on the phase rather than
+  // letting the tick early-return is not tidiness: useGameSync.seedhealth and .reconnect both assert
+  // `vi.getTimerCount() === 0` to prove no reconnect is queued, and a permanently-pending 1Hz timer made
+  // five of those go red. Weakening a reconnect-storm guard to accommodate a new feature would be a
+  // tolerance widened to fit a defect (Rule 110c) · and a clock that ticks in the lobby, where there is no
+  // turn to end, was never wanted anyway. `phase` is a string, so this dep cannot churn by identity.
+  const gamePhase = useGameStore(s => s.phase)
+  useEffect(() => {
+    if (!roomId || !currentUserId) return  // practice/solo has no room · nothing to unfreeze and no peer
+    if (gamePhase !== 'playing') return    // lobby, scoring, or a game that has already ended
+    // Anchor the clock at MOUNT, not on the first tick. Anchoring on the first tick costs a full interval
+    // (the deadline lands a second late) and, worse, makes the budget depend on the tick rate rather than
+    // on the limit · a number nobody would think to check against the one the UI prints.
+    turnStartRef.current = { turn: useGameStore.getState().turnNumber, at: Date.now() }
+    const tick = () => {
+      const st = useGameStore.getState()
+      if (st.phase !== 'playing') return
+      const turn = st.turnNumber
+      // THE LATCH IS KEYED ON turnNumber · the one quantity the domain guarantees advances (Rule 107).
+      // seatSignature-style composites have hung this project three times, always because the real change
+      // was not in the composite; on a frozen board seat/actions/phase are all constant by definition.
+      // Re-anchoring does NOT return early: elapsed is ~0 on the turn-change tick, so it cannot fire, and
+      // falling through keeps the deadline exactly one limit from the turn rather than one limit plus a tick.
+      // THE RE-ANCHOR IS THE ONLY THING STOPPING A SECOND FIRE, AND THAT IS DELIBERATE. The first draft
+      // also carried a `timedOutForTurn` latch. Mutation testing removed it and NOTHING went red · because
+      // endTurn() increments turnNumber, so the very act of firing re-anchors the clock and the next tick
+      // measures ~0 elapsed. Two guards, either one sufficient, so no single mutation can red either: the
+      // latch reported itself as present while being unable to fail (Rule 86), and it could not even
+      // disagree with the re-anchor because both key on the same quantity, so it bought no second witness
+      // (Rule 94). Deleted rather than kept, which is what gives the once-per-turn counterweight teeth.
+      if (turnStartRef.current.turn !== turn) turnStartRef.current = { turn, at: Date.now() }
+
+      const limitMs = getModeConfig(st.mode).TURN_TIME_LIMIT * 1000
+      const mySeat = st.players?.find(p => p.userId === currentUserId)?.seat
+      const isMine = mySeat != null && mySeat === st.currentSeat
+      const grace = isMine ? 0 : TURN_TIMEOUT_GRACE_MS * (1 + (mySeat ?? 0))
+      if (Date.now() - turnStartRef.current.at < limitMs + grace) return
+
+      // The SAME endTurn the button calls (Rule 45 · a second turn-advance would be a second rules
+      // engine). eventData records who fired and for whom, so a timed-out turn is distinguishable from a
+      // played one in game_events rather than looking like the absent player pressed the button.
+      useGameStore.getState().endTurn()
+      pushStateRef.current('endTurn', { reason: 'turn_timeout', seat: st.currentSeat, by: mySeat ?? null })
+    }
+    const id = setInterval(tick, 1_000)
+    return () => clearInterval(id)
+  }, [roomId, currentUserId, gamePhase])
 
   return { sendMove, pushState, broadcast, sessionId, overtakes }
 }
