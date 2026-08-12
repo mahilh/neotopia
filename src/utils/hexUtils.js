@@ -12,6 +12,59 @@ export function hexToPixel(q, r, size = HEX_SIZE) {
   }
 }
 
+// ── KEYBOARD NAVIGATION OVER A SET OF TARGETS (T1 S60) ───────────────────────────────────────────
+// THE 6-VS-4 PROBLEM DOES NOT ARISE HERE, and that is the design rather than a dodge. A flat-top hex
+// has six neighbours and, from hexToPixel above, they land at N · S · NE · SE · NW · SW · there is no
+// due EAST or WEST at all. So any mapping of four arrow keys onto six axial neighbours has to either
+// drop two directions or lie about which hex is adjacent, and a wrong adjacency model is worse than
+// no keyboard support because the player learns it and it is false.
+//
+// So arrows are NOT mapped to neighbours. An arrow means "the nearest target in that direction ON
+// SCREEN", scored over the set of LEGAL targets. That claim is true of what it does, it needs no
+// adjacency model, and it survives the case a neighbour walk cannot: at high occupancy the legal set
+// splits into TWO disconnected components (measured: 2 components at 10 and 14 tokens placed), and a
+// neighbour walk simply cannot cross the gap while a direction can.
+//
+// SCORE = distance / cos(angle from the axis). Dead on the axis it is the distance; 60 degrees off it
+// is twice the distance. Only the half-plane is considered, so a target behind you is never chosen.
+// TIE-BREAK: the NE/SE pair is exactly symmetric about the horizontal axis (both 1.5s across and
+// 0.866s up or down), so a horizontal press can find a genuine tie. It resolves UPWARD, i.e. toward
+// the smaller r, which matches the reading order the option list is announced in. Deterministic
+// beats clever · the player learns it in one press.
+const AXES = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
+export function nextTargetInDirection(fromKey, keys, dir, size = HEX_SIZE) {
+  const axis = AXES[dir]
+  if (!axis || !fromKey) return null
+  const [fq, fr] = fromKey.split(',').map(Number)
+  const from = hexToPixel(fq, fr, size)
+  let best = null, bestScore = Infinity, bestR = Infinity
+  for (const key of keys) {
+    if (key === fromKey) continue
+    const [q, r] = key.split(',').map(Number)
+    const p = hexToPixel(q, r, size)
+    const dx = p.x - from.x, dy = p.y - from.y
+    const along = dx * axis[0] + dy * axis[1]
+    if (along <= 1e-6) continue            // behind, or exactly perpendicular · not this direction
+    const dist = Math.hypot(dx, dy)
+    const score = dist / (along / dist)    // dist / cos(theta)
+    if (score < bestScore - 1e-6 || (Math.abs(score - bestScore) <= 1e-6 && r < bestR)) {
+      bestScore = score; best = key; bestR = r
+    }
+  }
+  return best
+}
+
+// Reading order for announcing a set of targets · top to bottom, then left to right, in SCREEN space
+// rather than axial space (a hex row is not a constant r). Used for Home/End and for the "N of M"
+// position in each option's accessible name.
+export function targetsInReadingOrder(keys, size = HEX_SIZE) {
+  return [...keys].sort((a, b) => {
+    const [aq, ar] = a.split(',').map(Number), [bq, br] = b.split(',').map(Number)
+    const pa = hexToPixel(aq, ar, size), pb = hexToPixel(bq, br, size)
+    return (pa.y - pb.y) || (pa.x - pb.x)
+  })
+}
+
 // Pixel to hex (click detection · ALWAYS pair with hexToPixel)
 export function pixelToHex(x, y, size = HEX_SIZE) {
   const q = (2/3 * x) / size

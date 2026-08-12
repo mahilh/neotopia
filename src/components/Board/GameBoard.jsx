@@ -1,4 +1,6 @@
-import { hexesInRadius, hexToPixel, REGIONS, TERRAIN, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
+import { useState, useRef } from 'react'
+import { hexesInRadius, hexToPixel, REGIONS, TERRAIN, FACTORIES, HEX_SIZE, ELEMENT_COLORS,
+         nextTargetInDirection, targetsInReadingOrder } from '../../utils/hexUtils'
 import { useCountUp } from '../../utils/useCountUp'
 import HexCell from './HexCell'
 
@@ -225,6 +227,49 @@ export default function GameBoard({
   const isPartialMatch = (q, r) => partialHighlight.some(t => t.q === q && t.r === r)
   const isCompletionCandidate = (q, r) => completionCandidates.some(t => t.q === q && t.r === r)
   const isReachable = (q, r) => reachableTargets.some(t => t.q === q && t.r === r)
+
+  // ── STEP 4 BY KEYBOARD · A ROVING TABINDEX OVER THE LEGAL TARGETS (T1 S60) ─────────────────────
+  // Steps 2 and 3 of the placement flow are already real <button>s and already reachable. Steps 1 and
+  // 4 were SVG <g> with no role, no tab stop and no name, so the flow was HALF wired · a keyboard
+  // player could start aiming and could not finish.
+  //
+  // ONE TAB STOP, NOT 57. The group behaves as a listbox: Tab reaches whichever target is current,
+  // arrows move within the set, Enter places. Measured, the legal set runs 1 to 11 of a region's 19
+  // hexes (58% at its peak) and splits into TWO disconnected components at high occupancy, which is
+  // the case a neighbour-walk cannot cross and a direction can.
+  //
+  // ⚠ KEYED ON "q,r", NEVER ON AN INDEX INTO THIS ARRAY. validTargets is recomputed on every render;
+  // an index would survive a change of aimed region and quietly point at a different cell, which is
+  // Rule 107 exactly (a latch keyed on something that is not the thing that moved). The remembered
+  // key is re-validated against the live set below, so a stale one cannot be activated · it is
+  // replaced by the first target in reading order.
+  const targetKeys = validTargets.map(t => `${t.q},${t.r}`)
+  const orderedKeys = targetsInReadingOrder(targetKeys)
+  const [rovingKey, setRovingKey] = useState(null)
+  const liveRoving = targetKeys.includes(rovingKey) ? rovingKey : (orderedKeys[0] ?? null)
+  const cellRefs = useRef({})
+  const moveTo = (key) => {
+    if (!key) return
+    setRovingKey(key)
+    // Focus follows the roving index · that is what makes it one tab stop rather than a selection
+    // model the player has to operate blind.
+    cellRefs.current[key]?.focus?.()
+  }
+  const onKeyNav = (fromKey, regionId) => (cmd) => {
+    if (cmd === 'activate') { onHexClick(...fromKey.split(',').map(Number), regionId); return }
+    if (cmd === 'first') { moveTo(orderedKeys[0]); return }
+    if (cmd === 'last') { moveTo(orderedKeys[orderedKeys.length - 1]); return }
+    // No target that way leaves focus exactly where it is · an arrow at the edge of the set must not
+    // blank the cursor, which is the one thing worse than not moving.
+    const next = nextTargetInDirection(fromKey, targetKeys, cmd)
+    if (next) moveTo(next)
+  }
+
+  // ── STEP 1 BY KEYBOARD · the three factories ──────────────────────────────────────────────────
+  // Three of them, always the same three, so they are three ordinary tab stops rather than a roving
+  // group · the same shape The Offer's four cards already ship with. Focus is tracked here because
+  // the focusable node is the wrapper <g> that owns the 44px hit circle, not the HexCell inside it.
+  const [focusedFactory, setFocusedFactory] = useState(null)
   // Only fade the other regions while a factory is actually picked · never on the resting board.
   const dimRegion = (id) => reachableRegions.length > 0 && !reachableRegions.includes(id)
 
@@ -421,13 +466,28 @@ export default function GameBoard({
       {REGIONS.map(reg => {
         const regionData = regions.find(r => r.id === reg.id) || {hexes: {}}
         return (
-        <g key={`region-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} data-region-group={reg.id}>
+        <g key={`region-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} data-region-group={reg.id}
+           {...(hexesInRadius(reg.cq, reg.cr, reg.radius).some(h => isValidTarget(h.q, h.r)) ? {
+             role: 'listbox',
+             'aria-label': `Where to place in ${reg.name} · ${orderedKeys.length} choices`,
+           } : {})}>
         {hexesInRadius(reg.cq, reg.cr, reg.radius).map(hex => {
           const key = `${hex.q},${hex.r}`
           const element = regionData.hexes[key]?.element ?? null
           const bonusCovered = regionData.hexes[key]?.bonusCovered ?? false
+          const optIdx = orderedKeys.indexOf(key)
+          const isTarget = optIdx >= 0
           return (
             <HexCell key={`hex-${key}`}
+              innerRef={isTarget ? (el => { if (el) cellRefs.current[key] = el; else delete cellRefs.current[key] }) : undefined}
+              // The name carries POSITION, because the ring is the only other thing that says which
+              // hex this is and a screen reader cannot see it. Reading order, not axial order · a
+              // hex row is not a constant r.
+              optionLabel={isTarget ? `Place in ${reg.name} · choice ${optIdx + 1} of ${orderedKeys.length}` : null}
+              roving={isTarget && key === liveRoving}
+              optionIndex={optIdx + 1}
+              optionCount={orderedKeys.length}
+              onKeyNav={isTarget ? onKeyNav(key, reg.id) : null}
               q={hex.q} r={hex.r}
               element={element}
               bonusCovered={bonusCovered}
@@ -487,6 +547,21 @@ export default function GameBoard({
             data-factory={factory.id}
             data-testid="factory"
             onClick={() => onFactoryClick(factory.id)}
+            role="button"
+            tabIndex={0}
+            // The name says what it HOLDS, because that is the whole basis for choosing one · a
+            // factory with no stock is a dead end and the label must say so before it is activated.
+            aria-label={`Factory ${factory.id + 1} · ${
+              (factoryData?.elements ?? []).filter(e => e.count > 0).map(e => `${e.count} ${e.type}`).join(', ') || 'empty'
+            }`}
+            aria-pressed={factory.id === selectedFactory}
+            onFocus={() => setFocusedFactory(factory.id)}
+            onBlur={() => setFocusedFactory(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                e.preventDefault(); onFactoryClick(factory.id)
+              }
+            }}
             style={{cursor: 'pointer'}}
           >
             {/* Touch target (Rule 4 · 44px) · the visible factory hex renders ~23px at a 375px
@@ -503,6 +578,7 @@ export default function GameBoard({
               q={factory.q} r={factory.r}
               isFactory
               isSelected={factory.id === selectedFactory}
+              forceFocusRing={focusedFactory === factory.id}
               regionColor="rgba(255,255,255,0.15)"
               onClick={() => {}}
             />

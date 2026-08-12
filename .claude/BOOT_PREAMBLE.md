@@ -66,6 +66,14 @@ are deliberately not creating (86).
   an import because the line it was about to add contained the name (112 in a script).
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
+- WHEN THE SUBJECT UNDER TEST IS THE THING YOUR HARNESS SIMULATES, THE HARNESS IS MAXIMALLY SUSPECT
+  AND A REAL-WORLD MEASUREMENT IS A PLANNED STEP, NOT A BONUS. Fake timers advance Date.now() and
+  performance.now() together, so no test in this repo could tell them apart — I shipped a turn clock
+  that measured excess 0 under fake timers, went green on all four CI jobs, and was reliably ~1000ms
+  late in a browser. Same shape for a mocked network, a stubbed clock, an in-memory storage layer:
+  the mock is a MODEL of exactly the thing you are changing (36). Ask before you start, not after:
+  what does my harness replace, and is that the subject? If yes, book the real measurement in the
+  plan. I found mine by accident, chasing an unrelated question, on a regression already pushed.
 
 ## 4 · WHAT YOU SAY IS AN ARTIFACT
 - A stated LIMIT needs the same counterweight as a stated finding. Limitations get believed harder
@@ -114,6 +122,9 @@ T3: src/hooks/useGameRoom.js · useGameSync.js · usePresence.js · tests/e2e/
 ## 8 · DESIGN — absolute
 No em dashes, use ·  |  no window.confirm(), hold-to-confirm  |  44px targets  |  tabular-nums
 npm run build passes before commit
-Copy is a layout input: a 66-char instruction wraps and costs the board 24% of its height at 320. A
-layout gate pins the STRING, not just the viewport.
+Copy is a layout input · a layout gate pins the STRING, not just the viewport. ⚠ THE 66 THIS LINE
+CARRIED FOR SIXTEEN SESSIONS WAS NOT THE WRAP POINT (measured T1 S59, in a browser at 320: 13px font,
+288px box). The instruction is ALREADY two lines for every string the game ships, from 37 chars up;
+the cliff is the THIRD line at 73. Prefer an ordering against the longest sentence the product already
+renders over any remembered number.
 Put long reasoning in the test file, where it cannot become a render. // in JSX children is text.

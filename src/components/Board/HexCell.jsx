@@ -23,6 +23,19 @@ export default function HexCell({
   bonusCovered = false,     // this hex has/had a bonus token
   regionColor = '#888888',
   biomeFill = null,         // T2 terrain biome empty-hex fill (per region) · overrides the flat region tint
+  // ── KEYBOARD (T1 S60) ────────────────────────────────────────────────────────────────────────
+  // Set ONLY on a legal target. A hex that cannot be placed on carries no role and no tab stop, so
+  // "the targets are reachable" stays a statement about the targets and not about all 60 cells.
+  // `roving` is the one target holding tabIndex 0; the rest are -1 and are reached with arrows.
+  optionLabel = null,       // accessible name · presence is what makes this hex a listbox option
+  roving = false,
+  optionIndex = 0, optionCount = 0,
+  onKeyNav = null,          // (dir|'activate'|'first'|'last') => void
+  // Factories track focus in GameBoard (the focusable node is the wrapper that owns the hit circle,
+  // not this <g>), so they PASS the flag in. Region hexes own their own focus below. Two detectors,
+  // but one place that DRAWS the ring · the thing that could visibly diverge is single-source.
+  forceFocusRing = false,
+  innerRef = null,          // the owner needs the node to move focus with the roving index
   onClick = () => {},
 }) {
   const {x, y} = hexToPixel(q, r)
@@ -81,8 +94,25 @@ export default function HexCell({
     return () => clearTimeout(id)
   }, [refusedSeq])
 
+  const isOption = typeof optionLabel === 'string' && optionLabel.length > 0
+  const [selfFocused, setSelfFocused] = useState(false)
+  const showFocusRing = forceFocusRing || (isOption && selfFocused)
+  const KEY_DIR = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }
+  const handleKeyDown = (e) => {
+    if (!isOption || !onKeyNav) return
+    const dir = KEY_DIR[e.key]
+    if (dir) { e.preventDefault(); onKeyNav(dir); return }
+    if (e.key === 'Home') { e.preventDefault(); onKeyNav('first'); return }
+    if (e.key === 'End') { e.preventDefault(); onKeyNav('last'); return }
+    // Enter and Space both place. Space is preventDefaulted so the page cannot scroll under the
+    // player mid-placement; unlike CardFrame there is no auto-repeat hazard, because placing leaves
+    // this phase and unmounts every option in the group.
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); onKeyNav('activate') }
+  }
+
   return (
     <g
+      ref={innerRef}
       className="hex-cell"
       // Addressable by coordinate (T1 S51). hexesInRadius returns ABSOLUTE (q,r), so this is unique
       // across all three regions and the factories · a test that addresses a cell by its index into
@@ -95,6 +125,20 @@ export default function HexCell({
       // match a hex that only means "reachable later" (Rule 50 · the attribute has to flip on state).
       data-testid={isValidTarget ? 'hex-valid' : isReachablePreview ? 'hex-reachable' : undefined}
       onClick={() => onClick(q, r)}
+      {...(isOption ? {
+        role: 'option',
+        // LISTBOX, NOT GRID, and the choice is forced by the data rather than by taste. A grid role
+        // demands rows and columns; a hex board has neither, and inventing them would be a lie told
+        // to a screen reader. What the player is doing here is choosing ONE item from a highlighted
+        // set · single-select, arrow-navigated, Enter to take it · which is a listbox exactly.
+        'aria-selected': roving,
+        'aria-setsize': optionCount, 'aria-posinset': optionIndex,
+        'aria-label': optionLabel,
+        tabIndex: roving ? 0 : -1,
+        onKeyDown: handleKeyDown,
+        onFocus: () => setSelfFocused(true),
+        onBlur: () => setSelfFocused(false),
+      } : {})}
       style={{cursor: (isValidTarget || isReachablePreview || isFactory) ? 'pointer' : 'default'}}
     >
       {/* Soul-metal hover tooltip on a placed token · native SVG <title> on the hoverable group
@@ -224,6 +268,15 @@ export default function HexCell({
           and the bot clicks these same nodes (Rule 78 · a correct control at an unreachable position is
           still a control the player does not have). fill="none" keeps it a RING · a filled flash would
           be the completion candidate's own vocabulary, which is the one cue that means the opposite. */}
+      {/* KEYBOARD FOCUS · painted above every state ring, including the refusal, because it answers
+          "where am I" and that question outranks every other cue on the cell.
+          A DRAWN POLYGON RATHER THAN A CSS outline, and that is measured rather than stylistic: the
+          factory's focusable node is a <g> whose FIRST child is a transparent r=70 hit circle, so an
+          outline would hug a box about four times the visible hex and float in empty space. A <g> has
+          no CSS box to hug in the first place.
+          TWO-TONE, black outside and white inside. A hex is 42%/13% tint over a full-bleed terrain
+          PHOTOGRAPH (T1 S59), so no single colour is safe on it · whichever tone the ground matches,
+          the other one carries. Measured on occupied hexes: black 4.75-5.66, white 3.07-3.65. */}
       {refusing && (
         <polygon
           className="hex-refuse"
@@ -236,6 +289,26 @@ export default function HexCell({
           vectorEffect="non-scaling-stroke"
           style={{ pointerEvents: 'none' }}
         />
+      )}
+
+      {/* KEYBOARD FOCUS · painted LAST, above every state ring including the refusal, because it
+          answers "where am I" and that outranks every other cue on the cell.
+          A DRAWN POLYGON RATHER THAN A CSS outline, and that is measured rather than stylistic: the
+          factory's focusable node is a <g> whose FIRST child is a transparent r=70 hit circle, so an
+          outline would hug a box about four times the visible hex and float in empty space · and a
+          <g> has no CSS box for an outline to hug in the first place.
+          TWO-TONE, black outside and white inside. A hex is a 42%/13% tint over a full-bleed terrain
+          PHOTOGRAPH (T1 S59), so no single colour is safe on it · whichever tone the ground matches,
+          the other one carries. Measured on occupied hexes: black 4.75-5.66, white 3.07-3.65. */}
+      {showFocusRing && (
+        <>
+          <polygon data-testid="hex-focus-ring" points={points} fill="none"
+            stroke="rgba(0,0,0,0.95)" strokeWidth={6} strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />
+          <polygon points={points} fill="none"
+            stroke="#ffffff" strokeWidth={2.5} strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke" style={{ pointerEvents: 'none' }} />
+        </>
       )}
     </g>
   )
