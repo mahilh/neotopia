@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -104,12 +104,31 @@ describe('with-project-env · finding the project .env.local', () => {
     })
   })
 
-  it('resolves against the REAL repo it lives in', () => {
-    // Anchors the suite to the artifact rather than only to fixtures · if the default argument or
-    // the path arithmetic breaks, every fixture above could still pass.
+  it('resolves against the REAL repo it lives in, in EITHER environment', () => {
+    // ⚠ THE FIRST VERSION OF THIS REDDENED THE MERGE GATE FOR EVERYONE. It asserted `not.toBe(null)`
+    // against the real repo · true on a developer's machine, false in CI, where there is no
+    // .env.local at all. I wrote a test that assumed a developer checkout, in the same commit as
+    // Rule 131, whose entire subject is that CI and a local checkout differ and that assuming one
+    // is how the collision happens. The preamble's §5 line I broke is explicit: never red a shared
+    // gate for another lane, and this reddened it for all three.
+    //
+    // The anchor is still worth having · without it a broken default argument or wrong path
+    // arithmetic would leave every temp-repo fixture above passing. So it now asserts the property
+    // that holds in BOTH environments and is still specific: whatever comes back is either nothing,
+    // or a path that really exists. A silently-invented path fails here in CI and locally alike.
     const found = findEnvLocal()
-    expect(found, 'this repo has no .env.local · run from a checkout that does, or the guard is ' +
-      'inert here too').not.toBe(null)
+    if (found === null) {
+      // The CI shape, and asserting it is not a formality: null is what makes the guard strip
+      // nothing, which is the property the counterweight at the top of this file protects.
+      expect(process.env.CI || !existsSync(join(process.cwd(), '.env.local')),
+        'findEnvLocal returned nothing while this checkout HAS a .env.local · the lookup is broken ' +
+        'and the guard would stop protecting anyone').toBeTruthy()
+      return
+    }
     expect(found.file).toMatch(/\.env\.local$/)
+    expect(existsSync(found.file), `findEnvLocal returned ${found.file}, which does not exist · the ` +
+      'path arithmetic is wrong and the fixtures above cannot see it').toBe(true)
+    expect(['this checkout', undefined]).toContain(
+      found.via.startsWith('the main worktree') ? undefined : found.via)
   })
 })
