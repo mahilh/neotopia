@@ -31,10 +31,23 @@ async function gotoLobby(page, expect) {
  * `expect` is passed in so this module stays importable by vitest (which does not have Playwright's expect).
  * Returns { code, roomId }. Throws with the offending SCREEN, never a bare locator timeout.
  */
-export async function runTwoHumanLobby(p1, p2, { expect, hostName, joinerName, boardSelector = BOARD }) {
+export async function runTwoHumanLobby(p1, p2, { expect, hostName, joinerName, boardSelector = BOARD, mode = 'classic' }) {
   await gotoLobby(p1, expect)
   await p1.getByPlaceholder(NAME_INPUT).fill(hostName)
   await p1.getByRole('button', { name: /enter neotopia/i }).click()
+
+  // MODE MUST BE CHOSEN BEFORE Create Room, not after (T3 S54). Create Room reads the CURRENT gameMode
+  // as its argument, so a toggle clicked afterwards changes nothing and the room is silently Classic
+  // (Rule 61 · verify the value, not just the signature · flow-mode-live's header makes the same point).
+  // The aria-pressed wait is what makes this deterministic rather than a race against a re-render.
+  if (mode === 'flow') {
+    const toggle = p1.locator('[data-testid="mode-flow"]')
+    await expect(toggle, 'the Flow toggle is missing · a caller asking for flow would silently get a ' +
+      'Classic room, and every timing assertion built on the 15s turn would be measuring 90').toBeVisible({ timeout: 15_000 })
+    await toggle.click()
+    await expect(toggle, 'clicking Flow did not select it before Create Room read gameMode').toHaveAttribute('aria-pressed', 'true')
+  }
+
   await p1.getByRole('button', { name: 'Create Room' }).click({ timeout: 15_000 })
 
   const codeEl = p1.locator('[style*="monospace"]').first()

@@ -254,3 +254,112 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
     }
   })
 })
+
+// ── THE DIVERGENT-STORE RACE · THE WORST FAILURE THIS FEATURE COULD HAVE (T3 S54) ────────────────────────
+//
+// The turn clock now ends turns ON OTHER PEOPLE'S BEHALF. So the failure that matters is not "it does not
+// fire" · it is a timeout write that CLOBBERS a placement its author never saw. I claimed in S52 that
+// concurrent fires are "safe by construction" and S53 closed half of it: two clients, one accepted write.
+// But that test states its own limit in the file · two renderHooks share ONE Zustand store, so it cannot
+// express clients whose local state has DIVERGED, which is the only shape where a clobber is possible at
+// all. Identical snapshots race harmlessly; a stale one is the whole hazard.
+//
+// HOW THE DIVERGENCE IS MANUFACTURED, and the first design did not work: blinding only the websocket is
+// not enough, because the transport-drop path calls fetchAndSeed over REST and re-syncs the client within
+// seconds (useGameSync's `system` handler → scheduleReconnect). So the peer is blinded on BOTH read paths
+// while its WRITES are left alive · realtime aborted via routeWebSocket, and GET on game_sessions aborted
+// while PATCH continues. That is a client that cannot learn and can still speak, which is exactly a phone
+// on a dying connection.
+//
+// FLOW MODE for the clock: 15s turns and a 2.25s-per-seat grace, so the whole race resolves in ~25s
+// instead of ~100s. It also exercises the proportional grace shipped in S52, which until now was
+// unit-tested only.
+//
+// COST · 2 anonymous sign-ins. Nightly-class (Rule 79b).
+test.describe('a blinded peer cannot clobber what it never saw (T3 S54)', () => {
+  test('LIVE · a stale timeout write is REFUSED, and the placement survives', async ({ browser }) => {
+    test.skip(!ENV, 'no Supabase creds · nightly-class live test')
+    test.setTimeout(240_000)
+
+    const ctxA = await browser.newContext()
+    const ctxB = await browser.newContext()
+    const A = await ctxA.newPage()
+    const B = await ctxB.newPage()
+    let roomId = null
+    let hostSession = null
+
+    try {
+      const lobby = await runTwoHumanLobby(A, B, {
+        expect, hostName: uniqueName('E2EDVA'), joinerName: uniqueName('E2EDVB'), mode: 'flow',
+      })
+      roomId = lobby.roomId
+      hostSession = await A.evaluate(() => localStorage.getItem('neotopia-auth'))
+
+      const client = createClient(ENV.url, ENV.key, { auth: { persistSession: false } })
+      const row = async () => (await client.from('game_sessions')
+        .select('state, state_version').eq('room_id', roomId).maybeSingle()).data
+      const placedIn = (s) => (s?.regions ?? [])
+        .reduce((n, r) => n + Object.values(r.hexes ?? {}).filter(h => h?.element).length, 0)
+
+      // ── COUNTERWEIGHT (Rule 120) · B MUST BE PROVEN TO BE LISTENING BEFORE IT IS BLINDED ──────────────
+      // A peer that never synced is stale for a completely different reason, and would produce this whole
+      // test's green without the feature working at all.
+      const bBefore = await read(B)
+      const actor = (await A.locator('[data-my-turn]').first().getAttribute('data-my-turn')) === 'true' ? A : B
+      expect(actor, 'the host does not hold the opening turn · this test assumes A acts first').toBe(A)
+      const acted = await spendOneAction(A, { expect })
+      expect(acted?.stage, `A could not act (${JSON.stringify(acted)}) · nothing below is measurable`).toBe('ok')
+      await expect.poll(async () => {
+        const now = await read(B)
+        return now.placed !== bBefore.placed || now.actionsRemaining !== bBefore.actionsRemaining
+      }, { timeout: 20_000, message: 'COUNTERWEIGHT FAILED · B never observed A\'s action, so it was never ' +
+           'listening and its later staleness is unmeasured rather than manufactured' }).toBe(true)
+      console.log('[divergent] counterweight OK · B observed a real action before being blinded')
+
+      // ── BLIND B · it can no longer LEARN, but it can still SPEAK ──────────────────────────────────────
+      await ctxB.routeWebSocket('**/realtime/v1/**', ws => { /* never connect · realtime is dead for B */ })
+      await ctxB.route('**/rest/v1/game_sessions*', route =>
+        route.request().method() === 'GET' ? route.abort() : route.continue())
+      const bAtBlind = await read(B)
+      console.log('[divergent] B blinded at', JSON.stringify(bAtBlind))
+
+      // A keeps playing. Every one of these reaches the row and NONE of them reaches B.
+      for (let i = 0; i < 2; i++) await spendOneAction(A, { expect }).catch(() => null)
+      const afterA = await row()
+      const placedOnServer = placedIn(afterA.state)
+      expect(placedOnServer, 'A made no progress the server can see · there is nothing for B to clobber')
+        .toBeGreaterThan(bAtBlind.placed)
+
+      // B IS GENUINELY STALE · asserted, not assumed. Without this the refusal below could be a peer that
+      // simply agreed with the server all along.
+      const bNow = await read(B)
+      expect(bNow.placed, 'B is not stale · the blinding did not take, so this measures nothing')
+        .toBeLessThan(placedOnServer)
+      console.log(`[divergent] B stale: sees ${bNow.placed} placements, server holds ${placedOnServer}`)
+
+      // ── B'S CLOCK EXPIRES ON A TURN IT CANNOT SEE HAS MOVED · it writes, and must be REFUSED ──────────
+      await expect.poll(async () => (await B.evaluate(
+        () => window.__neotopia_writeorder?.overtakes?.length ?? 0)) > 0,
+      { timeout: 90_000, message: 'B never had a write refused · either its timeout never fired (the clock ' +
+        'is not running for a blinded client) or its stale write was ACCEPTED, which is the clobber this ' +
+        'whole test exists to rule out. Check the row below before assuming the former.' }).toBe(true)
+
+      const overtakes = await B.evaluate(() => window.__neotopia_writeorder.overtakes)
+      console.log('[divergent] B overtakes:', JSON.stringify(overtakes))
+
+      // THE ASSERTION THAT MATTERS · the server still holds A's work.
+      const finalRow = await row()
+      expect(placedIn(finalRow.state), 'B\'s stale timeout write CLOBBERED placements it never saw · the ' +
+        'state_version predicate did not protect the seam, and the feature built to rescue a frozen game ' +
+        'is destroying live ones').toBeGreaterThanOrEqual(placedOnServer)
+      expect(finalRow.state_version, 'the row went BACKWARDS in version').toBeGreaterThanOrEqual(afterA.state_version)
+
+      console.log(`[divergent] VERDICT · B refused ${overtakes.length}x · server placements ` +
+        `${placedOnServer} → ${placedIn(finalRow.state)} · version ${afterA.state_version} → ${finalRow.state_version}`)
+    } finally {
+      await ctxA.close()
+      await ctxB.close()
+      await deleteRoomAsHost(hostSession, roomId)
+    }
+  })
+})
