@@ -234,6 +234,8 @@ describe('step 4 · the target hexes', () => {
     const box = document.querySelector(`[data-region-group="${s.regionId}"]`)
     expect(box.getAttribute('role'), 'the target group is not a listbox').toBe('listbox')
     expect(box.getAttribute('aria-label'), 'the listbox does not say which region it is for').toMatch(/place/i)
+    expect(box.getAttribute('aria-label'), 'the count and the noun disagree').toMatch(
+      new RegExp(`\\b${options().length} choices\\b`))
 
     const opts = options()
     for (const o of opts) {
@@ -269,6 +271,33 @@ describe('step 4 · the target hexes', () => {
     await act(async () => { cur.blur() })
     expect(document.querySelectorAll('[data-testid="hex-focus-ring"]').length,
       'the ring outlived the focus that produced it').toBe(0)
+  })
+
+  it('says "1 choice" on an EMPTY region · the very first placement of every game', async () => {
+    // ⚠ "1 choices" SHIPPED, and I read it off production. Then my first fix came with an assertion
+    // that had NO TEETH: the fixture seeds a token, so the region offers 6 targets and only the
+    // PLURAL branch was ever exercised · reverting the fix left every test green. The singular case
+    // is not an edge case at all. An empty region has exactly ONE legal cell (its centre, measured),
+    // so this is the label on the first placement of every game anybody plays.
+    render(<MemoryRouter><GameRoom practice practiceBots={0} /></MemoryRouter>)
+    await until(() => screen.queryAllByTestId('factory').length > 0)
+    const st = useGameStore.getState()
+    expect(st.regions.every(r => Object.keys(r.hexes).length === 0),
+      'a region is already occupied · this test needs the empty board').toBe(true)
+
+    await click(screen.getAllByTestId('factory')[0])
+    await until(() => phase() === 'factorySelected')
+    await click(screen.getAllByTestId('element-btn')[0])
+    await until(() => phase() === 'elementSelected' || phase() === 'regionSelected')
+    const rb = screen.queryAllByTestId('region-btn')
+    if (rb.length) await click(rb[0])
+    await until(() => phase() === 'regionSelected')
+
+    expect(options().length, 'an empty region should offer exactly its centre · if this is not 1 the ' +
+      'assertion below is testing the plural branch again').toBe(1)
+    const box = document.querySelector('[data-region-group][role="listbox"]')
+    expect(box.getAttribute('aria-label'), 'the label says "1 choices"').toMatch(/\b1 choice\b/)
+    expect(box.getAttribute('aria-label')).not.toMatch(/\b1 choices\b/)
   })
 
   it('no hex is an option when the flow is not asking for one', async () => {

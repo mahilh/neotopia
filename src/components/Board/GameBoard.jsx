@@ -469,7 +469,10 @@ export default function GameBoard({
         <g key={`region-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} data-region-group={reg.id}
            {...(hexesInRadius(reg.cq, reg.cr, reg.radius).some(h => isValidTarget(h.q, h.r)) ? {
              role: 'listbox',
-             'aria-label': `Where to place in ${reg.name} · ${orderedKeys.length} choices`,
+             // "1 choices" · caught reading the label off PRODUCTION, and an empty region is the
+             // most common way to meet it (the centre is the only legal cell, so the very first
+             // placement of every game says it).
+             'aria-label': `Where to place in ${reg.name} · ${orderedKeys.length} ${orderedKeys.length === 1 ? 'choice' : 'choices'}`,
            } : {})}>
         {hexesInRadius(reg.cq, reg.cr, reg.radius).map(hex => {
           const key = `${hex.q},${hex.r}`
