@@ -52,7 +52,7 @@
  */
 
 const { execFileSync } = require('node:child_process')
-const { readFileSync } = require('node:fs')
+const { readFileSync, readdirSync } = require('node:fs')
 const { join } = require('node:path')
 
 const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).trim()
@@ -145,6 +145,92 @@ function report(name, counts) {
   return out
 }
 
+// ── THE BLIND SPOT · WHAT THE RATE ABOVE CANNOT SEE  (T2 S62) ───────────────────────────────────
+// A context that is never seeded and never reports contributes to NEITHER the numerator NOR the
+// denominator, so it is invisible here and the rate reads as complete. My first run of this tool
+// printed `browser 2/2 REUSED (100.0%)` while ten specs were creating contexts that mint an identity
+// each and say nothing. That is Rule 130's corollary in my own instrument: a number that flatters,
+// produced by a reader that cannot see its own coverage.
+//
+// So the coverage is derived from the repo, every run, and printed beside the rate. Three caveats
+// travel WITH it rather than living in a commit message, because a bare "19 unseeded" is quoted and
+// the caveats are not:
+//   · these are CALL SITES, not runtime contexts · a loop or a helper can create more or fewer
+//   · practice.e2e.js makes zero Supabase calls BY DESIGN, so its contexts may mint nothing at all
+//   · a nightly spec costs ~1 run/day and a merge-gate spec costs one per push · the counts are NOT
+//     equally weighted, and routing is printed per spec so the reader can weight them
+function coverage(root) {
+  const dir = join(root, 'tests', 'e2e')
+  const wfDir = join(root, '.github', 'workflows')
+  let wfText = {}
+  try {
+    for (const f of readdirSync(wfDir).filter(n => /\.ya?ml$/.test(n))) {
+      wfText[f] = readFileSync(join(wfDir, f), 'utf8')
+    }
+  } catch { /* no workflows · routing is then UNKNOWN, and says so */ }
+
+  const specs = []
+  let files = []
+  try { files = readdirSync(dir).filter(n => n.endsWith('.e2e.js')) } catch { return null }
+  for (const f of files) {
+    let src = ''
+    try { src = readFileSync(join(dir, f), 'utf8') } catch { continue }
+    const contexts = (src.match(/newContext\(|browser\.newPage\(/g) || []).length
+    if (!contexts) continue
+    const seeds = (src.match(/seedPoolCredential/g) || []).length
+    const runsIn = Object.keys(wfText).filter(w => wfText[w].includes(f)).sort()
+    specs.push({ spec: f, contexts, seeds, runsIn })
+  }
+  // WHICH TREE DID THIS MEASURE? Coverage is read from files on disk, so a session in which another
+  // lane is mid-conversion reports a number that is NOT the committed state · and that number gets
+  // quoted. Measured live: T3's endgame-live and host-departure-live carried 0 seeds at HEAD and 3
+  // and 5 in the working tree at the same moment, a difference of four context creations. Rule 66,
+  // in a reader rather than in a build.
+  let dirty = []
+  try {
+    dirty = sh('git', ['status', '--porcelain', '--', 'tests/e2e'])
+      .split('\n').map(l => l.trim()).filter(Boolean)
+  } catch { dirty = null }
+  specs.dirty = dirty
+  return specs
+}
+
+function coverageLines(specs) {
+  if (!specs) return ['  coverage UNMEASURED · tests/e2e is unreadable from here']
+  const unseeded = specs.filter(s => s.seeds === 0)
+  const ctxTotal = specs.reduce((a, s) => a + s.contexts, 0)
+  const ctxUnseeded = unseeded.reduce((a, s) => a + s.contexts, 0)
+  const gate = (s) => s.runsIn.some(w => /e2e\.yml|placement-guard/.test(w)) ? 'per push'
+    : s.runsIn.some(w => /nightly/.test(w)) ? 'nightly'
+    : 'NO WORKFLOW'
+  const out = [
+    '  COVERAGE · what this rate cannot see',
+    `    ${ctxUnseeded} of ${ctxTotal} browser-context creations are in specs that seed NOTHING, so they`,
+    '    appear in neither the numerator nor the denominator above. The rate is over instrumented',
+    '    contexts only and must not be read as the feature having landed.',
+  ]
+  if (unseeded.length) {
+    out.push('    unseeded, by how often it actually runs:')
+    for (const g of ['per push', 'nightly', 'NO WORKFLOW']) {
+      const inGroup = unseeded.filter(s => gate(s) === g)
+      if (!inGroup.length) continue
+      out.push(`      ${g.padEnd(12)} ${inGroup.map(s => `${s.spec.replace('.e2e.js', '')}(${s.contexts})`).join(' ')}`)
+    }
+  }
+  if (specs.dirty === null) {
+    out.push('    ⚠ could not ask git whether tests/e2e is clean · this may not be the committed state')
+  } else if (specs.dirty.length) {
+    out.push(`    ⚠ MEASURED FROM A DIRTY TREE · ${specs.dirty.length} uncommitted change(s) under tests/e2e,`)
+    out.push('      so this is NOT what CI will see. Another lane mid-conversion moves these counts.')
+  }
+  out.push('    CAVEATS, carried here rather than left in a commit message:')
+  out.push('      · call sites, not runtime contexts · a loop or helper can create more or fewer')
+  out.push('      · practice.e2e.js makes ZERO Supabase calls by design · its contexts may mint nothing')
+  out.push('      · a NO WORKFLOW spec costs nothing today (Rule 79) and a per-push spec costs one')
+  out.push('        identity per context per push · these counts are not equally weighted')
+  return out
+}
+
 function main() {
   const root = join(__dirname, '..')
   const drift = contractHolds(root)
@@ -213,6 +299,8 @@ function main() {
     console.log(`  ⚠ ${t.other.unrecognised} pool line(s) matched no known shape · the contract may be drifting`)
   }
   console.log('')
+  for (const line of coverageLines(coverage(root))) console.log(line)
+  console.log('')
   console.log('  by label:')
   for (const [label, o] of Object.entries(t.labels).sort()) {
     console.log(`    ${label.padEnd(22)} ${Object.entries(o).map(([k, v]) => `${k}=${v}`).join('  ')}`)
@@ -225,4 +313,4 @@ function main() {
 
 if (require.main === module) main()
 
-module.exports = { classifyPoolLine, tally, report, contractHolds }
+module.exports = { classifyPoolLine, tally, report, contractHolds, coverage, coverageLines }

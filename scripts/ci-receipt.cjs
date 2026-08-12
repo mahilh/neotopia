@@ -272,7 +272,7 @@ function stepDetail(databaseId, conditional = new Set()) {
 // 9 green") is read as a pass by every habit a human has, and this file's entire subject is refusing
 // to let an absence read as a pass · its counterweight has already failed once by printing
 // "PASS · all 0 expected workflows". A partial-step reader is that same shape one level down.
-function stepLines(d, indent) {
+function stepLines(d, indent, verdict = 'CANCELLED') {
   const pad = ' '.repeat(indent)
   if (!d) return []
   if (d.unavailable) return [`${pad}step detail UNAVAILABLE (${d.unavailable}) · the verdict above stands`]
@@ -293,8 +293,14 @@ function stepLines(d, indent) {
     // The vacuous case, and it is the one a partial reader gets wrong: a run cancelled during its
     // post-job bookkeeping has every graded step green and nothing skipped, so the detail alone
     // looks exactly like success. GitHub's verdict belongs to the RUN, not to its steps.
-    out.push(`${pad}every graded step is green · but the RUN did not complete, and a green step`)
-    out.push(`${pad}list is NOT a workflow verdict. Still unmeasured.`)
+    // ⚠ TENSE IS MEANING HERE, AND I FIXED ONLY THE SIBLING BRANCH LAST SESSION. `no run YET` was
+    // added for MISSING while this line went on saying "did not complete" about a run that is still
+    // executing · asserting a finished state about something in progress, four lines away, written
+    // in the same sitting by the same hand. A RUNNING run has not FAILED to complete; it has not
+    // completed YET, and the honest instruction is to look again rather than to investigate.
+    const running = verdict === 'RUNNING'
+    out.push(`${pad}every graded step so far is green · but the RUN ${running ? 'has not completed YET' : 'did not complete'},`)
+    out.push(`${pad}and a green step list is NOT a workflow verdict. Still unmeasured${running ? ' · re-run this receipt' : ''}.`)
   }
   return out
 }
@@ -378,7 +384,7 @@ function main() {
       // The detail is INDENTED UNDER the verdict, never beside it · the verdict is the claim and
       // the steps are evidence about how far it got. Printing "8 of 9 green" on the verdict line
       // would put a pass-shaped number where a reader scans for the verdict.
-      for (const line of stepLines(r.detail, 14)) console.log(line)
+      for (const line of stepLines(r.detail, 14, r.verdict)) console.log(line)
     }
     console.log('')
     if (failures.length) {

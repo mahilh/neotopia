@@ -197,3 +197,39 @@ describe('ci-receipt · the conditional-step parser, against the real workflows'
     expect(conditionalStepNames('no-such-workflow.yml').size).toBe(0)
   })
 })
+
+describe('ci-receipt · a run in progress has not FAILED to complete', () => {
+  // P3, and the general form is why it is worth a test rather than a one-word edit: in S61 I changed
+  // `NO RUN` to `no run YET` for the MISSING branch and left "the RUN did not complete" untouched in
+  // the RUNNING branch four lines away. Same tense, same meaning error, same file, same sitting. A
+  // wording defect almost always has an adjacent sibling, because it was written by the same hand in
+  // the same pass · so the fix is not the word, it is grepping the file for the pattern.
+  const allGreen = {
+    total: 9, green: new Array(9).fill({ conclusion: 'success' }),
+    notRun: [], stopped: [], failed: [], conditionalSkipped: 0,
+  }
+
+  it('says YET while running, and offers the action that settles it', () => {
+    const out = stepLines(allGreen, 2, 'RUNNING').join('\n')
+    expect(out).toMatch(/has not completed YET/)
+    expect(out).toMatch(/re-run this receipt/)
+    expect(out, 'a run still executing must not be described in the past tense')
+      .not.toMatch(/did not complete/)
+  })
+
+  it('a genuinely finished run keeps the past tense, and offers no re-run', () => {
+    // The counterweight: buying the running case by making every verdict tentative would be worse
+    // than the defect. A cancelled run is over, and telling someone to look again is a lie.
+    const out = stepLines(allGreen, 2, 'CANCELLED').join('\n')
+    expect(out).toMatch(/did not complete/)
+    expect(out).not.toMatch(/YET/)
+    expect(out).not.toMatch(/re-run this receipt/)
+  })
+
+  it('neither tense weakens the verdict · both still say it is not a workflow verdict', () => {
+    for (const v of ['RUNNING', 'CANCELLED']) {
+      expect(stepLines(allGreen, 2, v).join('\n'), v).toMatch(/NOT a workflow verdict/)
+      expect(stepLines(allGreen, 2, v).join('\n'), v).toMatch(/Still unmeasured/)
+    }
+  })
+})

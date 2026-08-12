@@ -16,7 +16,8 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const require = createRequire(import.meta.url)
-const { classifyPoolLine, tally, report, contractHolds } = require('./pool-conversion.cjs')
+const { classifyPoolLine, tally, report, contractHolds, coverage, coverageLines } =
+  require('./pool-conversion.cjs')
 
 const SEED = '[pool] game-ux host · browser · seeded member 0 · the APP decides from here, and __neotopia_pool_outcome will say which branch it took'
 const REUSED = '[pool] game-ux host · browser · REUSED member 0 · 0 identities minted by this context'
@@ -88,6 +89,84 @@ describe('pool conversion · the arithmetic', () => {
     // to a smaller denominator that still prints a confident percentage.
     const t = tally(['[pool] something · browser · entirely new wording here'])
     expect(t.browser.unrecognised).toBe(1)
+  })
+})
+
+describe('pool conversion · the blind spot it must declare', () => {
+  const spec = (o) => ({ spec: 'x.e2e.js', contexts: 2, seeds: 0, runsIn: [], ...o })
+
+  // ── COUNTERWEIGHT, WRITTEN FIRST ───────────────────────────────────────────────────────────────
+  // A context that is never seeded and never reports lands in NEITHER the numerator nor the
+  // denominator, so the rate reads as complete while ten specs mint an identity each. My first run
+  // of this tool printed `browser 2/2 REUSED (100.0%)` in exactly that state. The rate and the
+  // coverage must therefore be inseparable: no wiring state may render a coverage block that omits
+  // the uninstrumented count, because the number without it is the flattering half on its own.
+  it('always states the uninstrumented count, in every wiring state', () => {
+    const STATES = [
+      ['nothing seeded anywhere', [spec({ seeds: 0 }), spec({ spec: 'y.e2e.js', seeds: 0 })]],
+      ['everything seeded', [spec({ seeds: 2 }), spec({ spec: 'y.e2e.js', seeds: 1 })]],
+      ['mixed', [spec({ seeds: 2 }), spec({ spec: 'y.e2e.js', seeds: 0 })]],
+    ]
+    for (const [label, specs] of STATES) {
+      specs.dirty = []
+      const out = coverageLines(specs).join('\n')
+      expect(out, `${label} produced no coverage block`).toMatch(/COVERAGE/)
+      expect(out, `${label} omitted the of-total count · the rate then stands alone`)
+        .toMatch(/\d+ of \d+ browser-context creations/)
+      expect(out, `${label} dropped the caveats`).toMatch(/not equally weighted/)
+    }
+  })
+
+  it('groups the unseeded by how often they RUN · a nightly miss is not a per-push miss', () => {
+    // The weighting is the difference between a list and a priority (Rule 121). A spec in no
+    // workflow costs nothing today; one on the merge gate costs an identity per context per push,
+    // and the placement guard alone ran 65 times in 24h.
+    const specs = [
+      spec({ spec: 'gate.e2e.js', runsIn: ['e2e.yml'] }),
+      spec({ spec: 'night.e2e.js', runsIn: ['e2e-live-nightly.yml'] }),
+      spec({ spec: 'orphan.e2e.js', runsIn: [] }),
+    ]
+    specs.dirty = []
+    const out = coverageLines(specs).join('\n')
+    expect(out).toMatch(/per push\s+gate\(2\)/)
+    expect(out).toMatch(/nightly\s+night\(2\)/)
+    expect(out).toMatch(/NO WORKFLOW\s+orphan\(2\)/)
+  })
+
+  it('declares a DIRTY tree · a count from mid-conversion is not the committed state', () => {
+    // Measured live while writing this: T3's endgame-live and host-departure-live carried 0 seeds at
+    // HEAD and 3 and 5 in the working tree, a four-context difference in the headline number. A
+    // reader that cannot say which tree it read will have that number quoted as a repo fact.
+    const specs = [spec({ seeds: 0 })]
+    specs.dirty = [' M tests/e2e/endgame-live.e2e.js']
+    expect(coverageLines(specs).join('\n')).toMatch(/DIRTY TREE/)
+    const clean = [spec({ seeds: 0 })]
+    clean.dirty = []
+    expect(coverageLines(clean).join('\n'), 'a clean tree must not be labelled dirty').not.toMatch(/DIRTY TREE/)
+  })
+
+  it('cannot ask git · says so rather than implying the tree is clean', () => {
+    // Rule 80 in its smallest form. "I did not check" and "it is clean" are different facts and
+    // only one of them licenses quoting the number.
+    const specs = [spec({ seeds: 0 })]
+    specs.dirty = null
+    expect(coverageLines(specs).join('\n')).toMatch(/could not ask git/)
+  })
+
+  it('unreadable specs are UNMEASURED, never zero uninstrumented contexts', () => {
+    expect(coverageLines(null).join('\n')).toMatch(/UNMEASURED/)
+    expect(coverageLines(null).join('\n'), 'a missing tests/e2e must not render as full coverage')
+      .not.toMatch(/0 of 0/)
+  })
+
+  it('reads the real repo · the spec list is not empty here', () => {
+    // Anchors to the artifact. If coverage() silently returned nothing, every fixture above would
+    // still pass and the block would print a confident "0 of 0".
+    const specs = coverage(process.cwd())
+    expect(specs, 'coverage() could not read tests/e2e in this repo').not.toBe(null)
+    expect(specs.length, 'no spec in this repo creates a browser context · the reader is inert')
+      .toBeGreaterThan(5)
+    expect(specs.some(s => s.seeds > 0), 'no spec seeds at all · the contract may have moved').toBe(true)
   })
 })
 
