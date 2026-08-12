@@ -607,6 +607,35 @@ confirms a source read, check that it reads a DIFFERENT LAYER, not merely that i
 place. Two sides from one source agree by construction, and running one of them in a browser does not
 make it a second source.
 
+SECOND HALF (T1 S53) · WHICH ARTIFACTS ARE DANGEROUS: THE ONE THAT PASSES THROUGH A TRANSFORM, AND
+THE TELL IS WHICH PIPELINE OWNS THE TEXT. The first half says check the artifact. On its own that is
+advice to check everything, which nobody sustains. The discriminator arrived free, because ONE SESSION
+produced two CSS-shaped changes with OPPOSITE outcomes:
+  · `src/index.css` -> Lightning CSS -> `.game-main { overflow: hidden; overflow: clip }` was
+    COLLAPSED to `.game-main{overflow:clip}` and the fallback was gone.
+  · a JSX `<style>{`...`}</style>` TEMPLATE LITERAL -> never parsed as CSS -> `@media (hover: none) {
+    .neo-soul-tip { max-height: 15px; opacity: 1; } }` reached production BYTE FOR BYTE, spaces and all.
+Same night, same kind of rule, same author, and the only difference is which tool owns the string.
+Verified on the deployed assets rather than assumed: the stylesheet has its whitespace and comments
+stripped (so it was parsed and rewritten, and anything a minifier considers redundant can be dropped);
+the template literal keeps the exact spacing I typed (so nothing inspected it).
+  116d · ASK WHO OWNS THE TEXT, AND WHETHER THAT OWNER IS ALLOWED TO REWRITE IT.
+         index.css                  -> Lightning CSS  · CAN drop, merge and reorder declarations
+         JSX <style>{`...`}</style> -> a JS string    · shipped verbatim; the CSS tooling never sees it
+         JSX style={{...}}          -> a JS object    · applied at runtime; no CSS tool involved
+         Any of the above           -> the JS minifier · renames identifiers, preserves string VALUES
+         A migration file           -> the DB         · superseded by any later one (Rule 109)
+  116e · THE DANGER IS NOT "IT MIGHT BREAK", IT IS THAT A TRANSFORM CAN REMOVE SOMETHING THAT WAS
+         CORRECT ON PURPOSE. A minifier deletes what looks redundant, and a deliberate fallback is
+         redundant BY DEFINITION · that is the whole idea of a fallback. So the exact constructs most
+         worth writing are the ones a pipeline is most likely to eat, and they fail silently and
+         only in the artifact.
+  116f · AND I FOUND THE SURVIVING HALF BY ACCIDENT. I noticed the template literal was intact while
+         grepping the deployed bundle for something else. I had not predicted which of my two changes
+         was at risk, which means the first half of this rule was carrying me and not the reasoning.
+         The prediction is now mechanical: if it goes through a transform that is permitted to rewrite
+         it, verify the OUTPUT; if it does not, the source is the artifact and the source read stands.
+
 RULE 112 (T3 S50 · August 11 2026):
 A SUBSTRING MATCH IS AN IDENTITY CHECK WITH NO BOUNDARY, AND AN INSTRUMENT BUILT ON ONE WILL EVENTUALLY
 HIDE THE EXACT CASE IT EXISTS TO FIND. The spec-runner audit · the gate whose whole purpose is finding
