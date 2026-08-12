@@ -355,6 +355,14 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
 
     // ── [1] THE REAL LOBBY LOOP ──────────────────────────────────────────────────────────────────────────
     await claimName(p1, uniqueName('E2EMH'))
+    // THE POSITIVE CONTROL FOR THE REFRESH TEST, TAKEN HERE BECAUSE HERE IS THE ONLY PLACE IT EXISTS
+    // (Rule 120). That test asserts the index does not move across a reload · an ABSENCE · and an absence
+    // is satisfied just as well by a contribution that never happens at all. Read after claimName, which
+    // is where the profile row first exists, and before a single district is scored. Taken as a DELTA
+    // rather than an absolute on purpose: a pooled identity carries its previous runs' total, so
+    // `index === districts` would be true only for a freshly minted user and would quietly become the
+    // thing that breaks when the browser half of the pool converts this spec.
+    stage.idxAtStart = await readMyIndex(p1)
     await p1.getByRole('button', { name: 'Create Room' }).click({ timeout: 15_000 })
     const code = await readRoomCode(p1)
 
@@ -608,7 +616,7 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
     })
 
   // ══════════════════════════════════════════════════════════════════════════════════════════════════════
-  test('refreshing the final score doubles this player\'s contribution to the Global Index',
+  test('refreshing the final score does NOT double this player\'s contribution to the Global Index',
     async ({ browser }) => {
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(240_000)
@@ -629,10 +637,25 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
       // MEASURED: 3 → 6, 3 → 6, 2 → 4 across three live runs. The delta is always exactly the player's
       // district count. Refresh twice and it triples.
       //
-      // CHARACTERISATION, NOT APPROVAL. The expected value below is the BUG. The day somebody gives that
-      // write a session key (server-side, so it cannot be forged) or the same localStorage guard the audit
-      // row already has, this test goes red and the fix is to change the expectation to 0. It is asserted
-      // rather than logged so it cannot drift unnoticed in either direction.
+      // ⚠ THAT IS THE HISTORY. IT IS FIXED, AND THIS TEST DID EXACTLY WHAT IT SAID IT WOULD (T3 S60).
+      // The paragraph above used to end: "The day somebody gives that write a session key or the same
+      // localStorage guard the audit row already has, this test goes red and the fix is to change the
+      // expectation to 0." T1 shipped the second of those two · FinalScore.jsx now holds a per-SESSION,
+      // per-SEAT localStorage guard · and this test went red on the night it landed and stayed red for
+      // three nights, failing the WHOLE nightly with a message reading "changed by 0 · it should be 0".
+      // A characterisation test is a citation, and a fix silently turns it into a false claim (Rule 101);
+      // the instruction for what to do about it was sitting in this comment and nobody was reading it,
+      // because a nightly that fails is a nightly nobody opens. Kept rather than rewritten, because the
+      // old expectation is the argument for the new one (Rule 101b).
+      //
+      // WHICH HALF LANDED MATTERS, and it is NOT the stronger one. Verified live rather than inferred:
+      // pg_get_functiondef says the deployed increment_neotopia_index is still
+      //     update player_profiles set neotopia_index = ... + least(greatest(amount,0),56) where user_id = auth.uid()
+      // a bare increment with no idempotency key (Rule 109a · the file would not have told me this). So
+      // the reload is closed CLIENT-SIDE and the class is not: a different browser re-entering the same
+      // finished session still double-counts, which no assertion here can reach because this spec has one
+      // host. T1 states the same limit in FinalScore.jsx and has routed the durable server-side key to T2.
+      // Do not read a green here as "the Global Index cannot be inflated".
       const s = await stageFinishedRoom(browser)
       const { p1, game, rpcs } = s
       try {
@@ -650,11 +673,27 @@ test.describe('the end of a real multiplayer game · the four writes nobody has 
         const hostDistricts = game.state.players[0].scoredCardIds?.length ?? 0
         expect(hostDistricts, 'the fixture must give seat 0 at least one district or this proves nothing')
           .toBeGreaterThan(0)
+
+        // POSITIVE CONTROL FIRST · "the index did not move on reload" is an ABSENCE, and a contribution
+        // that never happened satisfies it perfectly (Rule 120). Deleting recordCivilizationContribution
+        // outright would pass the idempotency assertion below and read as a clean green. So: prove the
+        // write HAPPENED, in this run, before asserting it did not happen twice.
+        expect(idxBefore - s.idxAtStart,
+          `the host contributed ${idxBefore - s.idxAtStart} to the Global Index for a game in which they ` +
+          `built ${hostDistricts} districts (index ${s.idxAtStart} -> ${idxBefore}). The reload assertion ` +
+          'below is an absence and CANNOT distinguish "idempotent" from "the contribution is gone" · this ' +
+          'is the line that can, and it is the one that fails if the write is ever dropped.')
+          .toBe(hostDistricts)
+
         expect(idxAfter - idxBefore,
           `refreshing the final score changed this player's Global Index contribution by ` +
-          `${idxAfter - idxBefore} · it should be 0, and it is their district count (${hostDistricts}) ` +
-          'because increment_neotopia_index has no idempotency key and its client guard is a useRef')
-          .toBe(hostDistricts)
+          `${idxAfter - idxBefore} · it must be 0. This was the S37 double-count (3 -> 6, 3 -> 6, 2 -> 4, ` +
+          'the delta always exactly the district count) and it is closed by FinalScore\'s per-session, ' +
+          'per-seat localStorage guard. A non-zero delta means that guard is gone or its key changed: the ' +
+          'deployed increment_neotopia_index is STILL a bare increment with no idempotency key (verified ' +
+          'live via pg_get_functiondef, not read off a migration file · Rule 109a), so nothing on the ' +
+          'server will catch this a second time.')
+          .toBe(0)
       } finally {
         await s.dispose()
       }

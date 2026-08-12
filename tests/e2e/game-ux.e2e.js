@@ -12,6 +12,7 @@
 
 import { test, expect } from '@playwright/test'
 import { deleteRoomAsHost, uniqueName } from './seedHelpers'
+import { seedPoolCredential, reportPoolOutcome } from './poolBrowser'
 
 const NAME_INPUT = 'Builder name (max 20)'
 const BOARD = 'svg[aria-label*="NeoTopia"]'
@@ -108,6 +109,14 @@ test.describe('In-game UX audit (T3 S11)', () => {
   test('the active player audits the /game board AND commits a placement', async ({ browser }) => {
     const ctx1 = await browser.newContext()
     const ctx2 = await browser.newContext()
+    // POOL · THE BROWSER HALF (T3 S60). This spec runs on e2e-placement-guard, which MEASURABLY
+    // COMPLETES · 73 successes in 100 runs since 2026-08-11, against 0 successes in 2 runs of the
+    // nightly · so its two contexts are the highest-frequency browser identity producer in the repo
+    // and the first place the conversion is worth anything. DIFFERENT MEMBERS, and not as a courtesy:
+    // seat resolution is by userId, so one member across both contexts would seat host and joiner as
+    // the same player. seedPoolCredential refuses that outright rather than trusting this comment.
+    const poolHost = await seedPoolCredential(ctx1, { index: 0, label: 'game-ux host' })
+    const poolJoiner = await seedPoolCredential(ctx2, { index: 1, label: 'game-ux joiner' })
     const p1 = await ctx1.newPage() // host · seat 0 · active first
     const p2 = await ctx2.newPage() // joiner
     let roomId, hostSession
@@ -121,6 +130,15 @@ test.describe('In-game UX audit (T3 S11)', () => {
       await p2.getByPlaceholder('ABC234').fill(code)
       await p2.getByRole('button', { name: 'Join', exact: true }).click({ timeout: 15_000 })
       await p2.getByRole('button', { name: /click when ready/i }).click({ timeout: 15_000 })
+
+      // READ IT FROM THE PAGE, NOT FROM THE IDENTITY COUNTER. T2's warning and it decides whether any
+      // of this is falsifiable: the teardowns converted in S59 and are already proven reusing member 0,
+      // so a fall in auth.users after this lands is explained by them and says nothing about browsers.
+      // __neotopia_pool_outcome is written by the app IN THIS PAGE · a node teardown has no window and
+      // cannot produce it. Asserts only when a credential was actually seeded; otherwise it prints
+      // UNMEASURED, because "the app did not reuse" and "we never asked it to" are different facts.
+      await reportPoolOutcome(p1, { ...poolHost, label: 'game-ux host' })
+      await reportPoolOutcome(p2, { ...poolJoiner, label: 'game-ux joiner' })
 
       const startBtn = p1.getByRole('button', { name: /^start game$/i })
       await expect(startBtn).toBeVisible({ timeout: 30_000 })

@@ -68,7 +68,7 @@ are deliberately not creating (86).
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
 - WHEN THE SUBJECT UNDER TEST IS THE THING YOUR HARNESS SIMULATES, THE HARNESS IS MAXIMALLY SUSPECT
   AND A REAL-WORLD MEASUREMENT IS A PLANNED STEP, NOT A BONUS. Fake timers advance Date.now() and
-  performance.now() together, so no test in this repo could tell them apart — I shipped a turn clock
+  performance.now() together, so no test in this repo could tell them apart · I shipped a turn clock
   that measured excess 0 under fake timers, went green on all four CI jobs, and was reliably ~1000ms
   late in a browser. Same shape for a mocked network, a stubbed clock, an in-memory storage layer:
   the mock is a MODEL of exactly the thing you are changing (36). Ask before you start, not after:
