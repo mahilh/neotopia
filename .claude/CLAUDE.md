@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (117 · cumulative · the header read 115 while 116 existed · T2 S52):
+PERMANENT ANTI-REGRESS RULES (118 · cumulative · the header read 115 while 116 existed · T2 S52):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,33 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 118 (T3 S52 · August 11 2026):
+TWO REDUNDANT GUARDS MAKE EACH OTHER UNTESTABLE, AND BOTH REPORT THEMSELVES AS PRESENT.
+I shipped the turn timeout with a `timedOutForTurn` latch AND a turn re-anchor. Mutation testing removed
+the latch and NOTHING went red · because endTurn() increments turnNumber, so the act of firing re-anchors
+the clock and the next tick measures ~0 elapsed. Either guard alone is sufficient, so NO SINGLE MUTATION
+CAN RED EITHER, and a mutation that changes nothing is the tell. Rule 86 says a COUNTERWEIGHT can be
+structurally unable to fail; this is the version where the IMPLEMENTATION is, and it is worse because it
+looks like defence in depth. The two also could not disagree · both keyed on the same quantity · so it
+bought no second witness either (Rule 94). Delete one; the survivor gets teeth.
+  118a · A TEETH-CHECK RESULT YOU PREDICTED IS STILL A PREDICTION. READ WHICH TEST WENT RED. I expected
+        removing the re-anchor to red the once-per-turn counterweight. It reds the REMOTE test instead,
+        and the reason was worth knowing: after a fire the seat moves AWAY from the active client (so its
+        next deadline picks up the remote grace and leaves the window) and TOWARD the peer (grace drops to
+        zero, the stale anchor fires again at once). "A mutation reddened something" is not the same claim
+        as "this assertion has teeth" · Rule 100 colour-vs-count, one level up.
+  118b · AND THE CONSTANT I HAD JUST WRITTEN WAS A HIDDEN PARAMETER, one hour after quoting Rule 111 at
+        someone else's harness. The remote grace was a flat 5s per seat and every test I wrote ran in the
+        default mode, so the limit never varied and the constant never looked like a choice. Computed:
+        Classic 90s makes it 5-22% of a turn; FLOW IS 15s, where the same constant is 33-133% and a seat-3
+        client waits 35 seconds to end a 15-second turn. A grace, a timeout, a threshold or a budget
+        expressed as an ABSOLUTE beside a quantity that varies by mode is wrong in every mode but the one
+        you measured. Cap it as a fraction of the thing it is waiting on.
+COROLLARY, the standing habit that found 118b: PREMISE-CHECK THE ARTIFACT YOU JUST SHIPPED, not only the
+one you inherited. The discipline is normally aimed outward · at a brief, at another lane's claim, at a
+migration comment · and the code with the least distance between you and it is your own, an hour old,
+while you still believe the reasoning that produced it.
 
 RULE 117 (T2 S52 · August 11 2026):
 ONE PREDICATE CANNOT SERVE TWO QUESTIONS WHOSE WRONG ANSWERS COST OPPOSITE THINGS · "ERR STRICT" IS
