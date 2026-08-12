@@ -763,3 +763,52 @@ test.describe('the E2E harness can still claim a name (T3 S51)', () => {
       `${reservedHits.length} reserved, ${guarded.length}/${calls.length} claim-path calls E2E-bypassed`)
   })
 })
+
+// ── CAN THE PEER EVEN KNOW? · THE ANSWER, MADE UNABLE TO ROT (T3 S52) ────────────────────────────────
+// S51 measured a departed host and found the peer told NOTHING · mentionsDeparture false, screen byte
+// identical. I could not say WHY from that data: a peer with no liveness signal and a peer with one that
+// nothing renders produce exactly the same green. This answers it, and the answer decides an estimate
+// that is not mine to make (the render belongs to T1), so it is printed on every merge-gate run rather
+// than described once in a note that expires (Rule 108a · the purge hazard went quiet for two sessions
+// that way).
+//
+// MEASURED, NOT GATED, and deliberately: a lane adding presence to the game screen is an IMPROVEMENT, and
+// a gate that reds on it would be a tripwire aimed at the fix (Rule 94a). The number moving is the signal.
+test.describe('the game screen liveness signal · reported, never gated (T3 S52)', () => {
+  test('how many modules reachable from GameRoom mount a presence channel', async () => {
+    const { existsSync } = await import('node:fs')
+    const root = new URL('../../src/', import.meta.url).pathname
+    const seen = new Set()
+    const mounts = []
+    const resolve = (from, spec) => {
+      if (!spec.startsWith('.')) return null
+      const base = from.replace(/\/[^/]+$/, '') + '/' + spec
+      for (const ext of ['', '.jsx', '.js', '/index.jsx', '/index.js']) {
+        if (existsSync(base + ext)) return base + ext
+      }
+      return null
+    }
+    const walk = (f) => {
+      if (seen.has(f) || !existsSync(f)) return
+      seen.add(f)
+      const src = readFileSync(f, 'utf8')
+      if (/\busePresence\s*\(/.test(src) || /\.on\(\s*'presence'/.test(src)) mounts.push(f.split('/src/')[1])
+      for (const m of src.matchAll(/from\s+['"](\.[^'"]+)['"]/g)) {
+        const r = resolve(f, m[1])
+        if (r) walk(r)
+      }
+    }
+    walk(root + 'pages/GameRoom.jsx')
+
+    // COUNTERWEIGHT (Rule 90): a resolver that stops resolving walks one file and reports a confident
+    // zero · the same false zero as a probe that never looked (Rule 95b). The tree is ~60 modules.
+    expect(seen.size, 'the import walk collapsed · a "0 presence mounts" reading from a one-file walk is ' +
+      'UNMEASURED, not an answer').toBeGreaterThan(20)
+
+    console.log(`[preconditions] game-screen liveness · ${seen.size} modules reachable from GameRoom · ` +
+      `${mounts.length} mount presence${mounts.length ? ': ' + mounts.join(', ') : ''}` +
+      (mounts.length ? '' : ' · so nothing can tell the peer their opponent is gone. The transport is ' +
+       'already there (useGameSync channel game-sync:<roomId>, postgres_changes + system), so this is an ' +
+       'extension of an existing subscription rather than new infrastructure.'))
+  })
+})
