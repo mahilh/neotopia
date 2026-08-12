@@ -12,6 +12,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useDialogA11y } from '../hooks/useDialogA11y'
+import { playSound } from '../utils/sound'
 import { useNavigate } from 'react-router-dom'
 import { calculateFinalScore } from '../lib/patternMatcher'
 // Namespace import (NOT a named import) for getClusterDetail · it is shipped by T2 (S17) and may land on
@@ -361,6 +362,9 @@ export default function FinalScore({
   // guarantees a keyboard user can actually get to.
   const dialogRef = useRef(null)
   useDialogA11y({ ref: dialogRef, active: true })
+  // GAME END · once per mount. This screen is reached exactly once per game, so a mount-scoped
+  // effect with an empty dep list is the whole guard it needs.
+  useEffect(() => { playSound('game-end') }, [])
 
   return (
     <div

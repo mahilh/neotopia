@@ -47,3 +47,9 @@ dist-ssr
 
 # Balance measurement blocks (T2 S48 · scripts/run-balance-blocks.sh output · regenerated, never committed)
 /.balance-reports/
+
+# Kenney source packs · CC0 · 238 files, 2.4MB
+# MUST live OUTSIDE public/ · Vite copies public/ wholesale, so gitignore alone does NOT stop it
+# shipping. Measured T1 S55: 238 files reached dist/audio/src before this moved (23x the curated
+# audio). Only the ten curated files in public/audio/ ship.
+audio-src/

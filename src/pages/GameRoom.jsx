@@ -21,6 +21,7 @@ import { ELEMENT_SOUL_METAL, elementSoulMetalLabel } from '../components/Board/E
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { TURN_TIME_LIMIT } from '../store/gameConfig'
+import { playSound, installSoundUnlock, isMuted, setMuted, subscribeMuted } from '../utils/sound'
 
 const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
@@ -629,12 +630,28 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     mq.addEventListener?.('change', apply)
     return () => mq.removeEventListener?.('change', apply)
   }, [])
+  // TURN-START · only when it becomes MINE, and keyed on turnNumber so it cannot re-fire on an
+  // unrelated re-render (this app re-renders every second for the countdown · Rule 76/107).
+  const lastAnnouncedTurn = useRef(null)
+  useEffect(() => {
+    if (phase !== 'playing' || !isMyTurn) return
+    if (lastAnnouncedTurn.current === turnNumber) return
+    lastAnnouncedTurn.current = turnNumber
+    playSound('turn-start')
+  }, [isMyTurn, turnNumber, phase])
+
   const focusRegion = isPhone && uiPhase === 'regionSelected' ? selectedRegion : null
 
   // THE OFFER'S COLLAPSE STATE (T1 S53 · see the block at "THE OFFER" for the measurement).
   // Default CLOSED, and `offerExpanded` folds the viewport in so desktop can never be collapsed by
   // a stale piece of state · at 1280 there is room for all three panels and the toggle is not even
   // rendered, so a `false` sitting in this variable must not be able to hide anything there.
+  // SOUND (T1 S55). The unlock is bound to the first pointer/key event · see utils/sound.js for why
+  // the first sound must not be one the browser will refuse.
+  useEffect(() => installSoundUnlock(), [])
+  const [muted, setMutedState] = useState(isMuted)
+  useEffect(() => subscribeMuted(setMutedState), [])
+
   const [offerOpen, setOfferOpen] = useState(false)
   const offerExpanded = !isPhone || offerOpen
 
@@ -853,9 +870,32 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             practice exit. This column is `1fr` in a `1fr auto 1fr` grid and holds NOTHING in a real
             game, so the button is free here. Top-right is also where a person looks for help. */}
         <div
-          aria-hidden={showRules || headerExit ? undefined : 'true'}
+          aria-hidden={undefined}
           style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}
         >
+          {/* MUTE · NOT in the ActionBar, and that is measured rather than stylistic: at 320 that bar
+              has MINUS 6px of free space (T1 S54) and I have fixed its overflow three times. This
+              column is `1fr` in a `1fr auto 1fr` grid and holds nothing in a real game, which is the
+              same argument that put the rules button here in S36.
+              It is always rendered · a mute control that appears only in practice would be missing
+              from the mode with other people in it, which is where a player most needs it. */}
+          <button
+            data-testid="mute-toggle"
+            onClick={() => { if (muted) playSound('ui-click'); setMuted(!muted) }}
+            aria-label={muted ? 'Unmute game sounds' : 'Mute game sounds'}
+            aria-pressed={muted}
+            title={muted ? 'Sound off' : 'Sound on'}
+            style={{
+              width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: 8,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              border: '1px solid rgba(255,255,255,0.14)', background: 'transparent',
+              color: muted ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)',
+              fontSize: 15, lineHeight: 1, cursor: 'pointer',
+              transition: 'color 0.2s, border-color 0.2s',
+            }}
+          >
+            <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span>
+          </button>
           {showRules && (
             <button
               data-testid="open-rules"
@@ -950,6 +990,10 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 return
               }
               const placed = handleHexClick(q, r, rid)
+              // A refused tap gets its OWN voice. Silence on refusal is what makes a player tap
+              // again harder; this product has spent three sessions on controls that look active
+              // and do nothing.
+              playSound(placed ? 'hex-place' : 'refused')
               if (placed) addLogEntry(`placed ${cap(placed.element)} in ${REGION_NAMES[placed.regionId]}`, ELEMENT_COLORS[placed.element])
             }}
             onFactoryClick={(id) => { setAimedRegion(null); handleFactoryClick(id) }}
@@ -970,7 +1014,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
           data-testid="sheet-handle"
           aria-expanded={sheetOpen}
           aria-controls="game-sheet"
-          onClick={() => setSheetOpen(o => !o)}
+          onClick={() => { playSound('sheet-toggle'); setSheetOpen(o => !o) }}
         >
           <span className="game-sheet-grip" aria-hidden="true" />
           <span className="game-sheet-handle-label">
@@ -1045,7 +1089,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                     data-testid="element-btn"
                     data-element={el.type}
                     title={elementSoulMetalLabel(el.type) ?? undefined}
-                    onClick={() => handleElementSelect(el.type)}
+                    onClick={() => { playSound('element-select'); handleElementSelect(el.type) }}
                     style={{
                       minHeight: 44, padding: '4px 14px', borderRadius: 8,
                       border: '1px solid rgba(255,255,255,0.15)',
@@ -1171,7 +1215,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 data-testid="offer-toggle"
                 aria-expanded={offerExpanded}
                 aria-controls="game-offer"
-                onClick={() => setOfferOpen(o => !o)}
+                onClick={() => { playSound('ui-click'); setOfferOpen(o => !o) }}
                 style={{
                   ...sectionLabel, marginBottom: offerExpanded ? sectionLabel.marginBottom : 0,
                   display: 'flex', alignItems: 'center', gap: 8, width: '100%',
@@ -1234,6 +1278,9 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                     onClick={isScoreable ? () => {
                       const scored = handleCardScore(card.id)
                       if (scored?.card) {
+                        // THE PAYOFF. A player who scores a district currently gets an 11px line in
+                        // error red; this is meant to be the one sound they want to hear again.
+                        playSound('district-score')
                         setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })
                         addLogEntry(`scored ${scored.card.name}: +${scored.card.points}`, '#C89440')
                       }
