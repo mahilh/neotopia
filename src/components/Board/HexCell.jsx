@@ -299,7 +299,18 @@ export default function HexCell({
           <g> has no CSS box for an outline to hug in the first place.
           TWO-TONE, black outside and white inside. A hex is a 42%/13% tint over a full-bleed terrain
           PHOTOGRAPH (T1 S59), so no single colour is safe on it · whichever tone the ground matches,
-          the other one carries. Measured on occupied hexes: black 4.75-5.66, white 3.07-3.65. */}
+          the other one carries. Measured on occupied hexes: black 4.75-5.66, white 3.07-3.65.
+
+          AND IT IS PAINTED, not merely present · S59 shipped a focus ring verified as computed style
+          and unclipped geometry and never as pixels, which was that session's stated debt. Rasterised
+          in a browser with the terrain inlined and the SAME cell measured focused against an
+          unfocused sibling in the same run, 396 perimeter samples each:
+              focused   40 black   41 white          control   8 black   31 white
+          BLACK IS THE DISCRIMINATOR (5x); white is not, because a valid target already wears a light
+          ring, which is the reason this ring is not white alone. Alignment control in the same run:
+          the one occupied hex reads red-dominant at its centre, so the sampling lands where it is
+          aimed. Terrain confirmed painted rather than assumed: 26% of the canvas opaque with it
+          against 1.4% without. */}
       {showFocusRing && (
         <>
           <polygon data-testid="hex-focus-ring" points={points} fill="none"

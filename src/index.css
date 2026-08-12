@@ -330,7 +330,19 @@
    a board that does not exist. That is what produced 2.55/2.62/3.46. Re-measuring the empty row here
    did not converge either (n=1-16, and identical with and without the terrain, which cannot be true),
    so it is not restated. The occupied conclusion does not depend on resolving it: black wins under
-   BOTH rasterisations, which is the reason it is safe to leave open. */
+   BOTH rasterisations, which is the reason it is safe to leave open.
+
+   ⚠ PROVENANCE CORRECTION, AND IT ANSWERS THE EMPTY ROW (T1 S60). That raster was sized from the
+   live SVG's RECT · box aspect 1.284 against a viewBox aspect of 0.956 · so preserveAspectRatio
+   LETTERBOXED the clone and the linear user-to-canvas mapping sampled the wrong pixels. The
+   per-element VALUES survive, because each pass painted the whole board ONE element, so a misaligned
+   sample landed on another hex of the same colour · and the read-back could not possibly have caught
+   it. What does not survive is the spatial provenance: they are "the colour of an all-energy board",
+   not "the colour of that hex". It is also the mechanism behind the empty row, where three different
+   biomes mean a misaligned sample lands in the wrong region · exactly the nonsense that row showed.
+   Rasterise at the VIEWBOX's own aspect (mapping becomes a pure scale, no offset) and carry an
+   ALIGNMENT CONTROL: one distinctly-coloured cell, read first, before any conclusion. A UNIFORM TEST
+   SUBJECT HIDES A MISALIGNED INSTRUMENT, and that is the transferable half. */
 /* STARTS AT FULL OPACITY, and that is a fix rather than a preference. Measured in a headless browser
    whose animation TIMELINE does not advance · playState "running", currentTime pinned at 0 across
    240ms of samples, with document.visibilityState reading "visible", so this is not simply a

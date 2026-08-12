@@ -75,6 +75,42 @@ describe('arrows move across the legal set', () => {
     expect(px('0,-1').y, 'north must be smaller y').toBeLessThan(px('0,0').y)
   })
 
+  it('STRAIGHT AHEAD WINS when a straight-ahead target exists · no zig-zag', () => {
+    // ⚠ THIS IS THE ASSERTION MY FIRST METRIC PASSED EVERY OTHER TEST WITHOUT. Scoring by
+    // distance/cos(angle), pressing Down from 0,-1 chose 1,-1 · down AND 54px right · over the
+    // straight-down 0,1, by a margin of 0.002 in the score. It "moved down", so every direction
+    // assertion in this file was green, and a player holding Down would have zig-zagged across the
+    // board. Found by pressing a real arrow key in a real browser, not by reading the code.
+    // The live set that produced it: one token on the centre 0,0, so the six cells around it are
+    // legal and 0,0 itself is NOT · which is why the straight-down target from 0,-1 is 0,1 and not
+    // the centre. Reproduced exactly, because a set that includes 0,0 answers a different question.
+    const LIVE = ['-1,0', '-1,1', '0,-1', '0,1', '1,-1', '1,0']
+    expect(LIVE).not.toContain('0,0')
+    expect(nextTargetInDirection('0,-1', LIVE, 'down'),
+      'Down passed over the cell directly below it and drifted sideways').toBe('0,1')
+
+    // The general property, over every cell that HAS a straight-ahead neighbour in the set: the
+    // chosen target must be the one with zero perpendicular offset.
+    let checked = 0
+    for (const from of REGION) {
+      const a = px(from)
+      for (const [dir, ax, ay] of [['up',0,-1], ['down',0,1], ['left',-1,0], ['right',1,0]]) {
+        const onAxis = REGION.filter(k => {
+          if (k === from) return false
+          const b = px(k)
+          const along = (b.x - a.x) * ax + (b.y - a.y) * ay
+          const across = Math.abs((b.x - a.x) * ay - (b.y - a.y) * ax)
+          return along > 1e-6 && across < 1e-6
+        })
+        if (!onAxis.length) continue
+        checked++
+        const got = nextTargetInDirection(from, REGION, dir)
+        expect(onAxis, `${dir} from ${from} chose ${got} while a dead-ahead target existed`).toContain(got)
+      }
+    }
+    expect(checked, 'no cell in the region had a straight-ahead target · nothing was asserted').toBeGreaterThan(10)
+  })
+
   it('left and right pick the nearest target in that half-plane', () => {
     const right = nextTargetInDirection('0,0', REGION, 'right')
     const left = nextTargetInDirection('0,0', REGION, 'left')

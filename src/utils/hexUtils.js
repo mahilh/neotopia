@@ -25,19 +25,29 @@ export function hexToPixel(q, r, size = HEX_SIZE) {
 // splits into TWO disconnected components (measured: 2 components at 10 and 14 tokens placed), and a
 // neighbour walk simply cannot cross the gap while a direction can.
 //
-// SCORE = distance / cos(angle from the axis). Dead on the axis it is the distance; 60 degrees off it
-// is twice the distance. Only the half-plane is considered, so a target behind you is never chosen.
+// STRAIGHT AHEAD FIRST, THEN NEAREST. Candidates are bucketed by how far OFF-AXIS they sit (half a
+// hex per bucket), then by distance along the axis, then by r. So pressing Down takes the cell
+// directly below when there is one, and only drifts when there is not.
+//
+// ⚠ THE FIRST VERSION SCORED `distance / cos(angle)` AND A LIVE RUN KILLED IT. Pressing Down from
+// 0,-1 with the straight-down cell 0,1 available, it chose 1,-1 · down AND 54px to the right. The
+// scores were 124.708 for straight down against 124.706 for down-right: a margin of 0.002, i.e. the
+// hex lattice makes several cells almost exactly equally "down-ish" under that metric and the winner
+// is floating-point noise. It satisfies every assertion I had written (it does move down) and a
+// player pressing Down repeatedly would ZIG-ZAG across the board · which is the false model of the
+// grid that this whole design exists to avoid, arriving by a back door.
+//
 // TIE-BREAK: the NE/SE pair is exactly symmetric about the horizontal axis (both 1.5s across and
-// 0.866s up or down), so a horizontal press can find a genuine tie. It resolves UPWARD, i.e. toward
-// the smaller r, which matches the reading order the option list is announced in. Deterministic
-// beats clever · the player learns it in one press.
+// 0.866s up or down), so a horizontal press can find a genuine tie no bucketing can separate. It
+// resolves UPWARD, toward the smaller r, matching the reading order the options are announced in.
+// Deterministic beats clever · the player learns it in one press.
 const AXES = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
 export function nextTargetInDirection(fromKey, keys, dir, size = HEX_SIZE) {
   const axis = AXES[dir]
   if (!axis || !fromKey) return null
   const [fq, fr] = fromKey.split(',').map(Number)
   const from = hexToPixel(fq, fr, size)
-  let best = null, bestScore = Infinity, bestR = Infinity
+  let best = null, bestBucket = Infinity, bestAlong = Infinity, bestR = Infinity
   for (const key of keys) {
     if (key === fromKey) continue
     const [q, r] = key.split(',').map(Number)
@@ -45,11 +55,13 @@ export function nextTargetInDirection(fromKey, keys, dir, size = HEX_SIZE) {
     const dx = p.x - from.x, dy = p.y - from.y
     const along = dx * axis[0] + dy * axis[1]
     if (along <= 1e-6) continue            // behind, or exactly perpendicular · not this direction
-    const dist = Math.hypot(dx, dy)
-    const score = dist / (along / dist)    // dist / cos(theta)
-    if (score < bestScore - 1e-6 || (Math.abs(score - bestScore) <= 1e-6 && r < bestR)) {
-      bestScore = score; best = key; bestR = r
-    }
+    const across = Math.abs(dx * axis[1] - dy * axis[0])
+    const bucket = Math.round(across / (size * 0.5))
+    const better =
+      bucket < bestBucket ||
+      (bucket === bestBucket && along < bestAlong - 1e-6) ||
+      (bucket === bestBucket && Math.abs(along - bestAlong) <= 1e-6 && r < bestR)
+    if (better) { bestBucket = bucket; bestAlong = along; bestR = r; best = key }
   }
   return best
 }
