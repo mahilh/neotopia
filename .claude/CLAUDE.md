@@ -585,6 +585,44 @@ alone would pass on a build where the bot seat was skipped entirely, so it requi
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
 
+RULE 131 (T2 S62 · August 12 2026):
+TWO DISCIPLINES CAN BOTH BE RIGHT AND COMPOSE INTO A DEFECT · AND NEITHER ONE'S TESTS CAN SEE IT,
+BECAUSE EACH IS VERIFIED ALONE AND THE COLLISION BELONGS TO NOBODY.
+This project runs two mature, separately-proven habits:
+    Rule 82   isolate in a detached worktree before believing any live failure
+    S26       with-project-env strips inherited VITE_* that .env.local contradicts, and deliberately
+              strips NOTHING when there is no .env.local · which is CI, and is correct
+Compose them and you get a silent wrong-project run. `.env.local` is gitignored, so a worktree does
+not carry it; the guard finds no file, concludes CI, strips nothing, and the shell's credentials for
+a DIFFERENT Supabase project reach the app. Measured end to end before the fix:
+    worktree/.env.local             does not exist
+    guard                           strips NOTHING
+    child VITE_SUPABASE_URL         https://gsogycwtllthrenqaxlh.supabase.co   (the dead project)
+T3 spent a live run on it with nothing able to sign in. Every symptom looks like an outage, which is
+the same disguise this guard's own header warned about for the original bug.
+  131a · THE TELL IS A RULE THAT CHANGES THE ENVIRONMENT ANOTHER RULE READS. "Always work in a
+        worktree" and "resolve config relative to the checkout" are both unimpeachable in isolation;
+        one of them silently alters an input the other depends on. Ask of any new standing habit:
+        what does it move · the cwd, the tree, the env, the identity, the clock · and which existing
+        habit reads that thing? A discipline is a change to the world, not just to your behaviour.
+  131b · NEITHER SIDE'S TESTS CAN CATCH IT, and that is structural rather than an oversight. The env
+        guard's tests covered its two documented states; the worktree habit has no tests at all
+        because it is a procedure. A composition has no owner in exactly the way Rule 115's
+        cross-lane contract has no owner, except that here both halves are MINE and it still went
+        unnoticed for as long as worktrees have been standard. Shared ownership was never the
+        mechanism · absent composition was.
+  131c · FIX IT IN WHATEVER COMPONENT CAN DETECT THE COMPOSITION, NEVER IN EITHER RULE'S PROSE. The
+        tempting repair is a sentence in the preamble telling everyone to copy .env.local into their
+        worktree · a manual step at a decision point, which is the thing that will not happen. git
+        already knew the answer: a linked worktree's --git-common-dir points at the clone that owns
+        the file. One lookup, no discipline required, and it cannot be forgotten.
+COROLLARY, and it is why this manifested as it did: to the script, CI and a worktree are BYTE-
+IDENTICAL · both are a checkout with no .env.local · and they need opposite behaviour. That is
+Rule 130, so a composition defect arrives wearing the disguise of a two-paths-one-output problem.
+The counterweight was therefore the CI case, written first: the fix may not buy the worktree by
+making CI strip a variable it has no replacement for, which would turn a silent local hazard into a
+loud broken gate for every contributor.
+
 RULE 130 (T2 S61 · August 12 2026):
 WHEN TWO PATHS PRODUCE THE SAME OUTPUT, THE ONE YOU CARE ABOUT IS UNTESTABLE · AND BOTH OF MINE
 REPORTED THEMSELVES AS PRESENT AND CORRECT.
