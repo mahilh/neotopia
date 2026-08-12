@@ -63,6 +63,41 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # ── T2 S58 · DOES THE FIXED CI POOL ACTUALLY AUTHENTICATE? ────────────────────────────────
+      # S57 shipped the pool's app half with a rigorous proof that it CANNOT LEAK into a player's
+      # bundle and zero evidence that it WORKS. This is the missing half, and it runs FIRST · before
+      # npm ci and the browser · so a dead credential costs 15 seconds rather than three minutes.
+      #
+      # It runs the NEGATIVE control in the same invocation: a deliberately wrong password must be
+      # rejected by the real endpoint. So a green step says "this check is capable of failing AND
+      # the credential works", not merely the second half (Rule 120 · an assertion about a thing
+      # working needs a control in the SAME run, or you have measured your own optimism).
+      #
+      # EXIT-CODE SEMANTIC IS DELIBERATE AND IS RULE 79d. This repo is public and `pull_request` is
+      # a trigger, so a fork PR gets no secrets. That is genuinely UNMEASURED · it must SAY SO and
+      # must not be read as a pass, but it must also not red a gate for a contributor who cannot
+      # possibly fix it. A measured FAILURE (exit 1) reds; a missing credential (exit 2) warns.
+      - name: Pool credential grants a session · and is REUSED, not minted
+        env:
+          E2E_POOL_EMAIL: ${{ secrets.E2E_POOL_EMAIL }}
+          E2E_POOL_PASSWORD: ${{ secrets.E2E_POOL_PASSWORD }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          set +e
+          node scripts/verify-pool-signin.cjs --negative
+          neg=$?
+          node scripts/verify-pool-signin.cjs
+          pos=$?
+          set -e
+          if [ $neg -eq 2 ] || [ $pos -eq 2 ]; then
+            echo "::warning title=Pool UNMEASURED::The pool credential was not available to this run"
+            echo "  (a fork PR cannot read repo secrets). This is NOT a pass · the question is open."
+            exit 0
+          fi
+          [ $neg -ne 0 ] && echo "::error::the negative control did not reject a wrong password"
+          exit $(( neg + pos ))
+
       - name: Install deps
         run: npm ci
 

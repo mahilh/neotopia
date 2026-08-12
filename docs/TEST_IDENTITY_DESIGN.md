@@ -111,3 +111,42 @@ harness setting it, which reproduces the failure it was chosen to end.
 the decision is cheap; the build is a session of its own with T3, and the sequencing that de-risks it
 is: fixed-pool sign-in first (closes the churn, needs no schema), then the trigger and the column
 (closes the tagging), then delete the prefix machinery.
+
+---
+
+## 6 · HOW THE POOL USER WAS CREATED · the runbook (T2 S58)
+
+Mahil created the first pool user **by hand**, and the Council declined a service-role key for it:
+that key bypasses RLS entirely, would live in CI forever for a one-time job, and this project has
+already leaked an API key publicly for 33 days. The decision is right and it has one cost worth
+paying down immediately · **a hand-made artifact leaves no record of how it was made**, which is the
+citation-with-no-runner shape (Rule 97). So the steps are written down here, where the next person
+looks, rather than living in one session's transcript.
+
+**Creating a pool member** (Supabase dashboard · no key, no script, ~40 seconds):
+
+1. Dashboard → **Authentication → Users → Add user → Create new user**.
+2. Email `e2e<role>@neotopia.test` · the `.test` TLD is reserved by RFC 2606 and can never resolve,
+   so these addresses cannot receive mail or collide with a real one.
+3. Password: generate a long random one. It is never typed again · it goes straight to step 5.
+4. Tick **Auto Confirm User**. Without it the user exists and *cannot sign in*, which surfaces as
+   `400 email_not_confirmed` and is the single most likely way this goes wrong.
+5. Repo → **Settings → Secrets and variables → Actions** → `E2E_POOL_EMAIL`, `E2E_POOL_PASSWORD`.
+
+**Verifying it** · `node scripts/verify-pool-signin.cjs`, which runs on every push in `e2e.yml` and
+asserts the three things that separate a working pool from a plausible one: the grant succeeds, the
+session is **not anonymous** (the app falls back to `signInAnonymously()` on failure, so a token in
+hand proves nothing), and the identity **predates the run** (a pool that silently mints a new user
+each time satisfies every other check and fixes nothing).
+
+**What is and is not swept.** Worth stating precisely because the loose version is already in
+circulation: the purge matches `player_profiles.username`, never an email, and `auth.users` is not
+in `public` so no purge can reach it *by design* · the whole point is that the identity persists.
+What the `e2e` email prefix buys is legibility in the dashboard. What actually keeps the pool inside
+the swept namespace is `poolUsername()` in `src/lib/e2ePool.js`, which derives the display name from
+`RESERVED_USERNAME_PREFIXES[0]` so a member's **profile** row is reachable by construction.
+
+**One member today, deliberately.** The pool grows only when a real constraint says it must · the
+first will be a single spec driving two browser contexts at once (host + joiner), which cannot share
+one identity. That is also the moment to re-ask whether scripting the creation earns a key. Not
+before.
