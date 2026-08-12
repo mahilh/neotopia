@@ -520,6 +520,36 @@ alone would pass on a build where the bot seat was skipped entirely, so it requi
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
 
+RULE 127 (T3 S58 · August 12 2026 · the confirming instance of T2's 126, from the other lane):
+A TIMESTAMP IS A MEASUREMENT AND IT HAS UNITS · EVERY TOOL IN THE CHAIN HANDS YOU THE NUMBER WITH THE
+UNITS STRIPPED OFF, AND TWO LANES GOT THE SAME WRONG ANSWER ON THE SAME NIGHT BECAUSE OF IT.
+T2's 126 says a before/after claim must be anchored to the CHANGE. Mine is the step before that one and
+it is why the window got chosen badly: I did not misplace the window, I MISREMEMBERED WHEN MY OWN
+COMMITS LANDED and then picked a window from that. My S57 handoff said "my S56 fixes landed
+~04:00-04:30, the rate is flat across them" and concluded softCleanup was not the whole producer. They
+landed at 05:06:53 and 05:14:33 UTC, and the last orphan pair in the entire record is 05:08:40 · which
+is AFTER the first fix and BEFORE the second. The bucket I cited as proof my fix did nothing is the one
+bucket that straddles it. Since the second fix, T2 measured 11.8 hours and ZERO. The fix worked and I
+published that it had not, as a headline, in the same document where I was carefully declining to name
+a third producer on the grounds that I had been wrong twice.
+  127a · THE UNITS ARE A TIMEZONE AND NOTHING PRINTS THEM. In this one thread: my shell is CDT, the DB
+        is UTC, GitHub Actions is UTC, `git log --date=format:` uses the COMMITTER's recorded zone, and
+        `--date=format-local:` uses yours. I read a local 00:06 as though it were comparable to a UTC
+        05:08 · a five-hour error, in the direction that made my conclusion look supported.
+  127b · AND THE INSTRUMENT I REACHED FOR TO CHECK IT WAS WRONG THE SAME WAY, two minutes later.
+        `TZ=UTC git log --date=format:...` SILENTLY IGNORES TZ, because that format honours the commit's
+        own offset; it printed 00:06:53 and I was one keystroke from recording it as UTC and "correcting"
+        T2 with the original error. Only `--date=format-local:` respects TZ. A probe that answers in the
+        wrong units is worse than one that errors, because it answers (Rule 97's corollary, in time).
+  127c · SO STATE THE ZONE IN THE CLAIM, NOT IN YOUR HEAD, and prefer a comparison the tool cannot get
+        wrong: ORDER two events from ONE source (`git log --oneline` against the row's own timestamp
+        column, both read the same way) rather than subtracting two numbers from two clocks. Same shape
+        as Rule 111's corollary · assert the ordering, not the arithmetic.
+COROLLARY, and it is the reason this is worth a rule rather than a note: BOTH LANES MADE IT, INDEPENDENTLY,
+ABOUT THE SAME FIX, ON THE SAME NIGHT, and each of us wrote a confident headline. A defect two people
+reach separately is not carelessness, it is a missing instrument. The cheap one is to never quote a bare
+time: write `05:14:33 UTC` or do not write it.
+
 RULE 126 (T2 S58 · August 12 2026):
 A BEFORE/AFTER CLAIM IS ANCHORED TO THE CHANGE, NEVER TO YOUR OWN CLOCK · AND "THE LAST N HOURS" IS
 ALWAYS ANCHORED TO YOUR CLOCK.
