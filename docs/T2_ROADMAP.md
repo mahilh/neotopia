@@ -6,6 +6,38 @@ correction is in the table rather than only in a commit message.
 
 ---
 
+## -3 · T2 S54 · THE OUTCOME-NULL SURVIVES SPENDING · the rulebook question is closed on balance
+
+**S53 said the divergence is large in experience and nil in outcome, measured on bots that never
+spend. That caveat is now closed.**
+
+| spendable/region | spends/game | one side spends | **both spend** |
+|---|---|---|---|
+| 1 (shipped) | 1.23 | 57.7 | **50.0** |
+| 2 | 2.17 | 58.8 | **50.0** |
+| 3 | 2.94 | 61.7 | **50.0** |
+
+Three disjoint 40-seed blocks. **Both-spend is exactly 50.0 in all nine cells** · when both players
+use the feature, spendable supply does not matter at all. And the effect is strongly sublinear: the
+first spend is worth +6.3, every later one +2.3.
+
+**So the photograph of setup step 8 can no longer overturn a balance conclusion.** Whatever the fourth
+tile is, the divergence remains an *experience* question (contested crossings 32.5% vs 11.4%) and not
+a balance one. That is what "land the measurement before the photo" bought.
+
+*Bonus: the harness independently reproduced S46's +7.7 (57.7% at supply 1) without being tuned to.*
+
+### Also this session
+- **Flow drawBias curve measured** (S53's step 1). Flow's slope is **0.52 margin per 0.01 of bias
+  against Classic's 0.86**, so the Classic constant is ~40% too steep · but the ratio is a constant
+  0.55-0.72 with no trend, meaning **Flow is the same curve compressed by ~0.6, not a different one.**
+  A Flow ladder is the Classic offsets scaled ~1.65x, so my S53 five-step cost estimate was too
+  pessimistic. Still parked: no player can reach a rung in either mode.
+- **The crossing recorder is opt-in** · and the performance argument I gave for it measured at **0.3%,
+  i.e. nothing.** The change stands on design. See Rule 122.
+
+---
+
 ## -2 · T2 S53 · WHAT THE RULEBOOK DIVERGENCE IS WORTH · measured before the photograph
 
 **Balance is the lowest track and it is capped by a document, not by a measurement. This is the

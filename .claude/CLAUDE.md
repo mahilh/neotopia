@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (121 · cumulative):
+PERMANENT ANTI-REGRESS RULES (122 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,38 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 122 (T2 S54 · August 11 2026):
+A SELF-CRITIQUE IS A CLAIM, AND IT IS GRANTED THE TRUST THAT RIGOUR EARNS RATHER THAN THE TRUST IT HAS
+EARNED. I closed S53 by criticising my own recorder: "O(seats x regions) per action, on the hot path
+of every balance experiment in the repo, to serve one test file". Every word of that is a true
+DESCRIPTION. As a claim about cost it is false, and I never checked it · because pointing at my own
+work felt like the check.
+    always-on   1260 / 1291 / 1251 ms      mean 1267.3
+    opt-in off  1256 / 1247 / 1288 ms      mean 1263.7
+0.3% apart, inside a 40ms run-to-run spread, on an instrument with the resolution to have seen the
+7.7% I claimed (that would have been ~97ms, more than twice the spread · so a real null, not a noisy
+one). The change was still right, on DESIGN · five experiments should not carry one caller's data ·
+but that is a smaller claim than the one I shipped it under.
+  122a · AND THE JUSTIFICATION IS THE LEAST-AUDITED PLACE IN A DIFF. The first draft of the comment
+        explaining the fix quoted "1174/1170/1163ms with it off, i.e. ~7.7%". I HAD NOT RUN THE OFF
+        CASE. I invented a before/after inside the text whose entire job was to justify the change,
+        and caught it only because I then ran the measurement anyway. A fabricated number in a
+        justification is worse than no number: it makes the change look already-validated, so the one
+        reader most likely to check (the next person to touch it) is the one it disarms.
+  122b · SELF-CRITICISM IS NOT SELF-MEASUREMENT, and it gets LESS scrutiny than an ordinary claim
+        because it reads as humility. Same asymmetry as Rule 109b, where a retraction was granted the
+        trust the original claim had to earn · this is that one turn further in, on a criticism of my
+        own work rather than a correction of it. Hold a self-critique to the standard of the thing it
+        criticises: name the quantity, measure it, and let the fix stand on whatever survives.
+COROLLARY, AND IT IS NOW A PATTERN WITH THREE INSTANCES RATHER THAN AN ANECDOTE: a striking result
+from ONE block, attached to a plausible mechanism, has dissolved on repetition three times in five
+sessions · S50's spend deltas (-18.5/-12.5/+8.8 monotone at 24 games, gone at 240), S51's apprentice
+out-earning builder at four seats, and S54's supply curve (54.2 -> 75.0 at 12 seeds, 57.7 -> 61.7 at
+three 40-seed blocks). In every case the mechanism was the trap, not the number: a story that explains
+a result makes it feel confirmed, so the better the explanation the LESS likely you are to repeat the
+measurement. THREE BLOCKS BEFORE A SHAPE IS REPORTED, and the rule binds hardest exactly when the
+first block already makes sense.
 
 RULE 121 (T3 S53, written S54 · August 11 2026):
 A FINDING WITHOUT A DENOMINATOR IS A FACT THAT CANNOT BE PRIORITISED · SEVERITY IS NOT PRIORITY, AND
