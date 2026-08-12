@@ -42,6 +42,13 @@ are deliberately not creating (86).
 - A wire sized from the run that produced it is a flake with a delay. Derive from a structural
   constant, not an observed rate.
 - A gate that asserts every file has a name does not assert every name has a caller.
+- ENUMERATE THE MUTATIONS BEFORE WRITING THE MESSAGES. A failure message is the most-read line in a
+  test and the only one that can never go red, so it is where claimed scope silently exceeds real
+  scope. Mine named the Rule 107 latch class; the mutation for that class came back GREEN, and I
+  found out only because I ran it afterwards out of curiosity. List what must red, then write prose.
+- The fix you recommended is a hypothesis about a MECHANISM, and the measurement can keep the defect
+  and kill the fix. Exact anchoring changed the turn deadline by zero at every off-grid offset · the
+  error was the sampling period, not the anchor. Build both arms before believing either.
 
 ## 3 · THE INSTRUMENT IS A CLAIM
 - A probe asserts its own output range. Contrast outside 1:1-21:1 must throw. One returned 97186:1.

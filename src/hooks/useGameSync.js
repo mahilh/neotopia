@@ -530,27 +530,10 @@ export function useGameSync(roomId, currentUserId) {
   const gamePhase = useGameStore(s => s.phase)
   useEffect(() => {
     if (gamePhase !== 'playing') return    // lobby, scoring, or a game that has already ended
-    // Anchor the clock at MOUNT, not on the first tick. Anchoring on the first tick costs a full interval
-    // (the deadline lands a second late) and, worse, makes the budget depend on the tick rate rather than
-    // on the limit · a number nobody would think to check against the one the UI prints.
-    turnStartRef.current = { turn: useGameStore.getState().turnNumber, at: Date.now() }
+    let intervalId = null
     const tick = () => {
       const st = useGameStore.getState()
       if (st.phase !== 'playing') return
-      const turn = st.turnNumber
-      // THE LATCH IS KEYED ON turnNumber · the one quantity the domain guarantees advances (Rule 107).
-      // seatSignature-style composites have hung this project three times, always because the real change
-      // was not in the composite; on a frozen board seat/actions/phase are all constant by definition.
-      // Re-anchoring does NOT return early: elapsed is ~0 on the turn-change tick, so it cannot fire, and
-      // falling through keeps the deadline exactly one limit from the turn rather than one limit plus a tick.
-      // THE RE-ANCHOR IS THE ONLY THING STOPPING A SECOND FIRE, AND THAT IS DELIBERATE. The first draft
-      // also carried a `timedOutForTurn` latch. Mutation testing removed it and NOTHING went red · because
-      // endTurn() increments turnNumber, so the very act of firing re-anchors the clock and the next tick
-      // measures ~0 elapsed. Two guards, either one sufficient, so no single mutation can red either: the
-      // latch reported itself as present while being unable to fail (Rule 86), and it could not even
-      // disagree with the re-anchor because both key on the same quantity, so it bought no second witness
-      // (Rule 94). Deleted rather than kept, which is what gives the once-per-turn counterweight teeth.
-      if (turnStartRef.current.turn !== turn) turnStartRef.current = { turn, at: Date.now() }
 
       // ── THE PREDICATE IS NOT PRACTICE-VS-MULTIPLAYER · IT IS "IS ANYONE ELSE WAITING" (T3 S56) ────────
       // The clock used to be scoped to real rooms (`if (!roomId) return`), so practice never expired while
@@ -594,8 +577,58 @@ export function useGameSync(roomId, currentUserId) {
       // return {error:'No room'} on every timeout and teach a future reader that the path is broken.
       if (roomId) pushStateRef.current('endTurn', { reason: 'turn_timeout', seat: st.currentSeat, by: mySeat ?? null })
     }
-    const id = setInterval(tick, 1_000)
-    return () => clearInterval(id)
+
+    // ── THE ANCHOR AND THE SAMPLING GRID ARE ONE THING, AND THAT IS THE WHOLE FIX (T3 S59) ─────────────
+    // WHAT WAS HERE BEFORE, and it shipped with a comment claiming the opposite of what it did: the anchor
+    // was re-stamped INSIDE the tick, `if (turnStartRef.current.turn !== turn)`, and the comment said
+    // "falling through keeps the deadline exactly one limit from the turn rather than one limit plus a
+    // tick". It does not. The tick that notices a turn change runs up to a full interval AFTER it, so
+    // every turn but the first was anchored late, and the deadline it produced was late by the same
+    // amount. Turn 1 was exact by coincidence · the effect mounts AT the turn, so the anchor, the turn and
+    // the grid origin are the same instant · which is why every test in useGameSync.turntimeout.test.js
+    // passed: all of them measure turn 1 and stop.
+    //
+    // ⚠ AND THE OBVIOUS FIX IS NOT A FIX · MEASURED, because I recommended it and it is wrong. Anchoring
+    // EXACTLY (this subscription, without the re-phase below) moves the fire time by ZERO. Driving turn 2
+    // to begin at five different offsets into a tick interval, excess over the promised limit:
+    //     offset      0     250     500     750     999      (ms into the interval)
+    //     in-tick  1000     750     500     250     250 *
+    //     exact       0     750     500     250     250 *
+    // Identical everywhere except offset 0, which is a turn change landing exactly ON a tick · an
+    // alignment only a fake-timer harness produces. The reason is that the old anchor was ALWAYS placed on
+    // the grid, so the deadline landed on the grid too; making the anchor exact just moves the same
+    // rounding from the anchor to the fire. The excess was never the anchor. It is the SAMPLING PERIOD,
+    // and no amount of precision at one end removes a poll at the other.
+    //     (* offset 999 reads 250 because the probe samples every 250ms · that row is my instrument,
+    //      not the system. Recorded rather than smoothed, per Rule 95b.)
+    //
+    // SO THE GRID IS RE-PHASED ON THE TURN, NOT JUST THE ANCHOR. With ticks re-based at the turn change
+    // and a limit that is a whole number of seconds, the deadline lands ON a tick by construction and the
+    // excess is EXACTLY ZERO · an identity rather than a tolerance, which is the form that does not need
+    // re-tuning when the mode changes (Rule 111's corollary). Both facts come from one call, so there is
+    // one guard and not two: a stamp without a re-phase leaves the rounding, a re-phase without a stamp
+    // measures the previous turn, and each mutation reds for its own reason (Rule 118).
+    //
+    // WHY A SUBSCRIPTION AND NOT A DEP · this fires SYNCHRONOUSLY inside the set() that advances the turn,
+    // so `at` is the turn change itself and not the render after it. It also keeps the Rule 76 shape the
+    // old code was built for: the effect deps are still three primitives, the handler still lives in a
+    // ref, the timer is still a repeating interval re-deriving elapsed time. Nothing here is a setTimeout.
+    //
+    // THE ONCE-PER-TURN LATCH IS STILL THIS AND ONLY THIS, unchanged in substance (Rule 107). endTurn()
+    // increments turnNumber, so the act of firing re-anchors the clock and the next tick measures ~0.
+    // The first draft also carried a `timedOutForTurn` latch; mutation testing removed it and nothing went
+    // red, because either guard alone sufficed and neither could be made to fail (Rule 86), and both keyed
+    // on the same quantity so it bought no second witness either (Rule 94). Deleted then, still deleted.
+    const anchor = (turn) => {
+      turnStartRef.current = { turn, at: Date.now() }
+      if (intervalId !== null) clearInterval(intervalId)
+      intervalId = setInterval(tick, 1_000)
+    }
+    anchor(useGameStore.getState().turnNumber)
+    const unsubscribe = useGameStore.subscribe((st, prev) => {
+      if (st.turnNumber !== prev.turnNumber) anchor(st.turnNumber)
+    })
+    return () => { if (intervalId !== null) clearInterval(intervalId); unsubscribe() }
   }, [roomId, currentUserId, gamePhase])
 
   return { sendMove, pushState, broadcast, sessionId, overtakes }

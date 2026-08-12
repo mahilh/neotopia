@@ -270,6 +270,68 @@ describe('the turn clock enforces itself · mechanism, not outcome (T3 S52)', ()
   })
 })
 
+// ── THE TURN I DID NOT TEST, WHICH IS EVERY TURN BUT THE FIRST (T3 S59) ─────────────────────────────────
+// Every test above mounts, waits once, and asserts one advance · so all of them measure TURN 1, and turn 1
+// is the only turn the old clock got right. The effect mounts AT the turn, so the anchor, the turn and the
+// sampling grid were the same instant; from turn 2 on, the anchor was stamped by the tick that NOTICED the
+// change, up to a full interval late, and the deadline was late by the same amount. Nothing here could see
+// it. That is the hidden-parameter shape of Rule 111 in a new place: the turn ORDINAL never varied, so it
+// never looked like a choice.
+//
+// ⚠ AND THE FIX I RECOMMENDED FOR IT DOES NOTHING · that is the finding, and it is measured rather than
+// argued. Anchoring exactly at the turn change, with the grid left alone, moves the fire time by ZERO at
+// every off-grid offset (1000/750/500/250 before, 0/750/500/250 after · identical except at offset 0, an
+// alignment only a fake-timer harness produces). The old anchor always landed ON the grid, so the deadline
+// did too; making the anchor exact just moves the same rounding to the other end. The excess was never the
+// anchor, it was the SAMPLING PERIOD. Re-phasing the grid ON the turn is what removes it, and then the
+// deadline lands on a tick by construction.
+//
+// SCOPE, stated so the claim is not read wider than it is: this is the ACTIVE seat's OWN limit, which is a
+// whole number of seconds and therefore lands exactly on a re-phased grid. The REMOTE grace is a fraction
+// (min(5000, limit*0.15) is 2250ms in Flow), so a remote fire is still rounded up to the next tick. That is
+// the safety net, not the number the UI prints at the player whose turn it is.
+describe('the deadline is the same on turn 2 as on turn 1 (T3 S59)', () => {
+  // A turn change lands on the grid only by coincidence, and offset 0 is exactly the case where the OLD
+  // code was already exact · so if the fixture happens to hand over on a tick, this whole block passes
+  // against the defect it exists to catch. Written first, with nothing else in the file to hide behind.
+  const handOverAt = async (offset) => {
+    const t0Mount = Date.now()
+    drive(ROOM, PEER)                       // seat 1 · becomes the ACTIVE seat once seat 0 ends its turn
+    await tick(2_000 + offset)
+    let t0
+    await act(async () => { useGameStore.getState().endTurn(); t0 = Date.now() })
+    return { t0, offGrid: (t0 - t0Mount) % 1_000 }
+  }
+
+  test('COUNTERWEIGHT · turn 2 begins OFF the tick grid, or this block tests nothing', async () => {
+    const { offGrid } = await handOverAt(250)
+    expect(offGrid, 'turn 2 began exactly on a tick · that is the one alignment where the pre-S59 clock ' +
+      'was already exact, so every assertion below would pass against the defect they exist to catch')
+      .not.toBe(0)
+    expect(useGameStore.getState().currentSeat, 'the seat did not move to the client under test · the ' +
+      'deadline measured below would be a REMOTE one, which carries a grace and is not the promised limit')
+      .toBe(1)
+  })
+
+  for (const offset of [250, 750]) {
+    test(`turn 2 handed over ${offset}ms into a tick · ends at the limit exactly, not up to a tick later`, async () => {
+      const { t0 } = await handOverAt(offset)
+      const before = turn()
+      await tick(LIMIT_MS - 1)
+      expect(turn(), 'the turn ended BEFORE its limit · firing early is the dangerous direction here, ' +
+        'because a player mid-move simply loses the turn and the countdown still showed time left')
+        .toBe(before)
+      await tick(1)
+      expect(Date.now() - t0, 'the harness drifted · this assertion is only an identity if the elapsed ' +
+        'time is exactly the limit').toBe(LIMIT_MS)
+      expect(turn(), 'turn 2 ran past its own deadline · the clock is sampling on a grid anchored at ' +
+        'MOUNT while the turn is anchored at the hand-over, so the deadline is delivered late by however ' +
+        'far the turn change fell from the next tick. Turn 1 hides this: it begins at mount, so its ' +
+        'anchor and the grid are the same instant.').toBe(before + 1)
+    })
+  }
+})
+
 // ── THE MODE I DID NOT TEST, WHICH IS WHERE THE CONSTANT WAS WRONG (T3 S52) ─────────────────────────────
 // Every test above runs in the default mode. That is a hidden parameter (Rule 111): the limit never varied,
 // so it never looked like a choice, and a flat 5s-per-seat grace reads as obviously fine at 90s. Flow is
