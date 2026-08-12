@@ -33,15 +33,22 @@
 // that role (only a request with NO user JWT is `anon`), so we get access with NO service-role key in CI.
 // Soft-fail always: cleanup is non-critical and must never fail the suite (or mask a real test result).
 
+// POOL (T3 S58): this sign-in happens once per playwright INVOCATION whatever the specs contain, and the
+// merge gate runs four of them · so it is ~4 permanent auth.users rows per push before a single spec has
+// done anything. It is also the ONLY client in this repo that needs exactly one identity, which is why it
+// is the one thing convertible against a pool with one member. Falls through to the anonymous path when
+// no credential is present, and SAYS SO · see signInPooledOrAnon.
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, signInAnonRetry } from './seedHelpers'
+import { loadEnv, signInPooledOrAnon } from './seedHelpers'
 
 export default async function globalTeardown() {
   let url, key
   try { ({ url, key } = loadEnv()) } catch { console.log('[teardown] no Supabase env · skipping purge'); return }
   try {
     const supabase = createClient(url, key, { auth: { storageKey: 'neotopia-e2e-teardown', persistSession: false } })
-    await signInAnonRetry(supabase)                       // → `authenticated` role (migration 007)
+    // Either identity yields the `authenticated` role migration 007 requires · only a request with NO
+    // user JWT is `anon`, and a pool member is an ordinary email user. No service-role key either way.
+    await signInPooledOrAnon(supabase, { label: 'teardown' })
     const { data, error } = await supabase.rpc('purge_e2e_test_data')
     if (error) throw error
     console.log('[teardown] purge_e2e_test_data →', JSON.stringify(data))

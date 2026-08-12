@@ -53,6 +53,65 @@ export async function signInAnonRetry(client, tries = 4) {
   throw new Error('anon sign-in: ' + lastErr.message)
 }
 
+// ── THE FIXED CI IDENTITY POOL · THE NODE-SIDE HALF (T3 S58) ──────────────────────────────────────────
+// T2 shipped the pool's APP half in S57/S58: useAuth reads a credential the harness seeds into
+// localStorage and signs in with a password instead of minting. That branch cannot reach here. Every
+// client in THIS file is a Node supabase client · no localStorage, no useAuth, no React · so a spec's
+// browser sign-ins and its harness sign-ins are two separate producers and only one of them was closed.
+// ENUMERATED rather than assumed (preamble §1), because the same grep first told me the app had three
+// anonymous call sites and reading them showed two were COMMENTS about it:
+//     src/hooks/useAuth.js:91          the app's only real one · covered by T2's branch
+//     tests/e2e/seedHelpers.js:47      this file · NOT covered
+//     tests/e2e/global-teardown.js     via signInAnonRetry · NOT covered, and it is per INVOCATION
+// The teardown is the one that pays immediately: it signs in once per playwright invocation whatever the
+// specs contain, and the merge gate has FOUR invocations, so it is ~4 identities per run on its own,
+// on every push, forever. It also needs exactly ONE identity, which is the whole reason it can convert
+// today when nothing else in my lane can (see the size note below).
+//
+// ⚠ SIZE · WHAT MY LANE ACTUALLY NEEDS, and it is more than one. Counted across tests/e2e:
+//     10 specs drive TWO browser contexts at once (host + joiner). Same user in both is not a saving,
+//        it is a broken spec · seat resolution is BY userId (useGameSync), so two contexts as one
+//        identity resolve to the SAME seat and each browser believes it holds the other's turn.
+//     four-player-live.e2e.js needs FOUR simultaneously, in one loop, 6s apart.
+// So the pool must be at least 4 members before the expensive specs can convert, and at least 2 before
+// any of the two-context ones can. Said plainly rather than worked around: ONE member cannot serve them,
+// and that is the point at which somebody has to decide whether creating members is worth a service-role
+// key in CI. Nothing here needs that decision · the teardown is a single client.
+export function poolCredential(index = 0) {
+  const suffix = index === 0 ? '' : `_${index}`
+  const email = (process.env[`E2E_POOL_EMAIL${suffix}`] || '').trim()
+  const password = process.env[`E2E_POOL_PASSWORD${suffix}`] || ''
+  if (!email || !password) return null
+  return { email, password, index }
+}
+
+// Sign in as pool member `index` when its credential is present, otherwise EXACTLY today's behaviour.
+// THE COUNTERWEIGHT IS THE PRINTING, and it is why every branch has a line (Rule 90 · written first).
+// The failure that would make this worse than not doing it at all is the SILENT one: a fallback that
+// mints an identity while the run reads as converted. Then the counter stays at ~449/day, the change
+// looks shipped, and nothing anywhere disagrees. So the three outcomes are three distinct strings, and
+// "I did not look" is never allowed to resolve to a plausible success (Rule 80 · Rule 95b).
+// It also asserts the DEFINING property rather than the convenient one (Rule 110): a password grant
+// that hands back an ANONYMOUS user is a pool that is quietly minting, which passes every other check.
+export async function signInPooledOrAnon(client, { index = 0, label = 'client' } = {}) {
+  const cred = poolCredential(index)
+  if (!cred) {
+    console.log(`[pool] ${label} · NO CREDENTIAL for member ${index} · minting anonymously (unconverted, not converted-and-free)`)
+    return await signInAnonRetry(client)
+  }
+  const { data, error } = await client.auth.signInWithPassword({ email: cred.email, password: cred.password })
+  if (error || !data?.user) {
+    console.log(`[pool] ${label} · member ${index} DID NOT AUTHENTICATE (${error?.message ?? 'no user returned'}) · falling back to anonymous`)
+    return await signInAnonRetry(client)
+  }
+  if (data.user.is_anonymous === true) {
+    console.log(`[pool] ${label} · member ${index} returned an ANONYMOUS user · this is the pool minting in disguise`)
+    return data
+  }
+  console.log(`[pool] ${label} · member ${index} REUSED ${data.user.id.slice(0, 8)} (created ${data.user.created_at}) · 0 minted`)
+  return data
+}
+
 // Admin-anon host + a member + a real engine-state game_sessions row (phase 'playing'). Returns the
 // admin client (a MEMBER · can UPDATE the session) so a test can drive authoritative state changes.
 export async function createSeededGame(storageKey = 'neotopia-e2e-seed') {
