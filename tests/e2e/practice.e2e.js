@@ -1225,42 +1225,34 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
     expect(board.focusable, 'no polygon is focusable').toBe(0)
   })
 
-  test('TODAY · the modal does not trap focus and Escape does not close it · though Escape DOES cancel', async ({ page }) => {
+  // Shared arrival for the three modal tests: the dialog open, and focus genuinely placed INSIDE it.
+  // Pressing Escape with focus outside is a different and unfair measurement · that confound cost a re-run
+  // in S53 (Rule 120b), so the placement is asserted rather than assumed.
+  async function modalOpenWithFocusInside(page, { expect }) {
     await page.goto('/practice?bots=0')
     await boardReady(page, { tutorial: 'keep' })
-
     const dialog = page.getByRole('dialog')
-    await expect(dialog, 'no dialog on arrival · the tutorial did not open, so nothing below is measured')
+    await expect(dialog, 'no dialog on arrival · the tutorial did not open, so nothing here is measured')
       .toBeVisible({ timeout: 10_000 })
-    expect(await dialog.getAttribute('aria-modal'),
-      'the dialog is correctly marked aria-modal · this half is RIGHT and worth keeping').toBe('true')
-
-    // Focus something inside, THEN press Escape. Pressing it with focus outside would be a different
-    // (and unfair) measurement · that confound cost a re-run before this was written down.
     await page.evaluate(() => {
       const d = document.querySelector('[role="dialog"]')
       d?.querySelector('button, [href], [tabindex]:not([tabindex="-1"])')?.focus()
     })
     expect(await page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement)),
-      'could not place focus inside the dialog · the Escape result below would be unmeasured').toBe(true)
+      'could not place focus inside the dialog · every keyboard result here would be unmeasured').toBe(true)
+    return dialog
+  }
 
-    await page.keyboard.press('Escape')
-    await page.waitForTimeout(600)
-    expect(await dialog.isVisible(), 'Escape closed the dialog · someone shipped the fix, update this test')
-      .toBe(true)
+  test('WORKS · the modal markup is right, and the S44 Escape cancel path is intact', async ({ page }) => {
+    // THE HALVES THAT ARE CORRECT, asserted rather than assumed · a uniformly damning audit reads as a
+    // position, and this is also the SETUP GUARD for the two requirements below: if the dialog stops
+    // opening, or focus can no longer be placed inside it, this reds. A test.fail() cannot notice that,
+    // because a setup that throws also "fails as expected" · which is Rule 86 in a new costume.
+    const dialog = await modalOpenWithFocusInside(page, { expect })
+    expect(await dialog.getAttribute('aria-modal'),
+      'the dialog is no longer aria-modal · the markup was AHEAD of the behaviour and has regressed')
+      .toBe('true')
 
-    // Focus escapes an aria-modal dialog: tabbing walks straight out into the page behind it.
-    const wandered = []
-    for (let i = 0; i < 5; i++) {
-      await page.keyboard.press('Tab')
-      wandered.push(await page.evaluate(() =>
-        !document.querySelector('[role="dialog"]')?.contains(document.activeElement)))
-    }
-    expect(wandered.some(Boolean), 'focus stayed inside the modal · a trap has been added, update this test')
-      .toBe(true)
-
-    // AND THE HALF THAT WORKS, measured so the report is precise rather than damning: T1's S44 Escape
-    // cancel path is intact · it just does not reach the dialog.
     await dismissTutorial(page)
     await boardIsLiveAndPointerPlayable(page, { expect })
     await page.locator('[data-testid^="factory"]').first().click({ force: true })
@@ -1268,6 +1260,42 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       .toBeGreaterThan(0)
     await page.keyboard.press('Escape')
     await expect.poll(() => page.locator('[data-testid^="element-"]').count(), { timeout: 5_000 })
+      .toBe(0)   // T1's S44 cancel path · it works, it just does not reach the dialog
+  })
+
+  // ── TWO REQUIREMENTS, NOT DESCRIPTIONS (T3 S54) ──────────────────────────────────────────────────────
+  // S53 described these defects; a description is satisfied by the defect persisting. These state what
+  // SHOULD be true. `test.fail()` keeps the suite GREEN while they are unfixed · reddening the merge gate
+  // for a defect in another lane is a tripwire aimed at a colleague (Rule 103b) · and the moment T1 ships
+  // the handler the test PASSES UNEXPECTEDLY, which Playwright reports as a failure. So the fix cannot
+  // land unwitnessed, and closing it is deleting one line.
+  //
+  // ⚠ THE KNOWN HAZARD WITH THIS MARKER, because this project has already been bitten by it: S37 found a
+  // test.fail() still attached to a defect T1 had fixed EIGHT COMMITS EARLIER · it had been asserting
+  // expected-to-fail against working code, and nothing said so because the spec RAN IN NO WORKFLOW (Rule
+  // 79). The marker is only safe on a spec something actually executes. This one is on the merge gate, so
+  // an unexpected pass reds within minutes of the fix landing.
+  test('REQUIREMENT · Escape closes the dialog (T1 · not yet implemented)', async ({ page }) => {
+    test.fail()
+    const dialog = await modalOpenWithFocusInside(page, { expect })
+    await page.keyboard.press('Escape')
+    await expect(dialog, 'Escape must dismiss the dialog · it is the documented way out of a modal and ' +
+      'the ONLY one for a keyboard user, since focus is not trapped either. T1 S44 already routes Escape ' +
+      'as a cancel path; it does not reach this component.').toBeHidden({ timeout: 3_000 })
+  })
+
+  test('REQUIREMENT · focus stays inside the modal while it is open (T1 · not yet implemented)', async ({ page }) => {
+    test.fail()
+    await modalOpenWithFocusInside(page, { expect })
+    const escaped = []
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press('Tab')
+      escaped.push(await page.evaluate(() =>
+        !document.querySelector('[role="dialog"]')?.contains(document.activeElement)))
+    }
+    expect(escaped.filter(Boolean).length, 'focus must not leave an aria-modal dialog · today Tab walks ' +
+      'straight out into the page behind it, so a keyboard user lands on controls they cannot see and ' +
+      'cannot get back. The markup already claims aria-modal="true"; only the behaviour is missing.')
       .toBe(0)
   })
 })
