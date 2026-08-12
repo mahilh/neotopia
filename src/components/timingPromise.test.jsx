@@ -1,39 +1,40 @@
 // THE TIMING PROMISE AUDIT · WHAT THE COPY CLAIMS vs WHAT THE PRODUCT DOES (T1 S52).
 //
-// ── THE FINDING, MEASURED IN A BROWSER RATHER THAN READ ───────────────────────────────────────────
-// Three places tell the player a turn is time-limited, and a fourth counts it down live:
-//     Tutorial step 1     "You have {TURN_TIME_LIMIT} seconds per turn."
-//     Tutorial mode chip  "{TURN_TIME_LIMIT}s per turn · {END_GAME_TILE} tiles"
-//     Lobby mode card     "{END_GAME_TILE} tiles · {TURN_TIME_LIMIT}s turns"
-//     ActionBar           a per-second readout and a shrinking bar
-// NOTHING ENFORCES IT. Sat on a real practice board and did not touch anything:
-//     t=  0s  myTurn=true  timer 90
-//     t= 30s  myTurn=true  timer 60
-//     t= 60s  myTurn=true  timer 30
-//     t= 90s  myTurn=true  timer  0
-//     t=130s  myTurn=true  timer  0   · turnNumber and currentSeat UNCHANGED throughout
-// The turn never expires. Worse than merely unenforced: the readout goes RED under 10s, reaches 0,
-// empties its bar and STAYS there, so it looks exactly like a turn that has run out while the player
-// still holds it. A promise that is silently not kept is one thing; one with a live animation
-// counting down to nothing is a different and louder thing.
+// ── S53 · REWRITTEN, NOT DELETED, BECAUSE THE MEASUREMENT IS THE ARGUMENT (Rule 101b) ───────────
+// S52 measured that nothing enforced the promise and marked this header to be rewritten when T3
+// landed the turn timeout. It landed (47aff1a, 3318ada). The answer is now MODE-DEPENDENT, and that
+// is a sharper finding than either "it works" or "it does not".
 //
-// GameRoom.jsx:244 does say "DISPLAY ONLY" in a comment. That is not why this file believes it · a
-// comment that is wrong goes red never (Rule 105a), and whether a turn expires is a COMPOSITION
-// question (timer -> store -> seat advance), which is exactly the shape a source read cannot answer
-// (Rule 116). The 130 seconds above are the evidence.
+// WHAT S52 MEASURED · sat on a practice board, touched nothing:
+//     t=0s timer 90 · t=90s timer 0 · t=130s timer 0 · turnNumber and currentSeat UNCHANGED
+// WHAT S53 MEASURED · the same probe, after the timeout shipped:
+//     BYTE-FOR-BYTE THE SAME RESULT. The turn still never expires in practice.
 //
-// ── WHAT THIS FILE DOES AND DELIBERATELY DOES NOT DO ─────────────────────────────────────────────
-// It does NOT change the copy, and it does NOT go red. T3 is building the turn timeout this session,
-// which will make all four of these statements TRUE. Editing the copy to remove the promise now
-// would have to be reverted next session, and reddening the shared merge gate for a defect in
-// another lane is a tripwire aimed at a colleague (Rule 103b).
-// What it DOES is the prerequisite: pin every timing statement to the SINGLE SOURCE, so that when
-// the timeout lands and the number is tuned, the tutorial, the chip, the lobby card and the bar all
-// move together instead of three of them quietly becoming lies.
+// NOT A BUG IN THE TIMEOUT · A SCOPE I HAD TO READ THE ARTIFACT TO FIND. useGameSync.js:500 opens
+// with `if (!roomId || !currentUserId) return  // practice/solo has no room`, so the clock runs in a
+// real multiplayer room and nowhere else. So:
+//     multiplayer room   the promise is KEPT · T3 measured it, not me · the active player's own
+//                        client fires at exactly the limit (`grace = isMine ? 0 : ...`), so the
+//                        deadline a player experiences is 90s Classic / 15s Flow with NO grace ·
+//                        the per-seat grace is a PEER-side fallback for a dead tab
+//     practice           the promise is still FALSE, and practice is the front door · zero
+//                        sign-ins, one click from the landing page, and the mode a first-timer
+//                        actually meets
+// ⚠ AND THE COPY DOES NOT DISTINGUISH THEM. The Tutorial renders in both, and says the same sentence
+// in both. Whether that matters is a product call and the guard is T3's · flagged, not touched.
 //
-// ⚠ WHEN T3'S TIMEOUT LANDS, THIS HEADER IS A FALSE CLAIM AND MUST BE REWRITTEN, not deleted: the
-// measurement above is the argument for whatever the new assertion is (Rule 101b).
-
+// THE NUMBER IN THE BRIEF WAS WRONG AND THE ARTIFACT SAID SO. I was told the effective deadline is
+// "90 plus a per-seat grace capped at 15% of the turn". That is the PEER fallback path. For the
+// player whose turn it is, `isMine` is true and the grace is 0. Reading the code was not optional
+// here: the sentence I was about to write into the product would have been wrong by 2.25s to 15s
+// depending on seat and mode.
+//
+// WHAT SURVIVES UNCHANGED, and it is why this file was worth writing before the fix existed: every
+// timing statement reads TURN_TIME_LIMIT from getModeConfig. That is what let T3 make Classic AND
+// Flow correct simultaneously without touching a single string of copy · a Flow turn says 15
+// because the config says 15. If any of the four had retyped "90", Flow would have been a lie from
+// the day the mode shipped.
+//
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
