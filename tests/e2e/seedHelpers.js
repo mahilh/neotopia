@@ -119,9 +119,34 @@ export async function deleteRoomAsHost(sessionJson, roomId) {
     const host = createClient(url, key, { auth: { storageKey: 'neotopia-e2e-host-cleanup', persistSession: false } })
     const { error: serr } = await host.auth.setSession({ access_token, refresh_token })
     if (serr) return
-    await host.from('game_rooms').update({ status: 'finished' }).eq('id', roomId)
-    await host.from('game_rooms').delete().eq('id', roomId) // rooms_delete_host · cascade
-  } catch { /* best-effort · documented limitation if it fails */ }
+    // ── THIS USED TO SWALLOW BOTH RESULTS, AND IT HAS BEEN LEAKING ROOMS FOR THE WHOLE PROJECT (T3 S55) ──
+    // MEASURED against production while T2 was diagnosing a room leak: 632 orphaned rooms, and 611 of them
+    // have NO room_players rows at all · 70 of the 73 created in the last twelve hours. Their shape is not
+    // "created before a profile existed" (that predicts a room WITH a seat and no profile, which is 21 of
+    // 632) · it is a room that was marked finished and then never deleted. That is exactly the pair of
+    // statements below.
+    // AND CHECKING `error` WOULD NOT HAVE CAUGHT IT. A DELETE that matches ZERO ROWS · because RLS
+    // (host_id = auth.uid() AND status = 'finished') did not match, most plausibly an access_token that
+    // expired during a long spec · returns no error at all. Zero rows affected reads as success, which is
+    // the identical trap documented one file over in pushState: "wasOvertaken(null) is false, so without
+    // .select() a refusal reads as success". So both statements now ASK FOR THE ROWS and the caller is told
+    // when nothing happened, instead of a `catch {}` reporting a cleanup that never ran (Rule 93).
+    const { data: updated } = await host.from('game_rooms')
+      .update({ status: 'finished' }).eq('id', roomId).select('id')
+    const { data: deleted, error: delErr } = await host.from('game_rooms')
+      .delete().eq('id', roomId).select('id')     // rooms_delete_host · cascade
+    const ok = Array.isArray(deleted) && deleted.length > 0
+    if (!ok) {
+      console.warn(`[teardown] deleteRoomAsHost LEFT ROOM ${roomId} BEHIND · update matched ` +
+        `${updated?.length ?? 0} row(s), delete matched ${deleted?.length ?? 0}` +
+        `${delErr ? ` · ${delErr.message}` : ' · no error, so RLS matched nothing (auth.uid() or status)'}` +
+        ' · this is the room-leak producer, not a cosmetic warning')
+    }
+    return ok
+  } catch (e) {
+    console.warn(`[teardown] deleteRoomAsHost THREW for ${roomId} · ${String(e).slice(0, 120)}`)
+    return false
+  }
 }
 
 // Read the REAL placed-element count from game_sessions.state by ROOM ID (Rule 53 · the DB is truth, not the
