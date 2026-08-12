@@ -120,6 +120,37 @@ describe('counterweight · the fixture can actually tell the two apart', () => {
   })
 })
 
+describe('no prose leaks into the board area · I shipped exactly this and CI caught it', () => {
+  // ⚠ REAL REGRESSION, MINE, IN THIS SESSION. Moving the explanatory comment out of the <GameBoard>
+  // attribute list (where `{/* */}` is invalid JSX) I re-emitted it as `//` lines in CHILDREN
+  // position · where they are not comments at all, they are TEXT. React rendered fourteen lines of
+  // my own reasoning onto the board area, which in a centred flex row pushed the SVG from 0..320 to
+  // 73..370 and put three hex cells off a 320px screen.
+  // NOTHING IN THE UNIT SUITE COULD SEE IT: jsdom has no layout, so the shove is invisible, and a
+  // stray text node breaks no assertion anyone had written. T3's browser reachability gate caught it
+  // (`7 are off screen`), which is the whole argument for that gate existing.
+  // It is also Rule 116 in its purest form · the source LOOKS like a comment and the JSX pipeline
+  // decides otherwise, so reading the file tells you nothing about what ships.
+  // This is the part jsdom CAN hold: a text node where only elements belong.
+  it('the board area contains elements only · no bare text children', async () => {
+    await mountTwoSeat()
+    const area = document.querySelector('.game-board-area')
+    expect(area, 'no board area rendered').toBeTruthy()
+    const stray = [...area.childNodes]
+      .filter(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim().length > 0)
+      .map(n => n.textContent.trim().slice(0, 60))
+    expect(stray, 'bare text is being rendered into the board area · in a centred flex row this ' +
+      'shoves the SVG sideways and pushes cells off a 320px screen').toEqual([])
+  })
+
+  it('and none of it is my own commentary · the specific failure mode', async () => {
+    await mountTwoSeat()
+    const txt = document.querySelector('.game-board-area').textContent
+    expect(txt, 'a JSX comment authored as `//` in children position renders as prose')
+      .not.toMatch(/MEASURED first|THE BLIND SPOT|myPlayer IS currentPlayer/)
+  })
+})
+
 describe('the readout belongs to the player reading it', () => {
   it('shows MY scores while it is the opponent turn', async () => {
     await mountTwoSeat()
