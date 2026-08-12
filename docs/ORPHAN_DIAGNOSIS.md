@@ -108,3 +108,68 @@ whose entire job is noticing things. A false zero in the alerting path (Rule 80)
 world-readable, but the orphan count needs the profile join, so it is unreadable for the same reason.
 The only component with the privilege to see this leak is a SECURITY DEFINER function, and the purge
 is one that already runs on every job and prints its result.
+
+---
+
+# ⚠ S58 · THE PRODUCER IS CLOSED, AND MY S57 HEADLINE WAS WRONG
+
+I closed S57 with: *"20 orphans in the last 3 hours, post BOTH of T3's fixes, every one finished with
+`player_count` 0 and zero seat rows · byte-identical to the 535 older ones. A third producer at
+~7/hour."* That became the next session's P2 and Mahil's reason to hold the mass delete.
+
+**It is false.** The window was anchored to my clock, not to the change I was measuring:
+
+| | UTC |
+|---|---|
+| `0cd6b60` cleanupSeeded fix | 05:06:53 |
+| `954d362` softCleanup fix | 05:14:33 |
+| **last orphan pair** | **05:08:40 / 05:08:48** |
+| since `954d362` (11.8 h) | **zero** |
+
+Every room I attributed to "after the fix" was created **before** it. The last pair landed between
+the two fixes, which means `softCleanup` was still the live producer at that instant, exactly as T3
+diagnosed. There is no third producer. See Rule 126.
+
+## The producer's fingerprint, which is the part that was right
+
+Orphans arrive in **pairs, 6-8 seconds apart** · every pair `max_players 4`, `phase 'playing'`, two
+players in state, **seat rows stripped**, session surviving, host profile gone. One pair per
+`NeoTopia E2E` run, which invokes `reconnect.e2e.js` and `backend-down.e2e.js` in a single
+Playwright call. The pairing is the tell: two specs, one invocation, one room each.
+
+## Two controls arrived free, and neither was designed
+
+- **June 30 → August 8: zero orphans across 39 days.** The project was idle. Production resumes
+  precisely when the autodrive sessions resume, so this was never a background process.
+- **`NeoTopia CI` (canary) ran on schedule at 07:15 and 12:55 UTC and produced nothing.** It is
+  vitest and build with no browser. So the producer is a browser workflow, and browser workflows here
+  are push-triggered.
+
+Which is also why the cadence looked like a cron. T3's observation · *"6 per 30 minutes for four
+hours; three lanes pushing irregularly doesn't produce that"* · was a real pattern with the opposite
+cause: during an autodrive session three lanes push **steadily**, and steady pushes make a comb.
+
+## What the evidence for "closed" actually is, stated at its true strength
+
+Not "five runs, zero orphans" · **three of those five were cancelled** (`scripts/ci-receipt.cjs`).
+And `game_rooms` cannot supply its own denominator, because a *successful* cleanup deletes the
+evidence: 11.8 hours of CI left exactly **one** surviving room.
+
+The honest measure is exposure from a table no purge can touch:
+
+```
+identities_3h  24      auth identities minted in the last 3 hours
+orphans_3h      0
+```
+
+**24 identities against 0 orphans** · that window was exercised, not idle. That is real evidence the
+fix landed, and it is a different and weaker claim than "the producer is gone forever", which needs
+a full autodrive session's worth of pushes to earn.
+
+## The instrument defect this exposes, which is mine and one session old
+
+`rooms_orphaned_1d = 0` cannot distinguish **closed** from **nobody ran**. Mahil's precondition for
+the mass delete is "a flat day" · a quiet weekend satisfies that sentence while proving nothing.
+`029_orphan_zero_gets_a_denominator.sql` adds `identities_1d` / `_total` / `_nonanon` so the receipt
+reads itself. **HELD, not applied**: it reads the `auth` schema, which is a new class of access for a
+function every authenticated player can execute, and that is Mahil's call rather than mine.

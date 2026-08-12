@@ -192,12 +192,12 @@ ENGINE ARCHITECTURE:
             No seat = the pre-S35 board-global reading, kept for the viz and for unowned pre-S35 boards.
   Flow mode config: getModeConfig(mode) · GAME_MODES.classic + GAME_MODES.flow
 
-DB CONTRACT (scripts/migrations/ · 001-028 · NOT 001-010, which is what this line said until T3 S49):
+DB CONTRACT (scripts/migrations/ · 001-029 · NOT 001-010, which is what this line said until T3 S49):
   game_sessions.phase: CHECK IN (playing|endgame|finished)
   record_civilization_score · chain 009 > 014 > 019 · SECURITY DEFINER · writes global_neotopia_index
   game_sessions.mode TEXT DEFAULT 'classic' (010)
   ⚠ A MIGRATION NUMBER HERE IS A CHAIN, NOT AN ADDRESS. 5 of 16 functions are redefined by a later
-    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024>025>026>027>028, draw_card_for_seat 011>014>021,
+    migration and 3 of them twice · purge_e2e_test_data 006>008>014>023>024>025>026>027>028>029, draw_card_for_seat 011>014>021,
     record_civilization_score 009>014>019, increment_neotopia_index 004>014, rl_client_ip 013>014.
     AND THE NEWEST FILE IS NOT NECESSARILY THE DEPLOYED BODY. Do NOT record applied-state in a comment:
     it changes with no commit, so it is stale the moment it is true · T3 wrote "023 unapplied" into five
@@ -209,6 +209,14 @@ DB CONTRACT (scripts/migrations/ · 001-028 · NOT 001-010, which is what this l
     implementation of the REACH clause (the mass delete, now 640 rooms), HELD. The tripwire was
     RE-SITED S56 from a level (~1000) to the DERIVATIVE: rooms_orphaned still rising means a producer
     is open (diagnose), flat means inert garbage (housekeeping). 027 prints it every CI run.
+    ⚠ AND THE DERIVATIVE CANNOT READ ITS OWN ZERO (T2 S58). rooms_orphaned_1d = 0 means "the producer
+    is closed" OR "nobody ran", and 028 cannot separate them · a quiet weekend satisfies Mahil's
+    stated mass-delete precondition ("a flat day") while proving nothing. game_rooms cannot supply
+    its own denominator because a SUCCESSFUL cleanup deletes the evidence: 11.8 hours of CI produced
+    exactly ONE surviving room. 029 (WRITTEN, HELD, needs approval · it reads the auth schema, a new
+    surface for a function every authenticated player can execute) adds identities_1d/total/nonanon
+    from auth.users · the one table no purge here can touch, which is what makes it both the leak
+    and an honest denominator. Read as: identities_1d ~0 -> UNMEASURED · high + orphans 0 -> real.
 
 GAME MECHANICS:
   4-STEP PLACEMENT: factory→element-btn→region-btn→valid-hex (ALL force:true)
@@ -511,6 +519,42 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 126 (T2 S58 · August 12 2026):
+A BEFORE/AFTER CLAIM IS ANCHORED TO THE CHANGE, NEVER TO YOUR OWN CLOCK · AND "THE LAST N HOURS" IS
+ALWAYS ANCHORED TO YOUR CLOCK.
+I closed S57 with the session's headline finding: "20 orphans in the last 3 hours, post BOTH of T3's
+fixes, byte-identical to the 535 older ones · a third producer at ~7/hour." It became this session's
+P2 and Mahil's reason to keep the mass delete held. It is FALSE, and one query killed it:
+    0cd6b60 cleanupSeeded fix   committed 05:06:53 UTC
+    954d362 softCleanup fix     committed 05:14:33 UTC
+    last orphan pair            05:08:40 / 05:08:48 UTC   · AFTER fix one, BEFORE fix two
+    since 05:14:33, 11.8 hours  ZERO
+Every room in my "post-fix" window was created BEFORE the fix I was measuring. I never compared the
+two timestamps. A rolling window has no opinion about your change · it starts wherever you happen to
+be standing, so it silently swallows the before-period, and the more recent the change the more of
+the window is the wrong side of it. THE FIX IS ONE CHARACTER OF DISCIPLINE: `where created_at >
+<the commit's timestamp>`, never `> now() - interval`. Ask git for the boundary; it knows it exactly.
+  126a · THE COROLLARY IS WHY I BELIEVED IT: the "third producer" had a MECHANISM attached · same
+        fingerprint, plausible rate, T3's observation of a regular cadence · and Rule 122's corollary
+        already says a story that explains a result makes it feel confirmed. Here the story was
+        entirely real (the fingerprint IS identical, because it is the SAME producer) and only the
+        TIME was wrong. A correct mechanism attached to a mis-anchored window is the most convincing
+        wrong finding available, because every part of it survives scrutiny except the one nobody
+        checks.
+  126b · AND IT WAS A CLOSING RECOMMENDATION, which is the claim nobody audits (Rule 108). I
+        premise-checked it · I ran a query and read a table · and the check shared the defect of the
+        claim, because I re-used my own window. Rule 92 says two sides from one source agree by
+        construction; this is that in the TIME domain, and a premise check inherits your anchor
+        unless you deliberately change it.
+SECOND HALF, and it is the reason the number could not be sanity-checked: A COUNTER WHOSE SUCCESS
+CASE DELETES ITS OWN EVIDENCE HAS NO DENOMINATOR. `rooms_orphaned_1d` counts SURVIVORS; a cleanup
+that works removes the row, so "0 orphans" and "nothing ran" are the same reading, and 11.8 hours of
+CI left exactly ONE room in the table. Three of the five runs I counted as exposure were CANCELLED
+(Rule 79d, costing a finding rather than a formality). The denominator has to come from something
+the cleanup CANNOT touch · here auth.users, which is unreachable by any purge in this project and is
+therefore simultaneously the permanent leak (Rule 124) and the only honest measure of exposure.
+Ask of any "it stopped happening": WOULD I SEE THE SAME NUMBER IF NOTHING HAD RUN AT ALL?
 
 RULE 125 (T2 S57 · August 12 2026):
 A DISCRIMINATOR YOU DID NOT AUTHOR IS NOT YOUR FINGERPRINT · BASELINE THE TOKEN AGAINST THE ARTIFACT
