@@ -28,12 +28,35 @@ jobs:
       - name: Lint
         run: npm run lint || echo "lint warnings (non-blocking)"
 
+      # ── BUILD BEFORE TEST · THIS ORDER IS LOAD-BEARING (T2 S59) ────────────────────────────────
+      # It was Test-then-Build, which reads as the natural order and silently disabled the two most
+      # security-relevant assertions in the repo for as long as they have existed.
+      #
+      # THE MECHANISM, measured rather than reasoned: `dist/` is gitignored (0 tracked files), so a
+      # fresh CI checkout has none. Both bundle guards below read dist/assets, find nothing, and
+      # SKIP · and they skipped by warning to a console vitest does not surface for a passing test,
+      # so the run printed `Tests N passed` with no indication that anything had been left unrun.
+      #     src/lib/e2ePool.test.js      "the production bundle contains no password-sign-in branch"
+      #     src/lib/reservedNames.test.js "the production bundle contains no VITE_E2E bypass"
+      # Those are the only two assertions in this project about a REAL PLAYER's browser rather than
+      # about drift · one keeps a credential path out of it, the other keeps the reserved-name bypass
+      # out of it · and each is described in its own file as exactly that. They pass locally, every
+      # time, because a developer's dist/ is left over from the last build. They have never run here.
+      #
+      # This is Rule 67 turned around: that rule says gate on what is true WHERE THE GATE RUNS rather
+      # than in your working tree. This is the same seam with the artifact missing instead of stale ·
+      # the gate ran somewhere the subject did not exist, and reported on it anyway. Reordering costs
+      # nothing (both steps already run) and a build failure now fails faster, before the suite.
+      #
+      # THE SKIPS ARE ALSO NOW COUNTABLE, so this cannot regress invisibly if the order is ever
+      # changed back: both guards use ctx.skip(), which the runner reports as `1 skipped` instead of
+      # folding into the pass count.
+      - name: Build
+        run: npm run build
+
       - name: Test
         run: npx vitest run
         continue-on-error: false
-
-      - name: Build
-        run: npm run build
 
       - name: Build size report
         run: |

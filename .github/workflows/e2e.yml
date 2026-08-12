@@ -77,25 +77,53 @@ jobs:
       # a trigger, so a fork PR gets no secrets. That is genuinely UNMEASURED · it must SAY SO and
       # must not be read as a pass, but it must also not red a gate for a contributor who cannot
       # possibly fix it. A measured FAILURE (exit 1) reds; a missing credential (exit 2) warns.
-      - name: Pool credential grants a session · and is REUSED, not minted
+      #
+      # ── T2 S59 · THE ALIAS MAP, AND WHY IT IS HERE RATHER THAN IN EITHER LANE ─────────────────
+      # Council Decision 2 created four pool users and eight secrets. The names diverged from what
+      # the code reads, and nothing could have said so · measured with `gh secret list` against
+      # tests/e2e/seedHelpers.js:80, which builds `E2E_POOL_EMAIL${suffix}` with suffix `_${index}`:
+      #
+      #     member   harness reads       repo has                  before this map
+      #     0        E2E_POOL_EMAIL      E2E_POOL_EMAIL            resolves
+      #     1        E2E_POOL_EMAIL_1    E2E_POOL_JOINER_EMAIL     NULL · falls back to anonymous
+      #     2        E2E_POOL_EMAIL_2    E2E_POOL_P3_EMAIL         NULL
+      #     3        E2E_POOL_EMAIL_3    E2E_POOL_P4_EMAIL         NULL
+      #
+      # Three of four users existed and were invisible to the only code that would use them, and the
+      # single symptom was one console line in a Playwright log. That is a contract spanning two
+      # lanes with no owner (Rule 115) · the workflow is the seam, so the reconciliation belongs
+      # here: nothing is renamed, no secret is recreated, and neither lane's file is touched.
+      #
+      # THIS IS MEASUREMENT, NOT ACTIVATION. The Council ordering is enough users -> instrument the
+      # branch -> the two env lines, and doing it out of order produces a silent regression in the
+      # harness everything depends on. These names reach the VERIFY step only. The playwright steps
+      # below still get nothing, so no browser converts and nothing about the specs changes yet.
+      - name: Pool credentials grant a session · REUSED not minted · ALL FOUR members
         env:
           E2E_POOL_EMAIL: ${{ secrets.E2E_POOL_EMAIL }}
           E2E_POOL_PASSWORD: ${{ secrets.E2E_POOL_PASSWORD }}
+          E2E_POOL_EMAIL_1: ${{ secrets.E2E_POOL_JOINER_EMAIL }}
+          E2E_POOL_PASSWORD_1: ${{ secrets.E2E_POOL_JOINER_PASSWORD }}
+          E2E_POOL_EMAIL_2: ${{ secrets.E2E_POOL_P3_EMAIL }}
+          E2E_POOL_PASSWORD_2: ${{ secrets.E2E_POOL_P3_PASSWORD }}
+          E2E_POOL_EMAIL_3: ${{ secrets.E2E_POOL_P4_EMAIL }}
+          E2E_POOL_PASSWORD_3: ${{ secrets.E2E_POOL_P4_PASSWORD }}
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           set +e
           node scripts/verify-pool-signin.cjs --negative
           neg=$?
-          node scripts/verify-pool-signin.cjs
+          node scripts/verify-pool-signin.cjs --all
           pos=$?
           set -e
           if [ $neg -eq 2 ] || [ $pos -eq 2 ]; then
-            echo "::warning title=Pool UNMEASURED::The pool credential was not available to this run"
+            echo "::warning title=Pool UNMEASURED::A pool credential was not available to this run"
             echo "  (a fork PR cannot read repo secrets). This is NOT a pass · the question is open."
             exit 0
           fi
           [ $neg -ne 0 ] && echo "::error::the negative control did not reject a wrong password"
+          [ $pos -eq 1 ] && echo "::error::a pool member exists but the harness cannot read its name"
           exit $(( neg + pos ))
 
       - name: Install deps

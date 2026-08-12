@@ -13,6 +13,9 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { RESERVED_USERNAME_PREFIXES, isReservedUsername, isSweptByPurge, reservedUsernameError } from './reservedNames'
+// The build-mode discriminator for the bundle guard below · a token from a DIFFERENT module behind a
+// DIFFERENT VITE_E2E gate, so it cannot be the same reading twice (see the note at its use site).
+import { E2E_POOL_KEY } from './e2ePool'
 
 // The purge's definition is a CHAIN, not a file (Rule 109) · `create or replace` means the last
 // migration that touched the function wins. So take the highest-numbered migration that defines
@@ -114,23 +117,95 @@ describe('reserved usernames · the namespace the purge owns', () => {
   // Asserted against the BUILT ASSETS rather than the source, because the source is not what ships.
   // Skipped when dist/ is absent so a bare `vitest` run is not red for the wrong reason · and the
   // skip is loud, because a guard that silently does not run is worse than no guard (Rule 79d).
-  it('the production bundle contains no VITE_E2E bypass', () => {
+  // ⚠ THE SKIP ABOVE WAS NOT LOUD, AND IT HAD NEVER BEEN ANYTHING ELSE (corrected T2 S59).
+  // The comment two lines up said "the skip is loud, because a guard that silently does not run is
+  // worse than no guard (Rule 79d)". It warned to console.warn, and vitest does not surface console
+  // output for a PASSING test · so the run printed `Tests N passed` and said nothing at all. Measured
+  // by deleting dist/ and reading the output: no warning, no marker, a clean green.
+  // WORSE, AND THIS IS THE PART THAT MATTERED: `dist/` is gitignored, so a CI checkout never has one,
+  // and canary.yml ran Test BEFORE Build. This assertion · named in this file as "the one assertion
+  // that is about a real person rather than about drift" · has therefore never executed on the merge
+  // gate in its life. It passes locally every time because a developer's dist/ is left over from the
+  // last build, which is exactly the shape that makes it invisible. canary.yml now builds first, and
+  // the skip goes through ctx.skip() so the RUNNER counts it (`1 skipped`) rather than the file
+  // asking a swallowed console to speak for it. A claim about loudness is a claim (Rule 81).
+  it('the production bundle contains no VITE_E2E bypass', (ctx) => {
     const dist = join(process.cwd(), 'dist', 'assets')
     let files = []
     try { files = readdirSync(dist).filter(f => f.endsWith('.js')) } catch { /* no build */ }
     if (!files.length) {
-      console.warn('[reservedNames] SKIPPED the bundle check · no dist/assets. Run `npm run build` ' +
-        'first. This is the assertion that keeps the E2E bypass out of a player\'s browser.')
+      ctx.skip('UNMEASURED · no dist/assets. Run `npm run build` first. This is the assertion that ' +
+        'keeps the E2E bypass out of a player\'s browser, and it did not run.')
       return
     }
     const bundled = files.map(f => readFileSync(join(dist, f), 'utf8')).join('\n')
-    // The prefixes must survive (the guard is real in prod) and the flag must not (the hole is not).
-    expect(bundled.includes('BotAlpha'), 'the reserved prefixes are absent from the production ' +
-      'bundle · the guard has been tree-shaken out entirely and no player is protected').toBe(true)
-    expect(bundled.includes('VITE_E2E'), 'VITE_E2E survives into the production bundle · the E2E ' +
-      'bypass is reachable in a real browser, so any player can claim a name inside ' +
-      'purge_e2e_test_data\'s delete scope and lose their game. This is the one assertion in this ' +
-      'file that is about a real person rather than about drift.').toBe(false)
+
+    // Which artifact is this? An E2E build legitimately shakes the prefixes OUT, so asserting their
+    // presence against one reports "no player is protected" about a correct bundle · a false alarm
+    // of the most alarming kind available. Two INDEPENDENT anchors, because one token cannot tell
+    // "not our app" from "our app, other mode" (Rule 92 · e2ePool.test.js carries the same pair).
+    expect(bundled.includes('neotopia_username_claimed'), 'the built bundle contains none of our ' +
+      'own app code · the checks below would pass or fail for the wrong reason').toBe(true)
+
+    // ⚠ MATCH THE PREFIX AS A DELIMITED LITERAL, NOT AS A SUBSTRING · A MUTATION CAUGHT THIS ONE.
+    // The first version of this asked `bundled.includes('BotAlpha')`. Renaming the shipped token to
+    // `BotAlphaX` · which is a prefix list a player is NOT protected by · left it GREEN, because
+    // 'BotAlphaX' contains 'BotAlpha'. That is Rule 112 inside the guard I was in the middle of
+    // rewriting to fix a different vacuity in the same assertion, and only the mutation found it;
+    // rereading did not, twice. Delimiters are read from the artifact (the bundle emits
+    // `E2E`,`BotAlpha`,`BotBeta` as template literals) but all three JS quote characters are
+    // accepted, because which one a minifier chooses is its business and pinning it would make this
+    // red on a correct bundle the day rolldown changes its mind (Rule 116e).
+    const asLiteral = (s) => new RegExp('[`\'"]' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[`\'"]')
+    const shipped = (p) => asLiteral(p).test(bundled)
+
+    // ⚠ THE BUILD-MODE DISCRIMINATOR MUST NOT BE THE SUBJECT · THE SECOND MUTATION FOUND THIS TOO.
+    // My first fix asked `if (!shipped('BotAlpha')) skip`, which is the same token the assertion
+    // below is ABOUT. So a production bundle whose prefix had been mangled classified itself as an
+    // E2E build and reported UNMEASURED · better than the green it used to return, and still not
+    // the red it should be. Two sides of a check from one source agree by construction (Rule 92);
+    // here they were literally the same string.
+    // E2E_POOL_KEY is the independent one: a different module, a different VITE_E2E gate, measured
+    // 0 in a production build and 1 under VITE_E2E=true. It is imported rather than retyped so it
+    // cannot drift, and if it were ever deleted this classifies every build as production and
+    // asserts MORE, which is the safe direction for a guard about a player's browser.
+    if (bundled.includes(E2E_POOL_KEY)) {
+      ctx.skip('UNMEASURED · dist/ is a VITE_E2E build (the pool key is present, which only that ' +
+        'build emits), and the prefixes are SUPPOSED to be shaken out of it. Run `npm run build` ' +
+        'and re-run · the production question is open, not answered.')
+      return
+    }
+
+    // ⚠ THE SECOND ASSERTION USED TO BE `VITE_E2E must be absent` AND IT COULD NOT FAIL (T2 S59).
+    // Measured on both artifacts tonight:
+    //     token       prod   VITE_E2E=true
+    //     VITE_E2E      0          0        Vite SUBSTITUTES the name · it is gone either way
+    //     BotAlpha      1          0        shaken out precisely WHEN the bypass is compiled in
+    // So the check named in this file as "the one assertion that is about a real person" was
+    // structurally unable to fail, in either direction, since the day it was written · and it would
+    // have passed on a bundle carrying the bypass, which is the only outcome it existed to prevent.
+    // I had ALREADY FOUND THIS: e2ePool.test.js's header says in terms that a guard keyed on
+    // VITE_E2E's absence "passes on a leaking bundle (my own S52 finding)". I wrote that sentence
+    // one file away from this guard and did not come back for it. A finding recorded next to the
+    // code it explains is not a finding applied to the code it indicts (Rule 86 · a guard that
+    // reports itself as present retires the worry).
+    //
+    // REPLACED BY SUBTRACTION rather than supplemented (Rule 95's corollary · keep only the delta
+    // that is real). BotAlpha's PRESENCE is the honest discriminator and it is two-sided: the
+    // prefixes are reachable only through isReservedUsername, the bypass is an early `return false`
+    // at the top of it, and a build where that bypass survives has no live caller for the prefix
+    // list · so it is shaken, and this reads 0. The measurement above is that claim tested, not
+    // asserted: 1 in the build that protects a player, 0 in the build that does not.
+    // Enumerated from the constant, never typed · a fourth prefix is covered with no edit here, and
+    // retyping the list would make the guard agree with its own copy (Rule 92a).
+    for (const p of RESERVED_USERNAME_PREFIXES) {
+      expect(shipped(p), `the reserved prefix "${p}" is absent from the PRODUCTION bundle as a ` +
+        'string literal · isReservedUsername has no live caller, which is what a compiled-in ' +
+        'VITE_E2E bypass looks like from outside. Any player can then claim a name inside ' +
+        'purge_e2e_test_data\'s delete scope and lose their game. This is the one assertion in this ' +
+        'file that is about a real person rather than about drift, and unlike the VITE_E2E check it ' +
+        'replaces, it can actually fail.').toBe(true)
+    }
   })
 
   // ══ THE THIRD EDGE OF A THREE-PARTY CONTRACT (T2 S52) ═══════════════════════════════════════════

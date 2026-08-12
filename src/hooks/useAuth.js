@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { reportBackendUp, reportBackendDown, registerBackendRetry, getBackendHealth } from './useConnectionHealth'
 import { isReservedUsername, reservedUsernameError } from '../lib/reservedNames'
-import { readPoolCredential } from '../lib/e2ePool'
+import { readPoolCredential, recordPoolOutcome, readPoolOutcome, POOL_OUTCOME } from '../lib/e2ePool'
 
 const USERNAME_KEY = 'neotopia_username'
 const CLAIMED_KEY  = 'neotopia_username_claimed'
@@ -71,12 +71,44 @@ export function useAuth() {
         // before. A pool that is absent is not an error.
         if (import.meta.env.VITE_E2E) {
           const pool = readPoolCredential()
+          if (!pool) {
+            // MEASURED ZERO, NOT UNMEASURED. The harness seeded nothing, so this run mints · which is
+            // correct behaviour and is also the state that must not read as "converted and free".
+            recordPoolOutcome(POOL_OUTCOME.NO_CREDENTIAL,
+              'no credential seeded for this browser context · minting anonymously')
+            console.log('[e2e-pool] NO CREDENTIAL for this context · unconverted, not converted-and-free')
+          }
           if (pool) {
             const { data: pd, error: pe } = await supabase.auth.signInWithPassword({
               email: pool.email, password: pool.password,
             })
             if (!mounted) return
             if (!pe && pd?.user) {
+              // ASSERT THE DEFINING PROPERTY, NOT THE CONVENIENT ONE (Rule 110). "We obtained a
+              // session" is satisfied by the exact failure this feature exists to prevent, so the
+              // question is not whether a user came back · it is whether it is a REUSED one. An
+              // anonymous user from a password grant is the pool minting in disguise, and it passes
+              // every other check in this branch. T3's node-side half asserts the same property
+              // (seedHelpers.signInPooledOrAnon), so the two halves now agree rather than one of them
+              // carrying the whole claim.
+              //
+              // HONEST ABOUT REACH: GoTrue is not expected to answer a password grant with an
+              // anonymous identity, so this is a defining-property assertion and not a fix for an
+              // observed bug (Rule 102's corollary · measure whether play can reach a state before
+              // claiming what guarding it fixed). It costs one comparison and it can never pass
+              // silently, which is the entire argument for it.
+              //
+              // EITHER WAY THE SESSION IS ADOPTED · falling through to signInAnonymously() here would
+              // mint a SECOND identity on top of the one we just received, so the wrong outcome would
+              // cost double what doing nothing costs.
+              if (pd.user.is_anonymous === true) {
+                recordPoolOutcome(POOL_OUTCOME.MINTED_IN_DISGUISE,
+                  'the password grant returned an ANONYMOUS user')
+                console.error('[e2e-pool] the grant SUCCEEDED and handed back an ANONYMOUS user · ' +
+                  'this is the pool minting in disguise, and every other check in this branch passes')
+              } else {
+                recordPoolOutcome(POOL_OUTCOME.REUSED, `reused ${String(pd.user.id).slice(0, 8)}`)
+              }
               setAuthError(null); setUser(pd.user); setIsLoading(false)
               reportBackendUp(HEALTH_SOURCE)
               return
@@ -84,6 +116,7 @@ export function useAuth() {
             // A configured pool that will not authenticate is a HARNESS defect and must be loud ·
             // silently falling through would mint the anonymous user this exists to prevent and the
             // saving would quietly stop happening with every test still green (Rule 93).
+            recordPoolOutcome(POOL_OUTCOME.GRANT_FAILED, pe?.message ?? 'no user returned')
             console.error('[e2e-pool] sign-in FAILED for a seeded credential · falling back to ' +
               'anonymous, so this run still mints an identity:', pe?.message ?? 'no user returned')
           }
@@ -117,6 +150,32 @@ export function useAuth() {
       if (!mounted) return
 
       if (session?.user) {
+        // ── THE SILENT SKIP, MADE LEGIBLE (T2 S59) ────────────────────────────────────────────────
+        // This early return is the one reachable path that bypasses the pool ENTIRELY: attemptSignIn
+        // is never called, so none of its four outcomes is recorded and the run mints nothing new but
+        // also converts nothing · it simply carries on as whatever identity was already persisted.
+        // A context that has signed in anonymously once and then has a credential seeded into it
+        // lands here, and today that is invisible in every view: the app works, the spec passes, the
+        // console says nothing and the identity counter does not move for a reason nobody can see.
+        //
+        // ONLY WHEN NOTHING HAS BEEN DECIDED. A grant that failed a moment ago has already recorded
+        // the specific reason and then fell through to an anonymous sign-in whose SIGNED_IN event
+        // arrives HERE · writing this record unconditionally would overwrite a diagnosis with an
+        // ambiguity (see readPoolOutcome's note). A successful pool sign-in cannot reach it at all,
+        // because its user is not anonymous.
+        //
+        // OBSERVED, NOT CORRECTED. Preferring the pool over a persisted anonymous session would be a
+        // behaviour change in the path that fixed the reload-churn bug (the user_id must not change
+        // on reload · guarded by useAuth.test.js), and it is not worth risking that to save an
+        // identity that has already been minted. The record makes the harness able to red on it;
+        // whether to re-seat the context is the harness's call, not this hook's.
+        if (import.meta.env.VITE_E2E && session.user.is_anonymous === true &&
+            !readPoolOutcome() && readPoolCredential()) {
+          recordPoolOutcome(POOL_OUTCOME.PERSISTED_ANON_PREEMPTED,
+            'a persisted anonymous session was adopted while a credential sat unread')
+          console.error('[e2e-pool] a credential was seeded but a PERSISTED ANONYMOUS session was ' +
+            'adopted first · the pool never ran for this context and nothing was converted')
+        }
         // Persisted / refreshed / freshly-signed-in session · adopt it. Reaching this proves the backend
         // answered, so it also clears any earlier degraded report (a refresh that succeeds after an outage).
         setUser(session.user)
