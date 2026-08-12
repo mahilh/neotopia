@@ -98,10 +98,35 @@ export async function updateSessionState(admin, roomId, mutate, columns = {}) {
 // FK cascade clears room_players + game_sessions + game_events. Best-effort (no-op if 005 absent).
 export async function cleanupSeeded(game) {
   if (!game) return
+  // ── THE ORDER WAS BACKWARDS, AND IT MANUFACTURED THE UNDIAGNOSABLE SHAPE (T3 S56) ────────────────────
+  // It deleted the ROOM and then deleted room_players unconditionally. On success the second statement is
+  // a no-op (the FK cascade already took the seats). On FAILURE it strips the seats off a room that is
+  // still there · turning "a leaked room with its seats" into "a leaked room with nothing left to identify
+  // it by", which is precisely the shape production is full of:
+  //     118 of the 121 rooms created in 24h · status finished · 0 seats · 1 game_sessions row
+  // and createSeededGame gives every room it makes exactly one session row, which is what makes that
+  // fingerprint this function's rather than anybody else's.
+  // ⚠ STATED AS AN INFERENCE, because I got the last one wrong by not doing that (S55, corrected today):
+  // the shape matches uniquely and the ordering defect is real and readable, but WHY the room delete fails
+  // is still unmeasured · my S56 probe showed this exact RLS path working on a fresh session. So the fix
+  // here is the part that is safe regardless of cause · never strip the seats off a room that survived ·
+  // plus the observability to name the cause on the next run rather than a third round of reasoning.
+  let roomGone = false
   try {
     await game.admin.from('game_rooms').update({ status: 'finished' }).eq('id', game.roomId)
-    await game.admin.from('game_rooms').delete().eq('id', game.roomId)
-  } catch { /* best-effort */ }
+    const { data: del, error } = await game.admin.from('game_rooms')
+      .delete().eq('id', game.roomId).select('id')
+    roomGone = Array.isArray(del) && del.length > 0
+    if (!roomGone) {
+      console.warn(`[cleanupSeeded] room ${game.roomId} SURVIVED its delete · ${del?.length ?? 0} row(s)` +
+        `${error ? ` · ${error.message}` : ' · no error, so RLS matched nothing'} · leaving its seats in ` +
+        'place so it stays identifiable')
+    }
+  } catch (e) {
+    console.warn(`[cleanupSeeded] room delete THREW for ${game.roomId} · ${String(e).slice(0, 100)}`)
+  }
+  // Only worth doing when the cascade did NOT run · and never when it would leave an anonymous husk.
+  if (!roomGone) return
   try { await game.admin.from('room_players').delete().eq('room_id', game.roomId).eq('user_id', game.userId) } catch { /* best-effort */ }
 }
 
