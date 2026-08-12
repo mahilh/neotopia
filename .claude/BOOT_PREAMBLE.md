@@ -43,7 +43,11 @@ are deliberately not creating (86).
   identical frames before reading mid-transition.
 - Absence inside a truncated page is not absence. Assert the COUNT found, not the absence of pending.
 - A probe that prints nothing is indistinguishable from one that found nothing. Guard the loop before
-  writing it.
+  writing it — assert the COUNT it observed, not that it finished. And route the summary somewhere the
+  runner cannot eat: vitest swallowed stdout and reported '1 passed' for a probe that printed nothing,
+  and the session's central finding nearly rested on it.
+- An idempotency guard that greps for a symbol matches its USES, not its declaration. Mine skipped adding
+  an import because the line it was about to add contained the name (112 in a script).
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
 
