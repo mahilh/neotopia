@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (115 · cumulative):
+PERMANENT ANTI-REGRESS RULES (117 · cumulative · the header read 115 while 116 existed · T2 S52):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,40 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 117 (T2 S52 · August 11 2026):
+ONE PREDICATE CANNOT SERVE TWO QUESTIONS WHOSE WRONG ANSWERS COST OPPOSITE THINGS · "ERR STRICT" IS
+NOT A DIRECTION UNTIL YOU NAME WHICH FAILURE YOU ARE BUYING. The reserved-username list answers two
+questions that look like one:
+    isReservedUsername  "may a PLAYER claim this?"     wrong-yes costs a stranger their game
+    isSweptByPurge      "can the CLEANUP reach this?"  wrong-yes costs a row that lives forever
+The first wants case-INsensitive · refuse generously, because Postgres `like 'E2E%'` is case sensitive
+and a player typing 'E2Etest' must be stopped whether or not the SQL would have matched it. The second
+wants case-SENSITIVE · it must mirror the SQL character for character, because a harness emitting
+'e2ehost' would be waved through by the generous predicate as "reserved, fine" while the purge could
+never match it. Same list, same three prefixes, opposite strictness, and I had written ONE function
+and was about to point it at both. Generous is safe in one direction and is a silent permanent leak in
+the other.
+  117a · THE TELL IS A PREDICATE WHOSE NAME IS A PROPERTY RATHER THAN A QUESTION. `isReserved` sounds
+        like a fact about the string, so it reads as reusable everywhere the subject comes up. Rename
+        it to the QUESTION it answers and the second call site stops looking like the same call ·
+        `isSweptByPurge` cannot be mistaken for `mayAPlayerClaimThis`. A shared constant is fine; a
+        shared COMPARISON is where the two costs get conflated.
+  117b · ASK WHAT THE WRONG ANSWER COSTS, IN EACH DIRECTION, BEFORE CHOOSING THE TOLERANCE. "Be
+        strict" is advice with no direction in it. Here one wrong answer is loud and recoverable (a
+        player is refused a name and picks another) and the other has no symptom at all. Same family
+        as Rule 94a · a false positive is not automatically the safe error · but sharper: the safe
+        error is different for each QUESTION, not for each system.
+COROLLARY, and it is about how evidence gets read: A SOURCE THAT ANSWERS THE QUESTION YOU CAME WITH IS
+WHERE YOU STOP READING IT. The printed rulebook settled S38 tonight · "gain the token on top of the
+pile of the corresponding Region, if any" · singular, shared pile, and "if any" licenses the 36% of
+crossings that award nothing. Correct, and it closed a question two sessions had called open. The SAME
+SENTENCE also says "on top of the pile", which is STACK ORDER, and S38's Rule 85 deliberately moved
+the granter AWAY from stack order to threshold matching on the strength of a repo markdown; and setup
+step 8 builds stacks of FOUR where we build THREE, so the game holds 12 tokens rather than 9 and every
+scarcity figure measured last session is against a pool a quarter too small. Nobody hid any of that ·
+it is in the quotation. The answer arrived first and the reading stopped. When a primary source
+finally lands, read it for what else it contradicts BEFORE recording the answer it gave you.
 
 RULE 116 (T1 S51, written S52 · August 11 2026):
 A SOURCE READ CANNOT ANSWER A QUESTION WHOSE ANSWER IS COMPOSED. GREP TELLS YOU WHAT THE TEXT SAYS;

@@ -29,6 +29,28 @@
 // the thing it protects against, so that a later change from `like` to `ilike` cannot silently open
 // a hole. Over-rejecting three prefixes nobody wants costs nothing; under-rejecting costs a game.
 
+// ── THE DESTINATION, RECORDED AND DELIBERATELY NOT BUILT (Council · Mahil, S52) ──────────────────
+// THIS WHOLE MODULE IS A NAMING CONVENTION DOING A SCHEMA'S JOB. purge_e2e_test_data identifies the
+// rows it may delete by how their username STARTS · a string a stranger can type and a harness must
+// remember to produce. Everything here · the player-facing refusal, the E2E bypass at the call site,
+// the SQL drift guard, the produced-identity leak guard · exists to hold that convention together.
+//
+// THE REAL FIX IS A COLUMN: `player_profiles.is_test boolean not null default false`, set by the
+// harness, checked by the purge, invisible to and unclaimable by a player. It removes the collision
+// class outright rather than guarding its edges.
+//
+// NOT BUILT, on purpose. It is a schema change plus a migration plus a harness change across two
+// lanes, to fix a class that has collided exactly once. The guards below are cheap and they hold.
+//
+//   COUNCIL TRIPWIRE: IF THE PREFIX SCHEME COLLIDES A SECOND TIME, THE FLAG COLUMN STOPS BEING A
+//   DESTINATION AND BECOMES THE FIX. One collision is a bug; two is the design telling you.
+//
+// SOPHIA'S DISSENT, RECORDED BECAUSE IT MAY WELL BE RIGHT: every new live spec is a new producer in
+// this namespace, so a second collision is closer to certain than to unlikely. The counter-argument
+// is that the S52 leak guard now makes a new producer fail LOUDLY at commit time rather than silently
+// in production · which is precisely the thing that was missing when it collided the first time. If
+// that guard ever has to be weakened or skipped, treat it as the second collision.
+
 /**
  * Prefixes owned by the E2E harness and swept by purge_e2e_test_data().
  * MUST stay in sync with scripts/migrations/*.sql · enforced by reservedNames.test.js.
