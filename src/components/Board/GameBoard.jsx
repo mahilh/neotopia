@@ -1,4 +1,5 @@
 import { hexesInRadius, hexToPixel, REGIONS, TERRAIN, FACTORIES, HEX_SIZE, ELEMENT_COLORS } from '../../utils/hexUtils'
+import { useCountUp } from '../../utils/useCountUp'
 import HexCell from './HexCell'
 
 // ── THE BOARD AS AN OBJECT, NOT THREE FILLS (T1 S34) ────────────────────────────────────────────
@@ -175,6 +176,24 @@ export function computeViewBox(focusRegionId = null) {
 // 'meet'. This is the quantity Rule 4 is about and the one every claim in this area should be made
 // in · not the viewBox, not the container, not the scale.
 export const hexPxIn = (vb, boxW, boxH) => 2 * HEX_SIZE * Math.min(boxW / vb.width, boxH / vb.height)
+
+// The score gets its own component because a hook cannot live inside a .map · and per-region is the
+// right granularity anyway: two regions scoring in one turn animate independently instead of one
+// number restarting the other (T1 S55).
+function RegionScore({ value, x, y }) {
+  const shown = useCountUp(value)
+  return (
+    <text
+      data-region-score
+      x={x} y={y}
+      textAnchor="middle" dominantBaseline="central"
+      fill="white" fontSize={30} fontWeight={700}
+      style={{ opacity: 0.92, fontVariantNumeric: 'tabular-nums' }}
+    >
+      {shown}
+    </text>
+  )
+}
 
 export default function GameBoard({
   focusRegion = null,       // region id · scope the viewBox to one region (phone, step 3). null = whole board
@@ -570,14 +589,7 @@ export default function GameBoard({
             >
               {reg.name}
             </text>
-            <text
-              x={x} y={y - HEX_SIZE * 2.62}
-              textAnchor="middle" dominantBaseline="central"
-              fill="white" fontSize={30} fontWeight={700}
-              style={{opacity: 0.92, fontVariantNumeric: 'tabular-nums'}}
-            >
-              {score}
-            </text>
+            <RegionScore value={score} x={x} y={y - HEX_SIZE * 2.62} />
           </g>
         )
       })}
