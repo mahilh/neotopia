@@ -255,6 +255,31 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
   })
 })
 
+// ── WHAT COULD NOT BE MANUFACTURED HERE, AND WHY · RECORDED WHERE THE WORK WOULD START (T3 S54) ────────
+//
+// THE TARGET: a peer whose local state has DIVERGED, writing a stale timeout snapshot, to prove the
+// state_version predicate refuses it rather than letting it clobber a placement its author never saw.
+// Identical snapshots race harmlessly (S53 proved that seam); a STALE one is the whole hazard, and the
+// turn clock now ends turns on other people's behalf.
+//
+// IT DOES NOT WORK THROUGH THIS DOOR, measured over three live runs, and the reason generalises: EVERY
+// MECHANISM THAT BLINDS A CLIENT ALSO DISTURBS THE STATE IT IS SUPPOSED TO BE HOLDING.
+//   · routeWebSocket alone · intercepts only NEW connections. The peer socket is already open by the time
+//     the counterweight has run, so it stayed perfectly synced (server 3 placements, peer 3). Caught by
+//     the staleness assertion, which is the only reason it was not reported as a passing test.
+//   · socket cut + REST GET blocked · the peer does go stale, and then falls all the way back: measured
+//     phase 'lobby', writeorder version 0, 0 placements. That is a RESET client, not a diverged one, and
+//     the turn clock correctly declines to run for it (gamePhase !== 'playing'). Nothing was refused
+//     because nothing was ever written.
+// So the honest state is: the divergence is reachable in the UNIT harness, where a stale payload and a
+// stale version can be issued deliberately (useGameSync.writeorder.test.js · T3 S54), and NOT through the
+// browser without a network shim faithful enough to keep the client playing while starving it. Building
+// that shim is a real piece of work and should be scoped as one rather than discovered mid-session.
+//
+// ⚠ ONE UNEXPLAINED OBSERVATION FROM THOSE RUNS, recorded because it is cheap to state and expensive to
+// lose · NOT a claim, it was seen ONCE and this harness had two defects in it: the persisted board went
+// from 3 placements to 2 as state_version went 3 → 4, with only one client writing. Nothing in scoreCard
+// or factoryRefill clears a hex, so game rules do not explain it. Reproduce before believing it.
 // ── THE DIVERGENT-STORE RACE · THE WORST FAILURE THIS FEATURE COULD HAVE (T3 S54) ────────────────────────
 //
 // The turn clock now ends turns ON OTHER PEOPLE'S BEHALF. So the failure that matters is not "it does not
@@ -276,90 +301,3 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
 // unit-tested only.
 //
 // COST · 2 anonymous sign-ins. Nightly-class (Rule 79b).
-test.describe('a blinded peer cannot clobber what it never saw (T3 S54)', () => {
-  test('LIVE · a stale timeout write is REFUSED, and the placement survives', async ({ browser }) => {
-    test.skip(!ENV, 'no Supabase creds · nightly-class live test')
-    test.setTimeout(240_000)
-
-    const ctxA = await browser.newContext()
-    const ctxB = await browser.newContext()
-    const A = await ctxA.newPage()
-    const B = await ctxB.newPage()
-    let roomId = null
-    let hostSession = null
-
-    try {
-      const lobby = await runTwoHumanLobby(A, B, {
-        expect, hostName: uniqueName('E2EDVA'), joinerName: uniqueName('E2EDVB'), mode: 'flow',
-      })
-      roomId = lobby.roomId
-      hostSession = await A.evaluate(() => localStorage.getItem('neotopia-auth'))
-
-      const client = createClient(ENV.url, ENV.key, { auth: { persistSession: false } })
-      const row = async () => (await client.from('game_sessions')
-        .select('state, state_version').eq('room_id', roomId).maybeSingle()).data
-      const placedIn = (s) => (s?.regions ?? [])
-        .reduce((n, r) => n + Object.values(r.hexes ?? {}).filter(h => h?.element).length, 0)
-
-      // ── COUNTERWEIGHT (Rule 120) · B MUST BE PROVEN TO BE LISTENING BEFORE IT IS BLINDED ──────────────
-      // A peer that never synced is stale for a completely different reason, and would produce this whole
-      // test's green without the feature working at all.
-      const bBefore = await read(B)
-      const actor = (await A.locator('[data-my-turn]').first().getAttribute('data-my-turn')) === 'true' ? A : B
-      expect(actor, 'the host does not hold the opening turn · this test assumes A acts first').toBe(A)
-      const acted = await spendOneAction(A, { expect })
-      expect(acted?.stage, `A could not act (${JSON.stringify(acted)}) · nothing below is measurable`).toBe('ok')
-      await expect.poll(async () => {
-        const now = await read(B)
-        return now.placed !== bBefore.placed || now.actionsRemaining !== bBefore.actionsRemaining
-      }, { timeout: 20_000, message: 'COUNTERWEIGHT FAILED · B never observed A\'s action, so it was never ' +
-           'listening and its later staleness is unmeasured rather than manufactured' }).toBe(true)
-      console.log('[divergent] counterweight OK · B observed a real action before being blinded')
-
-      // ── BLIND B · it can no longer LEARN, but it can still SPEAK ──────────────────────────────────────
-      await ctxB.routeWebSocket('**/realtime/v1/**', ws => { /* never connect · realtime is dead for B */ })
-      await ctxB.route('**/rest/v1/game_sessions*', route =>
-        route.request().method() === 'GET' ? route.abort() : route.continue())
-      const bAtBlind = await read(B)
-      console.log('[divergent] B blinded at', JSON.stringify(bAtBlind))
-
-      // A keeps playing. Every one of these reaches the row and NONE of them reaches B.
-      for (let i = 0; i < 2; i++) await spendOneAction(A, { expect }).catch(() => null)
-      const afterA = await row()
-      const placedOnServer = placedIn(afterA.state)
-      expect(placedOnServer, 'A made no progress the server can see · there is nothing for B to clobber')
-        .toBeGreaterThan(bAtBlind.placed)
-
-      // B IS GENUINELY STALE · asserted, not assumed. Without this the refusal below could be a peer that
-      // simply agreed with the server all along.
-      const bNow = await read(B)
-      expect(bNow.placed, 'B is not stale · the blinding did not take, so this measures nothing')
-        .toBeLessThan(placedOnServer)
-      console.log(`[divergent] B stale: sees ${bNow.placed} placements, server holds ${placedOnServer}`)
-
-      // ── B'S CLOCK EXPIRES ON A TURN IT CANNOT SEE HAS MOVED · it writes, and must be REFUSED ──────────
-      await expect.poll(async () => (await B.evaluate(
-        () => window.__neotopia_writeorder?.overtakes?.length ?? 0)) > 0,
-      { timeout: 90_000, message: 'B never had a write refused · either its timeout never fired (the clock ' +
-        'is not running for a blinded client) or its stale write was ACCEPTED, which is the clobber this ' +
-        'whole test exists to rule out. Check the row below before assuming the former.' }).toBe(true)
-
-      const overtakes = await B.evaluate(() => window.__neotopia_writeorder.overtakes)
-      console.log('[divergent] B overtakes:', JSON.stringify(overtakes))
-
-      // THE ASSERTION THAT MATTERS · the server still holds A's work.
-      const finalRow = await row()
-      expect(placedIn(finalRow.state), 'B\'s stale timeout write CLOBBERED placements it never saw · the ' +
-        'state_version predicate did not protect the seam, and the feature built to rescue a frozen game ' +
-        'is destroying live ones').toBeGreaterThanOrEqual(placedOnServer)
-      expect(finalRow.state_version, 'the row went BACKWARDS in version').toBeGreaterThanOrEqual(afterA.state_version)
-
-      console.log(`[divergent] VERDICT · B refused ${overtakes.length}x · server placements ` +
-        `${placedOnServer} → ${placedIn(finalRow.state)} · version ${afterA.state_version} → ${finalRow.state_version}`)
-    } finally {
-      await ctxA.close()
-      await ctxB.close()
-      await deleteRoomAsHost(hostSession, roomId)
-    }
-  })
-})

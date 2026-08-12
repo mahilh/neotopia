@@ -256,3 +256,73 @@ describe('two clients time out at the same instant · exactly one write is accep
     a.unmount(); b.unmount()
   })
 })
+
+// ── A STALE PAYLOAD, NOT JUST A STALE VERSION · THE CLOBBER ITSELF (T3 S54) ──────────────────────────────
+//
+// S53 proved two clients issuing the SAME snapshot produce one accepted write. That is necessary and it is
+// not the hazard: identical payloads race harmlessly, because whichever lands leaves the row saying the
+// same thing. The hazard is a peer whose store has DIVERGED · it writes an OLD board with an OLD version,
+// and if that is accepted it erases work its author never saw. The turn clock makes this reachable in
+// ordinary play, because it writes on behalf of a player who is not there to notice.
+//
+// I FIRST TRIED TO BUILD THIS IN A BROWSER AND IT DOES NOT WORK · three live runs, recorded in
+// tests/e2e/host-departure-live.e2e.js. Every mechanism that blinds a client also disturbs the state it is
+// supposed to be holding: routeWebSocket misses the already-open socket (the peer stayed perfectly
+// synced), and cutting the socket plus blocking REST reads drops the peer all the way back to phase
+// 'lobby' with version 0 · a RESET client, not a diverged one, for which the clock correctly never runs.
+//
+// AND THE SHARED-STORE OBJECTION DOES NOT APPLY, which is what I got wrong when I wrote the S53 limit.
+// pushState reads the store SYNCHRONOUSLY AT CALL TIME, so two hooks sharing one store can still issue two
+// genuinely different payloads · mutate the store between the calls and the second one carries the older
+// board. What two renderHooks cannot model is two clients diverging CONCURRENTLY over time; what they
+// model perfectly is the only thing this claim needs: a stale snapshot meeting a newer row.
+describe('a stale payload is refused, and the newer board survives (T3 S54)', () => {
+  const boardWith = (n) => [{
+    id: 'r1',
+    hexes: Object.fromEntries(Array.from({ length: n }, (_, i) => [`${i},0`, { element: 'energy' }])),
+  }]
+  const placedIn = (state) => (state?.regions ?? [])
+    .reduce((n, r) => n + Object.values(r.hexes ?? {}).filter(h => h?.element).length, 0)
+
+  beforeEach(() => {
+    db.rows = {}; db.applied = []; db.refused = []; nextDelay = () => 0; onSettled = null
+    useGameStore.setState({ phase: 'playing', currentSeat: 0, turnNumber: 19, players: seats() })
+  })
+
+  // COUNTERWEIGHT FIRST (Rule 90): the witness here is a COUNT OF PLACEMENTS on the persisted board, and
+  // it is worthless unless the harness can actually move it. A run where the row never carried 3 in the
+  // first place would "survive" the stale write trivially. So the fixture is proven to round-trip before
+  // anything is refused.
+  test('CONTROL · the board a client writes is what the row holds', async () => {
+    const a = renderHook(() => useGameSync(ROOM, 'userA'))
+    useGameStore.setState({ regions: boardWith(3) })
+    await act(async () => { await a.result.current.pushState('place') })
+    expect(db.applied, 'the first write did not land').toEqual([1])
+    expect(placedIn(db.rows[ROOM].state), 'the row does not carry the board that was written · the ' +
+      'placement count cannot witness a clobber if it cannot witness a write').toBe(3)
+    a.unmount()
+  })
+
+  test('a diverged peer stale timeout write is REFUSED · the placements it never saw survive', async () => {
+    const a = renderHook(() => useGameSync(ROOM, 'userA'))
+    const b = renderHook(() => useGameSync(ROOM, 'userB'))
+
+    // A plays: three placements reach the row at version 1.
+    useGameStore.setState({ regions: boardWith(3), turnNumber: 20 })
+    await act(async () => { await a.result.current.pushState('place') })
+    expect(placedIn(db.rows[ROOM].state)).toBe(3)
+
+    // B never saw any of it · its store still shows the older board, and its own counter is still 0, so
+    // the version it mints is the one it would have minted before A wrote. Both halves are what "stale"
+    // means and asserting only the version would let a same-board write masquerade as the hazard.
+    useGameStore.setState({ regions: boardWith(1), turnNumber: 19 })
+    await act(async () => { await b.result.current.pushState('endTurn', { reason: 'turn_timeout' }) })
+
+    expect(db.refused, 'B stale write was ACCEPTED · this is the clobber. A timeout firing on behalf of an ' +
+      'absent player has just erased two placements its author never saw, which is the worst possible ' +
+      'failure of a feature built to rescue a frozen game').toEqual([1])
+    expect(placedIn(db.rows[ROOM].state), 'the row lost placements to a stale writer').toBe(3)
+    expect(db.rows[ROOM].turn_number, 'the row turn went backwards').toBe(20)
+    a.unmount(); b.unmount()
+  })
+})
