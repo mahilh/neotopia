@@ -209,6 +209,24 @@ commit;
 --                              re-sized from measurement rather than raised by feel.
 --   orphan count               should stop GROWING. It will not shrink · that is the held half.
 --
+-- ⚠⚠ T2 S54 · THAT LAST LINE IS FALSIFIED, AND THE INVARIANT ABOVE IS NOT WHAT WAS WRONG.
+-- Measured four hours after applying this migration:
+--     rooms created since 026 was applied ....... 34
+--     of those, ORPHANED ........................ 33      (one has a profile)
+--     total orphans ............................. 597 -> 630
+-- The invariant holds and is not in question: purge_e2e_test_data cannot create an orphan, and the
+-- case analysis above is still correct. What is wrong is the SENTENCE I WROTE NEXT TO IT. "The purge
+-- cannot orphan a room" does not imply "rooms stop being orphaned" · it only rules out ONE producer,
+-- and I proved the one I had been thinking about and then stated an unscoped consequence of it.
+-- THERE IS A SECOND ORPHANING MECHANISM AND IT IS NOW THE DOMINANT ONE (97% of new rooms). Not
+-- diagnosed here, deliberately · the leading candidate is that a room can be BORN without a profile,
+-- because useGameRoom.js inserts the room (:303) BEFORE upserting the profile (:311), so any run
+-- whose claim or upsert does not land leaves a room with a host_id nothing points at. That is a
+-- different bug in a different lane and it needs its own measurement, not a guess bolted onto this
+-- header (Rule 32).
+-- Rule 122's shape, one more time and in the place it costs most: a scoped proof followed by an
+-- unscoped claim, where the proof makes the claim feel already checked.
+--
 -- THE ONE-QUERY CHECK that this migration did what it claims, run against production any time:
 --   select count(*) from public.game_rooms r
 --   where not exists (select 1 from public.player_profiles p where p.user_id = r.host_id);
