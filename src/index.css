@@ -305,7 +305,32 @@
    The palette had no free hue left (red/green/purple/blue are elements AND regions, amber is the
    near-miss, white is the completion candidate). Value was the free channel; hue was not.
    TRANSIENCE is the second half of the distinction and it is structural: every other cue on a hex is a
-   STATE and persists, this one is gone in 340ms, so the two readings cannot be held at once. */
+   STATE and persists, this one is gone in 340ms, so the two readings cannot be held at once.
+
+   ── THE SECOND ROW, AND THE FIRST ROW IS NOT WHAT IT SAYS (T1 S59) ─────────────────────────────
+   Those three numbers were measured on a board with EVERY REGION EMPTY, and a refusal usually lands
+   on a hex that already holds a token · you tap something that is occupied. Measured this session on
+   OCCUPIED hexes, one element type per pass, sampling the annulus INSIDE each hex (a sample on the
+   perimeter blends two neighbours and read an energy hex as mauve on the first attempt), n=25-52 per
+   cell, with a read-back confirming energy comes back RED [221,77,79] and biofarming GREEN
+   [32,156,120] rather than a smear:
+                    water        earth        sand      black ring   white ring   white fill .30
+       energy      221,77,79   212,81,77   211,89,71    4.75-4.93     3.52-3.65      1.51-1.55
+       biofarming   32,156,120  30,157,116  76,146,100  5.17-5.66     3.07-3.36      1.47-1.57
+       technology  126,119,219 120,121,212 143,119,172  5.01-5.13     3.38-3.47      1.58-1.61
+       community    57,137,219  54,139,212  94,132,172  4.99-5.37     3.23-3.51      1.52-1.61
+   BLACK WINS ALL TWELVE, by a wider margin than on an empty hex (4.75-5.66 against 2.55-3.46). The
+   choice was right and it is better on the case that actually occurs.
+
+   ⚠ AND THE LARGER FINDING, which is why the first row is stated as unreliable rather than corrected:
+   a full-bleed terrain PHOTOGRAPH sits under every hex (an <image> at SVG index 36, before the first
+   hex cell at 56 · wired T1 S37, 85d57b7), and hex fills are semi-transparent over it · 42% for an
+   empty hex, 13% for an occupied one. So a hex is mostly photograph. A blob-URL clone cannot resolve
+   that relative href, so any rasterisation which does not INLINE the image as a data URI is measuring
+   a board that does not exist. That is what produced 2.55/2.62/3.46. Re-measuring the empty row here
+   did not converge either (n=1-16, and identical with and without the terrain, which cannot be true),
+   so it is not restated. The occupied conclusion does not depend on resolving it: black wins under
+   BOTH rasterisations, which is the reason it is safe to leave open. */
 /* STARTS AT FULL OPACITY, and that is a fix rather than a preference. Measured in a headless browser
    whose animation TIMELINE does not advance · playState "running", currentTime pinned at 0 across
    240ms of samples, with document.visibilityState reading "visible", so this is not simply a
