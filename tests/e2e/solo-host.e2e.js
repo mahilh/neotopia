@@ -47,7 +47,7 @@
 
 import { test, expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, signInAnonRetry, deleteRoomAsHost, uniqueName } from './seedHelpers'
+import { loadEnv, signInPooledOrAnon, deleteRoomAsHost, uniqueName } from './seedHelpers'
 import { assertSessionEstablished } from './preconditions'
 
 const NAME_INPUT = 'Builder name (max 20)'
@@ -181,7 +181,9 @@ test.describe('the lone visitor · the arrival nothing else models', () => {
       // passes migration 016's room_players_join policy (room is 'waiting', under capacity) and it
       // fires trg_player_count. What it does NOT have is a browser, a channel, or a presence entry.
       ghost = createClient(url, key, { auth: { storageKey: 'neotopia-e2e-ghost', persistSession: false } })
-      const auth = await signInAnonRetry(ghost, 4)
+      // POOL (T3 S59) · one node client, one identity, no seat resolution against it · so the single
+      // member is enough here and this needs none of four-player-live's per-seat care.
+      const auth = await signInPooledOrAnon(ghost, { label: 'solo-host ghost' })
       const { error: insErr } = await ghost.from('room_players').insert({
         room_id: roomId, user_id: auth.user.id, username: 'GHOST_SEAT',
         player_color: 'red', seat_number: 1, is_ready: true,

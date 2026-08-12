@@ -34,7 +34,7 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, signInAnonRetry, makeRoomCode } from './seedHelpers'
+import { loadEnv, signInPooledOrAnon, makeRoomCode } from './seedHelpers'
 
 let ENV = null
 try { ENV = loadEnv() } catch { /* no creds · skip · this is a live-class spec */ }
@@ -91,7 +91,8 @@ test.describe('seat colours · what the client sends must be what the database a
     const client = createClient(ENV.url, ENV.key, {
       auth: { storageKey: 'neotopia-e2e-seatcolors', persistSession: false },
     })
-    const auth = await signInAnonRetry(client)
+    // POOL (T3 S59) · single node client · see solo-host.
+    const auth = await signInPooledOrAnon(client, { label: 'seat-colors' })
     const userId = auth.user.id
 
     let room = null

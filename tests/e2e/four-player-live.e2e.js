@@ -31,7 +31,7 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { loadEnv, signInAnonRetry, makeRoomCode } from './seedHelpers'
+import { loadEnv, signInPooledOrAnon, poolCredential, makeRoomCode } from './seedHelpers'
 import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../../src/store/gameStore'
 import { DECK } from '../../src/lib/projectCards'
 
@@ -285,15 +285,35 @@ test.describe('the 4-player game · every seat, a full game, against production'
       // teardown's) succeeded at the same moment four back-to-back ones were being refused. signInAnonRetry
       // backs off up to ~15s across 4 tries, which is not enough on its own for a rapid four.
       // The gap is also more faithful, not less: four humans do not join a room in the same millisecond.
+      // POOL (T3 S59) · this is the most sign-in-expensive spec in the repo, four permanent auth.users
+      // rows per run, so it is where the fixed pool is worth the most. One member PER SEAT: seat
+      // resolution downstream is by userId, so two seats sharing an identity is not a saving, it is a
+      // game that cannot exist (this spec's own tripwire, and the reason the pool was grown to four).
+      // The 6s gap exists for the ANONYMOUS burst limit measured above · a password grant is a different
+      // endpoint and does not need it, so it is skipped only when a credential actually exists. With no
+      // credential every line below behaves exactly as it did before.
       const SIGNIN_GAP_MS = 6_000
       for (const seat of SEATS) {
-        if (seat > 0) await new Promise(r => setTimeout(r, SIGNIN_GAP_MS))
+        const pooled = poolCredential(seat) !== null
+        if (seat > 0 && !pooled) await new Promise(r => setTimeout(r, SIGNIN_GAP_MS))
         const c = createClient(ENV.url, ENV.key, {
           auth: { storageKey: `neotopia-e2e-4p-${seat}`, persistSession: false },
         })
-        const auth = await signInAnonRetry(c, 6)
+        const auth = await signInPooledOrAnon(c, { index: seat, label: `seat ${seat}` })
         clients.push({ seat, client: c, userId: auth.user.id, username: `E2E_P${seat}` })
       }
+      // COUNTERWEIGHT · FOUR SEATS MUST BE FOUR PEOPLE. Under anonymous sign-in this was true BY
+      // CONSTRUCTION and therefore asserted nowhere · which is exactly the property that stops being
+      // free the moment identities come from a configured list (Rule 110). Two secrets pointing at one
+      // user, or one member reachable and the rest misnamed, collapses seats silently: the room seats
+      // "four" players, two of them are the same person, and the failure surfaces later as a turn the
+      // wrong client believes it owns. Cheap here, unreadable there.
+      const ids = clients.map(c => c.userId)
+      expect(new Set(ids).size,
+        `four seats resolved to ${new Set(ids).size} distinct identities · ${JSON.stringify(
+          clients.map(c => ({ seat: c.seat, id: c.userId.slice(0, 8) })))}. Seat resolution is by userId, ` +
+        'so duplicated identities make a board where two seats are one player. Check that every ' +
+        'E2E_POOL_* pair names a DIFFERENT user (scripts/verify-pool-signin.cjs --all).').toBe(SEATS.length)
       host = clients[0]
 
       // ── 2 · A REAL ROOM, SEATED THROUGH THE REAL POLICY ───────────────────────────────────────────────
