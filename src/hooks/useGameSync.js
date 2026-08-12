@@ -18,6 +18,7 @@ import {
 } from './useConnectionHealth'
 import { nextStateVersion, adoptServerVersion, wasOvertaken } from '../lib/writeOrder'
 import { getModeConfig } from '../store/gameConfig'
+import { PRACTICE_HUMAN_ID } from './useLocalSession'
 
 // ── THE TURN CLOCK, MADE REAL (T3 S52) ────────────────────────────────────────────────────────────────────
 // A remote client waits this long PAST the limit before ending someone else's turn, staggered by seat so
@@ -528,7 +529,6 @@ export function useGameSync(roomId, currentUserId) {
   // turn to end, was never wanted anyway. `phase` is a string, so this dep cannot churn by identity.
   const gamePhase = useGameStore(s => s.phase)
   useEffect(() => {
-    if (!roomId || !currentUserId) return  // practice/solo has no room · nothing to unfreeze and no peer
     if (gamePhase !== 'playing') return    // lobby, scoring, or a game that has already ended
     // Anchor the clock at MOUNT, not on the first tick. Anchoring on the first tick costs a full interval
     // (the deadline lands a second late) and, worse, makes the budget depend on the tick rate rather than
@@ -552,8 +552,27 @@ export function useGameSync(roomId, currentUserId) {
       // (Rule 94). Deleted rather than kept, which is what gives the once-per-turn counterweight teeth.
       if (turnStartRef.current.turn !== turn) turnStartRef.current = { turn, at: Date.now() }
 
+      // ── THE PREDICATE IS NOT PRACTICE-VS-MULTIPLAYER · IT IS "IS ANYONE ELSE WAITING" (T3 S56) ────────
+      // The clock used to be scoped to real rooms (`if (!roomId) return`), so practice never expired while
+      // the Tutorial promised "90 seconds per turn" in it. T1 found that and their framing argument beat
+      // mine: three of the four practice options are sold as GAMES ("A single opponent", "Three-player
+      // game", "A full four-player table"), so a first-timer who learns without a clock meets one for the
+      // first time in a real room, unprepared.
+      // AND THE CARVE-OUT IS MEASURED, not asserted · driving the store with ONE seat, endTurn keeps seat 0
+      // (nextSeat = (0+1)%1), consumes no production tile, and RESETS ACTIONS TO 3. In solo exploration a
+      // timeout passes the turn to nobody and hands the player their actions back: it cannot teach the
+      // mechanic and cannot penalise, so it is pure noise with a visible counter attached.
+      // `players.length > 1` covers multiplayer AND practice-with-bots and excludes solo, with no mode
+      // branching and no copy change · which is why it is one line rather than a practice special case.
+      if ((st.players?.length ?? 0) < 2) return
       const limitMs = getModeConfig(st.mode).TURN_TIME_LIMIT * 1000
+      // SEAT RESOLUTION HAS TO KNOW ABOUT PRACTICE, and this is the half that would have shipped invisibly
+      // inside the change above. Practice seats carry PRACTICE_HUMAN_ID, never the auth uuid, so matching
+      // on currentUserId alone finds NOTHING there · mySeat falls back to 0, the human is treated as a
+      // REMOTE client, and their turn ends at 95s in Classic instead of the 90 the Tutorial prints. A fix
+      // whose own promise is off by the grace it added is the kind nobody re-measures (Rule 61).
       const mySeat = st.players?.find(p => p.userId === currentUserId)?.seat
+        ?? st.players?.find(p => p.userId === PRACTICE_HUMAN_ID)?.seat
       const isMine = mySeat != null && mySeat === st.currentSeat
       // THE GRACE IS CAPPED AS A FRACTION OF THE TURN, NOT A FLAT 5s (T3 S52 · found by premise-checking
       // my own fix an hour after shipping it). A flat grace is a hidden parameter that silently qualifies
@@ -571,7 +590,9 @@ export function useGameSync(roomId, currentUserId) {
       // engine). eventData records who fired and for whom, so a timed-out turn is distinguishable from a
       // played one in game_events rather than looking like the absent player pressed the button.
       useGameStore.getState().endTurn()
-      pushStateRef.current('endTurn', { reason: 'turn_timeout', seat: st.currentSeat, by: mySeat ?? null })
+      // Practice has no server: the local endTurn above IS the whole effect there. Pushing would
+      // return {error:'No room'} on every timeout and teach a future reader that the path is broken.
+      if (roomId) pushStateRef.current('endTurn', { reason: 'turn_timeout', seat: st.currentSeat, by: mySeat ?? null })
     }
     const id = setInterval(tick, 1_000)
     return () => clearInterval(id)

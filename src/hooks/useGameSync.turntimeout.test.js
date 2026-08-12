@@ -74,6 +74,7 @@ import { useGameSync, TURN_TIMEOUT_GRACE_MS } from './useGameSync'
 import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { DECK } from '../lib/projectCards'
 import { TURN_TIME_LIMIT } from '../store/gameConfig'
+import { PRACTICE_HUMAN_ID } from './useLocalSession'
 
 const HOST = 'user-host'   // seat 0
 const PEER = 'user-peer'   // seat 1
@@ -122,12 +123,58 @@ describe('the turn clock enforces itself · mechanism, not outcome (T3 S52)', ()
     expect(writes, 'a write was issued before any deadline').toEqual([])
   })
 
-  test('COUNTERWEIGHT · practice has no room, so nothing can ever fire', async () => {
+  // ⚠ THIS TEST USED TO ASSERT THE OPPOSITE, and the old text is kept because it is the argument for the
+  // new one (Rule 101b). It read "practice has no room, so nothing can ever fire · a practice board ending
+  // its own turn is pure harm", and it was true of the code and wrong about the product. T1 measured the
+  // per-option copy: three of the four practice options are sold as GAMES ("A single opponent",
+  // "Three-player game", "A full four-player table"), so a first-timer who learns without a clock meets
+  // one for the first time in a real room, unprepared. Their framing argument beat mine and I withdrew it.
+  // What survives from my side is the CARVE-OUT, and it is measured rather than argued · see below.
+  test('practice WITH bots is a game, so the clock runs there · and never pushes', async () => {
+    drive(null, HOST)                                  // no room · two seats from the shared fixture
+    const before = turn()
+    await tick(LIMIT_MS + TURN_TIMEOUT_GRACE_MS * 2 + 1_000)
+    expect(turn(), 'the clock did not run in practice · the Tutorial promises "90 seconds per turn" there ' +
+      'and a player who learns without it meets one for the first time in a real room').toBe(before + 1)
+    expect(writes, 'practice pushed to a server it does not have · every timeout would return ' +
+      '{error:"No room"} and teach a future reader that the path is broken').toEqual([])
+  })
+
+  // THE SEAT-RESOLUTION HALF, and it is the one that would have shipped invisibly. Practice seats carry
+  // PRACTICE_HUMAN_ID, never the auth uuid, so matching on currentUserId alone finds NOTHING there ·
+  // mySeat falls back to 0, the human is classified as a REMOTE client, and the grace is added on top.
+  // In Classic that ends their turn at 95s against a Tutorial that prints 90. This test is the only
+  // thing that can tell the two resolutions apart: at exactly LIMIT the fixed version has fired and the
+  // broken one has not.
+  test('the practice human is the ACTIVE seat, not a remote one · fires at the limit, no grace', async () => {
+    useGameStore.getState().initGame(
+      [{ userId: PRACTICE_HUMAN_ID, username: 'You' }, { userId: 'local-bot-1', username: 'Bot 1', isBot: true }],
+      shuffleArray([...DECK]), shuffleArray([...PRODUCTION_TILES]),
+    )
+    expect(useGameStore.getState().currentSeat,
+      'the fixture does not start on the human seat · this test would measure the bot').toBe(0)
+
+    drive(null, undefined)   // practice mounts with no auth id to match on
+    const before = turn()
+    await tick(LIMIT_MS)
+    expect(turn(), 'the practice human was treated as a REMOTE client · their turn did not end at the ' +
+      'limit the Tutorial prints, it ends one grace later. Off by the grace the fix itself added.')
+      .toBe(before + 1)
+  })
+  test('COUNTERWEIGHT · SOLO exploration is not a game · one seat, no clock', async () => {
+    // THE CARVE-OUT, and the reason is measured not asserted: driving the store with ONE seat, endTurn
+    // keeps seat 0 (nextSeat = (0+1)%1), consumes no production tile, and RESETS ACTIONS TO 3. A timeout
+    // there passes the turn to nobody and hands the player their actions back · it cannot teach the
+    // mechanic and cannot penalise, so it is pure noise with a visible counter attached. "Just me" is sold
+    // as "Free exploration · learn the board", not as a game.
+    useGameStore.getState().initGame(
+      [{ userId: HOST, username: 'Solo' }], shuffleArray([...DECK]), shuffleArray([...PRODUCTION_TILES]),
+    )
     drive(null, HOST)
     const before = turn()
-    await tick(LIMIT_MS * 10)
-    expect(turn(), 'a practice board ended its own turn · practice has no peer to unfreeze and no ' +
-      'server to push to, so this is pure harm').toBe(before)
+    await tick(LIMIT_MS * 4)
+    expect(turn(), 'a solo explorer had their turn taken · nobody is waiting, nothing advances, and the ' +
+      'only visible effect is a turn counter changing under someone still reading the board').toBe(before)
   })
 
   test('COUNTERWEIGHT · a finished game does not keep ending turns', async () => {
