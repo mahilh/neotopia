@@ -66,6 +66,15 @@ are deliberately not creating (86).
   an import because the line it was about to add contained the name (112 in a script).
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
+- A BOUND IS A CLAIM ABOUT A NOISE FLOOR, AND ONE SAMPLE OF THE FLOOR IS NOT A MEASUREMENT OF IT.
+  I shipped a 500ms timing bound measured only on an idle machine and called it sound. Under a 6x CPU
+  throttle the same probe reported a working clock firing 51ms EARLY · because I had sized the
+  tolerance from the recorder's REQUESTED 25ms period, and a throttled 25ms interval is nothing like
+  25ms. The defect was in the instrument and only load revealed it. Generalises past timing: any
+  threshold on a rate, a latency, a retry count or a queue depth is implicitly "and the noise is
+  smaller than this", which is unmeasured until you move the load. Sweep at least a quiet and a
+  contended point before believing a bound · and where the floor can be measured IN the run, have the
+  probe measure it and refuse a verdict it cannot support (mine now reports its own worst gap).
 - WHEN THE SUBJECT UNDER TEST IS THE THING YOUR HARNESS SIMULATES, THE HARNESS IS MAXIMALLY SUSPECT
   AND A REAL-WORLD MEASUREMENT IS A PLANNED STEP, NOT A BONUS. Fake timers advance Date.now() and
   performance.now() together, so no test in this repo could tell them apart · I shipped a turn clock
@@ -90,6 +99,12 @@ are deliberately not creating (86).
   log-based conversion reader in S60 on sound reasoning — the app publishes to a BROWSER console, which
   no runner log sees — and T3 then shipped a node-side reporter, which made it the best instrument
   available. Re-check a closed premise when the code it rested on has moved, not when you doubt it.
+- WHEN YOU FIX A WORDING DEFECT, GREP THE FILE FOR ITS SIBLINGS BEFORE COMMITTING. The sibling is
+  almost always adjacent, because it was written in the same sitting by the same hand with the same
+  wrong idea. I changed `NO RUN` to `no run YET` for one branch and left "the RUN did not complete"
+  four lines below it, asserting a finished state about a run still executing — same tense, same
+  meaning error, same file, one branch fixed. Tense is meaning: "has not completed YET" asks the
+  reader to look again, "did not complete" sends them to investigate. The fix is never the word.
 - A closing recommendation is the claim nobody checks (108) — it arrives as the next session's
   priority. Premise-check it before writing it.
 - A citation with no runner is a claim. Migration 011 cited a proof that died on import for 19 sessions.

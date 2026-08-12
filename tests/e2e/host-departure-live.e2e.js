@@ -23,8 +23,12 @@
 // host takes a REAL action and the peer's store must be observed to MOVE. Only once this client has been
 // proven to be listening does its later silence mean anything at all.
 //
-// COST · 2 anonymous sign-ins. Nightly-class (Rule 79b). The caller-set guard costs zero and is offline.
-// RUNS-NOWHERE: new this session · routed to T2 with endgame-live, comms/t3-s51-host-departure.md
+// COST · ZERO SIGN-INS AS OF T3 S62 · it was 2 anonymous ones, and that cost was the stated reason this
+// spec was routed to the nightly and then never wired. Both contexts now take pool members 0 and 1
+// (seedPoolCredential), so it mints nothing at all. The caller-set guard costs zero and is offline.
+// RUNS-NOWHERE: eleven sessions and counting · routed to T2 in comms/t3-s51, t3-s60 and now t3-s62.
+// THE ASK IS NOW ONE RUN LINE FOR A SPEC THAT COSTS NO IDENTITIES. Nothing else about it has changed.
+// DELETE THIS DECLARATION IN THE SAME COMMIT THAT WIRES THE FILE.
 // Run locally:  node scripts/with-project-env.cjs npx playwright test tests/e2e/host-departure-live.e2e.js
 // ⚠ with-project-env is not optional · the shell exports another project's Supabase URL and it beats
 //   .env.local in both Vite and loadEnv, so a bare `npx playwright test` drives a dead host (Rule 93).
@@ -34,6 +38,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
 import { loadEnv, uniqueName, deleteRoomAsHost } from './seedHelpers'
 import { runTwoHumanLobby } from './lobby'
+import { seedPoolCredential, reportPoolOutcome } from './poolBrowser'
 import { spendOneAction, read } from './driver'
 
 let ENV = null
@@ -98,6 +103,13 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
 
     const ctxHost = await browser.newContext()
     const ctxPeer = await browser.newContext()
+    // POOL (T3 S62) · the header above says "COST · 2 anonymous sign-ins. Nightly-class", and that cost
+    // is the stated reason this spec has never been wired. It is now ZERO. Members 0 and 1 · DIFFERENT
+    // ones, because seat resolution is by userId and one member across both contexts would seat the
+    // host and the peer as the SAME player. seedPoolCredential refuses that outright rather than
+    // trusting this comment.
+    const poolHost = await seedPoolCredential(ctxHost, { index: 0, label: 'host-departure host' })
+    const poolPeer = await seedPoolCredential(ctxPeer, { index: 1, label: 'host-departure peer' })
     const host = await ctxHost.newPage()
     const peer = await ctxPeer.newPage()
     let roomId = null
@@ -109,6 +121,10 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
         expect, hostName: uniqueName('E2EHDH'), joinerName: uniqueName('E2EHDP'),
       })
       roomId = lobby.roomId
+      // Read from the PAGE, never from the identity counter · the teardowns already reuse member 0, so
+      // auth.users moves for their reason and cannot separate them from a browser (T2's condition).
+      await reportPoolOutcome(host, { ...poolHost, label: 'host-departure host' })
+      await reportPoolOutcome(peer, { ...poolPeer, label: 'host-departure peer' })
       hostSession = await host.evaluate(() => localStorage.getItem('neotopia-auth'))
       expect(roomId, 'no roomId from the host URL').toBeTruthy()
 

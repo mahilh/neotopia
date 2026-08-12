@@ -46,7 +46,10 @@
 // Run locally:  npm run test:e2e -- endgame-live
 // ⚠ Run it against a dev server nobody else is editing · see multiplayer-endgame-live's header (Rule 82).
 //
-// RUNS-NOWHERE: no workflow has ever invoked this file · routed to T2, comms/t3-s50-endgame-live-wiring.md
+// RUNS-NOWHERE: no workflow has ever invoked this file · routed to T2 in comms/t3-s50, t3-s60, t3-s62.
+// ⚠ AND AS OF T3 S62 IT COSTS ZERO IDENTITIES · both contexts take pool members 0 and 1, so the only
+// thing this 653-line spec now asks for is one run line. It is the composition CLAUDE.md still calls the
+// honest remaining gap, proven once on 3362f77 and gated by nothing for twelve sessions
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // AND IT READ AS WIRED THE WHOLE TIME, WHICH IS THE PART WORTH RECORDING (T3 S50). The spec-runner audit in
 // preconditions.e2e.js asked `workflowText.includes('endgame-live.e2e.js')` · and that string is a SUFFIX OF
@@ -68,6 +71,7 @@
 import { test, expect } from '@playwright/test'
 import { loadEnv, uniqueName, deleteRoomAsHost } from './seedHelpers'
 import { runTwoHumanLobby } from './lobby'
+import { seedPoolCredential, reportPoolOutcome } from './poolBrowser'
 import { spendOneAction, read } from './driver'
 import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../../src/store/gameStore'
 import { DECK } from '../../src/lib/projectCards'
@@ -297,6 +301,10 @@ test.describe('a real room reaches its own ending · the composition nobody had 
 
       const ctx1 = await browser.newContext()
       const ctx2 = await browser.newContext()
+      // POOL (T3 S62) · 2 anonymous sign-ins become 0. Members 0 and 1: one member across two live
+      // contexts is a broken spec and not a saving, because seat resolution is by userId.
+      const pool1 = await seedPoolCredential(ctx1, { index: 0, label: 'endgame host' })
+      const pool2 = await seedPoolCredential(ctx2, { index: 1, label: 'endgame joiner' })
       const p1 = await ctx1.newPage() // host · seat 0
       const p2 = await ctx2.newPage() // joiner · seat 1
       const bySeat = [] // filled from each page's OWN resolved seat · never assumed
@@ -335,6 +343,8 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         ;({ roomId } = await runTwoHumanLobby(p1, p2, {
           expect, hostName: uniqueName('E2EEH'), joinerName: uniqueName('E2EEG'),
         }))
+        await reportPoolOutcome(p1, { ...pool1, label: 'endgame host' })
+        await reportPoolOutcome(p2, { ...pool2, label: 'endgame joiner' })
         hostSession = await p1.evaluate(() => localStorage.getItem('neotopia-auth'))
 
         const uids = { host: await authUid(p1), joiner: await authUid(p2) }

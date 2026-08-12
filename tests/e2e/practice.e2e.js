@@ -1189,40 +1189,87 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       .toBeGreaterThan(0)
   })
 
-  test('TODAY · the four-step placement flow cannot be STARTED without a pointer', async ({ page }) => {
+  // ⚠ THIS TEST USED TO ASSERT THE OPPOSITE, AND THE OLD TEXT IS THE ARGUMENT FOR THE NEW ONE (Rule 101b).
+  // From S53 to S61 it was named `TODAY · the four-step placement flow cannot be STARTED without a
+  // pointer`, and its own failure message said: "the factory is now reachable by keyboard · if that is
+  // true this whole block is out of date and that is the best possible news · rewrite it to assert THAT."
+  // T1 shipped it, the test went red exactly as designed, and then it sat red for THREE COMPLETED RUNS ·
+  // every run between them cancelled by supersession, which is the 37% cancellation rate I measured in
+  // S57 producing precisely the harm it was always going to produce. Second time a correctly-red test of
+  // mine went unread for three nights; the first was the nightly, one session ago.
+  //
+  // ⚠ AND I DID NOT REWRITE IT FROM THE FAILURE. A failure names only the FIRST assertion that flipped,
+  // so rewriting from it is guessing at what shipped. Probed the live board instead, and the answer was
+  // larger than the red line implied · the WHOLE four-step flow is keyboard-operable end to end:
+  //     factory   <g role="button" tabindex="0" aria-label="Factory 1 · 1 energy, 1 biofarming, ...">
+  //     step 2    Enter on the factory -> 4 element buttons
+  //     step 3    Enter on an element  -> 2 region buttons
+  //     step 4    Enter on a region    -> 1 focusable NAMED hex · Enter -> actionsRemaining 3 -> 2
+  // A placement completed with no pointer at all.
+  //
+  // THE TAB COUNTS ARE DELIBERATELY NOT ASSERTED. It took 4 tabs to the factory, 3 more to an element and
+  // 10 to the hex on the run that measured this; pinning those would red on any unrelated change to the
+  // tab order while the flow stayed perfectly operable. Assert the PROPERTY, reachable within a bound ·
+  // which is what the S53 comment told me to do and then failed to do for the tag name.
+  test('WORKS · the whole four-step placement flow is operable by keyboard alone', async ({ page }) => {
     await page.goto('/practice?bots=0')
     await boardReady(page)
-    await boardIsLiveAndPointerPlayable(page, { expect })
+    const live = await boardIsLiveAndPointerPlayable(page, { expect })
 
-    const facts = await page.evaluate(() => {
-      const fac = document.querySelector('[data-testid^="factory"]')
-      const svg = document.querySelector('svg[aria-label*="NeoTopia"]')
-      svg?.focus?.()
-      return {
-        factoryTag: fac?.tagName?.toLowerCase() ?? null,
-        // reachable == a real control, or anything explicitly placed in the tab order
-        factoryKeyboardReachable: !!fac && (fac.tagName === 'BUTTON' || fac.tabIndex >= 0),
-        svgTabIndex: svg?.getAttribute('tabindex'),
-        svgTakesFocus: document.activeElement === svg,
+    // Start from a known place · a tab count means nothing without one, and document.body is where a
+    // keyboard user lands on arrival.
+    await page.evaluate(() => document.body.focus())
+    const tabTo = async (rx, budget) => {
+      for (let i = 0; i < budget; i++) {
+        await page.keyboard.press('Tab')
+        if (await page.evaluate((r) => new RegExp(r).test(document.activeElement?.getAttribute?.('data-testid') || ''), rx)) return i + 1
       }
-    })
-    // ASSERT THE PROPERTY, NOT THE MECHANISM. The first draft pinned the TAG (`toBe('g')`), which
-    // reds when T1 fixes this · correct · but ALSO reds if the markup changes for any unrelated reason
-    // while remaining just as inaccessible. What matters is reachability, not which element it is; I got
-    // this right for the layout cascade in S51 and dropped it here.
-    expect(facts.factoryKeyboardReachable, 'the factory is now reachable by keyboard · if that is true this ' +
-      'whole block is out of date and that is the best possible news · rewrite it to assert THAT').toBe(false)
-    expect(facts.svgTakesFocus, 'the board itself refuses focus · it has no tabindex').toBe(false)
+      return null
+    }
 
-    // And no key does anything: step 2 never appears. Compare against the pointer control above, which
-    // produces four element buttons from ONE click.
-    for (const key of ['Enter', ' ', 'ArrowRight', 'ArrowDown', 'Tab']) await page.keyboard.press(key)
-    expect(await page.locator('[data-testid^="element-"]').count(),
-      'a key started the placement flow · if this is now non-zero the board has become keyboard-operable ' +
-      'and this test should be rewritten to assert THAT').toBe(0)
+    expect(await tabTo('^factory', 25), 'no factory is reachable by Tab within 25 presses · the placement ' +
+      'flow cannot be STARTED without a pointer, which is the state this test characterised from S53 and ' +
+      'which T1 closed. Red here means the regression is in the factory node itself, not in the flow.')
+      .not.toBeNull()
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? ''),
+      'the focused factory has no accessible name · a keyboard user reaches it and cannot know what it ' +
+      'holds, which is reachable-but-unusable rather than fixed').toMatch(/factory/i)
+
+    await page.keyboard.press('Enter')
+    await expect.poll(() => page.locator('[data-testid^="element-"]').count(), { timeout: 5_000,
+      message: 'Enter on the focused factory produced no element buttons · step 2 of four never opens, ' +
+        'so the flow is reachable but not startable' }).toBeGreaterThan(0)
+
+    expect(await tabTo('^element-', 25), 'the element buttons exist but none is reachable by Tab').not.toBeNull()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => page.locator('[data-testid^="region-"]').count(), { timeout: 5_000,
+      message: 'Enter on an element produced no region buttons · step 3 of four never opens' }).toBeGreaterThan(0)
+
+    expect(await tabTo('^region-', 25), 'the region buttons exist but none is reachable by Tab').not.toBeNull()
+    await page.keyboard.press('Enter')
+
+    // STEP 4 IS WHERE A HALF-FIX WOULD STOP, because the target is a hex on an SVG board whose 126
+    // polygons are decoration. Only the VALID targets are exposed as focusable named nodes, which is
+    // exactly why the unnamed-image test below is STILL TRUE and not stale.
+    expect(await tabTo('^hex-', 40), 'no hex is reachable by Tab after a region is chosen · steps 1-3 are ' +
+      'keyboard-operable and the placement still cannot be COMPLETED without a pointer. A half-wired flow ' +
+      'is worse than none: it invites a keyboard user three steps in and strands them.').not.toBeNull()
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? ''),
+      'the focused hex has no accessible name').not.toBe('')
+
+    await page.keyboard.press('Enter')
+    // THE COUNTERWEIGHT, and it is the whole test: every assertion above is satisfied by a flow that
+    // renders four steps of buttons and PLACES NOTHING. The claim is that a placement HAPPENED, so the
+    // engine's own counter is the witness rather than the presence of nodes (Rule 110 · assert the
+    // defining property, which here is that the board changed).
+    await expect.poll(() => page.evaluate(() => window.__neotopia_store.getState().actionsRemaining),
+      { timeout: 5_000,
+        message: 'all four steps were reachable and Enter on a valid hex spent no action · the flow is ' +
+          'keyboard-NAVIGABLE and not keyboard-OPERABLE, and every assertion above passes in that state' })
+      .toBeLessThan(live.actions)
   })
 
-  test('TODAY · the board is one unnamed image · no hex, region or factory has an accessible name', async ({ page }) => {
+  test('TODAY · the STATIC board is one unnamed image · its 126 polygons carry no name or role', async ({ page }) => {
     await page.goto('/practice?bots=0')
     await boardReady(page)
     await boardIsLiveAndPointerPlayable(page, { expect })
@@ -1244,9 +1291,18 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       .toBeGreaterThan(50)
 
     expect(board.role, 'the whole board is exposed as a single image').toBe('img')
-    expect(board.named, `all ${board.polygons} polygons are unnamed · to a screen reader the entire game ` +
-      `state is one image described as "${board.label}". Every placed element, every buildable hex and ` +
-      'every region score is invisible.').toBe(0)
+    // ⚠ SCOPED IN S62, BECAUSE THE CLAUSE WAS TRUE AND THE SENTENCE HAD STOPPED BEING. It used to end
+    // "Every placed element, every buildable hex and every region score is invisible." The polygons are
+    // still 126 unnamed decorations · that has not changed and this still asserts it · but a buildable
+    // hex IS now exposed, as a named focusable [data-testid^="hex-"] node, once a placement is in
+    // progress. T1 named the ACTIONABLE nodes and left the decoration alone, which is the right call and
+    // is why the keyboard flow above works while every number here stays 0. A characterisation test
+    // going stale in its PROSE while its assertion stays green is the version nothing can catch: no run
+    // reddens, and the next reader takes the sentence as current (Rule 101, one step quieter).
+    expect(board.named, `all ${board.polygons} polygons are unnamed · to a screen reader the STATIC board ` +
+      `is one image described as "${board.label}". Placed elements and region scores are not conveyed ` +
+      'by it; the interactive targets are exposed separately and are covered by the keyboard test above.')
+      .toBe(0)
     expect(board.withRole, 'no polygon carries an interactive role').toBe(0)
     expect(board.focusable, 'no polygon is focusable').toBe(0)
   })
