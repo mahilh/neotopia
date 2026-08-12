@@ -148,10 +148,20 @@ const mask = (email) => {
 // step's own conclusion cannot carry the number.
 // $GITHUB_STEP_SUMMARY is rendered on the run page and, like the step conclusions the receipt now
 // reads, SURVIVES what a log does not · it is attached to the run rather than streamed into it.
+// ⚠ A STEP SUMMARY CANNOT BE READ BACK THROUGH THE API · MEASURED, not assumed: the jobs endpoint
+// has no summary field, so it is web-UI only. That makes this write the one artifact in this script
+// whose delivery I cannot verify from a terminal, which is exactly the kind of thing that quietly
+// stops working. So a failure is RECORDED rather than swallowed · a bare `catch {}` here would make
+// "the summary is missing" and "the summary was never attempted" the same observation, in the
+// script whose subject is that distinction (Rule 93 · a swallowed error is an unmeasured failure).
+// It still never fails the step: reddening a credential check because a courtesy write failed would
+// be a gate aimed at the wrong thing.
 function summary(md) {
   const p = process.env.GITHUB_STEP_SUMMARY
   if (!p) return                       // local runs · stdout already carries everything
-  try { fs.appendFileSync(p, md + '\n') } catch { /* a summary is a courtesy, never a gate */ }
+  try { fs.appendFileSync(p, md + '\n') }
+  catch (e) { console.log(`[summary] NOT WRITTEN · ${e.message} · the verdict above is unaffected, ` +
+    'but the run page will not show the member table') }
 }
 
 // ── THE SCOPE LINE · P3, AND IT IS MEASURED RATHER THAN ASSERTED ────────────────────────────────
