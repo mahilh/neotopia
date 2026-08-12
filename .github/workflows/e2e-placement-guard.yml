@@ -65,6 +65,24 @@ jobs:
       # Member 0, the teardown's single client. No spec here reads a pool credential.
       E2E_POOL_EMAIL: ${{ secrets.E2E_POOL_EMAIL }}
       E2E_POOL_PASSWORD: ${{ secrets.E2E_POOL_PASSWORD }}
+      # ── MEMBER 1 · THE JOINER  (T2 S61) ────────────────────────────────────────────────────────
+      # This job carried member 0 only, and game-ux.e2e.js:119 asks for member 1 for its SECOND
+      # browser context. Enumerated rather than assumed: game-ux is the only one of the three specs
+      # here that seeds at all (mobile and flow-mode seed nothing), and it seeds exactly two ·
+      # index 0 for the host context and index 1 for the joiner. So two lines, not eight.
+      #
+      # THE DENOMINATOR, measured rather than carried over: 65 runs of this workflow in the last
+      # 24 hours, one unseeded joiner context each, one permanent auth.users row each. That is ~65
+      # identities a day from a two-line omission · about 7% of the ~968/day this whole feature
+      # exists to stop, and the single largest remaining producer with a named cause.
+      #
+      # IT WAS ALREADY VISIBLE, WHICH IS THE POINT. T3 read it straight off the run log:
+      #     [pool] game-ux joiner · browser · UNMEASURED · nothing was seeded for member 1
+      # That is the five-state observable doing its job. UNMEASURED is not a failure and not a
+      # fallback · it is the record saying nothing was OFFERED, which is what makes the fix env
+      # rather than code. Before S60 this run was byte-identical to a converted one.
+      E2E_POOL_EMAIL_1: ${{ secrets.E2E_POOL_JOINER_EMAIL }}
+      E2E_POOL_PASSWORD_1: ${{ secrets.E2E_POOL_JOINER_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 

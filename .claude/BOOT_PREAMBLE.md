@@ -79,6 +79,17 @@ are deliberately not creating (86).
 - A stated LIMIT needs the same counterweight as a stated finding. Limitations get believed harder
   because they sound like rigour. One false limit cost three live runs, disproved in ninety seconds.
 - A retraction is not self-verifying (109b). It reads as rigour, so it gets trust the claim had to earn.
+- A CORRECT RECOMMENDATION PROTECTS A WRONG EXPLANATION FROM EVER BEING EXAMINED. Advice that works is
+  never re-derived, so the mechanism bolted to it is the least-audited sentence you will ever write and
+  it outlives every review. "Filter on --status=success" was right and my reason for it — cancellation
+  destroys the log — was invented from one sample; the real reason is that an unfinished run has not
+  written one yet. Nobody would have caught it, because the advice kept working. So state the mechanism
+  separately from the recommendation, and when you next rely on the advice, re-ask WHY rather than
+  whether. The tell is a "because" clause you have never tested standing next to a step you use often.
+- A premise you checked and correctly ruled out can be reopened by someone else's commit. I killed the
+  log-based conversion reader in S60 on sound reasoning — the app publishes to a BROWSER console, which
+  no runner log sees — and T3 then shipped a node-side reporter, which made it the best instrument
+  available. Re-check a closed premise when the code it rested on has moved, not when you doubt it.
 - A closing recommendation is the claim nobody checks (108) — it arrives as the next session's
   priority. Premise-check it before writing it.
 - A citation with no runner is a claim. Migration 011 cited a proof that died on import for 19 sessions.
@@ -87,6 +98,13 @@ are deliberately not creating (86).
 - A finding needs a denominator before a priority (121). Say who it reaches.
 - Measure in a window that predates your own change, or you will find your change.
 - When a mechanism resists three rounds of reasoning, stop deriving and look at what the rows are.
+- A SAFETY EXPLANATION IS A CLAIM WITH A FOUR-SECOND TEST, WRITTEN AT THE EXACT MOMENT YOU ARE LEAST
+  LIKELY TO RUN IT. I typed "raw node ESM does not resolve this, because e2ePool imports
+  ./reservedNames extensionless · Rule 97" INTO THE COMMENT ON THE IMPORT, while adding the import
+  that did exactly that. Naming the mechanism in the same edit did not stop me; a gate did. The tell
+  is the word BECAUSE in your own prose: you have just stated a testable proposition and reached for
+  a comment instead of a command. `node --input-type=module -e "import('...')"` was four seconds and
+  I had already typed the reason it would fail. Run it, then keep the sentence as the record.
 
 ## 5 · LANES — canonical
 T1: src/components/ src/pages/ src/App.jsx src/utils/ src/index.css

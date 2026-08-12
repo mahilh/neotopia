@@ -134,6 +134,51 @@ function runsFor(sha) {
   return rows
 }
 
+// ── "NO RUN" HAS TWO MEANINGS AND ONLY ONE IS A DEFECT  (T2 S61) ────────────────────────────────
+// My own S60 closing critique, from watching this tool report `NO RUN for this commit` about 35dc238
+// seconds after another lane pushed it. The VERDICT was right · unmeasured is unmeasured · and the
+// DIAGNOSIS was incomplete, in the one branch of the one tool whose entire subject is separating
+// "nothing happened" from "I looked too early".
+//
+// THE MARGIN IS MEASURED, NOT CHOSEN. Across the last 8 commits, a run appears 3 to 9 seconds after
+// its commit timestamp. 60s is roughly seven times the observed maximum · a structural cushion
+// rather than a bound fitted to the sample that produced it (preamble §2 · a wire sized from the run
+// it guards is a flake with a delay).
+// AND IT DECIDES NOTHING. The verdict is UNMEASURED on both sides of this threshold; it selects a
+// SENTENCE. That is the only reason a magic number is acceptable here at all: a threshold that
+// cannot change an outcome cannot be wrong in a way that costs anything.
+//
+// ⚠ COMMIT TIME IS NOT PUSH TIME, and the confound runs in the direction that matters. A commit
+// rebased, cherry-picked or held for an hour is OLD and freshly pushed, so it reads "committed 3.2h
+// ago · NO RUN" when the runs are simply still queuing. GitHub exposes no push timestamp for a bare
+// sha, so this is a genuine limit of the instrument and is printed rather than hidden · naming a
+// property I cannot measure beside the one I can is the whole lesson of Rule 129 (two properties
+// were true of that run and I put one in my sentence).
+// Both sides of the subtraction are Unix epoch seconds · `git log --format=%ct` and Date.now() ·
+// so no timezone can enter it (Rule 127c · prefer a comparison the tool cannot get wrong).
+const QUEUE_MARGIN_SEC = 60
+
+function commitAgeSeconds(sha) {
+  try { return Math.floor(Date.now() / 1000) - Number(sh('git', ['log', '-1', '--format=%ct', sha])) }
+  catch { return null }
+}
+
+function missingLine(file, ageSec, margin = QUEUE_MARGIN_SEC) {
+  if (ageSec === null || Number.isNaN(ageSec)) {
+    return `NO RUN for this commit · expected from ${file} (commit age UNREADABLE)`
+  }
+  const age = ageSec < 90 ? `${ageSec}s`
+    : ageSec < 5400 ? `${Math.round(ageSec / 60)}m`
+    : `${(ageSec / 3600).toFixed(1)}h`
+  // "not a defect" would be the natural phrasing and it closes the question · a reader who scans it
+  // has learned that nothing is wrong, which is not what has been established. What HAS been
+  // established is that the absence is not yet EVIDENCE of anything, and the answer is one minute
+  // away. The verdict column already says UNMEASURED; this must not quietly argue with it.
+  return ageSec < margin
+    ? `no run YET · committed ${age} ago, inside the ~${margin}s queue window · re-run this receipt`
+    : `NO RUN for this commit · committed ${age} ago · expected from ${file}`
+}
+
 function classify(run) {
   if (!run) return { verdict: 'MISSING', measured: false }
   if (run.status !== 'completed') return { verdict: 'RUNNING', measured: false }
@@ -295,6 +340,7 @@ function main() {
     if (r.run && r.verdict !== 'PASS') r.detail = stepDetail(r.run.databaseId, conditionalStepNames(r.file))
   }
 
+  const age = commitAgeSeconds(sha)
   const failures  = rows.filter(r => r.verdict === 'FAIL')
   const unmeasured = rows.filter(r => !r.measured)
 
@@ -325,7 +371,7 @@ function main() {
           ? 'ON THE TIP · this commit has NO VERDICT from this workflow'
           : 'superseded by a later push · expected, and fine'}`)
       } else if (r.verdict === 'MISSING') {
-        console.log(`  UNMEASURED  ${pad}NO RUN for this commit · expected from ${r.file}`)
+        console.log(`  UNMEASURED  ${pad}${missingLine(r.file, age)}`)
       } else {
         console.log(`  UNMEASURED  ${pad}${r.verdict.toLowerCase()}`)
       }
@@ -362,4 +408,4 @@ function main() {
 // comment (Rule 105a).
 if (require.main === module) main()
 
-module.exports = { stepLines, stepDetail, conditionalStepNames, classify, expectedWorkflows }
+module.exports = { stepLines, stepDetail, conditionalStepNames, classify, expectedWorkflows, missingLine, commitAgeSeconds, QUEUE_MARGIN_SEC }

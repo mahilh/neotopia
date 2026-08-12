@@ -22,7 +22,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const require = createRequire(import.meta.url)
-const { stepLines, conditionalStepNames } = require('./ci-receipt.cjs')
+const { stepLines, conditionalStepNames, missingLine, commitAgeSeconds, QUEUE_MARGIN_SEC } =
+  require('./ci-receipt.cjs')
 
 const step = (name, conclusion) => ({ name, conclusion, status: 'completed' })
 const detail = (o) => ({
@@ -102,6 +103,73 @@ describe('ci-receipt · the partial-step reader', () => {
     expect(lines[0]).toMatch(/8 of 9 steps completed green/)
     expect(lines[0]).toMatch(/conditional/)
     expect(lines.join('\n')).not.toMatch(/NEVER RAN/)
+  })
+})
+
+describe('ci-receipt · "no run" has two meanings and only one is a defect', () => {
+  // ── COUNTERWEIGHT, WRITTEN FIRST · the threshold must not be able to cost anything ─────────────
+  // A magic number is acceptable here for exactly one reason: it selects a SENTENCE and never a
+  // VERDICT. `missing` is unmeasured on both sides of it, so a badly chosen margin can make the
+  // wording unhelpful and can never make a commit look built. If that ever stops being true this
+  // becomes a tuned bound deciding truth, which is the shape that has flaked every gate in this
+  // repo (preamble §2 · a wire sized from the run it guards is a flake with a delay).
+  // Asserted STRUCTURALLY: no rendering, at any age, may lack a phrase that keeps the question open.
+  it('never closes the question, at any age · the absence is unmeasured on both sides', () => {
+    for (const age of [0, 1, 30, QUEUE_MARGIN_SEC - 1, QUEUE_MARGIN_SEC, 600, 4_000_000, null]) {
+      const line = missingLine('canary.yml', age)
+      expect(line.length, `age=${age} rendered nothing`).toBeGreaterThan(20)
+      expect(/no run|NO RUN|UNREADABLE/.test(line), `age=${age} · "${line}" does not say a run is ` +
+        'absent, so a reader learns nothing about why the verdict is UNMEASURED').toBe(true)
+      expect(/\bfine\b|\bok\b|\bpass(ed)?\b|nothing wrong/i.test(line),
+        `age=${age} · "${line}" reads as reassurance. This is the branch of the tool whose subject ` +
+        'is refusing to let an absence read as a pass, so it may explain an absence and may never ' +
+        'excuse one.').toBe(false)
+    }
+  })
+
+  it('a freshly pushed commit is not reported as a defect, and says how to settle it', () => {
+    // The observed case: this printed `NO RUN for this commit` about 35dc238 seconds after another
+    // lane pushed it. Correct verdict, incomplete diagnosis, in the one tool built to separate
+    // "nothing happened" from "I looked too early".
+    const line = missingLine('canary.yml', 4)
+    expect(line).toMatch(/no run YET/)
+    expect(line).toMatch(/re-run this receipt/)
+    expect(line, 'a young commit must not be blamed on the workflow file').not.toMatch(/expected from/)
+  })
+
+  it('an old commit with no run is still named as the defect it is', () => {
+    const line = missingLine('canary.yml', 4 * 3600)
+    expect(line).toMatch(/NO RUN for this commit/)
+    expect(line).toMatch(/4\.0h ago/)
+    expect(line, 'an old miss must name the workflow that should have produced it').toMatch(/canary\.yml/)
+  })
+
+  it('the margin is a boundary, not a vibe', () => {
+    // Measured before it was chosen: a run appears 3-9s after its commit timestamp across the last
+    // 8 commits, so 60 is ~7x the observed maximum. Pinned so a future edit has to mean it.
+    expect(QUEUE_MARGIN_SEC).toBe(60)
+    expect(missingLine('x.yml', QUEUE_MARGIN_SEC - 1)).toMatch(/no run YET/)
+    expect(missingLine('x.yml', QUEUE_MARGIN_SEC)).toMatch(/NO RUN for this commit/)
+  })
+
+  it('an unreadable commit age says UNREADABLE rather than guessing which side it is on', () => {
+    // Rule 95b · "I could not look" must never resolve to a plausible value. Guessing YOUNG hides a
+    // real miss; guessing OLD invents a defect. Neither is available.
+    const line = missingLine('canary.yml', null)
+    expect(line).toMatch(/UNREADABLE/)
+    expect(line).not.toMatch(/no run YET/)
+    expect(line).not.toMatch(/ago/)
+  })
+
+  it('commitAgeSeconds reads a real commit and returns a sane, timezone-free number', () => {
+    // Positive control in the same run (Rule 120): without it, a null from a broken git invocation
+    // would render as UNREADABLE forever and every case above would be testing the fallback.
+    const age = commitAgeSeconds('HEAD')
+    expect(age, 'commitAgeSeconds could not read HEAD · every age branch above is then unreachable ' +
+      'in practice and this suite is exercising only the null path').not.toBeNull()
+    expect(age).toBeGreaterThanOrEqual(0)
+    expect(age, 'HEAD is older than this repo · the epoch subtraction has picked up a unit or a ' +
+      'timezone (Rule 127 · both sides must be epoch seconds)').toBeLessThan(400 * 24 * 3600)
   })
 })
 
