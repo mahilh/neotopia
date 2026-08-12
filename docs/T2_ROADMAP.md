@@ -6,6 +6,48 @@ correction is in the table rather than only in a commit message.
 
 ---
 
+## -2 · T2 S53 · WHAT THE RULEBOOK DIVERGENCE IS WORTH · measured before the photograph
+
+**Balance is the lowest track and it is capped by a document, not by a measurement. This is the
+number that tells you what the document is worth.**
+
+S52 found the shipped granter diverges from the printed rulebook twice. S53 measured both, as three
+arms over three disjoint 40-seed blocks, with the shipped arm validated against the real engine
+(24/24 games, exact token counts).
+
+| arm | contested crossings | tokens/game |
+|---|---|---|
+| **A · shipped** · threshold-matched, 3 tiles | **32.5%** | 4.52 |
+| **C · book award rule** · top-of-pile, 3 tiles | **24.3%** | 5.07 |
+| **B · book** · top-of-pile, 4 tiles | **11.4%** | 5.93 |
+
+**32.5% → 11.4%.** Under the printed rules a threshold crossing pays about eight times in nine; under
+ours, about two times in three.
+
+**And the two divergences are coupled.** A fourth tile is *inert* under the shipped award rule, because
+the granter finds tokens by `threshold === t` and there is no fourth threshold. Fix only the award
+rule and you buy a quarter of the gap; fix only the depth and you buy **nothing**. Depth is the bigger
+half (13 points against 8) and it is the half that measures as worthless when tested alone.
+
+**But the win rate does not move at all.** Builder self-play is exactly 50.0 in every arm and every
+block; the asymmetric row's between-block spread exceeds its between-arm spread. **This is an
+experience divergence, not a balance one** · and the two license different decisions.
+
+**What is still open:** which arm is correct. That is the photograph of setup step 8. This measurement
+exists so the photograph confirms a number instead of starting a new question · if the stacks are 4
+deep and top-of-pile, arm B is the target and the shipped game is three times harsher than the printed
+one at the moment a player crosses a threshold.
+
+### Also this session
+- **The sink guard.** Every write of a username into `player_profiles` is now enumerated and must be
+  classified. The producer-shaped guard it replaces could not see a spec that claims a raw string.
+- **Flow ladder: costed, not retuned.** No picker exists in either mode (`DIFFICULTY_SELECTABLE`
+  false, verified), and Flow's 27.6/39.9 is uneven but playable, unlike v1's 6.3/15.2. Recommendation
+  is to measure the drawBias curve in Flow and then decide, rather than commit to a mode-aware policy
+  table that permanently doubles the tuning surface.
+
+---
+
 ## -1 · T2 S51 · THE PURGE CANNOT ORPHAN ANY MORE · AND A RULE MAY BE IMPLEMENTED WRONG
 
 ### ✅ Migration 026 APPLIED · the root cause is closed

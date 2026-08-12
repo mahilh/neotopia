@@ -216,7 +216,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (118 · cumulative · the header read 115 while 116 existed · T2 S52):
+PERMANENT ANTI-REGRESS RULES (119 · cumulative):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -509,6 +509,43 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 119 (T2 S53 · August 11 2026):
+WHEN A SYSTEM DIVERGES FROM ITS SPEC IN TWO PLACES, CHECK WHETHER ONE DIVERGENCE GATES THE OTHER
+BEFORE MEASURING EITHER ALONE · A NULL ON AXIS A CAN BE ENTIRELY MANUFACTURED BY AXIS B BEING UNFIXED.
+The printed rulebook diverges from the shipped bonus granter twice: it says "the token ON TOP OF THE
+PILE" (an ordering) where the code matches a threshold to its own token type, and it says 3 stacks of
+FOUR tiles where the code builds three. I was asked to measure the depth divergence, which is the
+obvious one and the one with a number attached.
+IT IS NOT MEASURABLE ALONE. The granter finds a token by `b.threshold === t` against
+SCORE_THRESHOLDS = [7,13,18], so a FOURTH tile can only ever be claimed if it carries one of those
+three values, and nobody knows which. Under the shipped award rule a fourth tile is INERT · it sits in
+the pile and no crossing can reach it. Measuring depth alone returns an EXACT ZERO, and an exact zero
+that is an artifact of the other divergence is the most confident wrong answer available: it is
+precise, it is reproducible, and it says "the discrepancy does not matter" when the truth is "the
+discrepancy cannot matter YET".
+Measured properly · three arms, shipped / award-rule-only / award-rule-plus-depth · the answer was
+32.5% -> 24.3% -> 11.4% of threshold crossings awarding nothing. Depth is the BIGGER half (13 points
+against 8) and it is the half that reads as worth nothing when tested on its own.
+  119a · THIS IS RULE 73 FOR COUPLED TERMS. 73 asks whether a term is CAPABLE of mattering. This asks
+        whether it is capable of mattering IN THE CONFIGURATION YOU ARE ABOUT TO TEST IT IN. The
+        cheap check is mechanical and takes one read: find the code that CONSUMES the thing you are
+        varying, and see whether the other divergence sits between your variable and its consumer.
+  119b · AND A DIVERGENCE CAN BE HUGE IN EXPERIENCE AND NIL IN OUTCOME. The same three arms moved the
+        win rate NOT AT ALL · builder self-play exactly 50.0 in every arm and every block, and the
+        between-block spread on the asymmetric row larger than the between-arm spread. So under the
+        printed rules a threshold crossing pays about eight times in nine and under ours about two in
+        three, and nobody wins more often either way. Report both numbers or the reader will spend a
+        balance budget on an experience problem, or dismiss an experience problem because balance did
+        not move (Rule 106's shape, on a different pair of axes).
+COROLLARY, and it is an instance of someone else's rule rather than a new one, recorded because the
+instance is the evidence: my first sink guard tested `/isReservedUsername/.test(src)` and stayed GREEN
+when the mutation renamed the guard to `isReservedUsernameXX`, because the new name CONTAINS the old.
+That is T3's Rule 112 · a substring match is an identity check with no boundary · committed by me into
+a brand-new guard ONE SESSION after they wrote it, in the file whose whole subject is watching a
+contract. Reading it twice did not find it; the mutation found it immediately. A rule you have read
+does not protect the code you are writing while you think about something else · only the mutation
+does. `\b` plus an open paren now, so the guard must be CALLED and not merely mentioned.
 
 RULE 118 (T3 S52 · August 11 2026):
 TWO REDUNDANT GUARDS MAKE EACH OTHER UNTESTABLE, AND BOTH REPORT THEMSELVES AS PRESENT.
