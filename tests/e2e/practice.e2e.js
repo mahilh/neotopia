@@ -1109,3 +1109,147 @@ test.describe('practice · the phone layout rule actually wins (T3 S49)', () => 
     expect(desk.board.flexGrow, 'the desktop board still takes the remaining width').toBe('1')
   })
 })
+
+// ── THE GAME SCREEN HAS NEVER BEEN AUDITED FOR KEYBOARD ACCESS · FIFTY-THREE SESSIONS (T3 S53) ───────────
+//
+// The landing page was audited and came out better than feared. This screen never was, and it is the harder
+// surface by far: an SVG board, a four-step pointer flow, and a modal. Everything below is MEASURED in a
+// real browser on the practice board · zero identities, so it belongs on the merge gate rather than the
+// nightly (Rule 79b).
+//
+// ⚠ THESE ARE CHARACTERISATION ASSERTIONS. Every one of them describes a DEFECT that is true today. When
+// someone fixes one it MUST go red, and the fixer updates it in the same commit · that is the point of
+// writing it down rather than filing it (Rule 101). The alternative, a note in a handoff, expires silently.
+//
+// THE COUNTERWEIGHT IS THE WHOLE AUDIT AND IT IS WRITTEN FIRST (Rule 90): a board that is inert BECAUSE IT
+// IS NOT YOUR TURN reads identically to a board that is keyboard-inaccessible · zero focusables, no
+// reaction to any key, nothing selectable. So the live-and-playable-by-POINTER case is established before
+// a single keyboard claim is made. bots=0 is chosen for exactly that reason: the human always holds the turn.
+test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () => {
+
+  test('COUNTERWEIGHT · the board is live, it is our turn, and a POINTER can start the flow', async ({ page }) => {
+    await page.goto('/practice?bots=0')
+    await boardReady(page)
+
+    const live = await page.evaluate(() => {
+      const g = window.__neotopia_store?.getState?.()
+      return {
+        myTurn: document.querySelector('[data-my-turn]')?.getAttribute('data-my-turn'),
+        phase: g?.phase, actions: g?.actionsRemaining,
+        stocked: (g?.factories ?? []).reduce((n, f) => n + f.elements.reduce((m, e) => m + e.count, 0), 0),
+      }
+    })
+    expect(live.phase, 'not in a playing phase · nothing below measures accessibility').toBe('playing')
+    expect(live.myTurn, 'it is not our turn · an inert board would produce every "inaccessible" reading ' +
+      'in this file for a completely different reason').toBe('true')
+    expect(live.actions, 'no actions left · the flow could not be started by any input device').toBeGreaterThan(0)
+    expect(live.stocked, 'every factory is empty · there is nothing to place').toBeGreaterThan(0)
+
+    // A REAL pointer click must produce the second step. This is the positive control: the flow works.
+    expect(await page.locator('[data-testid^="element-"]').count()).toBe(0)
+    await page.locator('[data-testid^="factory"]').first().click({ force: true })
+    await expect.poll(() => page.locator('[data-testid^="element-"]').count(), { timeout: 5_000 })
+      .toBeGreaterThan(0)
+  })
+
+  test('TODAY · the four-step placement flow cannot be STARTED without a pointer', async ({ page }) => {
+    await page.goto('/practice?bots=0')
+    await boardReady(page)
+
+    const facts = await page.evaluate(() => {
+      const fac = document.querySelector('[data-testid^="factory"]')
+      const svg = document.querySelector('svg[aria-label*="NeoTopia"]')
+      svg?.focus?.()
+      return {
+        factoryTag: fac?.tagName?.toLowerCase() ?? null,
+        factoryTabIndex: fac?.tabIndex ?? null,
+        svgTabIndex: svg?.getAttribute('tabindex'),
+        svgTakesFocus: document.activeElement === svg,
+      }
+    })
+    expect(facts.factoryTag, 'the factory is no longer a bare <g> · if it is a button now, this whole ' +
+      'block may be out of date and that is good news').toBe('g')
+    expect(facts.factoryTabIndex, 'the factory is not reachable by Tab').toBe(-1)
+    expect(facts.svgTakesFocus, 'the board itself refuses focus · it has no tabindex').toBe(false)
+
+    // And no key does anything: step 2 never appears. Compare against the pointer control above, which
+    // produces four element buttons from ONE click.
+    for (const key of ['Enter', ' ', 'ArrowRight', 'ArrowDown', 'Tab']) await page.keyboard.press(key)
+    expect(await page.locator('[data-testid^="element-"]').count(),
+      'a key started the placement flow · if this is now non-zero the board has become keyboard-operable ' +
+      'and this test should be rewritten to assert THAT').toBe(0)
+  })
+
+  test('TODAY · the board is one unnamed image · no hex, region or factory has an accessible name', async ({ page }) => {
+    await page.goto('/practice?bots=0')
+    await boardReady(page)
+
+    const board = await page.evaluate(() => {
+      const svg = document.querySelector('svg[aria-label*="NeoTopia"]')
+      const polys = [...document.querySelectorAll('polygon')]
+      return {
+        role: svg?.getAttribute('role'),
+        label: svg?.getAttribute('aria-label') ?? '',
+        polygons: polys.length,
+        named: polys.filter(p => p.getAttribute('aria-label')).length,
+        withRole: polys.filter(p => p.getAttribute('role')).length,
+        focusable: polys.filter(p => p.getAttribute('tabindex') !== null).length,
+      }
+    })
+    // Counterweight: if the board did not render, every zero below is a false zero (Rule 95b).
+    expect(board.polygons, 'the board did not render · "0 named polygons" would be UNMEASURED, not a finding')
+      .toBeGreaterThan(50)
+
+    expect(board.role, 'the whole board is exposed as a single image').toBe('img')
+    expect(board.named, `all ${board.polygons} polygons are unnamed · to a screen reader the entire game ` +
+      `state is one image described as "${board.label}". Every placed element, every buildable hex and ` +
+      'every region score is invisible.').toBe(0)
+    expect(board.withRole, 'no polygon carries an interactive role').toBe(0)
+    expect(board.focusable, 'no polygon is focusable').toBe(0)
+  })
+
+  test('TODAY · the modal does not trap focus and Escape does not close it · though Escape DOES cancel', async ({ page }) => {
+    await page.goto('/practice?bots=0')
+    await boardReady(page, { tutorial: 'keep' })
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog, 'no dialog on arrival · the tutorial did not open, so nothing below is measured')
+      .toBeVisible({ timeout: 10_000 })
+    expect(await dialog.getAttribute('aria-modal'),
+      'the dialog is correctly marked aria-modal · this half is RIGHT and worth keeping').toBe('true')
+
+    // Focus something inside, THEN press Escape. Pressing it with focus outside would be a different
+    // (and unfair) measurement · that confound cost a re-run before this was written down.
+    await page.evaluate(() => {
+      const d = document.querySelector('[role="dialog"]')
+      d?.querySelector('button, [href], [tabindex]:not([tabindex="-1"])')?.focus()
+    })
+    expect(await page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement)),
+      'could not place focus inside the dialog · the Escape result below would be unmeasured').toBe(true)
+
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(600)
+    expect(await dialog.isVisible(), 'Escape closed the dialog · someone shipped the fix, update this test')
+      .toBe(true)
+
+    // Focus escapes an aria-modal dialog: tabbing walks straight out into the page behind it.
+    const wandered = []
+    for (let i = 0; i < 5; i++) {
+      await page.keyboard.press('Tab')
+      wandered.push(await page.evaluate(() =>
+        !document.querySelector('[role="dialog"]')?.contains(document.activeElement)))
+    }
+    expect(wandered.some(Boolean), 'focus stayed inside the modal · a trap has been added, update this test')
+      .toBe(true)
+
+    // AND THE HALF THAT WORKS, measured so the report is precise rather than damning: T1's S44 Escape
+    // cancel path is intact · it just does not reach the dialog.
+    await dismissTutorial(page)
+    await page.locator('[data-testid^="factory"]').first().click({ force: true })
+    await expect.poll(() => page.locator('[data-testid^="element-"]').count(), { timeout: 5_000 })
+      .toBeGreaterThan(0)
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.locator('[data-testid^="element-"]').count(), { timeout: 5_000 })
+      .toBe(0)
+  })
+})
