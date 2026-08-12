@@ -56,6 +56,14 @@ jobs:
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      # T2 S59 · the same two lines as e2e.yml, and here for a counted reason rather than for
+      # symmetry. Per push to main the merge gate signs in anonymously SIX times purely to run
+      # globalTeardown: five playwright invocations in e2e.yml and this one. Converting five of six
+      # and leaving the sixth minting would be tidiness winning over the measurement · the whole
+      # feature exists to stop identities being created, and this creates one on every push.
+      # Member 0, the teardown's single client. No spec here reads a pool credential.
+      E2E_POOL_EMAIL: ${{ secrets.E2E_POOL_EMAIL }}
+      E2E_POOL_PASSWORD: ${{ secrets.E2E_POOL_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 

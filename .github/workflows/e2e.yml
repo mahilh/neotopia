@@ -55,6 +55,24 @@ jobs:
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      # ── ACTIVATION · THE TWO LINES  (T2 S59 · Council Decision 3, in its stated order) ──────────
+      # Order was: enough users (Decision 2) -> instrument the branch (P1, d5418a7) -> these. Both
+      # predecessors have landed, and the instrument runs BEFORE this does any work: the verify step
+      # below reds on a dead credential before npm ci, so activation cannot proceed on a broken pool.
+      #
+      # WHAT THIS ACTUALLY CONVERTS, counted rather than rounded: tests/e2e/global-teardown.js:51
+      # calls signInPooledOrAnon(), and playwright runs globalTeardown once per INVOCATION. This
+      # workflow has FIVE invocations, so it mints five anonymous identities per push today, on push
+      # AND pull_request, whatever the specs contain. With these two lines they become five reuses of
+      # one pre-existing user. Member 0 only · the teardown is a single client and needs nothing more.
+      #
+      # WHAT IT DOES NOT CONVERT, said plainly so a drop in the counter is not over-credited: the
+      # BROWSER contexts still mint. Nothing calls context.addInitScript to seed a credential into a
+      # page, so useAuth's pool branch takes its NO_CREDENTIAL path and signs in anonymously exactly
+      # as before · which it now RECORDS rather than passing over in silence. That is T3's half and
+      # it is the larger one.
+      E2E_POOL_EMAIL: ${{ secrets.E2E_POOL_EMAIL }}
+      E2E_POOL_PASSWORD: ${{ secrets.E2E_POOL_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 

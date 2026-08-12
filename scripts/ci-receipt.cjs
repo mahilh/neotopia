@@ -79,10 +79,59 @@ function expectedWorkflows() {
   return out
 }
 
+// ── ASK THE EXACT QUESTION · THE LOOKBACK WINDOW IS GONE, NOT WIDENED  (T2 S59) ─────────────────
+// MY OWN S58 CLOSING CRITIQUE, MEASURED AND FIXED. This read `gh run list --limit 200` and filtered
+// client-side. The repo has 1943 runs, so any commit outside the most recent 200 reported
+// "UNMEASURED · NO RUN for this commit" · and the diagnosis was simply false. Verified on 238a88d,
+// which the tool called run-less and which has SIX runs.
+//
+// It failed SAFE, which is the only reason this was a critique rather than a defect I shipped: the
+// verdict stayed UNMEASURED and never became a false PASS. But the distinction this whole file
+// exists to draw is UNMEASURED versus MEASURED-ZERO, stated in the output string, and inside the
+// instrument I had the two collapsed into one sentence. Closing one vacuity hole by mutation is not
+// evidence an instrument has no others · a single mutation proves a single path (Rule 112a: an
+// instrument earns trust from being MADE TO FAIL, and only along the axis you made it fail).
+//
+// `--commit` filters SERVER-SIDE · confirmed by asking for a 200-runs-ago sha with `--limit 5` and
+// getting its rows back. So there is no window to be outside of, and "no run" now means no run.
 function runsFor(sha) {
-  const raw = sh('gh', ['run', 'list', '--limit', '200', '--json',
-    'workflowName,headSha,conclusion,status,event,createdAt,url,databaseId'])
-  return JSON.parse(raw).filter(r => r.headSha === sha)
+  const LIMIT = 100
+  let raw
+  try {
+    raw = sh('gh', ['run', 'list', '--commit', sha, '--limit', String(LIMIT), '--json',
+      'workflowName,headSha,conclusion,status,event,createdAt,url,databaseId'])
+  } catch (e) {
+    // An instrument that cannot reach its source must SAY SO, never report an empty result · an
+    // auth failure, a network blip or a wrong repo would otherwise render as "nothing ran", which
+    // is a confident and completely wrong answer (Rule 80).
+    console.error('UNMEASURED · `gh run list` failed, so this tool has no data at all rather than ' +
+                  'a clean result:\n  ' + String(e.message || e).split('\n')[0])
+    console.error('  Check `gh auth status`. An empty answer here would be indistinguishable from ' +
+                  'a commit nothing built, which is the exact confusion this file exists to end.')
+    process.exit(2)
+  }
+  let rows
+  try { rows = JSON.parse(raw) } catch {
+    console.error('UNMEASURED · `gh run list` returned something that is not JSON.')
+    process.exit(2)
+  }
+  // Absence inside a truncated page is not absence. One commit having 100 runs would mean re-runs
+  // beyond anything seen here, but a silent truncation is how a receipt starts lying quietly.
+  if (rows.length >= LIMIT) {
+    console.error(`UNMEASURED · ${rows.length} runs for one commit hit the --limit ${LIMIT} page. ` +
+                  'Rows may have been dropped, so any "no run" below could be truncation.')
+    process.exit(2)
+  }
+  // The server filter is trusted but not assumed · a row for a different sha would mean --commit
+  // silently stopped filtering, and every verdict after that would be about somebody else's commit.
+  const foreign = rows.filter(r => r.headSha && r.headSha !== sha)
+  if (foreign.length) {
+    console.error(`UNMEASURED · ${foreign.length} of ${rows.length} rows carry a DIFFERENT headSha ` +
+                  'than the one requested · `gh run list --commit` is no longer filtering, so these ' +
+                  'verdicts would belong to other commits.')
+    process.exit(2)
+  }
+  return rows
 }
 
 function classify(run) {
