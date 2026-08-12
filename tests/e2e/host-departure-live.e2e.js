@@ -35,8 +35,13 @@
 // which is a better problem and an honest one. What the passing runs show is that the spec still
 // describes the product correctly: "held for 45s inside the budget, then the clock ended the absent
 // player's turn after ~100s → seat 1/turn 2". That ~100s path did not exist when this was written in
-// S51 · the turn clock I shipped in S56 is what unfreezes it now · so the likeliest suspect is a
-// budget in here racing that clock rather than anything about the pool.
+// S51 · the turn clock I shipped in S56 is what unfreezes it now.
+// ⚠ AND MY FIRST SUSPECT DOES NOT FIT THE CLOCK, corrected here rather than left standing. I wrote
+// that the likely cause was a budget in here racing that ~100s clock. The failing run died at 32.1s ·
+// BEFORE the 45s observation hold even completes · so it failed in SETUP (lobby, presence convergence,
+// or the counterweight action), and nothing about the clock is reached by then. The arithmetic was
+// available when I wrote the guess and I did not do it. What is actually known: 1 of 3 runs died at
+// 32.1s with its reason uncaptured. Diagnose before wiring; do not inherit my hypothesis.
 // DELETE THIS DECLARATION IN THE SAME COMMIT THAT WIRES THE FILE.
 // Run locally:  node scripts/with-project-env.cjs npx playwright test tests/e2e/host-departure-live.e2e.js
 // ⚠ with-project-env is not optional · the shell exports another project's Supabase URL and it beats
