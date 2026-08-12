@@ -142,7 +142,7 @@ function measure(levels) {
   for (const seed of seeds) {
     for (const swap of [false, true]) {
       const order = swap ? [...levels].reverse() : levels
-      const g = playOnce(bots(...order), seed)
+      const g = playOnce(bots(...order), seed, undefined, { recordCrossings: true })
       games++
       crossingsTotal += g.crossings.length
       // aSeat is the seat holding levels[0] this orientation · the swap cancels seat advantage.

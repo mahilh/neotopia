@@ -45,7 +45,7 @@ export const bots = (...levels) =>
 // Classic-only, while Flow is shipped and user-selectable with 9 production tiles instead of 12.
 // Defaulting to undefined keeps every existing caller byte-identical (initGame's own default is
 // DEFAULT_GAME_MODE), so this is a widening and not a change.
-export function playOnce(configs, seed, mode) {
+export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) {
   useGameStore.setState(useGameStore.getInitialState(), true)
   const rng = makeRng(seed)
   api().initGame(configs, shuffled(PROJECT_CARDS, rng), shuffled(PRODUCTION_TILES, rng), mode)
@@ -53,6 +53,29 @@ export function playOnce(configs, seed, mode) {
   const heldPrev = configs.map(() => 0)
   const grantOrder = []
   // T2 S53 · THE CROSSING SEQUENCE, in the order the crossings happen.
+  // OPT-IN SINCE S54. Exactly one of playOnce's six consumers needs it (pileDepth.test.js), and a
+  // shared instrument should not carry a single caller's cost by default.
+  //
+  // ⚠ AND THE PERFORMANCE ARGUMENT I MADE FOR THIS CHANGE WAS WRONG · MEASURED, IT COSTS NOTHING.
+  // I closed S53 calling this sampler "O(seats x regions) per action on the hot path of every balance
+  // experiment", which is true as a description and false as a concern. A 20-seed builder block, three
+  // runs each:
+  //     always-on   1260 / 1291 / 1251 ms      mean 1267.3
+  //     opt-in off  1256 / 1247 / 1288 ms      mean 1263.7
+  // 0.3% apart, inside a 40ms run-to-run spread. The instrument had the resolution to see the effect
+  // I claimed · a 7.7% cost would have been ~97ms, more than twice the spread · so this is a real null
+  // and not a noisy one.
+  //
+  // WORSE, AND THE REASON THIS NOTE IS THIS LONG: the first draft of this very comment quoted
+  // "1174/1170/1163ms with it off, i.e. ~7.7%". I had not run the off case. I wrote a plausible
+  // before/after into a comment that existed to justify the change, and only caught it because I then
+  // ran the measurement anyway. A fabricated number inside a justification is worse than no number,
+  // because it makes the change look already-validated (Rule 81; and S48's identical mistake, which I
+  // wrote a rule about).
+  //
+  // THE CHANGE STANDS ON DESIGN, NOT SPEED: five experiments should not pay for one caller's data,
+  // and the flag makes the dependency legible. That is a smaller claim than the one I set out with,
+  // and it is the one the evidence supports.
   // Recorded so one game can be scored under ALTERNATE award rules offline. The bots read no bonus
   // state (asserted live in bonusBalance.test.js premise B, and botPolicy.js has zero references), so
   // changing WHO gets a token changes no decision · the game is identical and only the scoring
@@ -61,7 +84,7 @@ export function playOnce(configs, seed, mode) {
   // Final scores alone are not enough here: they give the SET of crossings but not their ORDER, and
   // every first-come-first-served rule is decided by order.
   const crossings = []
-  const scorePrev = configs.map(() => ({}))
+  const scorePrev = recordCrossings ? configs.map(() => ({})) : null
 
   for (let i = 0; i < 4000 && api().phase === 'playing'; i++) {
     const s = api(); const seat = s.currentSeat
@@ -74,14 +97,16 @@ export function playOnce(configs, seed, mode) {
     // DEFINITION of a crossing (prev < t <= now), not a copy of the granter's award logic · and the
     // counterweight in pileDepth.test.js proves the derivation by replaying the SHIPPED rule against
     // it and requiring it to reproduce the real token counts exactly (Rule 36).
-    for (let k = 0; k < configs.length; k++) {
-      const sc = s.players.find(x => x.seat === k)?.scores ?? {}
-      for (const [regionId, v] of Object.entries(sc)) {
-        const before = scorePrev[k][regionId] ?? 0
-        const now = v ?? 0
-        if (now > before) {
-          for (const t of [7, 13, 18]) if (before < t && now >= t) crossings.push({ seat: k, regionId, threshold: t })
-          scorePrev[k][regionId] = now
+    if (recordCrossings) {
+      for (let k = 0; k < configs.length; k++) {
+        const sc = s.players.find(x => x.seat === k)?.scores ?? {}
+        for (const [regionId, v] of Object.entries(sc)) {
+          const before = scorePrev[k][regionId] ?? 0
+          const now = v ?? 0
+          if (now > before) {
+            for (const t of [7, 13, 18]) if (before < t && now >= t) crossings.push({ seat: k, regionId, threshold: t })
+            scorePrev[k][regionId] = now
+          }
         }
       }
     }
@@ -103,13 +128,15 @@ export function playOnce(configs, seed, mode) {
     for (let n = heldPrev[k]; n < held; n++) grantOrder.push(k)
     // Final sweep for crossings too · a crossing caused by the LAST scoring action of the game would
     // otherwise be missed, for the same reason the token sweep above exists.
-    const sc = st.players.find(x => x.seat === k)?.scores ?? {}
-    for (const [regionId, v] of Object.entries(sc)) {
-      const before = scorePrev[k][regionId] ?? 0
-      const now = v ?? 0
-      if (now > before) {
-        for (const t of [7, 13, 18]) if (before < t && now >= t) crossings.push({ seat: k, regionId, threshold: t })
-        scorePrev[k][regionId] = now
+    if (recordCrossings) {
+      const sc = st.players.find(x => x.seat === k)?.scores ?? {}
+      for (const [regionId, v] of Object.entries(sc)) {
+        const before = scorePrev[k][regionId] ?? 0
+        const now = v ?? 0
+        if (now > before) {
+          for (const t of [7, 13, 18]) if (before < t && now >= t) crossings.push({ seat: k, regionId, threshold: t })
+          scorePrev[k][regionId] = now
+        }
       }
     }
   }

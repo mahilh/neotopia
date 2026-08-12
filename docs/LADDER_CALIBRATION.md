@@ -198,7 +198,15 @@ priced like the last one.**
 the labels. A player picks a mode *and* a difficulty and experiences one combination; they never run
 Classic-builder and Flow-builder side by side. The consistency concern is real but second-order, and
 one honest sentence in the picker ("difficulty is tuned for Classic") costs nothing against a
-permanent doubling of the tuning surface. **My recommendation is to do step 1 only** · measure the
+permanent doubling of the tuning surface. **✅ T2 S54 · STEP 1 IS DONE, AND IT SHRINKS THE REST.** The Flow drawBias curve is measured (40
+seeds): the mid-range slope is **0.52 margin per 0.01 of bias against Classic's 0.86** · the Classic
+constant is ~40% too steep, exactly as suspected. But the ratio is a **constant 0.55-0.72 with no
+trend across the whole range**, so Flow is the same curve compressed by ~0.6, not a different one.
+A Flow ladder is therefore the Classic offsets scaled by ~1.65x from the same midpoint, and step 2
+collapses from *two independent tunings* to **one tuning plus one constant**. The five-step estimate
+below was written before this was known and is now an over-estimate; steps 3-5 stand.
+
+**My recommendation is to do step 1 only** · measure the
 Flow curve, which is cheap and is a prerequisite for every other option · and then decide, rather than
 committing to a mode-aware table before knowing whether the axis even behaves the same way.
 

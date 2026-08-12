@@ -177,6 +177,62 @@ describe(`ladder spacing (${SEEDS} seeds x 2 orientations per row · full=${FULL
     }
   }, 300_000)
 
+  // ── F · THE SAME CURVE IN FLOW · does the Classic slope carry? (T2 S54 · P3) ─────────────────────
+  // S50 found the ladder does not transfer: Flow's steps are 27.6 / 39.9 against Classic's
+  // 33.5 / 31.6. S53 costed a Flow retune at five steps and recommended doing ONLY THE FIRST, because
+  // every other step depends on it: the Classic slope (~0.86 points of margin per 0.01 of draw bias)
+  // CANNOT BE ASSUMED TO CARRY, and the ladder failing to transfer is itself the evidence that it
+  // does not. Tuning Flow off the Classic slope would be Rule 111 · a constant lifted out of the
+  // context that gave it its value.
+  //
+  // NOT URGENT AND SAID SO: DIFFICULTY_SELECTABLE is false and no picker exists in any component or
+  // page, so no player can reach a rung in either mode today. This measures the prerequisite so the
+  // decision is available when the picker ships, and nothing more.
+  // ══ MEASURED · 40 seeds. THE CLASSIC SLOPE DOES NOT CARRY, AND FLOW IS A SCALED COPY ═══════════
+  //   bias      0.00   0.10   0.20   0.30   0.40   0.55   0.70   1.00
+  //   FLOW     -12.1   -7.1   -4.4    0.0   +6.0  +13.4  +23.0  +31.9
+  //   CLASSIC  -20.7  -12.8   -6.4    0.0  +10.8  +18.6  +36.8  +46.6
+  //   ratio     0.58   0.55   0.69      -   0.56   0.72   0.63   0.68
+  //
+  // MID-RANGE SLOPE: Classic 0.20->0.40 spans 17.2 margin over 0.20 of bias = 0.86 per 0.01.
+  //                  Flow    0.20->0.40 spans 10.4 margin over 0.20 of bias = 0.52 per 0.01.
+  // So the Classic constant is ~40% TOO STEEP for Flow, which is exactly the assumption S53 refused to
+  // make. Tuning Flow off it would have overshot every rung.
+  //
+  // ── AND THE BETTER HALF · THE RATIO IS CONSTANT, SO FLOW IS A RESCALE AND NOT A REDESIGN ────────
+  // 0.55 to 0.72 across the whole range, with no trend. Flow is not a different curve, it is the same
+  // curve compressed by roughly 0.6 · which makes sense of the mechanism: nine tiles instead of twelve
+  // gives an advantage less time to compound, so every margin shrinks by about the same fraction.
+  //
+  // THIS MATERIALLY CHEAPENS MY OWN S53 RECOMMENDATION. I costed a Flow retune at five steps and
+  // warned it "permanently doubles the tuning surface". If the axis is a scaled copy, a Flow ladder is
+  // the Classic offsets divided by ~0.6 · i.e. bias offsets about 1.65x larger from the same midpoint ·
+  // and the mode-aware table collapses from two independent tunings to ONE tuning plus ONE constant.
+  // That is a much smaller thing than I described, and the difference is entirely this measurement.
+  // ⚠ NOT A RETUNE, AND NOT A PROPOSAL TO SHIP ONE: no player can reach a rung in either mode
+  // (DIFFICULTY_SELECTABLE false, no picker in any component or page), so this is a prerequisite
+  // parked until the picker exists. Rule 121 · a finding needs a denominator before it gets a priority.
+  it.runIf(FULL)('the drawBias curve in FLOW · measured, not assumed from Classic', () => {
+    const BIASES = [0.00, 0.10, 0.20, 0.30, 0.40, 0.55, 0.70, 1.00]
+    const curve = BIASES.map(x => {
+      const r = ladderRow({ ...B, drawBias: x }, { ...B, drawBias: 0.30 }, seeds, 'flow')
+      report(`F · flow drawBias ${x.toFixed(2)} v 0.30`, { winPct: r.winPctEarned, margin: r.marginEarned })
+      return { bias: x, pct: r.winPctEarned, margin: r.marginEarned }
+    })
+    report('F-curve-flow', { curve })
+
+    const mid = curve.find(c => c.bias === 0.30)
+    expect(mid.pct, 'drawBias 0.30 against itself IN FLOW is the same policy played both ways round · ' +
+      'it must be exactly 50.0 or the mode has handed a seat an advantage the swap does not cancel')
+      .toBe(50)
+    expect(mid.margin, 'and its margin must be exactly 0.00 for the same reason').toBe(0)
+    // Ordered ends · the axis must still be an axis in Flow. Deliberately NOT asserting the slope:
+    // whether it matches Classic is the FINDING, and gating it would pin the thing being measured.
+    expect(curve[0].margin, 'drawBias 0.00 must lose to 0.30 in Flow too').toBeLessThan(0)
+    expect(curve[curve.length - 1].margin, 'drawBias 1.00 must beat 0.00 in Flow too')
+      .toBeGreaterThan(curve[0].margin)
+  }, 600_000)
+
   // ── B · RESPONSE CURVE · the only continuous axis, across its whole range ────────────────────────
   it.runIf(FULL)('drawBias is monotone in margin, and saturates in win rate above ~0.7', () => {
     const BIASES = [0.00, 0.10, 0.20, 0.30, 0.40, 0.55, 0.70, 0.85, 1.00]
