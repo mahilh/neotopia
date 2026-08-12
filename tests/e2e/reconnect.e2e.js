@@ -118,10 +118,28 @@ async function bumpTurn(admin, roomId, turn) {
   if (error) throw new Error('turn bump: ' + error.message)
 }
 
+// ⚠ THIS WAS THE ROOM LEAK, AND IT NEEDED NO FAILURE TO HAPPEN (T3 S56). It marked the room finished,
+// deleted the SEATS, and never deleted the ROOM · so every run left exactly:
+//     status finished · 0 seats · 1 game_sessions row
+// which is 118 of the 121 rooms created in production in 24 hours. This spec is on the MERGE GATE, so it
+// ran on every push, which is the ~8/hour T2 measured. Nothing was broken; "soft" did what it said.
+// The seats mattered because they were the only thing left identifying the room · once the host profile
+// was purged the room became an anonymous husk the purge could no longer scope to.
 async function softCleanup(game) {
   if (!game) return
-  try { await game.admin.from('game_rooms').update({ status: 'finished' }).eq('id', game.roomId) } catch { /* best-effort */ }
-  try { await game.admin.from('room_players').delete().eq('room_id', game.roomId).eq('user_id', game.userId) } catch { /* best-effort */ }
+  try {
+    await game.admin.from('game_rooms').update({ status: 'finished' }).eq('id', game.roomId)
+    const { data: del, error } = await game.admin.from('game_rooms')
+      .delete().eq('id', game.roomId).select('id')      // cascade takes seats + session + events
+    if (!Array.isArray(del) || del.length === 0) {
+      console.warn(`[softCleanup] room ${game.roomId} SURVIVED its delete · ${del?.length ?? 0} row(s)` +
+        `${error ? ` · ${error.message}` : ' · no error, so RLS matched nothing'}`)
+      return   // leave the seats: they are what keeps a leaked room identifiable
+    }
+  } catch (e) {
+    console.warn(`[softCleanup] room delete THREW for ${game.roomId} · ${String(e).slice(0, 100)}`)
+    return
+  }
 }
 
 const BOARD = 'svg[aria-label*="NeoTopia"]'

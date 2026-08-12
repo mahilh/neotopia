@@ -168,10 +168,17 @@ async function createSeededGame() {
 async function cleanup(game) {
   if (!game) return
   try {
+    // Order matters: deleting the seats AFTER a failed room delete strips the only thing that keeps a
+    // leaked room identifiable (T3 S56 · the same defect as reconnect's softCleanup and the shared helper).
     await game.admin.from('game_rooms').update({ status: 'finished' }).eq('id', game.roomId)
-    await game.admin.from('game_rooms').delete().eq('id', game.roomId) // cascade · needs rooms_delete_host
+    const { data: del, error } = await game.admin.from('game_rooms')
+      .delete().eq('id', game.roomId).select('id') // cascade · needs rooms_delete_host
+    if (!Array.isArray(del) || del.length === 0) {
+      console.warn(`[cleanup] room ${game.roomId} SURVIVED its delete` +
+        `${error ? ` · ${error.message}` : ' · no error, so RLS matched nothing'}`)
+      return
+    }
   } catch { /* best-effort */ }
-  try { await game.admin.from('room_players').delete().eq('room_id', game.roomId).eq('user_id', game.userId) } catch { /* best-effort */ }
 }
 
 test.describe('Two-human complete game (T3 S7)', () => {
