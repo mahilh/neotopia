@@ -60,8 +60,10 @@ acquired   9:1  10:2  11:4  12:3  13:9  14:8  15:8  16:8  17:24  18:15  19:10  2
            p10 13   p50 17   p90 22   min 9   max 27
 ```
 
-A basket is not a point, it is a 2.5× spread between the thinnest and fattest game at the same skill
-level, and a single price meets all of it.
+A basket is not a point. At one skill level, in one mode, at one seat count, the fattest game buys
+**3.0× what the thinnest does** (27 against 9) and the p10-to-p90 range is still 1.7× (13 to 22) ·
+and a single price meets all of it. Any price argued from a mean is an argument about a player who
+does not exist.
 
 ---
 
