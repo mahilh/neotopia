@@ -221,6 +221,57 @@ const readSessionRow = (page, roomId) => page.evaluate(async (rid) => {
  * narrows the field and settles nothing. The next run answers it in one line instead of costing
  * another three identities to ask again.
  */
+/**
+ * Wait until this client's game-sync channel is JOINED, and report what it saw.
+ *
+ * ⚠ THIS IS THE MISSING ORDERING GUARANTEE, AND THE S70 RUN IS WHY (T3 S70).
+ * The spec waits for the game_sessions ROW to exist before writing (S45) and has never waited for the
+ * CLIENTS to be listening. postgres_changes delivers only what happens AFTER a subscription attaches,
+ * and useGameSync re-seeds over REST on connect and reconnect ONLY · its own comment names this exact
+ * hazard in these words: "a client that subscribes after the host's INSERT never receives that INSERT
+ * event". So a client whose seed lands before the write and whose subscription attaches after it holds
+ * the pre-write state forever, with a healthy socket and nothing to retry.
+ *
+ * WHAT S70 COULD AND COULD NOT ESTABLISH · the four-way probe ruled out three of the four:
+ *     channels  realtime:game-sync:<room>:joined     SUBSCRIBED · not "never listening"
+ *     server    state_turn 17 · state_tiles 1        THE ROW MOVED · the write is not the defect
+ *     writeorder { overtakes: [], version: 0 }       nothing was refused
+ *     local     turn 1 · tiles 12                    and this client is on the FRESH game
+ * and both clients were byte-identical, so S69's asymmetry did not reproduce · that run was the odd one.
+ * The two survivors are NEVER DELIVERED (this ordering race, mine) and DELIVERED AND NOT APPLIED (a
+ * product defect in every live room), and they produce the SAME four fields. The probe reads the channel
+ * at FAILURE time, +43.8s; the write happened at +12.9s, and `joined` half a minute later says nothing
+ * about whether it was attached when the frame went past. That is my instrument measuring at the wrong
+ * moment, which is the fourth time this class has bitten me in two sessions.
+ *
+ * SO THIS IS NOT A PRODUCT ACCUSATION AND MUST NOT BE READ AS ONE. Ruling out the version guard is the
+ * one thing that IS settled from source: useGameSync:182 gates on `v > 0`, the harness never sets
+ * state_version, so a 0-version frame is applied rather than refused. With this wait in place, a next
+ * run that still fails has eliminated the ordering race and the remaining explanation IS the product ·
+ * which is the only outcome that would change anybody's priorities (Rule 121 · the denominator goes from
+ * one fixme'd spec to every live room).
+ */
+async function waitForGameSyncJoined(page, roomId, { timeout = 20_000 } = {}) {
+  const read = () => page.evaluate(async (rid) => {
+    try {
+      const m = await import('/src/lib/supabase.js')
+      const chans = m.supabase.getChannels().map(c => `${c.topic}:${c.state}`)
+      return { chans, joined: chans.some(c => c.includes(rid) && c.endsWith(':joined')) }
+    } catch (e) { return { chans: `UNMEASURED · ${e.message}`, joined: false } }
+  }, roomId)
+  try {
+    await expect.poll(async () => (await read()).joined, { timeout }).toBe(true)
+  } catch {
+    // NOT A THROW. A client that never joins is a finding about THIS run and the write below is still
+    // worth making · refusing to write would turn one measurable failure into no measurement at all
+    // (Rule 80). It is recorded so the next reader knows the ordering guarantee did not hold.
+    const seen = await read()
+    console.log(`[endgame] ⚠ game-sync never reported JOINED within ${timeout}ms · ${JSON.stringify(seen.chans)}`)
+    return { joined: false, chans: seen.chans }
+  }
+  return await read()
+}
+
 async function syncDiagnostic(page, roomId) {
   return await page.evaluate(async (rid) => {
     const st = window.__neotopia_store?.getState?.()
@@ -236,12 +287,16 @@ async function syncDiagnostic(page, roomId) {
       out.channels = m.supabase.getChannels().map(c => `${c.topic}:${c.state}`)
       if (!out.channels.length) out.channels = 'NONE SUBSCRIBED · this client is not listening'
       const { data, error } = await m.supabase.from('game_sessions')
-        .select('current_seat, turn_number, phase, state').eq('room_id', rid).maybeSingle()
+        .select('current_seat, turn_number, phase, state, state_version').eq('room_id', rid).maybeSingle()
       out.server = error ? `READ REFUSED: ${error.message}`
         : data ? {
           column_seat: data.current_seat, column_turn: data.turn_number, column_phase: data.phase,
           state_seat: data.state?.currentSeat, state_turn: data.state?.turnNumber,
           state_tiles: data.state?.productionTilesRemaining,
+          // MISSING IN S70 AND IT MATTERED. useGameSync:182 refuses a frame whose version is <= the
+          // last applied, but ONLY when it is > 0 · so the row's actual state_version decides whether
+          // the apply guard was even eligible to fire, and the probe could not say.
+          state_version: data.state_version,
         } : `NO ROW for room_id ${rid} · UNMEASURED, not "the game is missing"`
     } catch (e) { out.server = `UNMEASURED · ${e.message}` }
     // AND WHAT THIS CLIENT'S OWN WRITES DID · the fourth possibility the three above do not cover:
@@ -378,11 +433,30 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       //     S66 run 2   tiles  1  turn 17  [2,1,4]         arrived
       //     S67 run 2   tiles  1  turn 17  [2,1,4]         arrived      (S67 run 1 never got this far · it
       //                                                    was a WRONG-PROJECT run, see projectAgreement.js)
-      //     S69 run 1   seat 0 arrived · SEAT 1 READ 12 FOR 30s      ASYMMETRIC · never seen before
-      // 4 of 6 fully, and every run since S65 made the gate capable of failing has had the seed reach
-      // at least one client. The seed is not the blocker · but S69 is the first run where the two
-      // clients DISAGREED, which is a different fact from "it did not arrive" and is why the adoption
-      // gate now carries the four-way diagnostic instead of a message listing two candidate causes.
+      //     S69 run 1   seat 0 arrived · SEAT 1 READ 12 FOR 30s      ASYMMETRIC · seen once only
+      //     S70 run 1   NEITHER adopted · both byte-identical             the four-way, in full
+      // 4 of 7 fully. The seed is not the blocker · and S69's asymmetry DID NOT REPRODUCE, so it was
+      // the odd run rather than the shape. Do not build on it.
+      //
+      // ── WHAT THE FOUR-WAY ESTABLISHED, AND WHAT IT DID NOT (T3 S70 · the last run in this lane) ──
+      //     channels    realtime:game-sync:<room>:joined      SUBSCRIBED · not "never listening"
+      //     server      state_turn 17 · state_tiles 1         THE ROW MOVED · the write is not it
+      //     writeorder  { overtakes: [], version: 0 }         nothing was refused
+      //     local       turn 1 · tiles 12                     and this client is on the FRESH game
+      // Three of the four are OUT. The version guard is out too, and that one is settled from source
+      // rather than inferred: useGameSync:182 gates on `v > 0`, this harness never sets state_version,
+      // so a 0-version frame is APPLIED and not refused.
+      // ⚠ THE TWO SURVIVORS PRODUCE AN IDENTICAL SIGNATURE AND THIS PROBE CANNOT SEPARATE THEM:
+      //     NEVER DELIVERED    the subscription attached AFTER the write · mine, an ordering race
+      //     NOT APPLIED        the client was told and did not act · a defect in every live room
+      // because it reads the channel at FAILURE time (+43.8s) and the write happened at +12.9s.
+      // `joined` half a minute later says nothing about whether the socket was attached when the frame
+      // went past · my instrument measuring at the wrong MOMENT, which is the fourth time that class
+      // has bitten me in two sessions. SO THIS IS NOT A PRODUCT ACCUSATION AND MUST NOT BE READ AS ONE.
+      // waitForGameSyncJoined now blocks the write until both clients report joined, and the state is
+      // captured AT WRITE TIME on every run. A next run that still fails has eliminated the race, and
+      // the remaining explanation IS the product · which is the only outcome that changes the
+      // denominator from one fixme'd spec to every live room (Rule 121).
       // AND THE TRIGGER HAS NOW BEEN WITNESSED LIVE FIVE TIMES · 3362f77, S64 run 2, both S66 runs and
       // S67 run 2 · every one at `tiles 0 · rounds 2 · turn 17`, the same signature CLAUDE.md records. The
       // composition it calls the honest remaining gap keeps happening; what fails is the driver after it.
@@ -429,7 +503,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // ARRIVED and a stalled driver step · both mine, both harness, and neither was visible before the
       // phase heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names
       // itself AND the gate that was supposed to catch run 1 can now fail.
-      test.fixme(true, 'the live room reaches its own ending (TRIGGER witnessed live five times, always tiles 0/rounds 2/turn 17) · S69 died in the ADOPTION gate instead: seat 0 adopted and seat 1 read 12 for 30s, the first ASYMMETRIC adoption ever seen here, so the `play/agree` re-read fix was not exercised and stays unwitnessed. The gate now carries the four-way diagnostic rather than a message naming two candidate causes · T3 S69')
+      test.fixme(true, 'the live room reaches its own ending (TRIGGER witnessed live five times, always tiles 0/rounds 2/turn 17) · S70 ran the four-way diagnostic on the adoption failure and ruled out three of four: the channel IS subscribed, the row DID move, no write was refused, and the version guard cannot refuse a 0-version frame. The two survivors are a harness ordering race (the subscription attaching after the write) and the client not applying what it was told · identical signatures, and the probe read the channel at failure time rather than write time. waitForGameSyncJoined closes the race, so the NEXT run separates them · T3 S70')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -532,6 +606,19 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           message: 'the host never INSERTed a game_sessions row for this room · nothing below can be ' +
             'written, and an UPDATE against a missing row would report success',
         }).toBe(true)
+
+        // ── BOTH CLIENTS MUST BE LISTENING BEFORE THE WRITE (T3 S70) ────────────────────────────────
+        // See waitForGameSyncJoined. The channel state is captured HERE, at write time, because the
+        // failure probe reads it at failure time and half a minute of hindsight cannot say whether the
+        // socket was attached when the frame went past. Printed on every run, not only on failure: this
+        // is the line that separates "the harness raced the subscription" from "the client was told and
+        // did not apply it", and it is worth nothing if it only appears once the answer is already lost.
+        const joinedAtWrite = {
+          host: await waitForGameSyncJoined(p1, roomId),
+          joiner: await waitForGameSyncJoined(p2, roomId),
+        }
+        console.log(`[endgame] subscriptions at write time · host ${joinedAtWrite.host.joined} · ` +
+          `joiner ${joinedAtWrite.joiner.joined} · ${JSON.stringify(joinedAtWrite.host.chans)}`)
 
         const writeErr = await p1.evaluate(async ({ rid, state }) => {
           const m = await import('/src/lib/supabase.js')
