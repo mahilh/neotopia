@@ -6,15 +6,27 @@
 // Copy was previously the canonical wording from docs/NEOTOPIA_LANDING_PAGE.md · every line passes the
 // Civilization Narrative Coherence test (Dimension 35): it would stand on a placard in a real
 // NeoTopia district. Voice rules honored: no exclamation marks · '·' never em dashes · civilization
-// first, game second. The Global Index counter is the REAL aggregate (getGlobalIndex · same source
-// as the FinalScore record), seed-fallback so it never shows a broken number.
+// first, game second.
+//
+// ── THREE REMOVALS (T1 S63 · Mahil, one of them backed by an outside audit) ──────────────────────
+// The page lost about a third of its length and every removal has a reason that is not "it was long":
+//   · THE PURPOSE · the whole section. Real land within his lifetime, the game as rehearsal, every
+//     game matters. The S43 browser audit reached this independently and named these exact passages:
+//     to somebody who came to play a board game it reads as a pitch deck. Cut by the owner agreeing
+//     with an outside reader, which is the strongest kind of evidence available for copy.
+//   · THE GLOBAL INDEX COUNTER · a 40-56px number with no unit and no context is noise. Its whole
+//     data path went with it (state, effect, seed constant, the getGlobalIndex import): a fetch
+//     whose value nothing renders is a writer with no reader, which is the exact shape this project
+//     has now found seven times and never once noticed from the outside (Rule 84).
+//     The AGGREGATE IS NOT DELETED · it is still written by FinalScore and still read there. What
+//     went is a figure on a page that could not say what it meant.
+//   · THE GITHUB LINK · href included. Flagged S50, and only the removal of the visible text was
+//     agreed then · measured on production tonight, the text was still rendering too, so nothing had
+//     ever landed. A player-facing page has no reason to link to source.
 
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getGlobalIndex } from '../lib/supabase'
 import HowItWorksDemo, { demoFinalScore, GOLD as BALANCE_GOLD } from '../components/HowItWorksDemo'
 
-const GLOBAL_INDEX_BASE = 147823 // fallback only · getGlobalIndex already folds the seed in.
 
 // Card-art design progress (T1 S20) · counted at BUILD time, NO server call. import.meta.glob resolves the
 // existing /public/art/cards/card_NN.png files into the bundle (verified empirically against the real Vite 8
@@ -84,7 +96,6 @@ function MicroCard({ tag, lines }) {
 
 export default function Landing() {
   const navigate = useNavigate()
-  const [index, setIndex] = useState(null)
 
   const enter = () => navigate('/lobby')
   const scrollTo = (id) => (e) => {
@@ -94,14 +105,6 @@ export default function Landing() {
     document.getElementById(id)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' })
   }
 
-  // Real Global NeoTopia Index · read-only · falls back to the seed inside getGlobalIndex on any error.
-  useEffect(() => {
-    let alive = true
-    getGlobalIndex().then(n => { if (alive && typeof n === 'number') setIndex(n) }).catch(() => {})
-    return () => { alive = false }
-  }, [])
-
-  const shownIndex = (index ?? GLOBAL_INDEX_BASE).toLocaleString()
   // The engine's own final-score arithmetic on the demo's regions · shared with the animation above
   // so the two can never state different rules.
   const balance = demoFinalScore()
@@ -290,50 +293,11 @@ export default function Landing() {
         </p>
       </section>
 
-      {/* ───────────── THE PURPOSE ───────────── */}
-      <section style={{ maxWidth: 760, margin: '0 auto', padding: '60px 24px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-        <div style={sectionLabel}>The Purpose</div>
-        <h2 style={{ fontSize: 'clamp(22px, 3.5vw, 34px)', fontWeight: 300, color: 'rgba(255,255,255,0.92)', margin: '0 0 22px', letterSpacing: -0.3 }}>
-          These aren't fictional buildings.
-        </h2>
-        <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.55)', lineHeight: 1.9, margin: '0 0 18px', letterSpacing: 0.3 }}>
-          Solar farms · seed archives · healing centres · research domes · water towers · community
-          halls.
-        </p>
-        <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 18px' }}>
-          Every project card in this game is named after a real district planned for the physical
-          NeoTopia world. When you score a Solar Temple, you are not earning five points. You are
-          rehearsing the construction of a building that is meant to stand on Earth by 2055.
-        </p>
-        <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8, margin: '0 0 32px' }}>
-          Building NeoTopia takes five stages · this game is the second one. The last stage is real
-          land, really bought and really built on.
-        </p>
-        <blockquote style={{
-          margin: 0, padding: '20px 28px', borderLeft: '2px solid rgba(255,215,0,0.4)',
-          fontSize: 'clamp(17px, 2.4vw, 22px)', fontWeight: 300, fontStyle: 'italic',
-          color: 'rgba(255,255,255,0.78)', lineHeight: 1.6,
-        }}>
-          “The game is the rehearsal. The civilization is the goal.”
-        </blockquote>
-      </section>
-
-      {/* ───────────── GLOBAL NEOTOPIA INDEX ───────────── */}
+      {/* ───────────── EVERY GAME MATTERS ───────────── */}
       <section style={{ maxWidth: 560, margin: '0 auto', padding: '60px 24px', textAlign: 'center' }}>
         <h2 style={{ fontSize: 'clamp(20px, 3vw, 28px)', fontWeight: 300, color: 'rgba(255,255,255,0.9)', margin: '0 0 28px' }}>
           Every game matters.
         </h2>
-        <div style={{
-          padding: '32px 28px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.07)',
-          background: 'rgba(255,255,255,0.02)', marginBottom: 28,
-        }}>
-          <div style={{ fontSize: 'clamp(40px, 8vw, 56px)', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.92)', letterSpacing: -1, marginBottom: 10 }}>
-            {shownIndex}
-          </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>
-            districts built across all NeoTopia games
-          </div>
-        </div>
         <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.45)', lineHeight: 1.8, margin: 0 }}>
           When you score a project card, it joins a permanent global counter of every district ever built
           across every game ever played. When the real world breaks ground, this is the record of everyone
@@ -392,17 +356,6 @@ export default function Landing() {
         <div style={{ fontSize: 12, letterSpacing: 3, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
           NeoTopia · Building the civilization · 2055
         </div>
-        <a
-          href="https://github.com/mahilh/neotopia"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, padding: '10px 16px',
-            fontSize: 12, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', letterSpacing: 0.5,
-          }}
-        >
-          View the source on GitHub
-        </a>
       </footer>
     </main>
   )

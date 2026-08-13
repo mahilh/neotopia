@@ -5,10 +5,21 @@
 // person in it (the ideas survive: a building meant to be built, a five-stage project this game is
 // stage two of) and the link keeps its href while its LABEL becomes "View the source on GitHub".
 //
-// ⚠ THE HREF IS A DELIBERATE CARVE-OUT, NOT AN OVERSIGHT. github.com/mahilh/neotopia is a real repo
-// and Mahil chose to keep the link. So the assertion is NOT "zero occurrences" · it is "exactly one,
-// and it is the href". That makes this falsifiable in BOTH directions: re-adding prose reds it, and
-// so does deleting the link. A one-directional gate here would let the link silently disappear.
+// ⚠ THE CARVE-OUT IS WITHDRAWN (T1 S63 · Mahil: remove the GitHub link entirely, href included).
+// A player-facing page has no reason to link to source. So the claim is now ZERO OCCURRENCES, and
+// that costs this file the positive anchor it was built around · until tonight it could say "exactly
+// one, and it is the href", which is falsifiable in both directions. It no longer can.
+// WHAT REPLACES IT is the pair of counterweights below, which were written for precisely this and
+// are now load-bearing rather than belt-and-braces: A proves the scanner consumed a real tree, and B
+// proves it can still SEE the name in a fixture whose answer is controlled here. Without both, "0
+// occurrences" and "I did not look" are the same reading (Rule 80), and this file's own subject is
+// that they must never be.
+// ⚠ AND A CORRECTION I OWE THE RECORD, because I got it wrong out loud earlier tonight: the S50
+// change DID land. Reading production I saw the label "View the source on GitHub" and read it as
+// "the removal never happened". What S50 removed was the founder's NAME from that label, which is
+// exactly what this file has been holding ever since. The href staying was the decision, not an
+// oversight, and it took reading this file to see that (Rule 109b · a correction is not
+// self-verifying and gets the trust the original claim had to earn).
 //
 // ── WHY THE COUNTERWEIGHTS ARE THE WHOLE FILE (Rule 80 · Rule 90) ────────────────────────────────
 // ZERO IS THE PASS VALUE. That is the single most dangerous shape this project keeps meeting: a
@@ -136,28 +147,28 @@ describe('the name does not appear in anything a player reads', () => {
     expect(countName(document.body.textContent)).toBe(0)
   })
 
-  it('the footer link keeps its href and loses its label', () => {
-    mount()
-    const link = screen.getByRole('link', { name: /view the source/i })
-    expect(link).toHaveAttribute('href', REPO_HREF)
-    expect(link).toHaveAttribute('target', '_blank')
-    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
-    // FALSE CASE, and the reason this is not `toBe(0)` across the board: the link must still EXIST.
-    // Deleting it would satisfy every other assertion in this file.
-    expect(countName(link.textContent), 'the LABEL must not carry the name').toBe(0)
-    expect(countName(link.getAttribute('href')), 'the HREF deliberately still does').toBe(1)
-    // Rule 4 · it is a touch target and stays one.
-    expect(parseInt(link.style.minHeight, 10)).toBeGreaterThanOrEqual(44)
+  it('there is no link to the source at all · the href went with the label', () => {
+    // WAS: "keeps its href and loses its label", asserting exactly one occurrence and that it was
+    // the href. That was the S50 decision and it held for thirteen sessions. S63 removes the link.
+    const { container } = mount()
+    expect(screen.queryByRole('link', { name: /github|view the source/i }),
+      'the source link is back · a player-facing page has no reason to carry it').toBeNull()
+    for (const a of container.querySelectorAll('a[href]')) {
+      expect(a.getAttribute('href')).not.toContain('github')
+    }
+    // POSITIVE CONTROL, and it is the whole reason this test means anything now that its subject is
+    // an absence: the page must still have rendered a footer with its own content. An empty render,
+    // a thrown effect or a mocked-away module all produce zero links and would read as a pass
+    // (Rule 120 · prove the capability exists through another channel in the same run).
+    expect(container.querySelectorAll('a[href]').length,
+      'no links AT ALL · the page did not render, so this proves nothing').toBeGreaterThan(0)
+    expect(document.body.textContent, 'the footer did not render').toMatch(/2055/)
   })
 
-  it('appears in exactly one non-comment place in all of src · the href', () => {
+  it('appears in NO non-comment place in all of src', () => {
     const { hits } = scan()
-    const stray = hits.filter(h => !h.line.includes(REPO_HREF))
-    expect(stray, `non-comment occurrences outside the href:\n` +
-      stray.map(h => `  ${h.file} · ${h.line}`).join('\n')).toEqual([])
-    expect(hits, 'the href itself must still be there · if this is empty the link was deleted')
-      .toHaveLength(1)
-    expect(hits[0].file).toBe('pages/Landing.jsx')
+    expect(hits, 'non-comment occurrences of the founder name:\n' +
+      hits.map(h => `  ${h.file} · ${h.line}`).join('\n')).toEqual([])
   })
 
   it('is not in index.html either · the one shipped file the src scan does not walk', () => {
@@ -167,21 +178,12 @@ describe('the name does not appear in anything a player reads', () => {
   })
 })
 
-describe('the ideas the prose carried survive without the person', () => {
-  it('still says the districts are meant to be built, and names the year', () => {
-    mount()
-    const purpose = screen.getByText(/rehearsing the construction/i)
-    expect(purpose.textContent).toMatch(/2055/)
-    expect(purpose.textContent).toMatch(/meant to stand on Earth/i)
-  })
-
-  it('still says five stages and that this game is the second', () => {
-    mount()
-    expect(screen.getByText(/five stages/i).textContent).toMatch(/second one/i)
-  })
-
-  it('still says the last stage is real land', () => {
-    mount()
-    expect(screen.getByText(/real\s+land, really bought/i)).toBeInTheDocument()
-  })
-})
+// ⚠ THREE ASSERTIONS RETIRED HERE, and saying so is the point (Rule 101 · a fix's blast radius
+// includes the tests that documented it, and they are the files most likely to be read as
+// authoritative). They pinned the ideas THE PURPOSE section carried after S50 rewrote it without a
+// person in it: "rehearsing the construction ... meant to stand on Earth" with the year 2055, "five
+// stages ... this game is the second one", and "the last stage is real land, really bought". Every
+// one was true and every one was a claim about copy that S63 deleted outright · Mahil agreeing with
+// the S43 browser audit, which reached the same passages independently and called them a pitch deck
+// rather than a game. They are not weakened, they are about text the page no longer has.
+// The year 2055 survives on the page and is asserted above, as the footer control.
