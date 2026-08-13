@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { formatMoney, MONEY_SLOT_PX } from '../utils/formatMoney'
 
 // NeoTopia · fixed bottom action bar for the game screen.
 // T1 owns this file. Mobile-first · 44px touch targets · tabular-nums on all counts.
@@ -58,9 +59,15 @@ export default function ActionBar({
   bonusUsedThisTurn = false, // the engine allows exactly one bonus per turn and refuses in silence
   turnTimeRemaining = null, // seconds left this turn · null hides the timer (legacy callers / tests)
   turnTimeLimit = 90,     // full turn budget · drives the progress-bar width
+  wallet = null,          // THIS player's balance · null hides the readout AND keeps the action dots
   onEndTurn = () => {},
   onUseBonus = () => {},  // (type) => void · spends the token through the store
 }) {
+  // ── THE WALLET READOUT IS A SWAP, NOT AN ADDITION (T1 S67) ──────────────────────────────────────
+  // See the measurement block below. `wallet == null` is the shipped state today (WALLET_ENABLED is
+  // false in gameConfig), so this renders byte-identically to S66 for every player · and the moment
+  // it is a number, the three action dots give up their 64px to pay for it.
+  const showWallet = wallet != null && Number.isFinite(wallet)
   const used = Math.max(0, TOTAL_ACTIONS - actionsRemaining)
   // ── THE ESCAPE HATCH (T1 S44) ──────────────────────────────────────────────────────────────────
   // `actionsRemaining === 0` alone is a CAGE, and a real player sat in it at Turn 33: two actions
@@ -78,8 +85,37 @@ export default function ActionBar({
     : isMyTurn ? 'Your turn' : `Waiting for ${playerName}`
 
   // ── THIS BAR IS OVER-SUBSCRIBED, AND EVERY FIX HERE IS ABOUT WHO PAYS FOR THAT ──────────────────
+  // ⚠ THE "~448px INTO A 292px BOX" THIS BLOCK CARRIED SINCE S38 IS STALE, AND IT WAS THE FIRST
+  // THING I READ WHENEVER I TOUCHED THIS FILE. It described the bar BEFORE the S38 fixes landed ·
+  // four labelled token pills, the "Actions" word, the timer's progress bar · and the prose two
+  // paragraphs down says those were removed. Both were in this file the whole time and the wrong one
+  // sat at the point of use, which is T2's Rule 132 corollary in my own header. I then quoted it in
+  // a closing recommendation and it became the next session's brief (Rule 108).
+  //
+  // MEASURED AT HEAD, in Chromium, live game, max-content clone against the live rect per element:
+  //     320, no tokens      content box 296   demand 298.1   deficit    2.1
+  //     320, four tokens    content box 296   demand 378.6   deficit   82.6
+  //     375, no tokens      content box 351   demand 298.1   slack     52.9
+  //   (the box is 296 and not 292 because index.css drops the padding to 12 below 480)
+  //
+  // NOTHING IS BEING SHRUNK ANY MORE · every element's max-content width equals its live width, in
+  // every arm. The S38 casualty is genuinely fixed: "Your turn" measures 57.0px, not 0.0. What the
+  // 2.1px buys instead is a WRAP: at 320, and only at 320, the bar is TWO ROWS and End Turn sits
+  // alone on the second at x=12. That is the tell · a right-aligned group rendering at the left
+  // padding edge · and it costs 8.5px of board height (72.5 vs 64.0 at 375+).
+  //
+  // SO THE ANSWER TO "WHAT COMES OFF WHEN THE READOUT ARRIVES" IS ARITHMETIC AND NOT TASTE:
+  //     wallet readout        +46 slot +10 gap  =  +56    ->  354.1, comfortably two rows
+  //     drop the action DOTS  -54 -10 gap       =  -64    ->  290.1, ONE ROW, 5.9px spare
+  //     drop the NUMERAL      -16 -10 gap       =  -26    ->  328.1, still two rows
+  // Only the dots buy the row back, and the dots are the redundant half: three filled circles and
+  // the numeral beside them are THE SAME INTEGER, rendered twice, 10px apart. That is the S38 move
+  // again (133px came off by deleting two second renderings of information already on screen) and it
+  // is the only one available here · the timer's seconds are the only clock, and the status text is
+  // the only thing that says WHOSE turn it is.
+  //
   // Its three groups want ~448px inside a 292px content box at 320. That is not "full", it is 156px
-  // short, and flex has always closed the gap by shrinking whatever can shrink.
+  // short, and flex has always closed the gap by shrinking whatever can shrink.   <- THE HISTORY:
   //
   // S37 · End Turn was the casualty once bonus tokens existed: four labelled pills put its right
   //       edge 267px off the side of a phone. A player who cannot reach End Turn cannot play, and
@@ -221,25 +257,53 @@ export default function ActionBar({
         <span className="ab-actions-label" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, letterSpacing: 2, textTransform: 'uppercase' }}>
           Actions
         </span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {Array.from({ length: TOTAL_ACTIONS }, (_, i) => {
-            const isUsed = i < used
-            return (
-              <span key={i} style={{
-                width: 14, height: 14, borderRadius: '50%',
-                background: isUsed ? 'rgba(255,255,255,0.85)' : 'transparent',
-                border: isUsed ? '1px solid rgba(255,255,255,0.85)' : '1px solid rgba(255,255,255,0.3)',
-                transition: 'background 0.2s, border-color 0.2s',
-              }} />
-            )
-          })}
-        </div>
-        <span style={{
+        {/* THE DOTS ARE THE PAYER, and they are the redundant half of a pair rather than a casualty:
+            three filled circles and the numeral 10px to their right are the same integer. They earn
+            their 64px while nothing else needs it and give it up the moment something does. */}
+        {!showWallet && (
+          <div data-testid="action-dots" style={{ display: 'flex', gap: 6 }}>
+            {Array.from({ length: TOTAL_ACTIONS }, (_, i) => {
+              const isUsed = i < used
+              return (
+                <span key={i} style={{
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: isUsed ? 'rgba(255,255,255,0.85)' : 'transparent',
+                  border: isUsed ? '1px solid rgba(255,255,255,0.85)' : '1px solid rgba(255,255,255,0.3)',
+                  transition: 'background 0.2s, border-color 0.2s',
+                }} />
+              )
+            })}
+          </div>
+        )}
+        <span data-testid="actions-left" style={{
           color: actionsRemaining > 0 ? 'rgba(255,255,255,0.55)' : '#E24B4A',
           fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', minWidth: 16, textAlign: 'center',
         }}>
           {actionsRemaining}
         </span>
+        {/* THE READOUT · a FIXED 46px slot, right-aligned, never `width: auto`.
+            Auto makes the bar's total demand a function of the BALANCE, so the layout could be
+            correct at $1.00B and wrap at $930M · a width regression that appears on the first
+            purchase of a game and never in a test that starts fresh. 46 is the widest string the
+            formatter can emit over the whole reachable domain (15 balances, measured · see
+            utils/formatMoney.js), not the width of the starting value.
+            The `$` is the visible label and the sr-only word is the spoken one: this sits between
+            two other bare numbers (seconds left, actions left) and a naked 930 says nothing about
+            which. NOT a live region · one more polite announcer competing with the two GameRoom
+            already owns is a decision with no measurement under it (open since S61). */}
+        {showWallet && (
+          <span
+            data-testid="wallet-readout"
+            data-wallet={wallet}
+            style={{
+              width: MONEY_SLOT_PX, flexShrink: 0, textAlign: 'right',
+              color: 'rgba(200,148,64,0.95)',
+              fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
+            }}
+          >
+            <span className="sr-only">Wallet </span>{formatMoney(wallet)}
+          </span>
+        )}
       </div>
 
       {/* RIGHT · bonus tokens + End Turn

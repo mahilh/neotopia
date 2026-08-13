@@ -12,6 +12,7 @@
 import { useState, useRef } from 'react'
 import ElementIcon from './Board/ElementIcon'
 import { toRomanNumeral } from '../utils/romanNumeral'
+import { formatMoney } from '../utils/formatMoney'
 
 // `label` is what the element-type bar prints under the art. It must be the SAME word the rest of the
 // game uses \u00B7 'Sustainable Energy' was the odd one out (every other surface says 'Energy') and at hand
@@ -152,7 +153,12 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
   // board, else null. Computed by GameRoom from usePatternHighlight · NEVER derived here, and
   // the reason is Rule 45: a second near-miss engine would drift from the board's rings, and the
   // whole point of this badge is that it says the same thing the rings do.
-  nearMiss = null }) {
+  nearMiss = null,
+  // What this card COSTS, in whole dollars, or null when nothing is for sale (T1 S67). Supplied by
+  // GameRoom from the engine's own priceOf() · never computed here, for the same Rule 45 reason as
+  // nearMiss above: a second pricing rule would diverge from what tryDrawCard actually charges, and
+  // a price that lies is worse than no price at all.
+  price = null }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -352,6 +358,33 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
             letterSpacing="0.8"
           >
             {`${nearMiss.placed} OF ${nearMiss.total} PLACED`}
+          </text>
+        )}
+
+        {/* ── WHAT IT COSTS (T1 S67) · THE SAME SLOT, AND THAT IS SAFE BY CONSTRUCTION ───────────
+            A price and a near-miss distance cannot both be true of one card: near-miss is a fact
+            about a card you HOLD and a price is a fact about a card you have NOT bought. GameRoom
+            passes nearMiss only to the hand and price only to the Offer, and that disjointness is
+            GATED (GameRoom.wallet.test.jsx) rather than left as "safe because nobody passes it" ·
+            which is exactly the shape I named as the improvement owed on S66's badge.
+            The `nearMiss &&` guard here is the belt: if both ever arrive, one renders instead of
+            two texts painting over each other, and the gate is what tells you it happened.
+            Measured in situ, not counted from characters: '$70M' is 20.7px at this size in a 120px
+            card, against a 69.4px title and a 76.5px element band. The card is not the constraint;
+            the action bar is. */}
+        {!nearMiss && price != null && (
+          <text
+            data-card-price={price}
+            x={s.width / 2}
+            y={s.borderW + s.fontSize + 14 + s.artSize + s.fontSize + 16}
+            textAnchor="middle"
+            fill="rgba(200,148,64,0.95)"
+            fontSize={s.fontSize - 1}
+            fontFamily="serif"
+            fontWeight="bold"
+            letterSpacing="0.8"
+          >
+            {formatMoney(price)}
           </text>
         )}
 

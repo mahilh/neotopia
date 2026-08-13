@@ -20,7 +20,9 @@ import MilestoneOverlay from '../components/MilestoneOverlay'
 import { ELEMENT_SOUL_METAL, elementSoulMetalLabel } from '../components/Board/ElementIcon'
 import { DECK } from '../lib/projectCards'
 import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
-import { TURN_TIME_LIMIT } from '../store/gameConfig'
+import { TURN_TIME_LIMIT, WALLET_ENABLED, priceOf } from '../store/gameConfig'
+import { formatMoney } from '../utils/formatMoney'
+import { viewingPlayer } from '../utils/viewingPlayer'
 import { playSound, installSoundUnlock, isMuted, setMuted, subscribeMuted } from '../utils/sound'
 
 // READ, NEVER RETYPED (T1 S63). This file alone held THREE copies of the region names · this
@@ -331,6 +333,10 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // Dual-score view (T1 S13) · the "my" column follows my seat · in solo dev mySeat is null, so fall back
   // to the active player · opponent = the other SEATED real player (absent in solo → single column · no crash).
   const myPlayer = players.find(p => p.seat === mySeat) ?? currentPlayer
+  // The player whose PERSONAL state the action bar shows · wallet and held bonus tokens. Same
+  // fallback as myPlayer above, extracted so the mySeat-vs-currentSeat choice is drivable: practice
+  // runs with mySeat null, where the two coincide, so no fixture built on it can separate them.
+  const viewer = viewingPlayer({ players, mySeat, currentSeat })
   const opponent = players.find(p => p.userId && p.seat != null && p.seat !== myPlayer?.seat)
 
   // Local per-second turn countdown · DISPLAY ONLY. The store holds no clock (rule 32 · the reducer only
@@ -1559,7 +1565,15 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-offer"
                     card={{ ...card, element: cardPrimaryElement(card) }}
-                    actionLabel={`Draw ${card.name}`}
+                    // THE PRICE COMES FROM THE ENGINE'S OWN FUNCTION, not from a constant read here
+                    // (Rule 45). priceOf currently ignores its card by design, but it is where a
+                    // per-card price would land, and the day it does this quotes the real number
+                    // with no edit. Gated behind the same flag the charge is: with WALLET_ENABLED
+                    // false tryDrawCard charges 0, so a price on the card would be a lie.
+                    price={WALLET_ENABLED ? priceOf(card) : null}
+                    actionLabel={WALLET_ENABLED
+                      ? `Buy ${card.name} for ${formatMoney(priceOf(card))}`
+                      : `Draw ${card.name}`}
                     onClick={disabled ? undefined : () => onDrawOffer(i)}
                   />
                 )
@@ -1743,7 +1757,13 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         isMyTurn={isMyTurn}
         actionsRemaining={actionsLeft}
         noLegalMove={noLegalMove}
-        bonusTokens={currentPlayer?.bonusTokens ?? []}
+        // ⚠ WAS `currentPlayer?.bonusTokens` SINCE S38, AND THAT IS A DEFECT I FOUND WHILE BUILDING
+        // THE WALLET'S CONTROL. The panel this feeds gates every Use button on `isMyTurn` and spends
+        // `mySeat ?? currentSeat`'s token · so on an opponent's turn it listed THEIR held tokens,
+        // each annotated "Only on your turn". The chip showed one player's resources and the button
+        // spent another's. Invisible in solo, in practice and in every screenshot, because there
+        // myPlayer and currentPlayer are the same object (Rule 130).
+        bonusTokens={viewer?.bonusTokens ?? []}
         bonusUsedThisTurn={bonusUsedThisTurn}
         onUseBonus={(type) => {
           // THE ENGINE REJECTS IN SILENCE · wrong turn, second use in a turn, or a type it does not
@@ -1765,6 +1785,13 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
         }}
         turnTimeRemaining={turnSecondsLeft}
         turnTimeLimit={TURN_TIME_LIMIT}
+        // MY balance, never the CURRENT player's · pointing a wallet at `currentPlayer` shows a
+        // stranger's money to whoever is waiting for their turn, and in practice the two are the
+        // same object so nothing built here can tell them apart (utils/viewingPlayer.js has the
+        // measurement, and the mutation that proved the inline version untestable).
+        // null while WALLET_ENABLED is false · the readout is gated on the same constant the CHARGE
+        // is, so it can never show a balance that nothing can spend (Rule 63 · gate what is true).
+        wallet={WALLET_ENABLED ? (viewer?.wallet ?? null) : null}
         onEndTurn={() => {
           handleEndTurn()
           const st = useGameStore.getState()
