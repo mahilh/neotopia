@@ -999,6 +999,34 @@ const readDeadlockShape = (page) => page.evaluate(async () => {
 // does this with `boardIsLiveAndPointerPlayable`; the new ones need the money-flavoured equivalent ·
 // prove a draw is affordable, THEN spend the wallet down, THEN assert the ending.
 //
+// ── WHAT MAHIL'S FLAT $70M RULING CHANGES, AND IT MAKES THE HARD PART EASY (T3 S65) ─────────────────────
+// A FIXED price per card means "affordable" is ONE COMPARISON · `wallet >= PRICE` · rather than a lookup
+// that depends on which card is on top. That is what turns the Rule 119 counterweight above from a
+// design problem into three lines, and it is the whole reason to write this down now:
+//
+//     the DISTINGUISHER, in the same run, in this order:
+//       1  wallet = PRICE      · draw succeeds        <- the positive control. The capability EXISTS.
+//       2  spend to wallet < PRICE, cards still on the deck/offer
+//       3  assert deck + offer > 0                    <- E1 is NOT the operative exhaustion
+//       4  assert no legal placement
+//       5  assert the ending triggers
+//     Without 1 and 3 this measures TODAY's condition and reports it as the wallet's. Step 1 is the one
+//     people drop, because by step 5 it feels already proven · it is not, it is the only thing making
+//     step 5 mean anything.
+//
+// Under a price CURVE step 1 would have needed to know which card the draw would take, and a control
+// that depends on the card under test is not independent (Rule 92 · two sides, one source). Flat pricing
+// removes that entirely: one number, read once, asserted twice.
+//
+// FOR THE DEMOLITION CASE the same shape, with the trap one level in: "nothing worth demolishing" must
+// be measured on a board where a demolition is AFFORDABLE (wallet >= (1-r) x PRICE at r = 0.6, i.e.
+// 0.4 x PRICE) and a demolishable card EXISTS. Otherwise the operative exhaustion is the wallet again
+// and the test has measured E2 while claiming E3 · Rule 119 one layer deeper, and the contract's own
+// bound (`max cycles = wallet / ((1 - r) x price)`, §6a) is the number to assert against rather than
+// re-derive here. Demolition costing a WHOLE TURN is what keeps that bound from being decorative: a
+// cycle that changes nothing still burns a turn, so a position that only demolition can "advance" is
+// dead in the sense that matters even while cycles remain.
+//
 // WHAT IS ALREADY CLOSED, so nobody re-fixes it: the bot latch. Rule 107's fix keyed seatSignature on
 // turnNumber, a MONOTONE quantity, rather than extending the enumeration · so a bot that can afford
 // nothing still advances the turn and cannot freeze the endgame burn. That was the class-ending fix and
