@@ -692,8 +692,11 @@ test.describe('practice mode · the end of the game', () => {
     // below the fold; the worst a small phone at over three screens of content with the way out at the
     // bottom. AND THE VISIBLE SCROLLBAR IS 0px WIDE AT EVERY SIZE (macOS overlay scrollbars stay hidden
     // until you already scroll), so there was no passive affordance at all · what the player could read
-    // without moving simply stopped, mid score-row: at 320 the last three readable things were "0",
-    // "Living Earth", "0".
+    // without moving simply stopped, mid score-row: at 320 the last three readable things were a score,
+    // A REGION NAME, and another score. (Written in S38 as the literal "0", "Living Earth", "0" · the
+    // string is deliberately gone, because T1 renames the three regions this session and a quotation
+    // that can no longer be found on any screen is prose rot in a file nothing can red. The measurement
+    // it illustrates · the cut lands mid score-row · does not depend on which region it was. T3 S63.)
     //
     // ── T3 S40 · MAHIL HAS RULED, SO THIS IS A CONTRACT NOW AND IT IS ASSERTED ────────────────────────────
     // S38 measured the defect. S39 I turned the measurement into an assertion that NOT ONE viewport shows a
@@ -1246,6 +1249,19 @@ test.describe('practice mode · the keyboard audit nobody had run (T3 S53)', () 
       message: 'Enter on an element produced no region buttons · step 3 of four never opens' }).toBeGreaterThan(0)
 
     expect(await tabTo('^region-', 25), 'the region buttons exist but none is reachable by Tab').not.toBeNull()
+    // THE COUNTERWEIGHT FOR A DECOUPLING I DID ELSEWHERE (T3 S63). game-ux.e2e.js and reconnect.e2e.js
+    // used to find this button by matching /sacred city|living earth|free energy/i against its text.
+    // I replaced both with the testid so T1's district rename cannot red two push-triggered gates · and
+    // the thing that quietly went with the regex was the only assertion in the repo that the region
+    // button is LABELLED AT ALL. Removing a coupling must not remove a property, so it lands here,
+    // stated name-agnostically: a keyboard user reaching step 3 must be told which region they are
+    // choosing. This is free (practice makes zero backend calls) and runs on the merge gate, which the
+    // two specs it replaces do not · so the property is now gated MORE often than before, not less.
+    expect(await page.evaluate(() => document.activeElement?.textContent?.trim() ?? ''),
+      'the focused region button has no text · a keyboard user is asked to choose a region and is shown ' +
+      'an unlabelled control, which is reachable-but-unusable. Red here means the label was dropped, not ' +
+      'that it was renamed · this assertion deliberately does not care what the three regions are called.')
+      .not.toBe('')
     await page.keyboard.press('Enter')
 
     // STEP 4 IS WHERE A HALF-FIX WOULD STOP, because the target is a hex on an SVG board whose 126

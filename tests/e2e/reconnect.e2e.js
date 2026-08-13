@@ -149,8 +149,15 @@ const BOARD = 'svg[aria-label*="NeoTopia"]'
 // needs a GENUINELY seated browser user (seat re-association is derived from the synced roster by auth id),
 // so it drives the real lobby. Same inline-helper style as game-ux.e2e.js / two-human.e2e.js.
 const NAME_INPUT = 'Builder name (max 20)'
-const ELEMENT_RE = /energy|biofarming|technology|community/i
-const REGION_RE  = /sacred city|living earth|free energy/i
+// ⚠ SELECTED BY TESTID, NOT BY THE CONTROL'S VISIBLE TEXT (T3 S63). This helper is a byte-for-byte
+// sibling of game-ux.e2e.js's, and both used /sacred city|living earth|free energy/i to find step 3 of
+// the placement chain. T1 renames the regions to WATER / FOREST / DESERT DISTRICT, so that regex would
+// match nothing and THIS spec · which runs on e2e.yml, the merge gate, on every push and PR · would
+// have reddened on their commit for a reason unrelated to reconnection. Fixed in both files at once:
+// the sibling is always adjacent, because it was written in the same sitting by the same hand.
+// The full reasoning, including where the naming property is now gated instead, is in game-ux.e2e.js.
+const REGION_BTN  = '[data-testid="region-btn"]:not([disabled])'
+const ELEMENT_BTN = '[data-testid="element-btn"]'
 
 
 async function claimName(page, name) {
@@ -188,10 +195,12 @@ async function dismissTutorial(page) {
 async function placeOneElement(page) {
   for (const factory of await page.locator('[data-testid="factory"]').all()) {
     await factory.click({ timeout: 3000 }).catch(() => {})
-    const elBtn = page.getByRole('button').filter({ hasText: ELEMENT_RE }).first()
+    const elBtn = page.locator(ELEMENT_BTN).first()
     if (!(await elBtn.isVisible({ timeout: 1500 }).catch(() => false))) continue // empty factory · next
     await elBtn.click()
-    const regBtn = page.getByRole('button').filter({ hasText: REGION_RE }).first()
+    // :not([disabled]) · a region with no legal hex from this factory is a disabled button (T1 S44),
+    // and .first() could otherwise land on it and hang until the click timeout.
+    const regBtn = page.locator(REGION_BTN).first()
     await expect(regBtn).toBeVisible({ timeout: 3000 })
     await regBtn.click()
     const validHex = page.locator('[data-valid="true"], [data-testid="hex-valid"]').first()

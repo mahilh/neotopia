@@ -75,12 +75,34 @@ async function fontViolations(page) {
   })
 }
 
-// The 4-element / 3-region names rendered as plain-text buttons in the placement sidebar.
-const ELEMENT_RE = /energy|biofarming|technology|community/i
-const REGION_RE  = /sacred city|living earth|free energy/i
+// ⚠ THESE TWO STEPS USED TO BE SELECTED BY THE CONTROL'S VISIBLE TEXT, AND THAT MADE A DRIVER HELPER
+// A HOSTAGE OF THE PRODUCT'S COPY (T3 S63). The old form was
+//     const REGION_RE = /sacred city|living earth|free energy/i
+//     page.getByRole('button').filter({ hasText: REGION_RE }).first()
+// which is a MECHANISM standing in for a PROPERTY: this helper does not care what a region is called,
+// it cares that step 3 of the placement chain is clickable. T1 renames the three regions to WATER /
+// FOREST / DESERT DISTRICT and the old regex matches nothing · so this spec, which runs on
+// e2e-placement-guard.yml on every push AND every pull_request, would have gone red on their commit
+// for a reason that has nothing to do with placement. Predicted and removed BEFORE the push rather
+// than discovered by a run (the whole point: a red you predict costs nothing).
+// Selecting on the testid is also strictly MORE precise than the regex was · getByRole('button')
+// scans the entire page, so any future button whose label happens to contain a region name would have
+// been matched ahead of the real control.
+// THE NAMING PROPERTY IS NOT LOST, it moved somewhere that can run for free: practice.e2e.js's
+// keyboard test asserts the focused region button HAS a non-empty accessible name (name-agnostic), and
+// measure.js's assertDiagnoseCanSee asserts region-btn matches >0 and is clickable · both on the merge
+// gate, both at zero identities. What is dropped here is the coupling, not the coverage.
+// The LOBBY selectors below (Create Room, Join, Enter NeoTopia) stay text-based deliberately: those
+// assert the copy a player reads, which is the property. This one was only ever finding a control.
+const REGION_BTN  = '[data-testid="region-btn"]:not([disabled])'
+const ELEMENT_BTN = '[data-testid="element-btn"]'
 
 // Drive the live placement chain as the active player: factory → element → region → a lit hex.
 // Returns true once a valid hex has been clicked (an empty factory shows no element buttons · skip it).
+//
+// :not([disabled]) on the region is not cosmetic · a region with no legal hex from this factory renders
+// as a DISABLED button (GameRoom.jsx · T1 S44), and .first() could otherwise land on it and hang until
+// the click timeout. The old text filter had the same latent defect and no way to express the fix.
 //
 // force:true on the hex is REQUIRED, not a workaround: the valid-target hex's ring runs an infinite
 // `hexPulse` scale animation (src/index.css · transform: scale(1)↔1.08), so the <g data-valid> bbox
@@ -90,10 +112,10 @@ const REGION_RE  = /sacred city|living earth|free energy/i
 async function placeOneElement(page) {
   for (const factory of await page.locator('[data-testid="factory"]').all()) {
     await factory.click({ timeout: 3000 }).catch(() => {})
-    const elBtn = page.getByRole('button').filter({ hasText: ELEMENT_RE }).first()
+    const elBtn = page.locator(ELEMENT_BTN).first()
     if (!(await elBtn.isVisible({ timeout: 1500 }).catch(() => false))) continue // empty factory · next
     await elBtn.click()
-    const regBtn = page.getByRole('button').filter({ hasText: REGION_RE }).first()
+    const regBtn = page.locator(REGION_BTN).first()
     await expect(regBtn).toBeVisible({ timeout: 3000 })
     await regBtn.click()
     const validHex = page.locator('[data-valid="true"], [data-testid="hex-valid"]').first()

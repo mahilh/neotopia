@@ -20,6 +20,11 @@ import { describe, test, expect } from 'vitest'
 import { getClusterDetail, getClusterTotal, calculateFinalScore } from '../src/lib/patternMatcher'
 
 // region.hexes is a flat map keyed 'q,r' → { element } (the engine's shape · src/lib/patternMatcher.js).
+// The `name` is a READER'S LABEL and is never asserted · these are synthetic fixtures, not the product's
+// three regions. Deliberately NOT the real names (T3 S63): they were the shipped district names until
+// T1 renamed all three, at which point seven lines here would have quoted regions that no
+// longer exist and NOTHING could go red about it. A fixture label that tracks product copy is prose rot
+// waiting to happen; one that obviously does not is correct forever.
 const region = (id, name, hexes) => ({ id, name, hexes })
 
 // Axial adjacency the engine BFS uses (HEX_NEIGHBORS): (1,0)(1,-1)(0,-1)(-1,0)(-1,1)(0,1). So '0,0'·'1,0'·'0,1'
@@ -30,7 +35,7 @@ describe('cluster bonus scoring · board game rule p9 (T3 S18 guard for T2 2348d
 
   // ── Forge test 1 ────────────────────────────────────────────────────────────────────────────────────
   test('cluster bonus increases final score over the no-cluster baseline', () => {
-    const regions = [region('r1', 'Sacred City', CONNECTED_3)]
+    const regions = [region('r1', 'Region A', CONNECTED_3)]
     const clusterBonus = getClusterTotal(regions)
     expect(clusterBonus, 'a connected energy cluster of 3 must yield a bonus of 3').toBe(3)
 
@@ -50,7 +55,7 @@ describe('cluster bonus scoring · board game rule p9 (T3 S18 guard for T2 2348d
       ...CONNECTED_3,
       '5,5': { element: 'energy' }, '6,5': { element: 'energy' }, // a separate, non-adjacent energy pair
     }
-    const regions = [region('r1', 'Sacred City', hexes)]
+    const regions = [region('r1', 'Region A', hexes)]
     const detail = getClusterDetail(regions)
 
     const energy = detail.filter(d => d.element === 'energy')
@@ -67,7 +72,7 @@ describe('cluster bonus scoring · board game rule p9 (T3 S18 guard for T2 2348d
     const hexes = {
       '0,0': { element: 'energy' }, '0,2': { element: 'energy' }, '3,0': { element: 'biofarming' },
     }
-    const regions = [region('r1', 'Sacred City', hexes)]
+    const regions = [region('r1', 'Region A', hexes)]
 
     expect(getClusterDetail(regions), 'isolated tokens form no clusters').toEqual([])
     expect(getClusterTotal(regions), 'no adjacency → 0 cluster bonus').toBe(0)
@@ -79,8 +84,8 @@ describe('cluster bonus scoring · board game rule p9 (T3 S18 guard for T2 2348d
   test('bonus is 1 point per element token in the biggest cluster, summed PER region (rulebook p9)', () => {
     // Two regions, each with one cluster: r1 energy×3, r2 community×2. The rule sums per region+element.
     const regions = [
-      region('r1', 'Sacred City', CONNECTED_3),                                  // energy cluster of 3
-      region('r2', 'Living Earth', { '0,0': { element: 'community' }, '1,0': { element: 'community' } }), // community of 2
+      region('r1', 'Region A', CONNECTED_3),                                  // energy cluster of 3
+      region('r2', 'Region B', { '0,0': { element: 'community' }, '1,0': { element: 'community' } }), // community of 2
     ]
     const detail = getClusterDetail(regions)
 
@@ -95,8 +100,8 @@ describe('cluster bonus scoring · board game rule p9 (T3 S18 guard for T2 2348d
 
   test('getClusterTotal never disagrees with the sum of getClusterDetail bonuses (one BFS · rule 10)', () => {
     const regions = [
-      region('r1', 'Sacred City', { ...CONNECTED_3, '5,5': { element: 'community' }, '6,5': { element: 'community' } }),
-      region('r2', 'Free Energy', { '0,0': { element: 'technology' }, '1,0': { element: 'technology' }, '0,1': { element: 'technology' } }),
+      region('r1', 'Region A', { ...CONNECTED_3, '5,5': { element: 'community' }, '6,5': { element: 'community' } }),
+      region('r2', 'Region C', { '0,0': { element: 'technology' }, '1,0': { element: 'technology' }, '0,1': { element: 'technology' } }),
     ]
     const detail = getClusterDetail(regions)
     const summed = detail.reduce((s, c) => s + c.bonus, 0)
