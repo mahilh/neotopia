@@ -87,15 +87,28 @@ export function detectWalletSeam({ storeSrc, playerFactory, terminalFnName }) {
   const moneyField = MONEY_TOKENS.find(t => new RegExp(`\\b${t}\\s*[:=]`).test(factory)) ?? null
 
   const terminalBody = functionBody(storeSrc, terminalFnName)
-  const terminalRefs = moneyField !== null && terminalBody !== null
+  // ⚠ A MENTION IS NOT A USE (T3 S66, at the moment the guard stopped being armed). `\bwallet\b`
+  // appearing in the terminal body is satisfied by a log line, a destructure, or a comment that
+  // survived stripping. The contract's clause is a COMPARISON · "drawing needs deck-or-offer AND
+  // money" · so the body must also compare against a price. Without this second term the biconditional
+  // could be satisfied by a body that names the field and gates on nothing, which is the same
+  // mention-shaped vacuity that let a substring stand in for a value in endgame-live (Rule 112's
+  // family, one level up: the check passes on the appearance of the thing rather than its use).
+  const mentionsField = moneyField !== null && terminalBody !== null
     ? new RegExp(`\\b${moneyField}\\b`).test(terminalBody)
     : false
+  const comparesToPrice = terminalBody !== null &&
+    /\b[A-Z][A-Z0-9_]*PRICE[A-Z0-9_]*\b|\bprice\b/.test(terminalBody) &&
+    /[<>]=?/.test(terminalBody)
+  const terminalRefs = mentionsField && comparesToPrice
 
   const armed = moneyField === null
   return {
     moneyField,
     terminalBody,
     terminalRefs,
+    mentionsField,
+    comparesToPrice,
     armed,
     // The biconditional. When armed, both sides are false and it holds trivially · which is exactly
     // why `armed` is reported separately and asserted by the caller rather than folded in here.
@@ -103,8 +116,9 @@ export function detectWalletSeam({ storeSrc, playerFactory, terminalFnName }) {
     why: armed
       ? `no per-player money field in the player factory · ARMED, NOT ASSERTING. Looked for ${MONEY_TOKENS.join('/')}`
       : terminalRefs
-        ? `the wallet ('${moneyField}') has landed AND ${terminalFnName} accounts for it`
-        : `'${moneyField}' exists on a player and ${terminalFnName} does NOT reference it · a player with ` +
+        ? `the wallet ('${moneyField}') has landed AND ${terminalFnName} gates on it against a price`
+        : `'${moneyField}' exists on a player and ${terminalFnName} does not GATE on it (mentions=${mentionsField}, `
+          + `comparesToPrice=${comparesToPrice}) · a player with ` +
           'cards in the deck and an empty wallet is exactly as stuck as one with an empty deck, and the ' +
           'dead-position check will decline to notice. See docs/WALLET_AND_DEMOLITION_CONTRACT.md §5.',
   }

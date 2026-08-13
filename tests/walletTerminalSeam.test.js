@@ -1,9 +1,18 @@
 // NeoTopia · the wallet/terminal seam (T3 S64). Design in tests/walletTerminalSeam.js.
 //
-// ORDER IS DELIBERATE. The synthetic cases come FIRST and the live repo case LAST, because today the
-// live case is the ARMED one · it holds trivially, so it can prove nothing about whether this guard
-// works. A guard whose only exercised path is the vacuous one is Rule 86 exactly, and it would sit
-// here reading as protection for however many sessions the wallet takes to arrive.
+// ORDER IS DELIBERATE. The synthetic cases come FIRST and the live repo case LAST · originally because
+// the live case was the ARMED one and held trivially, so it could prove nothing about whether the guard
+// worked (Rule 86). ⚠ THAT STOPPED BEING TRUE ON 2026-08-13 and the sentence is corrected rather than
+// left: T2 shipped the wallet, the guard fired, and the live case now ASSERTS. The ordering stays,
+// because the synthetic cases still cover states the repo cannot be in at any one moment.
+//
+// WHAT THE TRANSITION ACTUALLY SHOWED, since a guard's first firing is the only real test of it:
+//     moneyField 'wallet'   EXTRACTED from the player factory, not hardcoded · T2 chose the name and
+//                           the guard needed no edit (Rule 125 · it is not my fingerprint to guess)
+//     terminalRefs true     maybeForceDeadlockEndgame gates on it against CARD_PRICE
+// So the biconditional HELD at the transition · both halves landed together and the guard confirmed a
+// correct change rather than catching a defect. That is the outcome it was built to make visible in
+// EITHER direction, and reporting it as a success is as much the job as reporting a failure.
 //
 // TEETH, mutation-proven (each reds a DIFFERENT assertion · Rule 118):
 //   W1  stripComments becomes identity          -> the prose-is-not-a-field case reds
@@ -155,8 +164,8 @@ describe('the synthetic cases · the only ones that can have teeth while the wal
   })
 })
 
-describe('the LIVE repo · today this is the armed case, and that is the finding', () => {
-  test('gameStore has no per-player money field yet, and the terminal condition has no money term', () => {
+describe('the LIVE repo · armed until 2026-08-13, asserting since', () => {
+  test('the biconditional holds against the real gameStore, in whichever state it is in', () => {
     const storeSrc = readFileSync(resolve(process.cwd(), 'src/store/gameStore.js'), 'utf8')
     const r = detectWalletSeam({ storeSrc, playerFactory: storeSrc, terminalFnName: TERMINAL_FN })
 
@@ -167,10 +176,32 @@ describe('the LIVE repo · today this is the armed case, and that is the finding
       'read, or the function was renamed. Either way the absence below means nothing.').toBeTruthy()
 
     console.log(`[wallet-seam] ${r.why}`)
+
+    // ── THE GUARD STOPPED BEING ARMED ON 2026-08-13 AND THIS IS THE FLIP (T3 S66) ──────────────────
+    // It used to assert `armed === true` · a wake-up device, whose whole job was to fail the day a
+    // money field appeared. It did exactly that, and T2 had shipped BOTH halves together:
+    //     moneyField 'wallet'  ·  maybeForceDeadlockEndgame gates on it against CARD_PRICE
+    // so the biconditional HELD at the transition. The guard confirmed a correct change rather than
+    // catching a defect, which is the outcome it was built to make visible either way.
+    //
+    // A wake-up assertion that has woken you cannot stay · re-asserting `armed` would now red on
+    // every run for a state that is CORRECT, which is a gate that cries wolf (Rule 94a) and gets
+    // switched off before the day it is right. What replaces it is the assertion that was always the
+    // real one, and it is true in BOTH states · which also keeps it honest on a CI checkout, where
+    // gameStore.js may not yet carry the field (Rule 67 · gate what is true where the gate runs).
     expect(r.ok, r.why).toBe(true)
-    expect(r.armed, 'THE WALLET HAS LANDED. This guard is no longer armed · it is asserting, and the ' +
-      'composition it watches (docs/WALLET_AND_DEMOLITION_CONTRACT.md §5) is now live. Read the note in ' +
-      'tests/e2e/practice.e2e.js above the S45 soft-lock block: the dead position is reachable a second ' +
-      'way and the browser gate needs its second scenario.').toBe(true)
+
+    if (r.armed) {
+      expect(r.moneyField, 'armed means no money field · nothing else may be concluded').toBeNull()
+    } else {
+      // Both halves reported separately, because "accounts for it" was satisfiable by a MENTION until
+      // S66 · a log line or a destructure naming the field would have passed. The contract's clause is
+      // a comparison, so the body must both name the field AND compare against a price.
+      expect(r.mentionsField, `${TERMINAL_FN} does not name '${r.moneyField}' · a player with cards in ` +
+        'the deck and an empty wallet is exactly as stuck as one with an empty deck, and the ' +
+        'dead-position check would decline to notice (docs/WALLET_AND_DEMOLITION_CONTRACT.md §5)').toBe(true)
+      expect(r.comparesToPrice, `${TERMINAL_FN} names '${r.moneyField}' but compares it to no price · a ` +
+        'mention is not a gate, and this is the vacuity the biconditional could not see before S66').toBe(true)
+    }
   })
 })
