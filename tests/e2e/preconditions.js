@@ -23,6 +23,9 @@
 // same snapshot with the reason string attached.
 
 import { expect } from '@playwright/test'
+// The project-agreement decision lives in its own playwright-free module so a vitest unit test can hold
+// it without pulling the runner (the devServerTarget precedent). One copy · a second would drift (Rule 45).
+import { assertProjectAgreement } from './projectAgreement.js'
 
 const HEALTH_ATTR = 'html[data-backend-status]'
 
@@ -226,7 +229,15 @@ export async function assertBackendReachable(page, { settleMs = 8_000, bootTimeo
     await page.waitForTimeout(250)
   }
 
-  return { status: last?.status ?? 'unknown', reason: last?.reason ?? null }
+  // ── AND THE OTHER HALF OF THE ENVIRONMENT CONTRACT (T3 S67) ─────────────────────────────────────────
+  // Placed HERE rather than in the two specs that motivated it, because a guard applied to one member of
+  // a class rots the moment the class grows (Rule 100) · every existing caller gets it with no edit, and
+  // a spec added tomorrow cannot forget it. It throws ONLY on two present, disagreeing hosts: a missing
+  // node env and a page that has issued no request are both UNMEASURED and must not red a shared gate
+  // for another lane (§5). In CI both sides come from one workflow env, so they agree by construction.
+  const project = await assertProjectAgreement(page, { context })
+
+  return { status: last?.status ?? 'unknown', reason: last?.reason ?? null, project }
 }
 
 /**

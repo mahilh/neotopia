@@ -9,6 +9,7 @@
 // about the database; seedHelpers writes rows and knows nothing about the UI.
 
 import { BOARD } from './seedHelpers'
+import { assertProjectAgreement } from './projectAgreement.js'
 
 // NOT retro-fitted to two-human.e2e.js or multiplayer-endgame-live.e2e.js in the same session: both are
 // wired into CI and green, and rewriting a file somebody is watching land is how a green gate turns red for
@@ -35,6 +36,17 @@ export async function runTwoHumanLobby(p1, p2, { expect, hostName, joinerName, b
   await gotoLobby(p1, expect)
   await p1.getByPlaceholder(NAME_INPUT).fill(hostName)
   await p1.getByRole('button', { name: /enter neotopia/i }).click()
+
+  // ── THE TEST PROCESS AND THE BROWSER MUST BE ON ONE PROJECT (T3 S67) ──────────────────────────────
+  // HERE and not in the spec, for the same reason this helper exists at all: every two-human live spec
+  // passes through it, so no spec can forget it and none can inherit a fourth copy (Rule 100).
+  // AND HERE rather than a line later, because p2's context has not navigated yet · a mismatch caught
+  // now costs ONE identity, and the run it replaces cost two plus a five-minute driver failure that
+  // read as a multiplayer sync defect. UNMEASURED never throws, so this cannot red anybody's gate.
+  // The VERDICT is printed, not just the throw. AGREE and UNMEASURED are different facts and only one of
+  // them is protection: UNMEASURED means the traffic read found nothing and this guard is present but
+  // inert, which is precisely the state a green run cannot distinguish from a working one (Rule 79d).
+  console.log(`[project] ${await assertProjectAgreement(p1, { context: 'runTwoHumanLobby · host signed in' })}`)
 
   // MODE MUST BE CHOSEN BEFORE Create Room, not after (T3 S54). Create Room reads the CURRENT gameMode
   // as its argument, so a toggle clicked afterwards changes nothing and the room is silently Classic
