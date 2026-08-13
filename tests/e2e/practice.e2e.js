@@ -970,6 +970,46 @@ const readDeadlockShape = (page) => page.evaluate(async () => {
   }
 })
 
+// ── WHAT THIS GATE WILL NEED WHEN THE WALLET LANDS · NAMED BEFORE THE SEAM OPENS (T3 S64) ───────────────
+//
+// docs/WALLET_AND_DEMOLITION_CONTRACT.md §5 (T2 S63) states the change to the terminal proof, and the
+// half that lands here is that THE DEAD POSITION BECOMES REACHABLE MORE THAN ONE WAY:
+//
+//     today    no legal placement  AND  no card available
+//     wallet   no legal placement  AND  (no card available OR NO MONEY)
+//     +demo    no legal placement  AND  no affordable draw  AND  nothing worth demolishing
+//
+// The block below is the only thing in this repo that has ever caught the soft-lock, and it took four
+// fixes across three lanes to close once (Rule 103). Writing the requirement now means it is designed
+// against a condition rather than inferred from the source afterwards · the Rule 65 seam, named for once
+// before it opens rather than traced after both halves shipped.
+//
+// ⚠ THE HARD PART IS NOT THE SCENARIO, IT IS THE COUNTERWEIGHT · AND IT IS RULE 119 EXACTLY. A test for
+// "stuck because the wallet is empty" run on a board that ALSO has no cards has measured today's path
+// and called it the new one, and it will pass on a build where the money term was never added. So each
+// scenario must ASSERT THAT THE OTHER EXHAUSTIONS ARE NOT OPERATIVE:
+//
+//     scenario          must hold                                    must ALSO assert (or it is vacuous)
+//     no-money          wallet 0, no legal placement                 deck + offer > 0   <- the whole point
+//     nothing-to-demo   no legal placement, no affordable draw,      a demolishable card EXISTS, and money
+//                       no demolition that changes the position       is >= its price
+//
+// And each needs a positive control in the same run (Rule 120): one step earlier the game must still be
+// playable, or "the board is dead" and "the board was never alive" are the same green. The existing test
+// does this with `boardIsLiveAndPointerPlayable`; the new ones need the money-flavoured equivalent ·
+// prove a draw is affordable, THEN spend the wallet down, THEN assert the ending.
+//
+// WHAT IS ALREADY CLOSED, so nobody re-fixes it: the bot latch. Rule 107's fix keyed seatSignature on
+// turnNumber, a MONOTONE quantity, rather than extending the enumeration · so a bot that can afford
+// nothing still advances the turn and cannot freeze the endgame burn. That was the class-ending fix and
+// it needs no wallet work. The other three halves (T1's End Turn unlock, T2's terminal condition, my
+// restore refusal) all take a new term, and the store-level half of that seam is watched statically and
+// for free by tests/walletTerminalSeam.test.js · a biconditional that reds the day a wallet field exists
+// while maybeForceDeadlockEndgame does not mention it.
+//
+// NOT BUILT HERE, DELIBERATELY: T2 has not implemented the wallet, so a scenario written today would be
+// a fixture describing a board that cannot exist · which is the defect Rule 102's corollary is about,
+// and which I have shipped before. This is the requirement, not the test.
 test.describe('practice · the soft-lock, end to end across three lanes (T3 S45)', () => {
   test('a deadlocked board unlocks End Turn and triggers the endgame · the real button, not a model',
     async ({ page }) => {
