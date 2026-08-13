@@ -203,20 +203,34 @@ describe('handleDrawCard · the engine answers and the answer survives', () => {
   // action log are their lane, and it is routed in comms. This is the half that is mine, and it is
   // the same shape as the tick-health <-> e2e.yml job-name guard: assert the RELATION across the
   // two files, not the presence of a token (preamble §2 · a name appearing is not a name being used).
-  it('every GameRoom call site reads .ok · an object condition is always truthy', () => {
+  it('no GameRoom call site uses the outcome OBJECT as a truth test', () => {
+    // ⚠ THIS ASSERTED A FORM AND WENT RED ON CORRECT CODE (T2 S69). The first version required the
+    // call to be textually followed by `.ok`. T1 then landed the refusal surface and wrote the
+    // obviously right thing · `const r = handleDrawCard('offer', i); if (r.ok) {...} else {...}` ·
+    // which reads `ok` and does not match `handleDrawCard(...).ok`. My guard failed their correct
+    // code, in their lane, on the day they took the seam I asked them to take.
+    //
+    // The preamble's own §2 says it: assert the RELATION, never the presence of a token. "Is the
+    // call followed by .ok" is a proxy for "does the caller read ok", and the proxy broke on the
+    // first legitimate refactor. So this now forbids the ONE construct that is actually dangerous ·
+    // the outcome object used directly where a boolean is expected · and permits every shape that
+    // reads the field, including binding it first.
     const src = readFileSync(join(process.cwd(), 'src/pages/GameRoom.jsx'), 'utf8')
-    const calls = [...src.matchAll(/handleDrawCard\s*\(([^)]*)\)(\s*\.\s*ok)?/g)]
-    // POSITIVE CONTROL FIRST · a renamed handler, a moved call, or a bad path yields ZERO matches,
-    // and "all zero of them read .ok" passes forever. Naming the value that would redden it is the
-    // only thing that separates a guard from decoration (preamble §3, fifth shape).
+    const calls = [...src.matchAll(/handleDrawCard\s*\(/g)]
+    // POSITIVE CONTROL FIRST · a renamed handler or a wrong path yields ZERO matches, and "none of
+    // zero are dangerous" passes forever (preamble §3, fifth shape · name the value that reddens it).
     expect(calls.length, 'no handleDrawCard call site found in GameRoom.jsx · this guard is passing ' +
       'vacuously. Either the handler was renamed or this path is wrong; find it before trusting the ' +
       'assertion below').toBeGreaterThan(0)
-    const bare = calls.filter(m => !m[2]).map(m => m[0])
-    expect(bare, 'a GameRoom call to handleDrawCard does not read `.ok`. It returns the engine ' +
-      'OUTCOME OBJECT since T2 S68, and every object is truthy · so this condition is true even when ' +
-      'the draw was refused for money, and the action log announces a card the player never got. ' +
-      'Add `.ok`.').toEqual([])
+
+    // The dangerous forms: the call standing alone as a condition or as an operand of a boolean.
+    // `if (handleDrawCard(...))`, `else if (...)`, `&& handleDrawCard(...)`, `!handleDrawCard(...)`.
+    const dangerous = [...src.matchAll(/(?:if\s*\(|&&\s*|\|\|\s*|!\s*)handleDrawCard\s*\([^)]*\)\s*(?![.\w])/g)]
+      .map(m => m[0].trim())
+    expect(dangerous, 'GameRoom uses the RESULT of handleDrawCard directly as a truth test. It ' +
+      'returns the engine OUTCOME OBJECT since T2 S68 and every object is truthy · so the branch is ' +
+      'taken even when the draw was refused for money, and the action log announces a card the ' +
+      'player never got. Read `.ok` (binding it to a variable first is fine).').toEqual([])
   })
 
   it('a refused draw does not persist, and a successful one does', () => {

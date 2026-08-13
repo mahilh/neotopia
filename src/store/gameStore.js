@@ -7,7 +7,11 @@ import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
 import { findBuildableCards, getClusterDetail as computeClusterDetail, getClusterTotal as computeClusterTotal, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
-import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig, STARTING_WALLET, CARD_PRICE, priceOf, WALLET_ENABLED } from './gameConfig'
+// CARD_PRICE is deliberately NOT imported (T2 S69) · the bare constant was the third spelling of
+// affordability and the only one that would stop matching under per-card pricing. Everything here
+// goes through `costOf` / `cheapestAvailableCost`, so reaching for the constant is now a reference
+// error rather than a plausible-looking line that happens to agree today.
+import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig, STARTING_WALLET, priceOf, WALLET_ENABLED } from './gameConfig'
 
 // Immer does not draft Map/Set unless this is enabled. pendingMoves is a Set that
 // the optimistic-update flow mutates, so without this the first mutation throws.
@@ -206,6 +210,28 @@ function maybeForceFlowEndgame(state) {
 // Deliberately ignores actionsRemaining: the budget resets every turn, so it can make a player stuck
 // NOW but can never make a position dead. Checking it would end healthy games (Rule 73's question ·
 // can this term even mean what I want it to mean).
+// ── ONE SPELLING OF WHAT A CARD COSTS  (T2 S69) ───────────────────────────────────────────────────
+// Three places asked "can this be afforded" and each wrote the question out again: tryDrawCard's
+// `WALLET_ENABLED ? priceOf(card) : 0`, canAcquireCard's copy of it, and the terminal condition's
+// bare `>= CARD_PRICE`. All three agreed, which is what makes this worth doing NOW · the three
+// duplications I deleted in S67 and S68 were each found AFTER they diverged (one purchase rule, one
+// Diverse City enforcement point, one actions pre-check), and this is the only version that costs
+// nothing. Rule 45's cheapest possible moment.
+const costOf = (card) => (WALLET_ENABLED ? priceOf(card) : 0)
+
+/**
+ * The price of the cheapest card a seat could actually buy right now, or NULL when the supply is
+ * empty · which is a different answer from "free" and must not collapse into 0 (Rule 80).
+ *
+ * Only the two REACHABLE cards are priced: the Offer's first slot and the top of the deck. Pricing
+ * the whole deck would be wrong rather than merely slower · the deck is a blind draw, so a card
+ * buried in it has no price a player could act on.
+ */
+const cheapestAvailableCost = (state) => {
+  const reachable = [state.theOffer?.[0], state.deck?.[0]].filter(Boolean)
+  return reachable.length ? Math.min(...reachable.map(costOf)) : null
+}
+
 function anyPlacementPossible(state) {
   for (const f of state.factories) {
     if (!f.elements?.some(e => e.count > 0)) continue
@@ -248,12 +274,26 @@ function anyPlacementPossible(state) {
 function maybeForceDeadlockEndgame(state) {
   if (state.endGameTriggered) return
   if (state.phase !== 'playing') return
-  const cardExists = state.deck.length > 0 || state.theOffer.length > 0
   // `.some`, not the current seat: the question is whether the GAME can still move, and a game in
-  // which one player is broke and another can buy is not dead. Flat pricing makes CARD_PRICE the
-  // cheapest card there is, so this is exact rather than an approximation of "the cheapest card".
-  const affordable = !WALLET_ENABLED || (state.players ?? []).some(p => (p.wallet ?? 0) >= CARD_PRICE)
-  if (cardExists && affordable) return
+  // which one player is broke and another can buy is not dead.
+  //
+  // T2 S69 · THE PRICE COMES FROM `cheapestAvailableCost`, NOT FROM THE BARE `CARD_PRICE` CONSTANT.
+  // This used to read `p.wallet >= CARD_PRICE` · a THIRD spelling of affordability beside
+  // tryDrawCard's `costOf(card)` and canAcquireCard's, and the only one that would stop matching the
+  // day pricing became per-card. It was right today and wrong by construction, which is the version
+  // that costs nothing to fix and everything to find later.
+  //
+  // ⚠ THE COMPARISON STAYS INLINE ON PURPOSE AND THAT IS A CROSS-LANE CONSTRAINT, NOT STYLE.
+  // T3's `detectWalletSeam` reads the BODY of this function and requires BOTH the money field name
+  // and a comparison against a price token. Extracting the whole predicate into `anySeatCanAcquire()`
+  // · the obvious collapse, and what I had recommended · leaves a body with no `wallet`, no `price`
+  // and no operator, so their biconditional goes from `true ⇔ true` to `true ⇔ false` and REDS a
+  // shared gate for three lanes. What was actually wrong here was the PRICE, not the inlining, and
+  // the smaller fix leaves their guard asserting something stronger than before: the body now
+  // compares against the real price function rather than against a constant that happens to equal it.
+  const price = cheapestAvailableCost(state)
+  // null means nothing is for sale at any price · exactly the pre-wallet "no card available" case.
+  if (price !== null && (state.players ?? []).some(p => (p.wallet ?? 0) >= price)) return
   if (anyPlacementPossible(state)) return
   state.endGameTriggered = true
 }
@@ -465,7 +505,10 @@ export const useGameStore = create(immer((set, get) => ({
 
     // priceOf takes the card it currently ignores · see gameConfig. With the flag off the cost is 0,
     // so no purchase can ever be refused for money and the engine is unchanged.
-    const cost = WALLET_ENABLED ? priceOf(card) : 0
+    // T2 S69 · via `costOf`, the single spelling. This asks about THIS card, which is a genuinely
+    // different question from canAcquireCard's "any card" · so they share the PRICE and not the
+    // predicate. Collapsing them further would answer the wrong question in one of the two places.
+    const cost = costOf(card)
     const balance = player.wallet ?? 0
     if (cost > 0 && balance < cost) return { ok: false, reason: 'insufficient_funds', cost, balance }
 
@@ -512,23 +555,15 @@ export const useGameStore = create(immer((set, get) => ({
   // exact · an infinite budget hangs 0 of 12 under every policy.
   //
   // NO SECOND PREDICATE. T1 declined to re-derive affordability in the UI and was right to; this
-  // reads the same `WALLET_ENABLED ? priceOf(...) : 0` that tryDrawCard charges, so the disabled
-  // state and the refusal cannot disagree (Rule 45 / Rule 94 · one rule, one owner).
-  //
-  // ⚠ THE CHEAPEST AVAILABLE CARD IS THE RIGHT QUESTION, and with flat pricing every card is the
-  // cheapest. If priceOf ever becomes a function of the card this must take the MINIMUM over what is
-  // actually reachable · the deck is a blind draw, so its price cannot be quoted at all, which is
-  // the fourth argument for flat pricing recorded in docs/WALLET_AND_DEMOLITION_CONTRACT.md §2.
+  // reads the same price `tryDrawCard` charges, so the disabled state and the refusal cannot
+  // disagree (Rule 45 / Rule 94 · one rule, one owner). T2 S69 · via `cheapestAvailableCost`, which
+  // the terminal condition now reads too, so all three former spellings share one source.
   canAcquireCard: (seat) => {
     const state = get()
     const player = state.players.find(p => p.seat === seat)
     if (!player) return false
-    const offered = state.theOffer[0]
-    const top = state.deck[0]
-    if (!offered && !top) return false
-    const cheapest = Math.min(...[offered, top].filter(Boolean)
-      .map(c => (WALLET_ENABLED ? priceOf(c) : 0)))
-    return (player.wallet ?? 0) >= cheapest
+    const price = cheapestAvailableCost(state)
+    return price !== null && (player.wallet ?? 0) >= price
   },
 
 

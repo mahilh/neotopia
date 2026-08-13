@@ -25,6 +25,7 @@ vi.mock('./gameConfig', async (importOriginal) => ({ ...(await importOriginal())
 
 const { POLICIES, playWithPolicy } = await import('./fuzzDriver')
 const { WALLET_ENABLED, CARD_PRICE } = await import('./gameConfig')
+const { DECK } = await import('../lib/projectCards')
 
 const SEEDS = Array.from({ length: 12 }, (_, i) => 5100 + i * 41)
 const names = Object.keys(POLICIES)
@@ -75,6 +76,7 @@ describe('the wallet against the adversarial policies', () => {
         const budget = CARD_PRICE * cards
         let hung = 0, scoring = 0, capped = 0, refused = 0
         const evidence = []
+        const healthy = []   // the games that ENDED · the column the flag decision rests on
         for (const seed of SEEDS) {
           const r = playWithPolicy(policy, seed, { wallet: budget })
           refused += r.refusedDraws
@@ -84,10 +86,10 @@ describe('the wallet against the adversarial policies', () => {
               evidence.push(`turn ${r.turns} · cardsExist ${r.cardsExist} · placements ` +
                 `${r.placements} · allBroke ${r.broke}`)
             }
-          } else if (r.outcome === 'scoring') scoring++
+          } else if (r.outcome === 'scoring') { scoring++; healthy.push({ seed, ...r }) }
           else capped++
         }
-        rows.push({ policy, cards, hung, scoring, capped, refused, evidence })
+        rows.push({ policy, cards, hung, scoring, capped, refused, evidence, healthy })
       }
     }
     for (const r of rows) {
@@ -106,6 +108,94 @@ describe('the wallet against the adversarial policies', () => {
 
     globalThis.__s68_locks = rows.filter(r => r.hung > 0)
     expect(rows.length, 'the sweep produced no rows').toBeGreaterThan(0)
+
+    // ══ THE SCOPING FACT THE OUTCOME COLUMN HID, AND IT NARROWS S68's HEADLINE (T2 S69) ══════════
+    // S68 reported "greedy survives at the shipping budget, so 14 cards is only unsafe under
+    // adversarial play". Printing the values behind the healthy column kills that reading: every
+    // healthy row has refusedDraws ZERO. greedy places whenever it can, so it barely draws, so the
+    // price never binds on it · its healthy games are the FREE game wearing a budget label.
+    //
+    // Stated as the relation rather than as four numbers I read off a table: NO MEASURED GAME HAS
+    // EVER BOTH BEEN PRICED AND ENDED. Every row where a draw was refused hung 12/12; every row that
+    // reached scoring refused nothing. That is a far stronger and far less comfortable claim than
+    // "3 of 4 policies hang", and it is the one Council's flag decision should be read against.
+    const pricedAndEnded = rows.filter(r => r.refused > 0 && r.scoring > 0)
+    const pricedRows = rows.filter(r => r.refused > 0)
+    // POSITIVE CONTROL · if no row was ever priced, "no priced row ended" is vacuously true and says
+    // nothing at all (Rule 120 · the absence needs the mechanism exercised in the same run).
+    expect(pricedRows.length, 'not one row in the sweep had a draw refused · nothing was priced, so ' +
+      'the relation below is vacuous').toBeGreaterThan(0)
+    // eslint-disable-next-line no-console
+    console.log(`SCOPE · ${pricedRows.length} of ${rows.length} rows were actually PRICED (a draw ` +
+      `was refused) · of those, ${pricedAndEnded.length} produced a game that ENDED`)
+
+    // ══ THE HEALTHY COLUMN, CHECKED RATHER THAN COUNTED (T2 S69) ═════════════════════════════════
+    // ⚠ THIS IS THE PRECONDITION COUNCIL PUT ON FLIPPING THE FLAG, and it exists because of my own
+    // S68 closing critique: I reported hung/scoring/capped and asserted NOTHING about the games in
+    // the scoring column. `greedy@14cards reaching scoring 12/12` is the entire basis for "the
+    // shipping budget is only unsafe under adversarial play" · and a game that ended instantly, or
+    // with nobody scoring, or having lost cards, would have read as green in exactly that column.
+    //
+    // A verdict-shaped absence sitting in a verdict column · the fourth instance in four sessions,
+    // and the first one that is load-bearing for a DECISION rather than for a report.
+    const healthyRows = rows.filter(r => r.healthy.length > 0)
+    // PRINT THE UNMUTATED VALUES AT THE ASSERTED LINES. A bound sitting far from the data is a real
+    // guard; one sitting on it is a flake, and one the fixture cannot violate is decoration · and
+    // those three are indistinguishable from a green run (Rule 132a · print the value before
+    // believing the pass).
+    for (const row of healthyRows) {
+      const t = row.healthy.map(g => g.turns)
+      const sc = row.healthy.map(g => g.state.scored.reduce((n, x) => n + x, 0))
+      // eslint-disable-next-line no-console
+      console.log(`HEALTHY  ${row.policy.padEnd(18)} budget ${String(row.cards).padStart(2)} cards  ` +
+        `n=${row.healthy.length}  turns ${Math.min(...t)}-${Math.max(...t)} (bound >8)  ` +
+        `cards scored ${Math.min(...sc)}-${Math.max(...sc)} (bound >0)  ` +
+        `deck reconciles to ${DECK.length}`)
+    }
+    // POSITIVE CONTROL FIRST · if nothing reached 'scoring' anywhere, every assertion below is
+    // vacuous and the sweep has no healthy column to bound the defect with (Rule 120).
+    expect(healthyRows.length, 'not one game in the entire sweep reached scoring · there is no ' +
+      'healthy column, so nothing below is asserting anything and the blast radius is UNMEASURED')
+      .toBeGreaterThan(0)
+
+    for (const row of healthyRows) {
+      for (const g of row.healthy) {
+        const tag = `${row.policy}@${row.cards}cards seed ${g.seed}`
+        // 1 · IT WAS PLAYED, NOT ABANDONED. A two-player Classic game burns 12 tiles through
+        //     placements plus a two-round endgame; ending in a handful of turns means the terminal
+        //     condition fired on a board nobody had built on.
+        expect(g.turns, `${tag} reached scoring in only ${g.turns} turns · the game ended almost ` +
+          'immediately, so "scoring" here is a terminal condition firing early rather than a game ' +
+          'being played, and this row cannot bound anything').toBeGreaterThan(8)
+        expect(g.turns, `${tag} took ${g.turns} turns · past the 400-turn cap this is not a ` +
+          'finished game').toBeLessThanOrEqual(400)
+
+        // 2 · SOMEBODY ACTUALLY SCORED. A game can reach 'scoring' with an empty scoresheet · that
+        //     is a legal ending and a worthless one, and it is indistinguishable from a healthy
+        //     game in the outcome column.
+        expect(g.state.scored.reduce((n, x) => n + x, 0), `${tag} ended with NOBODY having scored ` +
+          `a single card (${JSON.stringify(g.state.scored)}) · the outcome column calls that ` +
+          'healthy and it is a game nobody could have played').toBeGreaterThan(0)
+
+        // 3 · THE DECK RECONCILES. Every one of the 56 cards is scored, in a hand, in the deck, or
+        //     face-up in the offer. This is the assertion that would catch a draw that debited and
+        //     delivered nothing · precisely the failure a price introduces (Rule 29), and the one
+        //     the outcome column is structurally blind to.
+        // ⚠ PROVEN FOR THE OFFER PATH ONLY. Mutating the DECK branch so a drawn card never reaches
+        // the hand left this GREEN · the driver draws from the Offer whenever it is non-empty and
+        // endTurn replenishes it every turn, so the deck branch is almost never taken and the
+        // mutation landed in the file without landing in the measurement (Rule 132). The same
+        // mutation on the OFFER branch reds immediately, at 50 of 56. So the assertion works and its
+        // coverage is one path narrower than it reads.
+        const inHands = g.state.hands.reduce((n, x) => n + x, 0)
+        const inScored = g.state.scored.reduce((n, x) => n + x, 0)
+        const total = inHands + inScored + g.state.deck + g.state.offer
+        expect(total, `${tag} accounts for ${total} of ${DECK.length} cards · ${inHands} held + ` +
+          `${inScored} scored + ${g.state.deck} deck + ${g.state.offer} offer. A card left the ` +
+          'accounting: a purchase that debited and delivered nothing would look exactly like this, ' +
+          'and it is the failure mode a price is most likely to introduce').toBe(DECK.length)
+      }
+    }
   }, 600_000)
 
   // ── THE DEFECT, CARRIED AS AN EXPECTED FAILURE SO IT CANNOT RED A SHARED GATE ──────────────────

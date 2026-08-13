@@ -14,6 +14,7 @@
 // why walletSoftLock.test.js exists: under a price those two stop being the same question.
 
 import { useGameStore, PRODUCTION_TILES } from './gameStore'
+import { CARD_PRICE } from './gameConfig'
 import { PROJECT_CARDS } from '../lib/projectCards'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
 
@@ -163,7 +164,7 @@ export function playWithPolicy(policyName, seed, { gate = 't1', turnCap = 400, m
         // WHY the turn could not end · the whole point under a wallet, where "a card exists" and
         // "a card can be bought" stop being the same question.
         cardsExist: canDraw(), placements: legalPlacements().length,
-        broke: store().players.every(p => (p.wallet ?? 0) < 70_000_000), state: snapshot() }
+        broke: store().players.every(p => (p.wallet ?? 0) < CARD_PRICE), state: snapshot() }
     }
     store().endTurn()
     turns++
@@ -180,5 +181,9 @@ const snapshot = () => {
   return {
     phase: s.phase, tiles: s.productionTilesRemaining, deck: s.deck.length, offer: s.theOffer.length,
     actions: s.actionsRemaining, triggered: s.endGameTriggered,
+    // T2 S69 · the terms a HEALTHY ending has to be checked against. Without these the outcome
+    // column says a game reached 'scoring' and nothing says whether it got there by playing.
+    hands: s.players.map(p => p.hand.length),
+    scored: s.players.map(p => (p.scoredCardIds ?? []).length),
   }
 }
