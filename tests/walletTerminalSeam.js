@@ -125,11 +125,23 @@ export function calledNames(body) {
  * at boot this session, then measured this an hour later. A rule you have read does not protect the
  * code you wrote three sessions ago (Rule 119's corollary).
  *
- * ONE LEVEL, STATED AS A LIMIT WITH A COUNTERWEIGHT (§4 · a stated limit needs one too). Two levels
- * would be arbitrary and unbounded resolution invites a cycle. What makes one level safe is that a
- * name this cannot RESOLVE is reported in `unresolved` rather than contributing nothing silently:
- * "I could not read the helper" and "the helper does not check money" are different findings with
- * different fixes, and collapsing them is the Rule 80 failure this module was written to avoid.
+ * ONE LEVEL, AND IT IS MEASURED RATHER THAN PICKED (T3 S70). I shipped this in S69 as a stated limit
+ * with a counterweight and said in my own close that it was still "a limit I picked rather than
+ * derived". Measured against the real gameStore, hops from an entry point to a body that COMPARES the
+ * money field:
+ *     maybeForceDeadlockEndgame   0      it compares inline today
+ *     canAcquireCard              0      likewise · it calls cheapestAvailableCost for the PRICE, but
+ *                                        the `wallet >= price` comparison is in its own body
+ *     tryDrawCard                 0
+ * So the collapse Council ordered · the terminal delegating to canAcquireCard · needs exactly ONE,
+ * and one is what this does. Sufficient for the ordered design with zero margin, which is worth
+ * knowing rather than guessing.
+ *
+ * WHAT MAKES THE MARGIN SAFE is that a name this cannot RESOLVE is reported in `unresolved` rather
+ * than contributing nothing silently: "I could not read the helper" and "the helper does not check
+ * money" are different findings with different fixes, and collapsing them is the Rule 80 failure this
+ * module exists to avoid. So going a level deeper than this reads as UNMEASURED · loud, and one edit
+ * to fix · never as a false green.
  */
 export function reachableCode(src, terminalBody) {
   if (terminalBody === null) return { code: null, unresolved: [] }

@@ -28,6 +28,24 @@ The brief is a hypothesis from someone with less context than you.
 - A claim you have already written down is the expensive kind to be wrong about. I put a wrong producer
   in a commit message, a code comment and a handoff, then spent the next hour disproving myself — and
   the evidence that would have stopped me was the enumeration I only ran afterwards.
+- FOUR GREPS OF MINE WERE WRONG IN ONE SESSION, ONE CLASS, AND NOT ONE WAS FOUND BY REREADING (T3
+  S69). Every one matched something ADJACENT to its subject and returned a confident answer:
+      a CALL SITE read as a declaration   `functionBody` brace-matched from a caller 113 lines above
+                                          the definition · caught because the answer went UNIFORM
+                                          across four arms built to differ
+      a SUFFIX                            `grep -l endgame-live.e2e.js` matched
+                                          multiplayer-endgame-live.e2e.js · my own Rule 112
+      a COMMENT read as code              delimited, it STILL matched · the hit was a `#` line saying
+                                          the file is NOT wired
+      a DEFINITION counted as a call      `export async function assertProjectAgreement(` satisfies a
+                                          boundary lookbehind exactly as a call does
+  The first three were about the SAME question, and I was two sentences from "correcting" a true
+  CLAUDE.md claim with a false one · a wrong retraction, which is the expensive direction (109b).
+  WHAT ACTUALLY FOUND THEM, every time, was running the instrument: a uniform answer, a counterweight
+  on its first execution, a comment-stripped re-scan. Grep is fast and CONFIDENT, and neither zero
+  hits nor one hit carries any signal that it was the wrong instrument. So: strip comments before
+  scanning code, delimit both ends of a filename, exclude declarations when you mean calls, and when
+  a scan decides anything, ASK IT SOMETHING WHOSE ANSWER YOU ALREADY KNOW in the same run.
 If the brief's premise is false, say so and do the better task. Six times now, every time worth more.
 
 ## 2 · COUNTERWEIGHT FIRST
@@ -215,7 +233,21 @@ T2: src/lib/ src/store/ src/hooks/ api/ scripts/ migrations/ .github/
 T3: src/hooks/useGameRoom.js · useGameSync.js · usePresence.js · tests/e2e/
 - Lane discipline covers COMMANDS. git stash -u swept eight foreign files; git add committed another
   lane's mid-edit prose. Pathspec only, never git add -A.
-- Pre-push: read your own diff.
+- ⚠ AND PATHSPEC IS NOT ENOUGH, MEASURED (T3 S69). `git add <pathspec>` writes to a SHARED INDEX. In a
+  live multi-terminal tree another lane staging its OWN work lands in YOUR commit whatever you passed
+  · I named four paths and committed eight files, four of them T2's mid-edit wallet work. Pathspec
+  discipline gave no protection at all, because the problem was never my `add`.
+      `git add -p`            fixes the S66 sweep (my own whole-file add of a shared doc)
+                              and does NOTHING here · my add was already correctly scoped
+      `git commit -m … -- <paths>`   COMMITS ONLY THOSE PATHS AND IGNORES THE INDEX.  ← this one
+      `git show --stat HEAD`  read it EVERY time · the file COUNT is the tell, and it is how I caught
+                              this one commit too late
+  Repair, and it loses nothing: `git reset --soft HEAD~1`, `git restore --staged <their files>`,
+  re-commit path-scoped. Their working tree is untouched throughout · verify with md5 before and
+  after and say so, because "I think I put it back" is not a claim anybody can check.
+- Pre-push: read your own diff. AND READ THE FILE LIST, not only the hunks · the pre-push secret scan
+  printed lines from T2's files and I read them as prose hits on the word "token". The foreign
+  CONTENT was on my screen and the foreign FILENAMES were one command away.
 - Cross-lane exports get a comms post BEFORE the requester builds.
 - Route line-level. The collision rule exists for the moment crossing it feels justified.
 - Never red a shared gate for another lane. Use test.fail() with the requirement named, plus a WORKS
