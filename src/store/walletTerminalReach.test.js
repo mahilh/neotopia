@@ -107,10 +107,15 @@ describe('the money-terminal · reachable by play, or only by construction?', ()
     // never reached either, "the composite never fires" would be true for an uninteresting reason
     // and would say nothing about the terminal term (Rule 120 · an absence needs a control that
     // exercises the mechanism, in the same run).
+    // ⚠ `> games / 4` IS WHAT I WROTE FIRST AND IT IS A WIRE SIZED FROM THE RUN THAT PRODUCED IT.
+    // I measured 58 of 80 and then picked 20 · a number chosen after seeing the answer, which is my
+    // own Rule 111 and Rule 88c in the counterweight of a file about instruments. The claim the zero
+    // below actually needs is that the state occurs AT ALL; anything beyond that is a balance
+    // observation, and it is REPORTED above rather than gated so it cannot flake as bot policy moves.
     const ship = rows.find(r => r.priceM === 70)
     expect(ship.unaffordable, 'not one game reached a board of cards nobody could afford · the ' +
       'money term of the terminal condition has no live inputs here, so the zero below is vacuous')
-      .toBeGreaterThan(ship.games / 4)
+      .toBeGreaterThan(0)
 
     for (const r of rows) {
       expect(r.endedByMoney, `${r.endedByMoney} of ${r.games} games at $${r.priceM}M ended with ` +

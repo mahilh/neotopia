@@ -61,7 +61,8 @@ vi.mock('./gameConfig', async (importOriginal) => ({ ...(await importOriginal())
 
 import { playOnce, bots, makeReporter } from './ladderHarness'
 import { useGameStore } from './gameStore'
-import { WALLET_ENABLED, CARD_PRICE } from './gameConfig'
+import { DECK } from '../lib/projectCards'
+import { WALLET_ENABLED, CARD_PRICE, priceOf } from './gameConfig'
 
 const SEEDS = Number(process.env.SWEEP_SEEDS || 8)
 const OFFSET = Number(process.env.SWEEP_OFFSET || 0)
@@ -193,6 +194,32 @@ describe('price sweep · the wallet is real before any of it is read', () => {
   it('WALLET_ENABLED really is ON in this file', () => {
     expect(WALLET_ENABLED, 'the module mock did not take effect · the engine is charging 0 for every ' +
       'card and every row below is the FREE game wearing a price label').toBe(true)
+  })
+
+  // 0b · THE EQUIVALENCE THIS WHOLE FILE RESTS ON IS A CLAIM, SO IT IS DRIVEN AND NOT ARGUED.
+  //      `budgetFor` converts a price into an equivalent budget at the SHIPPING price, and the
+  //      derivation in the header is exact only because pricing is FLAT · every wallet term depends
+  //      on budget/price, which is a ratio only when there is one price. The day `priceOf` becomes a
+  //      function of the card, that stops being true and every row in this file is silently labelled
+  //      with a price it did not run at. Nothing would go red: the sweep would still produce a
+  //      complete, monotone, entirely plausible curve.
+  //
+  //      Rule 135b · "with the flag off this is byte-for-byte the old predicate" is a claim, and the
+  //      comment is only worth having if it is the record of a measurement. I wrote the derivation
+  //      in prose first and this is the assertion that makes it one.
+  it('pricing is FLAT · the ratio the budget conversion depends on exists at all', () => {
+    // CONTROL FIRST · an empty deck yields an empty price set, which would fail the length check
+    // below for entirely the wrong reason and read as "pricing went per-card" (Rule 130 · two paths,
+    // one observable). My first draft had this line LAST, which is the same mistake it guards.
+    expect(DECK.length, 'the deck is empty, so nothing below is measuring pricing at all')
+      .toBeGreaterThan(0)
+    const prices = new Set(DECK.map(c => priceOf(c)))
+    expect([...prices], 'priceOf returns more than one value across the deck, so there is no single ' +
+      'price for budgetFor() to scale against · "price P at $1B" and "the shipping price at a scaled ' +
+      'budget" are no longer the same experiment, and every priceM label in this file is now a ' +
+      'fiction. Sweep the real price (mock priceOf) rather than the budget.').toHaveLength(1)
+    expect([...prices][0], 'the deck-wide price is not CARD_PRICE · budgetFor scales against the ' +
+      'wrong constant').toBe(CARD_PRICE)
   })
 
   // 1 · THE DEFINING PROPERTY OF THE ARM. A wallet that does not actually stop anybody produces a
