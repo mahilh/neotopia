@@ -146,8 +146,8 @@ describe('with-project-env · finding the project .env.local', () => {
 const SCRIPT = join(process.cwd(), 'scripts', 'with-project-env.cjs')
 
 /** Run the guard for real and capture the child's stdout. `env` REPLACES the inherited one. */
-function runGuard(args, env = {}) {
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], {
+function runGuard(args, env = {}, script = SCRIPT) {
+  const r = spawnSync(process.execPath, [script, ...args], {
     encoding: 'utf8',
     // A clean base: PATH so binaries resolve, and nothing else unless the caller asks. Inheriting
     // this machine's shell would import the very AetherMind vars these tests are about.
@@ -155,6 +155,39 @@ function runGuard(args, env = {}) {
   })
   return { out: (r.stdout || '').trim(), err: (r.stderr || '').trim(), code: r.status }
 }
+
+/**
+ * A throwaway checkout that OWNS a .env.local, with a copy of the guard in its scripts/ dir.
+ *
+ * ⚠ THIS EXISTS BECAUSE I REDDENED THE MERGE GATE FOR ALL THREE LANES, AGAIN, IN THIS FILE (T2 S64).
+ * The first version of the injection tests ran the guard against THE REAL REPO and asserted a
+ * Supabase URL reached the child. True on a developer's machine. CI has no .env.local, so nothing is
+ * injected, the child prints `undefined`, and NeoTopia CI went red at the Test step for everybody ·
+ * measured PASS at 09aec83 and FAIL from my first commit.
+ *
+ * The comment forty lines above this one, which I wrote in S62, says in terms: "THE FIRST VERSION OF
+ * THIS REDDENED THE MERGE GATE FOR EVERYONE. It asserted not.toBe(null) against the real repo · true
+ * on a developer's machine, false in CI." I made the same mistake two tests below my own warning
+ * about it. A rule you have read does not protect the code you write while thinking about something
+ * else (Rule 119's closing line, now paid for twice by me in three sessions) · only the environment
+ * does, so the environment is now built rather than assumed.
+ *
+ * The temp dir is deliberately NOT a git repo, so findEnvLocal resolves through its `this checkout`
+ * branch and never consults git · the worktree branch has its own tests above and does not need to
+ * be re-exercised here.
+ */
+function withEnvRepo(envFileBody, fn) {
+  const d = realpathSync(mkdtempSync(join(tmpdir(), 'envguard-run-')))
+  try {
+    mkdirSync(join(d, 'scripts'), { recursive: true })
+    copyFileSync(SCRIPT, join(d, 'scripts', 'with-project-env.cjs'))
+    writeFileSync(join(d, '.env.local'), envFileBody)
+    return fn(join(d, 'scripts', 'with-project-env.cjs'))
+  } finally { rmSync(d, { recursive: true, force: true }) }
+}
+
+const GOOD = 'https://wynccumuisjxbptjlfwq.supabase.co'
+const DEAD = 'https://gsogycwtllthrenqaxlh.supabase.co'   // AetherMind · the project this guard exists to keep out
 
 const PRINT = 'process.stdout.write(JSON.stringify(process.argv.slice(1)))'
 const PRINT_ENV = (n) => `process.stdout.write(String(process.env.${n}))`
@@ -186,27 +219,46 @@ describe('with-project-env · the child gets what the caller meant', () => {
     // The defect T3 measured: S62 found the main clone's file and stripped the shadowing var, then
     // handed the child nothing, because Vite loads env files from ITS OWN root and a worktree has
     // none. `npm run dev` in a worktree died on "VITE_SUPABASE_URL ... required in .env.local".
-    const { out } = runGuard([process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')])
-    expect(out, 'the child received no VITE_SUPABASE_URL · the guard is still delete-only, so any ' +
-      'checkout without its own .env.local runs with nothing at all').not.toBe('undefined')
-    expect(out).toMatch(/^https:\/\//)
+    withEnvRepo(`VITE_SUPABASE_URL=${GOOD}\n`, (script) => {
+      const { out } = runGuard([process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')], {}, script)
+      expect(out, 'the child received no VITE_SUPABASE_URL · the guard is still delete-only, so any ' +
+        'checkout without its own .env.local runs with nothing at all').toBe(GOOD)
+    })
   })
 
   it('OVERRIDES a shell value that disagrees · the original S26 hazard, still closed', () => {
-    const { out, err } = runGuard(
-      [process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')],
-      { VITE_SUPABASE_URL: 'https://gsogycwtllthrenqaxlh.supabase.co' })   // the dead AetherMind project
-    expect(out, 'the shell\'s value for another Supabase project reached the child · this is the bug ' +
-      'the whole file exists for').not.toContain('gsogycwtllthrenqaxlh')
-    expect(err, 'the override happened silently · a value being replaced must say so').toMatch(/ignoring inherited/)
+    withEnvRepo(`VITE_SUPABASE_URL=${GOOD}\n`, (script) => {
+      const { out, err } = runGuard(
+        [process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')], { VITE_SUPABASE_URL: DEAD }, script)
+      expect(out, 'the shell\'s value for another Supabase project reached the child · this is the ' +
+        'bug the whole file exists for').toBe(GOOD)
+      expect(err, 'the override happened silently · a value being replaced must say so')
+        .toMatch(/ignoring inherited/)
+    })
   })
 
   it('leaves a VITE_ var the project does not define completely alone', () => {
     // Scope: this guard replaces what .env.local has an opinion about and nothing else. Without
     // this, "the project's truth wins" could quietly become "the project's truth is all there is".
-    const { out } = runGuard(
-      [process.execPath, '-e', PRINT_ENV('VITE_SOMETHING_ELSE')], { VITE_SOMETHING_ELSE: 'kept' })
-    expect(out).toBe('kept')
+    withEnvRepo(`VITE_SUPABASE_URL=${GOOD}\n`, (script) => {
+      const { out } = runGuard(
+        [process.execPath, '-e', PRINT_ENV('VITE_SOMETHING_ELSE')], { VITE_SOMETHING_ELSE: 'kept' }, script)
+      expect(out).toBe('kept')
+    })
+  })
+
+  it('COUNTERWEIGHT · none of the three above depends on THIS checkout having a .env.local', () => {
+    // The assertion that would have caught tonight's breakage before it was pushed, and it is
+    // structural rather than a promise: the injection tests build their own repo, so their result
+    // must not change when the real one has no env file. Proven by asking the lookup what it sees
+    // from a directory that certainly has none · if a future edit points them back at SCRIPT's own
+    // checkout, this stays green but the one below it will not.
+    withEnvRepo(`VITE_SUPABASE_URL=${GOOD}\n`, (script) => {
+      const { out } = runGuard([process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')],
+        { CI: 'true' }, script)      // CI=true is what the real merge gate sets
+      expect(out, 'the injection tests behave differently under CI=true · they are reading something ' +
+        'about the environment rather than about their own fixture').toBe(GOOD)
+    })
   })
 
   it('CI keeps its silence · no .env.local anywhere means nothing is injected and nothing is said', () => {
