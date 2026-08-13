@@ -146,7 +146,13 @@ export const artSlot = (size = 'hand') => {
 // Enter fires on keydown and Space on keyUP, which is what a native <button> does. Space is the one
 // that matters: held down it auto-repeats, and on the Offer that is a second draw. preventDefault on
 // its keydown also stops the page scrolling under the player.
-export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid, innerRef = null, actionLabel = null }) {
+export default function CardFrame({ card, size = 'hand', onClick, isSelected = false, testid,
+  innerRef = null, actionLabel = null,
+  // {placed, total} when this card is ONE legal placement from completing somewhere on the
+  // board, else null. Computed by GameRoom from usePatternHighlight · NEVER derived here, and
+  // the reason is Rule 45: a second near-miss engine would drift from the board's rings, and the
+  // whole point of this badge is that it says the same thing the rings do.
+  nearMiss = null }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
 
@@ -319,18 +325,33 @@ export default function CardFrame({ card, size = 'hand', onClick, isSelected = f
           {colors.symbol} {colors.label.toUpperCase()}
         </text>
 
-        {/* Card description / category */}
-        {card.category && (
+        {/* ── HOW CLOSE IS THIS CARD (T1 S66 · Council, on Sophia's reframe) ────────────────────
+            T2 measured 5-point cards building at 9.2% of acquired and found the lever is element
+            SUPPLY; Council declined that lever because tile count is the denominator under every
+            measurement in the project. The ruling instead: "the defect is not the rate, it is that
+            a player cannot see the distance." A 5-pointer that says 4 OF 5 is an achievement in
+            progress; the same card silent is a tease.
+            THE INFORMATION WAS ALREADY ON THE BOARD AND NOT ON THE CARD · the amber near-miss ring
+            is exactly this distance, rendered where a player deciding what to CHASE is not looking.
+            So this is a relocation, not a new claim, and it reuses the board's own amber so the two
+            surfaces teach one colour rather than two.
+            IT SITS IN THE `category` SLOT, which is free: 0 of 56 cards carry a category, so that
+            branch has never rendered. Measured rather than assumed · the footer band below is
+            occupied (the Roman numeral ends at x110 and NEOTOPIA 2055 runs x28.1-91.9 of 120),
+            which is why the badge is here and not down there. */}
+        {nearMiss && (
           <text
+            data-near-miss={`${nearMiss.placed}/${nearMiss.total}`}
             x={s.width / 2}
             y={s.borderW + s.fontSize + 14 + s.artSize + s.fontSize + 16}
             textAnchor="middle"
-            fill="rgba(255,255,255,0.3)"
-            fontSize={s.fontSize - 2}
+            fill="rgba(255,180,50,0.95)"
+            fontSize={s.fontSize - 1}
             fontFamily="serif"
-            letterSpacing="0.5"
+            fontWeight="bold"
+            letterSpacing="0.8"
           >
-            {card.category}
+            {`${nearMiss.placed} OF ${nearMiss.total} PLACED`}
           </text>
         )}
 

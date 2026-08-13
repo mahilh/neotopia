@@ -574,6 +574,47 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     [ph0, ph1, ph2, actionsLeft],
   )
 
+  // ── HOW CLOSE IS EACH CARD · the same distance, moved onto the card (T1 S66) ──────────────────
+  // Council's ruling on Mahil's 9.2% question, via Sophia's reframe: the defect is not the build
+  // RATE, it is that a player cannot see the DISTANCE. The board has said it since S18 (the amber
+  // near-miss ring); a player deciding what to CHASE is looking at their hand.
+  //
+  // DERIVED FROM THE SAME THREE HOOKS THE BOARD USES · no second near-miss engine (Rule 45), which
+  // is also what makes the two named failure modes answer themselves:
+  //   · DIVERSE CITY · findPatternHighlights filters `c.illustration !== lastBuiltIllustration`
+  //     per region, and each hook call passes THAT region's own lastBuiltIllustration. A card that
+  //     is one placement from completing in a region the rule forbids is not a candidate there, so
+  //     it cannot read "4 OF 5" when the real answer is never.
+  //   · THREE REGIONS · there is only ONE number a card can show, and that is a fact about the
+  //     engine rather than a choice I made. completionCandidates sets
+  //     `filledKeys = matchedHexKeys.filter(k => k !== emptyKey)`, so a candidate is ALWAYS exactly
+  //     one placement away and filled is ALWAYS pattern.length - 1. A card is either one-away
+  //     somewhere or it is not; taking the max across regions cannot hide a smaller truth because
+  //     no smaller truth exists. WHERE it is close stays the board's job, which is the division
+  //     that keeps this a relocation rather than a duplication.
+  //
+  // NOT gated on actionsLeft, unlike the two above. Those say "place HERE" and must go quiet when
+  // the player cannot place; this says "this card is one away", which is true of the board whether
+  // or not it is your turn, and blinking it out at zero actions would make it read as a permission.
+  //
+  // ⚠ THE FAILURE THIS CANNOT SEE, and it is Isabella's dissent in its exact form: a card reading
+  // 4 OF 5 is one LEGAL PLACEMENT away, not one ACHIEVABLE placement away. The engine restricts
+  // candidates to legal hexes (empty, adjacent, in-region), so the distance is real · but it does
+  // not ask whether the required element is in a factory bordering that region THIS turn. Deliberate:
+  // factories refill, so "not now" is not "never", and hiding the badge on stock would make it
+  // flicker turn to turn and would put a second rules engine here. The badge means distance, never
+  // permission · which is why the copy is PLACED and not READY.
+  const nearMissByCard = useMemo(() => {
+    const best = new Map()
+    for (const ph of [ph0, ph1, ph2]) {
+      for (const c of ph.completionCandidates) {
+        const placed = c.filledKeys.length
+        if (placed > (best.get(c.cardId) ?? -1)) best.set(c.cardId, placed)
+      }
+    }
+    return best
+  }, [ph0, ph1, ph2])
+
   // ── AUTO-END-TURN (T1 S35) ────────────────────────────────────────────────────────────────────
   // "No actions left · end your turn" beside an End Turn button is a required click that
   // communicates nothing: the game already knows the turn is over and is asking the player to agree.
@@ -1586,8 +1627,19 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 // browser's back gesture, and losing the game to a sideways swipe on the hand is a
                 // worse defect than the one being fixed.
                 overscrollBehaviorX: 'contain',
-                // room for the selected card's 18px glow, which overflow:auto would otherwise clip
-                padding: `${HAND_GLOW_REACH}px 4px`,
+                // Room for the selected card's 18px glow vertically, and ZERO horizontally (T1 S66).
+                // The horizontal 4px was costing the second visible card at desktop and I had only
+                // measured at 320. The sidebar is 288px with 16px padding = a 256px content box;
+                // two cards need 120 + 8 + 120 = 248, so 4px each side left 248 against 248 and
+                // fullyVisible measured 1 at 768, 1280 AND 1440 · WORSE than the phone's 288px
+                // window, which is not a trade anybody chose. Rule 78b: "exactly fits" is where a
+                // control leaves the screen.
+                // What the horizontal padding bought was glow room at the two scroll EXTREMES only ·
+                // a card in the middle is clipped by the scrollport edge whatever the padding is ·
+                // and the scoreable card is scrolled to inline:'center' precisely so it is never
+                // there. Comparison is the requirement this strip is constrained by; 18px of glow
+                // at one end of the scroll is not.
+                padding: `${HAND_GLOW_REACH}px 0`,
               }}
             >
               {currentPlayer?.hand?.map(card => {
@@ -1595,6 +1647,12 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                 return (
                   <CardFrame key={card.id} size="hand" testid="card-hand" isSelected={isScoreable}
                     actionLabel={`Score ${card.name} for ${card.points} points`}
+                    // A card that can be scored RIGHT NOW is not a near-miss · it is a completion,
+                    // and it already glows for that. Showing both would put two different urgencies
+                    // on one card and teach that amber and the score glow mean the same thing.
+                    nearMiss={!isScoreable && nearMissByCard.has(card.id)
+                      ? { placed: nearMissByCard.get(card.id), total: card.pattern.length }
+                      : null}
                     // The FIRST scoreable card is the scroll target · DERIVED from the current hand
                     // and matches, never latched. A `!ref.current` test here would pin the ref to the
                     // first card it ever saw and quietly scroll to a stale one on the next pattern.
