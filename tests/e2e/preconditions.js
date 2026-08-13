@@ -235,7 +235,25 @@ export async function assertBackendReachable(page, { settleMs = 8_000, bootTimeo
   // a spec added tomorrow cannot forget it. It throws ONLY on two present, disagreeing hosts: a missing
   // node env and a page that has issued no request are both UNMEASURED and must not red a shared gate
   // for another lane (§5). In CI both sides come from one workflow env, so they agree by construction.
-  const project = await assertProjectAgreement(page, { context })
+  // ⚠ WAIVED HERE, AND REQUIRED AT THE LOBBY · THE TWO CALL SITES ARE NOT THE SAME KIND OF PLACE.
+  // I made the verdict REQUIRED in S69 and reddened the merge gate for two other lanes within the
+  // hour, because I checked one call site and forgot this one · which I had wired MYSELF in S67.
+  // The same Rule 100 failure I had already written up twice that day, in the file I was writing it in.
+  //
+  // The reason it is right to waive HERE rather than to weaken the requirement: this function is what
+  // an OUTAGE self-test calls. preconditions.e2e.js aborts every backend route on purpose and then
+  // asserts this gate reports the outage · a page in that state has issued no successful
+  // *.supabase.co request, so "no traffic to compare" is the SUBJECT of the test, not a failure of
+  // it. Requiring a measured verdict there demands the one thing the scenario is built to remove.
+  // The live lobby is the opposite: a host has signed in, traffic exists by construction, and an
+  // UNMEASURED there means the guard is inert on a run that is about to spend identities.
+  const project = await assertProjectAgreement(page, {
+    context,
+    require: false,
+    why: 'assertBackendReachable is called by OUTAGE self-tests that abort every backend route · no ' +
+      'traffic is the premise of those scenarios. The requirement lives at runTwoHumanLobby, where a ' +
+      'signed-in host guarantees traffic and an inert guard would cost identities.',
+  })
 
   return { status: last?.status ?? 'unknown', reason: last?.reason ?? null, project }
 }

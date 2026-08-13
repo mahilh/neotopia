@@ -14,6 +14,9 @@
 // absence can produce the defect, because it needs the node side pointed at a WRONG host, not no host.
 
 import { describe, test, expect, afterEach } from 'vitest'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { stripComments } from './walletTerminalSeam.js'
 import { compareProjects, assertProjectAgreement } from './e2e/projectAgreement.js'
 
 const REAL = 'https://wynccumuisjxbptjlfwq.supabase.co'   // NeoTopia
@@ -147,5 +150,75 @@ describe('the requirement · UNMEASURED must not pass silently (T3 S69)', () => 
     expect(lines.join('\n'), 'a waived requirement that prints nothing is indistinguishable from a ' +
       'requirement that held · which is the S67 defect, re-entering through the opt-out')
       .toMatch(/REQUIREMENT WAIVED[\s\S]*offline spec/)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// EVERY CALL SITE'S POSTURE IS PINNED (T3 S69, written after it cost a red merge gate)
+//
+// I made the verdict REQUIRED and reddened `NeoTopia E2E` for two other lanes inside the hour. I had
+// checked ONE call site · runTwoHumanLobby, and proved preconditions.e2e.js never calls it · and
+// forgotten the other, `assertBackendReachable`, which I wired MYSELF in S67. Its self-test aborts
+// every backend route on purpose, so the page has no traffic and the requirement fired on the one
+// spec whose premise is that there is nothing to see.
+//
+// That is Rule 100 · a guard applied to one member of a class rots the moment the class grows · and I
+// had already written it up twice the same day, once about a delegating grep and once about phase
+// markers. Reading a rule does not apply it. A test that ENUMERATES does.
+//
+// The map is deliberately hand-maintained in a DIFFERENT file from the calls (Rule 92 · two sides from
+// one source agree by construction). Adding a call site reds this until somebody records which kind of
+// place it is, which is the decision that was missing.
+describe('the call sites · REQUIRED vs WAIVED is a decision somebody wrote down', () => {
+  const POSTURE = {
+    'tests/e2e/lobby.js': 'REQUIRED',        // a signed-in host · traffic exists by construction
+    'tests/e2e/preconditions.js': 'WAIVED',  // called by OUTAGE self-tests that abort every route
+  }
+
+  const callSites = () => {
+    const out = {}
+    const walk = (dir) => {
+      for (const e of readdirSync(dir)) {
+        const p = join(dir, e)
+        if (statSync(p).isDirectory()) { if (e !== 'fixtures') walk(p) ; continue }
+        if (!/\.js$/.test(e) || e.includes('projectAgreement.test')) continue   // Rule 89 · not itself
+        const code = stripComments(readFileSync(p, 'utf8'))
+        // The CALL, not the import and not the definition · `import {...} from` and `export async
+        // function` both contain the name, and counting either would classify this module as its own
+        // consumer (Rule 112 · match what you mean, with a boundary).
+        for (const m of code.matchAll(/(?<![.\w$])assertProjectAgreement\(([\s\S]{0,400}?)\)\s*$/gm)) {
+          // THE DEFINITION IS NOT A CALL, and my first draft counted it · `export async function
+          // assertProjectAgreement(` satisfies the boundary lookbehind exactly as a call does. That is
+          // the THIRD time in one session a scan of mine matched a declaration or a mention instead of
+          // a use (functionBody took a call site for a declaration; a filename grep took a suffix and
+          // then a comment). The counterweight found it on the first run, which is the argument for
+          // running a new instrument before believing it.
+          if (/function\s*$/.test(code.slice(Math.max(0, m.index - 30), m.index))) continue
+          const rel = p.replace(`${resolve(process.cwd())}/`, '')
+          out[rel] = /require\s*:\s*false/.test(m[1]) ? 'WAIVED' : 'REQUIRED'
+        }
+      }
+    }
+    walk(resolve(process.cwd(), 'tests'))
+    return out
+  }
+
+  test('COUNTERWEIGHT · the scanner finds call sites at all', () => {
+    expect(Object.keys(callSites()).length, 'no call site found · the map below is compared against ' +
+      'an empty object and this whole check is vacuous').toBeGreaterThan(0)
+  })
+
+  test('every call site is classified, and every classification still matches the code', () => {
+    expect(callSites(), 'a call site of assertProjectAgreement is new or changed posture. REQUIRED is ' +
+      'right where traffic is guaranteed (a signed-in host). WAIVED is right where the absence of ' +
+      'traffic is the scenario (an outage self-test). Requiring it in the second place reddened the ' +
+      'merge gate for two other lanes in S69.').toEqual(POSTURE)
+  })
+
+  test('a WAIVED call site must give a REASON · a silent opt-out is the defect re-entering', () => {
+    const src = stripComments(readFileSync(resolve(process.cwd(), 'tests/e2e/preconditions.js'), 'utf8'))
+    const call = src.match(/assertProjectAgreement\(([\s\S]{0,400}?)\)\s*$/m)?.[1] ?? ''
+    expect(call, 'the waiver carries no `why` · then the log line says "no reason given" and the next ' +
+      'reader cannot tell a considered exemption from a copied one').toMatch(/why\s*:/)
   })
 })
