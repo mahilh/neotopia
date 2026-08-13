@@ -141,10 +141,18 @@ export const PROJECT_CARDS = [
     description: 'Some thresholds are made of vibration. You pass through by becoming coherent.',
   },
   {
-    id: 'card_23', name: 'Free Energy Lab',
+    id: 'card_23', name: 'Magnetics Lab',
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'technology' }, { q: 1, r: -1, type: 'energy' }],
     points: 3, illustration: 'lab', district: 4,
-    description: "My grandfather's dream. The invention that cannot be suppressed.",
+    // RENAMED T2 S65 (was 'Free Energy Lab' · Mahil + Council). The description changed with it and
+    // that was the point rather than a side effect: the old one, "the invention that cannot be
+    // suppressed", pointed at the free-energy suppression story, so renaming the card alone would
+    // have left the removed idea in the deck under a new heading. The grandfather thread is KEPT
+    // deliberately · docs/NEOTOPIA_PITCH_GUIDE.md:29 anchors the whole pitch on this card carrying
+    // it, and card_38 carries it too. What is gone is the pseudoscience, not the person.
+    // Magnetics is also the more honest claim: the rotating magnetic field is documented, dated and
+    // in every motor on earth, where free energy is not.
+    description: 'A field nobody can see, turning a wheel anybody can. My grandfather kept the drawing.',
   },
   {
     id: 'card_24', name: 'Crystal Academy',
@@ -326,7 +334,11 @@ export const PROJECT_CARDS = [
     pattern: [{ q: 0, r: 0, type: 'energy' }, { q: 1, r: 0, type: 'energy' }, { q: -1, r: 1, type: 'energy' },
               { q: 0, r: 1, type: 'technology' }, { q: 1, r: -1, type: 'energy' }],
     points: 5, illustration: 'array', district: 4,
-    description: 'Four aligned energy sources and one intelligence to guide them. Free energy becomes real.',
+    // "Free energy becomes real" until T2 S65. Found by grepping the deck case-INsensitively after
+    // renaming card_23 · my first pass searched "Free Energy" and this one is "Free energy", so the
+    // capitalised search missed the only other place the idea survived (Rule 117 · the case a
+    // discriminator is sensitive to decides what it can catch).
+    description: 'Four aligned energy sources and one intelligence to guide them. Abundance, engineered.',
   },
   {
     id: 'card_53', name: 'World Assembly Hall',

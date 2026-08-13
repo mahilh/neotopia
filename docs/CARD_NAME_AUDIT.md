@@ -34,7 +34,7 @@ These already name a building and carry the solarpunk-2055 register without help
 
 `card_01` Fibonacci Solar Terrace · `card_04` Council Ring · `card_13` Sacred Geometry Park ·
 `card_14` Living Earth Collective · `card_16` Healing Sanctuary · `card_18` Meditation Hall ·
-`card_20` Food Forest · `card_21` Solarpunk Atrium · `card_23` Free Energy Lab · `card_31` Solar Temple ·
+`card_20` Food Forest · `card_21` Solarpunk Atrium · ~~`card_23` Free Energy Lab~~ · `card_31` Solar Temple ·
 `card_33` Holographic Research Center · `card_34` Regeneration Field · `card_35` Sacred Water Tower ·
 `card_36` Hempcrete District · `card_38` Pyramid Research Center · `card_44` Healing Arts Center ·
 `card_45` Ancestral Memory Garden · `card_47` Earth Embassy · `card_49` NeoTopia Heart ·
@@ -116,3 +116,65 @@ these are what stop that happening. Listed so the decision is yours rather than 
   Lab` (25 chars) against the current longest `Consciousness Broadcast Tower` (29), so nothing gets
   wider · worth a glance at the card face anyway before it lands.
 - 56 stays 56.
+
+---
+
+## POST-AUDIT RENAME · card_23 (T2 S65 · Mahil + LLM Council)
+
+**`card_23` Free Energy Lab → Magnetics Lab.** Outside the S34 bucket process, by a later ruling:
+Mahil wants "Free Energy" out of the game, and this was the last place it survived as a card title.
+
+Council's reasoning, recorded because a rename without one is a preference: Magnetics Lab is
+unambiguously a building, names a real discipline Tesla worked in, carries the Tesla thread without
+a third "Coil" in the deck's most crowded element (Energy already has Bladeless Turbine, Tesla Coil
+Station, Wardenclyffe Tower, Pyramid Power Plant, Solar Hydrogen Array, Copper Arc Substation,
+Rooftop Wind Array, Solar Updraft Tower and Shared Battery Hall), and collides with nothing.
+
+**TRIPWIRE:** if a playtester asks what magnetics is, fall back to "Magnet Lab" or "Earth Coil Station".
+
+### The description changed too, and that was the point rather than a side effect
+
+> was  · "My grandfather's dream. The invention that cannot be suppressed."
+> now  · "A field nobody can see, turning a wheel anybody can. My grandfather kept the drawing."
+
+Renaming the card alone would have left the removed idea in the deck under a new heading · "the
+invention that cannot be suppressed" IS the free-energy suppression story. The grandfather thread is
+kept deliberately: `docs/NEOTOPIA_PITCH_GUIDE.md:29` anchors the pitch on this card carrying it, and
+`card_38` carries it too. What is gone is the pseudoscience, not the person. Magnetics is also the
+more honest claim · the rotating magnetic field is documented, dated, and in every motor on earth.
+
+### A SECOND card carried the phrase and a capitalised grep did not find it
+
+`card_52` Solar Hydrogen Array read **"Free energy becomes real."** · lowercase e. The first sweep
+searched `"Free Energy"` and missed the only other place the idea survived (Rule 117 · the case a
+discriminator is sensitive to decides what it can catch). Now "Abundance, engineered."
+
+A case-INSENSITIVE sweep of all 112 player-visible name and description strings is the check that
+found it, and it is the one to repeat on any future rename pass.
+
+### What was deliberately NOT renamed, so it does not read as an oversight
+
+- **`card_14` Living Earth Collective.** T1 routed it in S63 and declined; I declined for the same
+  reason and Council's ruling named only `card_23`. Deck content went through audit-and-approve with
+  Mahil in S34, so it has an owner.
+- **`card_02`'s description**, "threading the living earth beneath every building" · lowercase, and
+  it reads as prose (soil, biosphere) rather than as the former region name. Judgement call, flagged
+  rather than taken.
+
+### Still carrying the old name · routed, not edited
+
+The name survives in seven documents and one test fixture. None is the game, so Mahil's instruction
+is satisfied by the deck, but the list is here so the next reader does not have to rebuild it:
+
+```
+tests/e2e/fixtures/seededState.json:48   "name": "Free Energy Lab"   (T3's fixture · a stale VALUE;
+                                          the shape guard compares keys, so it stays green)
+docs/NEOTOPIA_PITCH_GUIDE.md:29,147      the grandfather anchor · Mahil's voice, his call
+docs/NEOTOPIA_PITCHDECK_EXPANDED.md:40
+docs/CONSCIOUSNESS_RESEARCH.md:123
+docs/CIVILIZATION_VISION_2055.md:68
+docs/NEOTOPIA_STAGE_3_VISION.md:32
+docs/ART_DIRECTION_ALL_56_CARDS.md:377   the art brief for this card
+```
+
+Art is unaffected: it keys on `card.id`, so `card_23.png` needs nothing.

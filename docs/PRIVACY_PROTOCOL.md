@@ -52,7 +52,10 @@ Files that currently contain full name that should be updated:
   docs/CONSCIOUSNESS_RESEARCH.md — uses "NeoTopia" framing (fine)
   .claude/CLAUDE.md — uses "Mahil" only (fine, internal)
   .claude/skills/esoteric-knowledge/SKILL.md — references "Mahil's ancestral thread" (fine, internal)
-  src/lib/projectCards.js — card_23 says "My grandfather's dream" (first person, no name) (fine)
+  src/lib/projectCards.js — card_23 says "My grandfather kept the drawing" (first person, no name) (fine)
+    ⚠ the wording changed in T2 S65 (the card was renamed Free Energy Lab -> Magnetics Lab and its
+      description rewritten). The PRIVACY property is unchanged and was re-checked, not assumed:
+      first person, no name, no surname. card_38 carries the same thread and the same property.
 
 Files that SHOULD have full name removed if found:
   Any public docs/ file that contains the full surname
