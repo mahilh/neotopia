@@ -65,11 +65,28 @@ const createRegionBonusPile = () => [
   { threshold: 18, type: 'permits', claimed: false },
 ]
 
-const createInitialRegions = () => [
-  { id: 0, name: 'Sacred City', center: { q: 0, r: 0 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: createRegionBonusPile() },
-  { id: 1, name: 'Living Earth', center: { q: 8, r: -4 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: createRegionBonusPile() },
-  { id: 2, name: 'Free Energy', center: { q: 4, r: 5 }, hexes: {}, lastBuiltIllustration: null, scores: {}, bonusPile: createRegionBonusPile() },
-]
+// DERIVED FROM hexUtils.REGIONS, not typed here (T2 S64 · routed by T1 S63 after their rename).
+//
+// This list was a hand-written second copy of TWO things the board already owns · the region NAME
+// and the region CENTRE · and the names had gone stale in a way that reached a player. T1 renamed
+// the regions to Water / Forest / Desert District; `patternMatcher.getClusterDetail` stamps
+// `regionName: region.name` off THESE objects, and FinalScore rendered it. So a finished game showed
+// a board saying "Water District" and a score row underneath saying "Sacred City", with nothing red
+// anywhere. T1 made their side read REGION_NAMES with a fallback, so the screen was already correct
+// at HEAD; this makes the store stop being the wrong answer to "what is region 1 called".
+//
+// The centres were the quieter half and are the reason this is a bind rather than three string
+// edits: `center: {q,r}` duplicated `cq/cr` exactly, so the store held a second copy of the board's
+// geometry with nothing checking the two agreed (Rule 45). Deriving both removes the class.
+const createInitialRegions = () => REGION_DEFS.map(r => ({
+  id: r.id,
+  name: r.name,
+  center: { q: r.cq, r: r.cr },
+  hexes: {},
+  lastBuiltIllustration: null,
+  scores: {},
+  bonusPile: createRegionBonusPile(),
+}))
 
 // Six axial neighbor directions (flat-top), shared by placement-adjacency checks.
 const NEIGHBOR_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]]
