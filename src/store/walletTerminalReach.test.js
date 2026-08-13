@@ -28,7 +28,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('./gameConfig', async (importOriginal) => ({ ...(await importOriginal()), WALLET_ENABLED: true }))
 
 import { playOnce, bots } from './ladderHarness'
-import { WALLET_ENABLED, CARD_PRICE } from './gameConfig'
+import { WALLET_ENABLED, CARD_PRICE, DEFAULT_GAME_MODE } from './gameConfig'
 
 const WALLET = 1_000_000_000
 const M = 1_000_000
@@ -80,6 +80,15 @@ describe('the money-terminal · reachable by play, or only by construction?', ()
   // only other route to endGameTriggered, so a game ending with tiles STILL ON IT ended by deadlock.
   // Cards-still-available separates the money route from the pre-existing no-cards-left route.
   it('the money precondition is common, and the composite still never ends a game', () => {
+    // ⚠ THE DISCRIMINATOR BELOW IS EXACT ONLY IN CLASSIC, AND THIS FILE PASSES `undefined` FOR MODE.
+    // `tilesAtEnd > 0` identifies a deadlock ending because the tile stack is the ONLY other route
+    // to endGameTriggered · in FLOW there is a third, maybeForceFlowEndgame, and the discriminator
+    // silently stops being exact. A finding is scoped to the configuration it was measured under and
+    // a later change can invalidate it without altering a word of it (Rule 133), so the scope is
+    // asserted rather than described. I put "in Classic" in a commit message and left it unpinned.
+    expect(DEFAULT_GAME_MODE, 'this file relies on Classic being the default that `mode: undefined` ' +
+      'resolves to · under Flow, maybeForceFlowEndgame is a THIRD route to a tiles-remaining ending ' +
+      'and `tilesAtEnd > 0` no longer isolates the wallet term').toBe('classic')
     const seeds = Array.from({ length: 40 }, (_, i) => 9000 + i * 31)
     const rows = []
     for (const price of [70 * M, 250 * M]) {
