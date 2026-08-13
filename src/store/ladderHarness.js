@@ -21,6 +21,11 @@ import { calculateFinalScore, getClusterTotal } from '../lib/patternMatcher'
 
 const api = () => useGameStore.getState()
 
+// Card id -> points, from the canonical deck rather than from the game's shuffled copy. scoredCardIds
+// records ids and not objects, so the points have to come from somewhere; taking them from
+// PROJECT_CARDS keeps the economics reading independent of anything the store did to the deck.
+const CARD_POINTS = new Map(PROJECT_CARDS.map(c => [c.id, c.points]))
+
 const shuffled = (arr, rng) => {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
@@ -86,6 +91,25 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
   const crossings = []
   const scorePrev = recordCrossings ? configs.map(() => ({})) : null
 
+  // T2 S63 · CARD ECONOMICS · always on, because it costs one integer increment per action and no
+  // scan (the S54 opt-in exists for the crossings sampler, which is O(seats x regions) per action).
+  //
+  // `dealt` is READ rather than assumed. initGame hands every player three cards; writing 3 into the
+  // consumer would be exactly the hidden parameter Rule 111 is about, and it is the term every
+  // acquisition figure below is built on.
+  const dealt = api().players.map(p => p.hand.length)
+  // ATTEMPTS, not successes. drawCard decrements the action budget and then does `deck.shift()`
+  // without checking, so a draw against an empty deck costs an action and adds no card · the
+  // `if (found) { act }` with no else that Rule 114 is about, one subsystem over. Counting attempts
+  // here and hand size at the end makes the gap between them observable instead of unrecorded.
+  const drawActions = configs.map(() => 0)
+  // The rest of the action budget, so the split is readable. docs/ACTION_ECONOMY_FINDING.md is the
+  // project's oldest unactioned design document and its finding is that drawing STRICTLY DOMINATES
+  // placing because both come out of one free budget. A price on cards is an exchange rate between
+  // exactly these two columns, so the columns have to be countable before a rate can be argued.
+  const placeActions = configs.map(() => 0)
+  const scoreActions = configs.map(() => 0)
+
   for (let i = 0; i < 4000 && api().phase === 'playing'; i++) {
     const s = api(); const seat = s.currentSeat
     for (let k = 0; k < configs.length; k++) {
@@ -114,9 +138,9 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
       state: api(), seat, difficulty: configs[seat].difficulty,
       getValidPlacements: api().getValidPlacements, getBuildableCards: api().getBuildableCards, lastPlacedKey, rng,
     })
-    if (a.type === 'placeElement') { api().placeElement(seat, a.factoryId, a.elementType, a.q, a.r, a.regionId); lastPlacedKey = `${a.q},${a.r}` }
-    else if (a.type === 'scoreCard') { api().scoreCard(seat, a.cardId, a.regionId, a.lastPlacedKey); lastPlacedKey = null }
-    else if (a.type === 'drawCard') api().drawCard(seat, a.source, a.cardIndex)
+    if (a.type === 'placeElement') { api().placeElement(seat, a.factoryId, a.elementType, a.q, a.r, a.regionId); lastPlacedKey = `${a.q},${a.r}`; placeActions[seat]++ }
+    else if (a.type === 'scoreCard') { api().scoreCard(seat, a.cardId, a.regionId, a.lastPlacedKey); lastPlacedKey = null; scoreActions[seat]++ }
+    else if (a.type === 'drawCard') { api().drawCard(seat, a.source, a.cardIndex); drawActions[seat]++ }
     else { api().endTurn(); lastPlacedKey = null }
   }
   // Final sweep · a token granted by the LAST scoring action of the game would otherwise be missed,
@@ -155,6 +179,13 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
     scores: configs.map((_, seat) => ({ ...st.players.find(x => x.seat === seat).scores })),
     pileClaimed: (st.regions ?? []).reduce((n, r) => n + (r.bonusPile ?? []).filter(b => b.claimed).length, 0),
     pileTotal: (st.regions ?? []).reduce((n, r) => n + (r.bonusPile ?? []).length, 0),
+    // T2 S63 · WHAT THE CARD SUPPLY HAD LEFT WHEN THE GAME ENDED. A wallet is a second scarcity on
+    // top of whatever scarcity already exists, and which one binds first is not guessable: if the
+    // deck routinely empties, cards are already rationed and a price mostly re-prices an existing
+    // constraint; if it ends full, price would be the FIRST thing that ever limited a draw.
+    deckAtEnd: st.deck.length,
+    offerAtEnd: st.theOffer.length,
+    turnsPlayed: st.turnNumber,
     seats: configs.map((_, seat) => {
       const p = st.players.find(x => x.seat === seat)
       return {
@@ -165,6 +196,29 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
         // proxy for how CLUMPED this player's board looks · which is the thing a person actually
         // sees, as against the win column. Taken from the real scoring function, not re-derived.
         cluster: getClusterTotal(st.regions, seat),
+
+        // ── T2 S63 · THE CARD ECONOMY · every field a price has to be derived from ──────────────
+        // A card leaves a hand only by being scored and enters one only by being dealt or drawn
+        // (useBonus is the third door and no bot opens it · botPolicy.js contains no reference to
+        // bonus state, which bonusBalance.test.js premise B asserts against the source every run).
+        // So these four numbers close: dealt + drawsThatLanded === scored + handAtEnd, and
+        // cardEconomics.test.js asserts exactly that rather than trusting this comment.
+        dealt: dealt[seat],
+        drawActions: drawActions[seat],
+        placeActions: placeActions[seat],
+        // ATTEMPTS again, and the gap from scoredPoints.length is the count of scoring attempts the
+        // engine REFUSED (wrong seat, Diverse City, pattern not actually complete). The bot picks
+        // from getBuildableCards so it should be zero · which is a claim, and it is reported so that
+        // it can be read rather than believed.
+        scoreActions: scoreActions[seat],
+        scoredPoints: (p.scoredCardIds ?? []).map(id => CARD_POINTS.get(id)),
+        handAtEnd: p.hand.length,
+        // The points of what is still HELD. Needed because a price that is a function of a card's
+        // points charges for the unbuilt ones too, and the interesting question is whether the
+        // leftovers are the cheap cards or the expensive ones · a 5-point card needs five elements
+        // placed in one pattern, so it is both the dearest and the hardest to finish. Read off the
+        // hand objects rather than the id map, which is a second source for the same quantity.
+        handPoints: p.hand.map(c => c.points),
       }
     }),
   }

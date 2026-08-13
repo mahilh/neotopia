@@ -399,12 +399,21 @@ export const useGameStore = create(immer((set, get) => ({
     const simultaneous = getModeConfig(state.mode).SIMULTANEOUS_DRAW
     if (!isCurrentSeat && !simultaneous) return // classic / non-current → reject (classic behavior unchanged)
 
-    // Action budget: actionsRemaining is the CURRENT turn-holder's single shared place/draw/score counter (the
+    // Action budget: actionsRemaining is the CURRENT turn-holder's single shared PLACE/DRAW counter (the
     // engine is still turn-based). The current seat spends from it exactly as before. A non-current simultaneous
     // draw must NOT touch it — decrementing the active player's budget would corrupt their turn (rule 65 · the
     // composed seam). It is instead bounded by the shared deck/offer emptying; a true per-player action budget +
     // per-player 15s timer is the cross-lane Flow follow-up (engine + T3 channel · see comms · NOT this slice).
     // Only the DRAW GATE is turn-agnostic here · Flow is not yet fully simultaneous and the comment does not claim it.
+    //
+    // ⚠ IT IS NOT A SCORE COUNTER · this line read "place/draw/score counter" until T2 S63, and scoring has
+    // never decremented it. `actionsRemaining--` exists in placeElement and in drawCard and NOWHERE ELSE, and
+    // the deadlock proof at line 186 already said so in terms ("scoring a card is still possible and costs no
+    // action") · so the file disagreed with itself and the wrong half was the one a reader meets first.
+    // MEASURED rather than re-read: actionsRemaining is 1 before and 1 after a successful tryScoreCard.
+    // The wrong word cost a wrong denominator in docs/CARD_ECONOMY.md's action split and understated the draw
+    // share of every cell by ~7 points before a counterweight computed the constraint and reddened. A comment
+    // that is wrong goes red never (Rule 105a), and this one was load-bearing for a pricing decision.
     if (isCurrentSeat && state.actionsRemaining <= 0) return
 
     if (source === 'offer') {
