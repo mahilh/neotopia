@@ -27,21 +27,32 @@
 // spec was routed to the nightly and then never wired. Both contexts now take pool members 0 and 1
 // (seedPoolCredential), so it mints nothing at all. The caller-set guard costs zero and is offline.
 // RUNS-NOWHERE: eleven sessions and counting · routed to T2 in comms/t3-s51, t3-s60 and now t3-s62.
-// ⚠ THE ASK IS NOT YET "WIRE IT", AND RUNNING IT IS WHY (Rule 79a · run a spec locally BEFORE adding
-// it to a workflow). Three runs against live Supabase in S62: PASS, FAIL at 32.1s, PASS. Roughly a
-// third of runs, and I did not capture the failing run's reason, so the flake is real and undiagnosed.
-// Wiring it in this state would put a ~33% flake on the nightly · a tripwire aimed at colleagues (§5),
-// and worse than leaving it unwired. THE COST OBJECTION IS GONE AND A STABILITY ONE HAS REPLACED IT,
-// which is a better problem and an honest one. What the passing runs show is that the spec still
-// describes the product correctly: "held for 45s inside the budget, then the clock ended the absent
-// player's turn after ~100s → seat 1/turn 2". That ~100s path did not exist when this was written in
-// S51 · the turn clock I shipped in S56 is what unfreezes it now.
-// ⚠ AND MY FIRST SUSPECT DOES NOT FIT THE CLOCK, corrected here rather than left standing. I wrote
-// that the likely cause was a budget in here racing that ~100s clock. The failing run died at 32.1s ·
-// BEFORE the 45s observation hold even completes · so it failed in SETUP (lobby, presence convergence,
-// or the counterweight action), and nothing about the clock is reached by then. The arithmetic was
-// available when I wrote the guess and I did not do it. What is actually known: 1 of 3 runs died at
-// 32.1s with its reason uncaptured. Diagnose before wiring; do not inherit my hypothesis.
+// ── THE STABILITY QUESTION, AND WHAT SIX RUNS ACROSS TWO SESSIONS ACTUALLY SAY (T3 S62 + S63) ────────────
+// S62: PASS, FAIL at 32.1s, PASS · and I captured the failing run's reason for NONE of them, which is how
+// a diagnosable defect became an undiagnosed one and left this spec blocked on a number rather than on a
+// cause. S63: PASS, PASS, PASS, instrumented. Six runs, one failure · an observed ~17%, not the ~33% one
+// session of three could suggest, and neither figure is a rate anybody should lean on.
+// ⚠ THREE PASSES DO NOT CLEAR A FLAKE. A 1-in-3 fault passes three times about 30% of the time, so this
+// run is consistent with "fixed" AND with "did not recur", and the log says which is unsupported: the
+// point-in-time seat read I replaced with a poll would have SUCCEEDED on all three (seatResolveMs 8 / 6 /
+// 88 ms), so the seat race is hardened but is NOT demonstrated to have been the cause. Saying so is the
+// difference between this note and the one I wrote in S62.
+// WHAT THE INSTRUMENTATION SETTLED, which is the actual progress · the lobby is ELIMINATED. It completes
+// at +12.7 / +9.1 / +13.1s in four runs, so nothing that dies at 32.1s died there. Two candidates remain
+// and they share a window: both remaining polls start at ~9-13s with a 20s timeout, so both expire at
+// 29-33s.
+// AND NEITHER BOUND IS MARGINAL, WHICH IS THE FINDING THAT CHANGES WHAT A FAILURE HERE MEANS. Measured
+// headroom, not assumed: seatResolveMs 8 / 6 / 88 / 6 ms (0.4% of its 20s bound) and wireMs 873ms (4%).
+// A test whose timeouts are 23x its normal cost does not flake because the budget is tight · so if this
+// ever dies at ~32s again it is a genuine stall of realtime delivery or of seat resolution, and that is
+// SIGNAL rather than noise. That distinction is the whole difference between a tripwire aimed at
+// colleagues and a monitor worth wiring (Rule 94a · a gate that cries wolf gets switched off).
+// THE NEXT FAILURE WILL NAME ITSELF · `✗ DIED IN PHASE "<name>" at +Xs` · and needs no argument from me.
+// ⚠ WHAT THE PASSING RUNS SHOW ABOUT THE PRODUCT is unchanged and is the reason this file exists: "held
+// for 45s inside the budget, then the clock ended the absent player's turn after ~100s → seat 1/turn 2".
+// That ~100s path did not exist when this was written in S51 · the turn clock I shipped in S56 unfreezes
+// it now. The peer is still told NOTHING (mentionsDeparture false, statusText null, body unchanged to the
+// character across 45s), which is the finding, not the flake.
 // DELETE THIS DECLARATION IN THE SAME COMMIT THAT WIRES THE FILE.
 // Run locally:  node scripts/with-project-env.cjs npx playwright test tests/e2e/host-departure-live.e2e.js
 // ⚠ with-project-env is not optional · the shell exports another project's Supabase URL and it beats
@@ -130,7 +141,21 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
     let hostSession = null
     let hostClosed = false
 
+    // ── INSTRUMENTATION (T3 S63) · A FLAKE YOU CAN DESCRIBE IS A BUG, ONE YOU CAN ONLY COUNT IS A RUMOUR ──
+    // S62 ran this three times · PASS / FAIL at 32.1s / PASS · and captured the reason for NONE of them. I
+    // had the failing run in front of me on the first attempt and re-ran instead of reading it, which is
+    // how a diagnosable defect became an undiagnosed one, cost four extra identities, and left this spec
+    // blocked on a number rather than on a cause. Two lines fix that permanently: a per-phase heartbeat, so
+    // a silence has a name and an elapsed time, and a catch that says WHICH phase was in flight. This is
+    // Rule 90's second corollary (an instrument that cannot say WHERE it stopped has not measured
+    // anything), applied to the run I myself failed to read.
+    const t0 = Date.now()
+    const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1)
+    let phase = 'start'
+    const at = (name) => { phase = name; console.log(`[host-departure] +${elapsed()}s · ${name}`) }
+
     try {
+      at('lobby · two real identities through the real lobby')
       const lobby = await runTwoHumanLobby(host, peer, {
         expect, hostName: uniqueName('E2EHDH'), joinerName: uniqueName('E2EHDP'),
       })
@@ -159,22 +184,53 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
       // actor and the watcher being the same client · which reads exactly like a broken product.
       const turnOwner = async (page) =>
         (await page.locator('[data-my-turn]').first().getAttribute('data-my-turn')) === 'true'
-      const hostActs = await turnOwner(host)
-      const peerActs = await turnOwner(peer)
-      console.log('[host-departure] data-my-turn · host:', hostActs, '· peer:', peerActs)
-      // Exactly one of them must own the turn. Both-false means neither page has resolved its seat (the
-      // real failure the first draft hid); both-true is impossible and would mean the attribute is wrong.
-      expect(hostActs !== peerActs, `data-my-turn is ${hostActs}/${peerActs} on host/peer · exactly one ` +
-        'client must own the turn. Both false = neither page resolved its seat, so no action can be ' +
-        'taken and nothing below is measurable.').toBe(true)
+
+      // ⚠ THIS READ USED TO HAPPEN EXACTLY ONCE, WITH NO WAIT (T3 S63). getAttribute is a POINT-IN-TIME
+      // check · it is the same defect class as Rule 82's isVisible({timeout}), which ignores its timeout ·
+      // and the assertion below has no retry either, so a run that arrived a beat before either client
+      // resolved its seat failed INSTANTLY and permanently at whatever second the lobby happened to finish.
+      // That is the leading candidate for S62's 32.1s death, and this is deliberately NOT a blind fix:
+      // seatResolveMs is REPORTED, so the run says how long convergence actually took. If it is 0 on every
+      // run then the race was never reached and I have not demonstrated the cause · which is a different
+      // and weaker claim than "fixed", and the log has to be able to tell them apart (Rule 130 · how many
+      // ways could this green have been produced?).
+      at('seat ownership · waiting for exactly one client to own the turn')
+      const tSeat = Date.now()
+      let hostActs = false, peerActs = false
+      await expect.poll(async () => {
+        hostActs = await turnOwner(host)
+        peerActs = await turnOwner(peer)
+        return hostActs !== peerActs
+      }, { timeout: 20_000, message: 'neither client resolved a seat within 20s · data-my-turn stayed ' +
+           `${hostActs}/${peerActs} on host/peer, so no action can be taken and nothing below is measurable` })
+        .toBe(true)
+      const seatResolveMs = Date.now() - tSeat
+      console.log(`[host-departure] data-my-turn · host: ${hostActs} · peer: ${peerActs} · ` +
+        `seatResolveMs ${seatResolveMs} ${seatResolveMs > 250 ? '· NON-ZERO · the single un-waited read ' +
+        'this replaced could have failed here' : '· converged immediately on this run'}`)
+      // Exactly one of them must own the turn · asserted BY the poll above rather than after it. Both-false
+      // means neither page resolved its seat (the real failure the first draft hid); both-true is
+      // impossible and would mean the attribute is wrong. Keeping a second, un-retried copy of the same
+      // claim here would be a redundant guard: either is sufficient, so no mutation can red either, and
+      // the surviving one loses its teeth (Rule 118 / preamble §2).
       const actor = hostActs ? host : peer
       const watcher = hostActs ? peer : host
 
+      at('counterweight · the actor takes a real action and the watcher must observe it')
       const watcherBefore = await read(watcher)
       const acted = await spendOneAction(actor, { expect })
       expect(acted?.stage, `the actor could not take an action (${JSON.stringify(acted)}) · the ` +
         'counterweight cannot be established, so the silence measured later proves nothing').toBe('ok')
 
+      // wireMs IS REPORTED FOR THE SAME REASON seatResolveMs IS · a 20s bound is a claim that the noise
+      // floor is smaller than 20s, and that was never measured (preamble §3 · a bound is a claim about a
+      // noise floor, and one sample of the floor is not a measurement of it). This is the last un-eliminated
+      // candidate for S62's 32.1s death: the lobby is now known to finish at 9-13s, both remaining polls
+      // start there with a 20s timeout, so both expire at 29-33s and 32.1 sits inside that band for either.
+      // seatResolveMs came back 8 / 6 / 88 ms across three runs · nowhere near its bound · and THIS one
+      // crosses the network, so it is the one with no headroom measurement. Now it has one, and the next
+      // failure will not need an argument.
+      const tWire = Date.now()
       await expect.poll(async () => {
         const now = await read(watcher)
         return now.actionsRemaining !== watcherBefore.actionsRemaining ||
@@ -182,7 +238,10 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
       }, { timeout: 20_000, message: 'THE COUNTERWEIGHT FAILED · the peer never observed the actor\'s ' +
            'real action, so this client is not listening and its later silence is unmeasured, not a finding' })
         .toBe(true)
-      console.log('[host-departure] counterweight OK · the watcher observed a real action cross the wire')
+      const wireMs = Date.now() - tWire
+      console.log(`[host-departure] counterweight OK · the watcher observed a real action cross the wire · ` +
+        `wireMs ${wireMs} of a 20000ms budget (${Math.round(wireMs / 200)}% used)`)
+      at('departure · closing the host context')
 
       // ── THE DEPARTURE · a dead battery, not a click. Nothing in the app runs on tab close: there is no
       //    beforeunload/pagehide/unload handler in useGameRoom, useGameSync, usePresence or GameRoom.
@@ -200,6 +259,7 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
       // 45s meant NOTHING WILL EVER HAPPEN. Today it means WE ARE STILL INSIDE THE BUDGET the UI prints ·
       // Classic is 90s, and a remote client adds GRACE*(1+seat) before it will end someone else's turn.
       // So the window is now split, and the second half is the assertion that could not exist before.
+      at('hold · 45s inside the turn budget, watching the peer')
       const samples = []
       for (let i = 0; i < 9; i++) {                       // 45s · INSIDE the budget
         await peer.waitForTimeout(5000)
@@ -250,7 +310,7 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
       // fires EARLIER than the budget is caught by half one and a fix that never fires is caught here.
       // Nobody is present to press anything · the only client left is not the one whose turn it is.
       const deadlineMs = 90_000 + 10_000
-      console.log(`[host-departure] past ${(deadlineMs / 1000)}s · waiting for the clock to unfreeze it`)
+      at(`unfreeze · waiting past ${(deadlineMs / 1000)}s for the clock to end the absent player's turn`)
       let unfroze = null
       const startedWaiting = Date.now() - 45_000        // the 45s already observed counts toward the budget
       while (Date.now() - startedWaiting < deadlineMs + 30_000) {
@@ -277,6 +337,16 @@ test.describe('the host departs mid-game · what the peer is told (T3 S51)', () 
       // rejoin (useGameRoom rejoinable = status !== 'finished'). No fix should tidy the room away.
       expect(statusAfter, 'the room was closed · a returning phone can no longer rejoin its own game')
         .toBe('playing')
+      at('DONE · every assertion passed')
+    } catch (err) {
+      // THE ONE LINE S62 WAS MISSING. Playwright prints the assertion; what it cannot print is WHICH
+      // stage of a six-stage live setup was in flight and how far into the run it happened · which is
+      // the difference between "FAIL at 32.1s" (a rumour, and what blocked this spec for a session) and
+      // "died in seat ownership at +32.1s" (a bug with an owner). Rethrown unchanged: this records, it
+      // does not swallow · a caught error that does not rethrow is Rule 93 wearing a diagnostic's hat.
+      console.log(`[host-departure] ✗ DIED IN PHASE "${phase}" at +${elapsed()}s · ` +
+        `${String(err?.message ?? err).split('\n')[0].slice(0, 200)}`)
+      throw err
     } finally {
       if (!hostClosed) await ctxHost.close()
       await ctxPeer.close()
