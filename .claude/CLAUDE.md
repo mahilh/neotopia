@@ -291,7 +291,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (133 · cumulative · the highest rule number, and it read 125 from S57
+PERMANENT ANTI-REGRESS RULES (134 · cumulative · the highest rule number, and it read 125 from S57
 until T2 S63 while seven more were added under it · a hand-maintained count is a counter resting at
 a plausible value, which is Rule 80 in the header of the file Rule 80 lives in):
   1.  NEVER git add -A · pathspec from git status
@@ -586,6 +586,42 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 134 (T2 S65 · August 13 2026):
+WHEN WORK IS LOST TO PREEMPTION, ANY MITIGATION THAT DELAYS THE START OF THAT WORK MAKES IT WORSE ·
+AND THE TWO CANDIDATE SHAPES SOUND EQUALLY SENSIBLE UNTIL YOU ASK WHICH ONE CHANGES THE EXPOSURE.
+e2e.yml reaches a verdict on 35% of commits because `cancel-in-progress` supersedes a ~5-minute run
+whenever another lane pushes, so a verdict needs a quiet window LONGER THAN THE RUN. The brief
+proposed "a scheduled or debounced run on the tip a few minutes after the last push" and offered the
+two as one idea. They are opposites:
+    debounce   sleep 3m, then run 5m   ->   needs an 8-minute quiet window   ->   FEWER verdicts
+    schedule   run 5m when the tip is unmeasured and nothing is in flight  ->  MORE verdicts
+A debounce collapses a burst into one run, which is a COST saving, and it lengthens the window the
+run must survive, which is the defect. It is the right tool for "too many runs" and precisely the
+wrong one for "runs do not finish", and the two problems present identically · lots of runs, few
+results.
+  134a · THE DISCRIMINATOR IS ONE QUESTION: does this mitigation change the DURATION OF EXPOSURE to
+        the thing that kills the work? Retries, backoff, batching, debouncing and queueing all add
+        latency somewhere; against a preemptor that fires on a clock they are all the same mistake.
+        Ask it before choosing a shape, because after you have chosen one the implementation looks
+        equally reasonable either way and the measurement to distinguish them takes days.
+  134b · AND THE MITIGATION MUST NOT JOIN THE POOL OF PREEMPTORS. `github.ref` is refs/heads/main for
+        a push AND for a schedule, so a tick sharing the concurrency group would CANCEL somebody's
+        fresh push run · strictly worse than the defect, and invisible, because a cancelled push run
+        and a quiet CI look identical. Any periodic repair aimed at a contended resource has to be
+        keyed so it cannot contend for it (event name in the group key, plus a guard that stands down
+        while anything is in flight).
+  134c · A GUARD IN FRONT OF A GATE MUST FAIL OPEN AT BOTH LAYERS. The script returns NEEDED when it
+        cannot read the run history; the YAML says `if: needs.needed.outputs.run != 'false'` rather
+        than `== 'true'`, because a guard that fails to write its output would otherwise SKIP the
+        job, and a workflow run with a skipped job still reports SUCCESS. That is a green merge gate
+        that ran nothing · the exact defect being fixed, reintroduced by its own fix.
+COROLLARY, and it is the reason any of this was aimed correctly: THE BRIEF NAMED THE WRONG WORKFLOW.
+It called this "the merge gate at 25% verdict, 68% cancelled". The merge gate is canary.yml, it has
+NO concurrency block at all, and it measures 56 of 56 commits with a verdict · 100%. One `gh run
+list` piped through a tally settled it before a line was written, and a debounce built for canary.yml
+would have solved a problem that does not exist there while leaving the real one untouched. Preamble
+§1 in its cheapest form: the brief is a hypothesis, and the artifact is one command away.
 
 RULE 133 (T2 S64 · August 12 2026):
 A FINDING IS SCOPED TO THE RULESET IT WAS MEASURED UNDER, AND A LATER RULE CHANGE CAN INVALIDATE IT

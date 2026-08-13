@@ -127,6 +127,39 @@ Monotone in **all 13 cells**, no exceptions. The consequences:
   1.86 / 2.19 / 1.19 / 0.46, so even flat pricing makes 4s and 5s bad buys. If those cards are to be
   worth owning it has to come from a rule, not from the price.
 
+> ### §3b · WHAT WOULD MOVE THE 9.2%, ASKED BY MAHIL AFTER RULING FLAT PRICING (T2 S65)
+>
+> The ruling is that price cannot fix a build-rate problem, only report it · so if a 5-point card is
+> meant to feel like an achievement, the lever is the rate itself. Measured from the same three
+> blocks, no new run required:
+>
+> | | production tiles | element supply | turns per player | **5pt built** |
+> |---|---|---|---|---|
+> | Classic | 12 | 60 | 11.6 | **10.6%** |
+> | Flow | 9 | 48 | 9.3 | **6.4%** |
+>
+> **The lever is ELEMENT SUPPLY, and it is not time.** 1.25× the elements gives 1.65× the build rate.
+> The controlled comparison is inside the table and it is the decisive one: `classic 4p` gives each
+> player **7.9** turns and builds 8.8% of its 5-pointers, while `flow 2p` gives each player **11.4**
+> turns and builds **7.2%**. More time, fewer landmarks. Offline the only thing separating the two
+> modes is the tile count (Flow's other difference, simultaneous draw, is not exercised by this
+> harness), so this is a clean two-point dose-response on supply.
+>
+> The mechanism is why it is superlinear rather than proportional: completing a 5-cell pattern is a
+> combinatorial function of how densely the board is populated, so each additional element raises the
+> chance of finishing a large pattern faster than it raises the chance of finishing a small one. That
+> is also why the effect is invisible on 2-point cards, which sit at 93% in both modes.
+>
+> **So: add production tiles.** Each tile is four more elements. A 13th and 14th tile would raise the
+> whole board's density, and the cards it would help most are exactly the eight that currently
+> almost never get built.
+>
+> ⚠ **Two points cannot establish a curve.** "Larger than proportional" is supported; the shape is
+> not, and a third tile count would settle it. That measurement does not exist because the tile count
+> is fixed per mode in `gameConfig.js` rather than being a parameter · which is itself the cheapest
+> next step if this becomes a live question (Rule 111 · a constant at every call site is a hidden
+> parameter).
+
 **This is a property of the patterns, not of the players.** The three difficulty rungs span a policy
 range that has historically produced a 94-point win-rate spread, and the 5-point completion rate
 across all of them in Classic is 11.2% / 10.0% / 10.9% · flat. What *does* move it is game length:
