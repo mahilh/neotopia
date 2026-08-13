@@ -24,7 +24,8 @@ import { TURN_TIME_LIMIT, WALLET_ENABLED, priceOf } from '../store/gameConfig'
 import { formatMoney } from '../utils/formatMoney'
 import { viewingPlayer } from '../utils/viewingPlayer'
 import { drawRefusalCopy } from '../utils/drawRefusal'
-import { playSound, installSoundUnlock, isMuted, setMuted, subscribeMuted } from '../utils/sound'
+import { playSound, installSoundUnlock } from '../utils/sound'
+import SoundControl from '../components/SoundControl'
 
 // READ, NEVER RETYPED (T1 S63). This file alone held THREE copies of the region names · this
 // constant plus two inline arrays, in the place-into-region buttons and the score panel. A rename
@@ -1006,8 +1007,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // SOUND (T1 S55). The unlock is bound to the first pointer/key event · see utils/sound.js for why
   // the first sound must not be one the browser will refuse.
   useEffect(() => installSoundUnlock(), [])
-  const [muted, setMutedState] = useState(isMuted)
-  useEffect(() => subscribeMuted(setMutedState), [])
+
 
   const [offerOpen, setOfferOpen] = useState(false)
   const offerExpanded = !isPhone || offerOpen
@@ -1236,23 +1236,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
               same argument that put the rules button here in S36.
               It is always rendered · a mute control that appears only in practice would be missing
               from the mode with other people in it, which is where a player most needs it. */}
-          <button
-            data-testid="mute-toggle"
-            onClick={() => { if (muted) playSound('ui-click'); setMuted(!muted) }}
-            aria-label={muted ? 'Unmute game sounds' : 'Mute game sounds'}
-            aria-pressed={muted}
-            title={muted ? 'Sound off' : 'Sound on'}
-            style={{
-              width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: 8,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid rgba(255,255,255,0.14)', background: 'transparent',
-              color: muted ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)',
-              fontSize: 15, lineHeight: 1, cursor: 'pointer',
-              transition: 'color 0.2s, border-color 0.2s',
-            }}
-          >
-            <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span>
-          </button>
+          <SoundControl />
           {showRules && (
             <button
               data-testid="open-rules"

@@ -58,13 +58,56 @@ const GAIN = {
 }
 
 const KEY = 'neotopia_muted_v1'
+const VOL_KEY = 'neotopia_volume_v1'
 const MIN_INTERVAL_MS = 40
+
+// ── VOLUME · A LEVEL AND A MUTE ARE TWO SETTINGS, AND THE FAILURE IS PERSISTING ONE (T1 S69) ──────
+// Council: "a player who finds the sound too loud can only turn it off entirely · that is a binary
+// where a range belongs, and it is the difference between a player muting permanently and turning
+// it down."
+//
+// ONE SFX CHANNEL, not music + SFX. There are ten samples and no music, so a second slider would
+// control nothing · a control for an empty channel is worse than no control, because it teaches a
+// player the mix has two halves and one of them is broken.
+//
+// THE COMPOSITION IS THE WHOLE DESIGN, and it is the failure worth naming: `muted` and `volume` are
+// stored SEPARATELY so that unmuting returns you to the level you chose rather than to full. That is
+// two pieces of state and therefore two ways to be half-wrong, so both are persisted, both are read
+// back on boot, and the round trip is gated together rather than one at a time.
+//   effective = muted ? 0 : volume        · mute always wins over the level
+//   setVolume(v > 0)                      · UNMUTES · dragging a slider is an intent to hear, and a
+//                                           player who drags while muted and hears nothing has been
+//                                           told the control is broken
+//   setVolume(0)                          · MUTES, and LEAVES `volume` alone, so the mute button
+//                                           restores the level they had rather than silence
+// The last line is the one that would be got wrong: writing 0 into `volume` makes unmute a no-op,
+// and it is invisible until somebody drags to zero and then presses the button (Rule 80's shape in a
+// setting · a value resting at something that looks correct).
+const clampVolume = (v) => {
+  // ⚠ THE NULL CHECK IS THE WHOLE FUNCTION, AND WITHOUT IT THE DEFAULT WAS SILENCE.
+  // `Number(null)` is 0 and `Number('')` is 0, both finite · so a MISSING stored level read back as
+  // a deliberate zero, and every player who had never touched the slider would have booted muted at
+  // level 0 with a control that said the sound was on. My own test caught it on its first run; no
+  // amount of rereading would have, because 0 is exactly the value a broken read produces AND a
+  // legitimate value the setting can hold (Rule 80 · a value resting at something that looks
+  // correct, in the one place where the resting value is the product being silent).
+  // It bites setVolume too: `setVolume(null)` would have MUTED the game rather than refusing.
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null      // NOT a plausible default · the caller passed nonsense
+  return Math.min(1, Math.max(0, n))
+}
 
 const nodes = new Map()
 const lastPlayed = new Map()
 const listeners = new Set()
 let unlocked = false
 let muted = (() => { try { return localStorage.getItem(KEY) === '1' } catch { return false } })()
+// A stored level that is missing, empty or garbage falls back to FULL · the pre-S69 behaviour, so a
+// player who has never touched the slider hears exactly what they heard before it existed.
+let volume = (() => {
+  try { return clampVolume(localStorage.getItem(VOL_KEY)) ?? 1 } catch { return 1 }
+})()
 
 // The countable seam. Every ATTEMPT lands here whether or not the browser lets it through, so a
 // test can tell "the app asked for this sound" from "the app never asked".
@@ -76,18 +119,56 @@ export const __resetSound = () => {
   lastPlayed.clear()
   unlocked = false
 }
+/** Re-read both settings from storage · for tests that write localStorage directly. */
+export const __reloadSettings = () => {
+  try { muted = localStorage.getItem(KEY) === '1' } catch { muted = false }
+  try { volume = clampVolume(localStorage.getItem(VOL_KEY)) ?? 1 } catch { volume = 1 }
+}
 
-const notify = () => { for (const fn of listeners) { try { fn(muted) } catch {} } }
+// Subscribers were called with the boolean before S69 and still are · every existing caller reads
+// exactly one argument. The level rides alongside it so a component can take both from one
+// subscription rather than opening a second one that can drift out of step.
+const notify = () => { for (const fn of listeners) { try { fn(muted, volume) } catch {} } }
 
 export const isMuted = () => muted
+export const getVolume = () => volume
+/** What a sound is actually multiplied by right now. Mute always wins over the level. */
+export const effectiveVolume = () => (muted ? 0 : volume)
 export const subscribeMuted = (fn) => { listeners.add(fn); return () => listeners.delete(fn) }
 export function setMuted(next) {
   muted = !!next
   try { localStorage.setItem(KEY, muted ? '1' : '0') } catch {}
   if (muted) for (const el of nodes.values()) { try { el.pause() } catch {} }
+  applyVolume()
   notify()
 }
 export const toggleMuted = () => setMuted(!muted)
+
+/**
+ * Set the SFX level, 0..1.
+ *
+ * v > 0 unmutes and v === 0 mutes · see the header. `volume` itself is never written to 0, so the
+ * mute button always has a level to come back to.
+ */
+export function setVolume(next) {
+  const v = clampVolume(next)
+  if (v === null) return false              // refuse rather than resolve to a plausible level
+  if (v === 0) { setMuted(true); return true }
+  volume = v
+  try { localStorage.setItem(VOL_KEY, String(v)) } catch {}
+  if (muted) { setMuted(false); return true }   // setMuted applies + notifies
+  applyVolume()
+  notify()
+  return true
+}
+
+/** Push the current effective level onto every element that has already been created. */
+function applyVolume() {
+  const e = effectiveVolume()
+  for (const [name, el] of nodes) {
+    try { el.volume = (GAIN[name] ?? 0.5) * e } catch {}
+  }
+}
 
 const node = (name) => {
   if (typeof Audio === 'undefined') return null
@@ -96,7 +177,9 @@ const node = (name) => {
     try {
       el = new Audio(`/audio/${FILES[name]}`)
       el.preload = 'auto'
-      el.volume = GAIN[name] ?? 0.5
+      // The per-sound mix TIMES the player's level · GAIN keeps the shape of the mix (district-score
+      // stays the loudest thing in the game) and the slider scales all of it together.
+      el.volume = (GAIN[name] ?? 0.5) * effectiveVolume()
       nodes.set(name, el)
     } catch { return null }
   }
@@ -153,6 +236,19 @@ export function installSoundUnlock(target = typeof document !== 'undefined' ? do
     target.removeEventListener('pointerdown', onGesture, { capture: true })
     target.removeEventListener('keydown', onGesture, { capture: true })
   }
+}
+
+/**
+ * The volume actually set on a created Audio element, or null if it has not been created yet.
+ *
+ * EXISTS BECAUSE A MUTATION FOUND MY ASSERTION VACUOUS. My "the level reaches the mix" test read
+ * `effectiveVolume()` · which is the value the multiplication is computed FROM, not the value it
+ * lands on · so deleting the multiplication in `node()` left the suite green (Rule 92 · two sides
+ * of a check from one source agree by construction). This is the SINK.
+ */
+export const __elementVolume = (name) => {
+  const el = nodes.get(name)
+  return el ? el.volume : null
 }
 
 export const __isUnlocked = () => unlocked
