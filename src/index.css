@@ -83,7 +83,32 @@
      is information. !important because these are inline styles on the component (the same override
      the game-header rules above use). At 4 tokens the row still wraps and that is the right answer ·
      73px instead of S37's 183px, and nothing hidden. */
-  .action-bar { padding: 0 12px !important; column-gap: 10px !important; }
+  /* ── AND IT WAS STILL 2.1px SHORT, WHICH NOBODY MEASURED FOR SIX SESSIONS (T1 S67) ──────────
+     The block above says "still 33 short, which is a two-row bar" and then fixes 31 of the 33.
+     Measured at HEAD in Chromium, live game, no tokens: 298.1px of demand into a 296px content
+     box · so the bar has been TWO ROWS at 320, for every player, ever since. The tell is that
+     End Turn (right-aligned at every other width · x 262.9 at 360, 277.9 at 375, 316.9 at 414)
+     renders at x=12, the LEFT padding edge, because it wrapped onto a row of its own.
+     Cost: 8.5px of board height (72.5 against 64.0) on the smallest screen the game supports.
+     Swept in the page before editing anything · the boundary is exactly between 9 and 8:
+         gap  10   rows 2   bar 72.5   board 586.0   End Turn  12.0..97.1
+         gap   9   rows 2   bar 72.5   board 586.0   End Turn  12.0..97.1
+         gap   8   rows 1   bar 64.0   board 594.5   End Turn 222.9..308.0
+     Two pixels of gap, 8.5px of board, and End Turn back on the right where it is everywhere else.
+
+     ⚠ SCOPED, because my first draft of this comment said "one row at 320" and that is TRUE OF ONE
+     STRING. The demand is `237.1 + statusW`, so 296 buys statusW <= 58.9 · and the status is:
+         "Your turn"                57.0px   ONE ROW      (1.9px spare)
+         "Waiting for Ana"          94.7px   two rows
+         "Waiting for Bartholomew"  152.7px  two rows
+         "Waiting for Bartholomew Fitzgerald III"  232.3px  two rows, End Turn still on screen
+     So the 8.5px comes back ON YOUR TURN · always in practice and solo, half the time in a duel ·
+     and the waiting case is exactly as it was. THAT IS THE ARGUMENT FOR A 1.9px MARGIN, and it is
+     structural rather than lucky: "Your turn" is a LITERAL in ActionBar.jsx and cannot vary with
+     user data, while every string that can vary already wrapped and still does. Measured to the
+     longest name I could type; End Turn never left the viewport. flex-wrap stays the safety net
+     rather than becoming the behaviour. Reducing demand, not arbitrating the remainder (Rule 83). */
+  .action-bar { padding: 0 12px !important; column-gap: 8px !important; }
   .ab-end-turn { padding: 0 14px !important; }
 }
 

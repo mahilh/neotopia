@@ -17,6 +17,8 @@
 // lost the action count entirely.
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup, screen } from '@testing-library/react'
+import fs from 'node:fs'
+import path from 'node:path'
 import ActionBar from './ActionBar'
 import { formatMoney, MONEY_SLOT_PX, MONEY_STRING_PX, reachableBalances } from '../utils/formatMoney'
 
@@ -112,6 +114,66 @@ describe('the slot is fixed over the WHOLE reachable domain, not sized at the st
       expect(readout(), `wallet=${bad} rendered a readout`).toBeNull()
       expect(dots(), `wallet=${bad} took the dots without giving anything back`).not.toBeNull()
     }
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// THE OTHER TERM IN THE SAME ARITHMETIC · the gaps between the three groups
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+describe('the sub-480 column gap is 8, and it is a term in the demand above', () => {
+  it('is declared at 8px, because 10 leaves the bar on two rows with NO readout at all', async () => {
+    // The 290.1 in this file's header is `113 + gap + 70.6 + gap + 85.1` · so the gap is not
+    // decoration, it is 2 of the ~5 terms. Swept in Chromium before the edit, and the boundary is
+    // exactly between 9 and 8:
+    //     gap 10 -> 2 rows, bar 72.5, board 586.0, End Turn at x=12   (the shipped state until S67)
+    //     gap  9 -> 2 rows, bar 72.5, board 586.0, End Turn at x=12
+    //     gap  8 -> 1 row,  bar 64.0, board 594.5, End Turn at x=222.9
+    //
+    // AND THE ONE ROW IS SCOPED TO ONE STRING. Demand is `237.1 + statusW` and 296 buys 58.9, so:
+    // "Your turn" 57.0 fits with 1.9 to spare, "Waiting for Ana" 94.7 does not, and every longer
+    // name wraps as it already did (measured to 232.3px; End Turn never left the viewport). The
+    // margin is structural rather than lucky · "Your turn" is a LITERAL in ActionBar.jsx and cannot
+    // vary with user data, which is exactly why the assertion below is worth having.
+    //
+    // ⚠ SCOPE, stated because a source read cannot answer a composed question (Rule 116): this
+    // gates the DECLARATION, not the computed value. Lightning CSS owns index.css and may rewrite
+    // it, and jsdom has no layout, so the row count and the 8.5px of board are the browser numbers
+    // above and are not re-established here. What this catches is the realistic failure · someone
+    // tidying the gap back to a round 10 with nothing to say the bar wraps again.
+    const css = fs.readFileSync(path.resolve(__dirname, '../index.css'), 'utf8')
+    // THREE separate `max-width: 479px` blocks exist and only one carries `.action-bar` · my first
+    // version took the FIRST match and reported "no column-gap declared" against a file that
+    // declares one, which is a probe answering a question adjacent to mine (Rule 97's corollary).
+    // Select by CONTENT, never by position.
+    const blocks = [...css.matchAll(/@media \(max-width: 479px\)\s*\{[\s\S]*?\n\}/g)].map(m => m[0])
+    expect(blocks.length, 'no sub-480 media block at all').toBeGreaterThan(0)
+    const block = [blocks.find(b => b.includes('.action-bar'))]
+    expect(block[0], 'no sub-480 block mentions .action-bar · the bar\'s padding and gap moved ' +
+      'somewhere this cannot see, and every number in this file\'s header is unanchored').toBeDefined()
+    const gap = block[0].match(/\.action-bar\s*\{[^}]*column-gap:\s*(\d+)px/)
+    expect(gap, 'the action bar declares no column-gap below 480 · the browser default is 0, which ' +
+      'happens to fit, but nothing says so on purpose').not.toBeNull()
+    expect(Number(gap[1]),
+      `column-gap is ${gap?.[1]}px below 480 · measured, anything above 8 puts the bar on two rows ` +
+      'at 320 and costs 8.5px of board, with End Turn alone on the second row at the LEFT edge')
+      .toBeLessThanOrEqual(8)
+    // and the padding it is paired with, since the content box (296) is the other side of the sum
+    const pad = block[0].match(/\.action-bar\s*\{[^}]*padding:\s*0\s+(\d+)px/)
+    expect(Number(pad?.[1]), 'the sub-480 side padding moved · 296 was 320 - 2x12').toBe(12)
+  })
+
+  it('the string the one-row case depends on is a LITERAL, not user data', async () => {
+    // The 1.9px of margin belongs to "Your turn" and to nothing else. If that ever becomes a
+    // template · a name, a role, a translated phrase of unknown length · the margin stops being a
+    // property of the code and becomes a property of whoever is playing, and the row silently goes
+    // back to two. Rule 96b: gate the PREMISE, not the conclusion.
+    const src = fs.readFileSync(path.resolve(__dirname, './ActionBar.jsx'), 'utf8')
+    expect(src, 'the fixed turn label is gone · re-measure the bar, because the one-row result at ' +
+      '320 rests entirely on that string being 57.0px and unable to vary').toContain("'Your turn'")
+    // and the case that DOES vary is still allowed to wrap · flex-wrap is the net, not the bug
+    expect(src.match(/flexWrap:\s*'wrap'/), 'the action bar no longer wraps · a long opponent name ' +
+      'now overflows instead of taking a second row, which is Rule 78b with a control off screen')
+      .not.toBeNull()
   })
 })
 
