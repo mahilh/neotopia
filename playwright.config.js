@@ -4,6 +4,33 @@
 // Reconnect tests mutate shared realtime state · they run SERIALLY (one worker, not parallel).
 
 import { defineConfig, devices } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { resolveDevServer } from './tests/e2e/devServerTarget.js'
+
+// WHICH APP THIS RUN IS ALLOWED TO TALK TO (T3 S63). The port used to be a literal in three places, and
+// that composed with the project's own "isolate in a worktree" discipline into a run that drives the MAIN
+// CLONE's app while you believe you are testing your worktree · silently, and always green. The whole
+// story, with the three identical mutation results that found it, is in tests/e2e/devServerTarget.js.
+// git is asked rather than guessed; if git is unavailable this resolves to the pre-S63 behaviour exactly.
+const git = (...args) => {
+  try { return execFileSync('git', ['rev-parse', '--path-format=absolute', ...args], { encoding: 'utf8' }).trim() }
+  catch { return '' }
+}
+const commonDir = git('--git-common-dir')
+const DEV = resolveDevServer({
+  gitDir: git('--git-dir'),
+  gitCommonDir: commonDir,
+  cwd: process.cwd(),
+  isCI: Boolean(process.env.CI),
+  // Read here, decided in the module · the I/O stays out of the pure function so both branches stay
+  // testable without a worktree, a git repo or a filesystem.
+  hasEnvFile: existsSync(resolve(process.cwd(), '.env.local')),
+  mainHasEnvFile: Boolean(commonDir) && existsSync(resolve(commonDir, '..', '.env.local')),
+})
+if (DEV.linkedWorktree) console.log(`[playwright] dev server ${DEV.origin} · ${DEV.why}`)
+if (DEV.envWarning) console.warn(`\n⚠️  [playwright] ${DEV.envWarning}\n`)
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -17,16 +44,19 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: DEV.origin,
     trace: 'on-first-retry',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
+    // --strictPort so a port clash is a loud refusal rather than Vite quietly moving to the next free
+    // port while baseURL keeps pointing at the old one · which would be this defect again, wearing a
+    // different hat (the run would talk to whatever WAS on DEV.port).
+    command: `npm run dev -- --port ${DEV.port} --strictPort`,
+    url: DEV.origin,
+    reuseExistingServer: DEV.reuse,
     timeout: 120_000,
     // HALF OF A TWO-LINE CROSS-LANE FIX · INERT UNTIL THE OTHER HALF LANDS (T3 S51).
     // src/lib/reservedNames.js refuses a username claim on 'E2E'/'BotAlpha'/'BotBeta' · correctly, it
