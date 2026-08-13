@@ -191,7 +191,7 @@ async function validateManifest() {
   try { liveHead = git('git rev-parse --short HEAD'); }
   catch (e) { console.error(`❌ git rev-parse failed: ${e.message}`); process.exit(1); }
 
-  console.log('🔍 MANIFEST VALIDATION · running vitest (live test count) ...');
+  console.log('🔍 MANIFEST VALIDATION · running vitest SERIALLY (live test count) ...');
   let liveTests = null, liveFailed = 0;
   // Anchor to the "Tests" summary line · vitest prints "Test Files N passed" FIRST, so an unanchored
   // /(\d+)\s+passed/ captures the FILE count, not the test count (finding #3).
@@ -199,8 +199,19 @@ async function validateManifest() {
     const pm = out.match(/Tests\s+.*?(\d+)\s+passed/s); if (pm) liveTests = parseInt(pm[1], 10);
     const fm = out.match(/Tests\s+.*?(\d+)\s+failed/s); if (fm) liveFailed = parseInt(fm[1], 10);
   };
+  // ⚠ SERIAL, AND THE FLAG IS THE WHOLE POINT (T2 S67). This ran `npx vitest run` · parallel · and
+  // reported `1 FAILED` at load average 14.63 on 8 cores while a SERIAL run of the identical tree
+  // was 1397 passed, 0 failed. Rule 77 has been in CLAUDE.md since S35 and says exactly this: a
+  // suite run on a loaded machine is a measurement of the machine, and wall-clock-bounded tests lose
+  // under contention. Every other suite invocation in this project is already serial for that
+  // reason; the one instrument that GATES NIGHTSAVE was not.
+  //
+  // It matters more here than anywhere else because of WHEN it runs: session close, in a repo with
+  // three terminals, which is the most contended moment there is. And its verdict is a STOP · so a
+  // load flake either blocks the close or, worse, gets forced past, which retires the gate (Rule
+  // 94a). Costs ~3 minutes once per session and buys a verdict that means what it says.
   try {
-    parseTests(execSync('npx vitest run', { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }));
+    parseTests(execSync('npx vitest run --no-file-parallelism', { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }));
   } catch (e) {
     parseTests((e.stdout || '') + (e.stderr || '')); // non-zero exit on failure · still parse (a failing suite is drift)
   }
