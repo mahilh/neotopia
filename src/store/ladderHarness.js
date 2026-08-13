@@ -50,7 +50,38 @@ export const bots = (...levels) =>
 // Classic-only, while Flow is shipped and user-selectable with 9 production tiles instead of 12.
 // Defaulting to undefined keeps every existing caller byte-identical (initGame's own default is
 // DEFAULT_GAME_MODE), so this is a widening and not a change.
-export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) {
+// T2 S64 · A WALLET, SIMULATED IN THE HARNESS AND NOWHERE ELSE.
+//
+// The engine has no wallet and this does not give it one. A draw the seat cannot afford is simply not
+// ISSUED: the policy is re-asked with an empty deck and offer, which is precisely the state
+// chooseBotAction already handles (`theOffer.length > 0` / `deck.length > 0` are its own guards), so
+// the bot places or ends its turn exactly as it would if the cards had run out. No new decision code
+// exists, and therefore no second rules engine can drift from the first (Rule 45).
+//
+// ⚠ WHAT THIS MODEL CANNOT SEE, stated before any number is read (preamble §3 · when the harness
+// simulates the subject, the harness is maximally suspect). It models the CONSTRAINT faithfully · a
+// player with no money cannot buy · and it does not model ADAPTATION. A real player who knows cards
+// cost money buys different cards, at different moments, and places differently in between. Bot draw
+// bias is a fixed constant, so the only adaptation available here is the pacing policy below, which
+// is why there are two arms rather than one.
+const PACING = {
+  // Spend freely until broke. The whole budget is available from turn 1.
+  naive: () => true,
+  // Never get more than LOOKAHEAD cards ahead of a straight-line spend across the game, measured on
+  // the TILE CLOCK · the game's own progress meter, readable in-game, needing no oracle. The
+  // lookahead exists because strict linear pacing cannot make the FIRST purchase: at turn 1 nothing
+  // has been consumed, so a zero-tolerance schedule permits zero spending forever.
+  paced: ({ spent, price, budget, tilesRemaining, tilesTotal, lookahead = 2 }) => {
+    const consumed = 1 - (tilesRemaining / tilesTotal)
+    return spent + price <= budget * consumed + price * lookahead
+  },
+}
+
+// `walletBySeat` overrides `wallet` for individual seats, so two BUDGETING POLICIES can be compared
+// inside ONE game rather than between two blocks. That is Rule 74 applied to pacing: the two arms
+// then share the deck, the seeds, the board and the opponent exactly, and the comparison is a
+// difference rather than a difference-of-averages.
+export function playOnce(configs, seed, mode, { recordCrossings = false, wallet = null, walletBySeat = null } = {}) {
   useGameStore.setState(useGameStore.getInitialState(), true)
   const rng = makeRng(seed)
   api().initGame(configs, shuffled(PROJECT_CARDS, rng), shuffled(PRODUCTION_TILES, rng), mode)
@@ -109,6 +140,22 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
   // exactly these two columns, so the columns have to be countable before a rate can be argued.
   const placeActions = configs.map(() => 0)
   const scoreActions = configs.map(() => 0)
+  // T2 S64 · the PEAK hand, which is the number a UI has to be able to render · handAtEnd is the
+  // hand after every completable card has been played out of it, so it systematically understates
+  // what the player was holding while the game was live.
+  const handPeak = configs.map(() => 0)
+  // T2 S64 · wallet bookkeeping. `spent` is per seat; `refused` counts draws the price prevented,
+  // which is the whole point of the instrument · a purchase that does not happen leaves no trace
+  // anywhere else, and an unrecorded refusal is an unmeasured constraint (Rule 114).
+  const spent = configs.map(() => 0)
+  const refusedByPrice = configs.map(() => 0)
+  const tilesTotal = api().productionTilesRemaining
+  // Cumulative spend at the moment the tile clock passes its halfway mark. This is the DEFINING
+  // property of a rationing policy · it must hold back early money · and it is the only observable
+  // that separates the pacing arms by construction. Total refusals cannot: a policy that refuses
+  // EARLY draws has more money later and refuses fewer LATE ones, so the totals can land either way
+  // (measured: naive 3, paced 2 at $100M on one seed, which is the opposite of the naive reading).
+  const spentAtHalf = configs.map(() => null)
 
   for (let i = 0; i < 4000 && api().phase === 'playing'; i++) {
     const s = api(); const seat = s.currentSeat
@@ -116,6 +163,9 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
       const held = s.players.find(x => x.seat === k)?.bonusTokens.length ?? 0
       for (let n = heldPrev[k]; n < held; n++) grantOrder.push(k)
       heldPrev[k] = held
+      const h = s.players.find(x => x.seat === k)?.hand.length ?? 0
+      if (h > handPeak[k]) handPeak[k] = h
+      if (spentAtHalf[k] === null && s.productionTilesRemaining * 2 <= tilesTotal) spentAtHalf[k] = spent[k]
     }
     // Sample every seat's per-region score and record any threshold it has just passed. This is the
     // DEFINITION of a crossing (prev < t <= now), not a copy of the granter's award logic · and the
@@ -134,10 +184,27 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
         }
       }
     }
-    const a = chooseBotAction({
-      state: api(), seat, difficulty: configs[seat].difficulty,
+    const ask = (st) => chooseBotAction({
+      state: st, seat, difficulty: configs[seat].difficulty,
       getValidPlacements: api().getValidPlacements, getBuildableCards: api().getBuildableCards, lastPlacedKey, rng,
     })
+    let a = ask(api())
+
+    // ── THE PRICE, applied at the only place a card is bought ────────────────────────────────────
+    const seatWallet = (walletBySeat && walletBySeat[seat] !== undefined) ? walletBySeat[seat] : wallet
+    if (seatWallet && a.type === 'drawCard') {
+      const { price, budget, pacing = 'naive', lookahead } = seatWallet
+      const affordable = spent[seat] + price <= budget &&
+        PACING[pacing]({ spent: spent[seat], price, budget, tilesRemaining: api().productionTilesRemaining, tilesTotal, lookahead })
+      if (affordable) {
+        spent[seat] += price
+      } else {
+        refusedByPrice[seat]++
+        // Re-ask with the card supply hidden. NOT a substitute action chosen here: the policy makes
+        // the decision, through the same branch it already uses when the deck and offer are empty.
+        a = ask({ ...api(), theOffer: [], deck: [] })
+      }
+    }
     if (a.type === 'placeElement') { api().placeElement(seat, a.factoryId, a.elementType, a.q, a.r, a.regionId); lastPlacedKey = `${a.q},${a.r}`; placeActions[seat]++ }
     else if (a.type === 'scoreCard') { api().scoreCard(seat, a.cardId, a.regionId, a.lastPlacedKey); lastPlacedKey = null; scoreActions[seat]++ }
     else if (a.type === 'drawCard') { api().drawCard(seat, a.source, a.cardIndex); drawActions[seat]++ }
@@ -186,6 +253,7 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
     deckAtEnd: st.deck.length,
     offerAtEnd: st.theOffer.length,
     turnsPlayed: st.turnNumber,
+    tilesTotal,
     seats: configs.map((_, seat) => {
       const p = st.players.find(x => x.seat === seat)
       return {
@@ -219,6 +287,11 @@ export function playOnce(configs, seed, mode, { recordCrossings = false } = {}) 
         // placed in one pattern, so it is both the dearest and the hardest to finish. Read off the
         // hand objects rather than the id map, which is a second source for the same quantity.
         handPoints: p.hand.map(c => c.points),
+        // T2 S64 · what a UI would have had to render at the worst moment, and what the price cost.
+        handPeak: handPeak[seat],
+        spent: spent[seat],
+        spentAtHalf: spentAtHalf[seat] ?? spent[seat],   // a game that never reached half spent it all
+        refusedByPrice: refusedByPrice[seat],
       }
     }),
   }
