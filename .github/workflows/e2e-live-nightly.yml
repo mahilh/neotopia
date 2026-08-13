@@ -123,7 +123,33 @@ jobs:
       # Proven before wiring, and per Rule 82 in an ISOLATED WORKTREE on its own port rather than the shared
       # dev server this spec's own header warns about: 1 passed in 22.7s, clusters 16 v 18, award_game_win
       # 'awarded' then 'already_awarded' from the second seat, zero non-2xx.
-      - name: Run the live-DB E2E suite (Flow · draw-UI · recovery · 4-player · 2-human · phase · seat colours)
+      # T2 S65 · host-departure-live.e2e.js joins, after eleven sessions of being routed and declined.
+      # WHAT CHANGED IS NOT THE FLAKE RATE, IT IS THE DIAGNOSABILITY. T3 S63 instrumented it: every
+      # phase prints its elapsed time and a failure prints `✗ DIED IN PHASE "<name>" at +Xs`, so the
+      # observed ~17% (one failure in six runs across two sessions, not the ~33% one session of three
+      # suggested) now arrives as a named phase in this log instead of a bare 32-second timeout. An
+      # undiagnosable flake on a nightly is a tripwire aimed at whoever next opens it red; a flake
+      # that names its own phase is a bug report. Three passes do not clear a 1-in-3 fault · that is
+      # ~30% likely by luck · so this is wired on the instrumentation, not on a claim of a fix.
+      # COST · ZERO anonymous sign-ins. Both contexts call seedPoolCredential (index 0 and 1) and this
+      # job carries all four pool members at job level, so it mints nothing. Verified in the spec's
+      # code, not from its header.
+      # RUNTIME 2.0m, MEASURED, not estimated · I wrote "~40s" here first and the isolated run said
+      # 2.0m. The spec deliberately holds 45s inside the turn budget and then waits past 100s for the
+      # clock to end the absent player's turn; the waiting IS the test. Against ~8m of current
+      # suite and a 55m budget, so there is room · but the number is the run's, not mine (Rule 81).
+      #
+      # ⚠ AND THE STATE OF THIS WORKFLOW IS UNMEASURED, NOT HEALTHY. Its last three runs were RED, on
+      # multiplayer-endgame-live's Global-Index characterisation test, which T3 corrected in 2dfda4a
+      # at 2026-08-12 16:34:39 UTC · TEN HOURS AFTER the most recent nightly started (06:15:51 UTC).
+      # So every red predates the repair and the repair has never run here. Anchor to the change, not
+      # to a window (Rule 126): the next nightly is the first measurement of either that fix or this
+      # spec, and neither should be called green until it has one.
+      # AND THE SIBLING IS NOT WIRED, DELIBERATELY: endgame-live.e2e.js carries test.fixme(true) at
+      # :333 ("0 of 2 runs green"), so adding it would buy a GREEN job containing a switched-off test
+      # · which is the exact silent no-op the skip-guard below exists to catch, arriving by a route
+      # that guard cannot see (fixme is not `skipped`).
+      - name: Run the live-DB E2E suite (Flow · draw-UI · recovery · 4-player · 2-human · phase · seat colours · host departure)
         run: >
           npx playwright test
           tests/e2e/flow-mode-live.e2e.js
@@ -136,6 +162,7 @@ jobs:
           tests/e2e/solo-host.e2e.js
           tests/e2e/multiplayer-endgame-live.e2e.js
           tests/e2e/postgres-writeorder.e2e.js
+          tests/e2e/host-departure-live.e2e.js
           --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: results.json

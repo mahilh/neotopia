@@ -26,7 +26,19 @@
 // COST · ZERO SIGN-INS AS OF T3 S62 · it was 2 anonymous ones, and that cost was the stated reason this
 // spec was routed to the nightly and then never wired. Both contexts now take pool members 0 and 1
 // (seedPoolCredential), so it mints nothing at all. The caller-set guard costs zero and is offline.
-// RUNS-NOWHERE: eleven sessions and counting · routed to T2 in comms/t3-s51, t3-s60 and now t3-s62.
+// ✅ WIRED T2 S65 · e2e-live-nightly.yml. The RUNS-NOWHERE: declaration that stood here for thirteen
+// sessions is deleted in the same commit, per the instruction below · a marker saying "nobody runs
+// this" is a false statement the moment somebody does, and preconditions.e2e.js classifies wired
+// BEFORE declared, so it would not have gone red and the lie would have been permanent (Rule 97).
+// WHY IT WAS WIREABLE NOW, and both halves were verified against the code rather than this header:
+//   COST · both contexts call seedPoolCredential (index 0 and 1, lines below), so it mints ZERO
+//     anonymous identities · and e2e-live-nightly.yml carries all four pool members at JOB level,
+//     so the credentials reach this step. That was the objection that held it back for eleven
+//     sessions and it is now paid rather than argued.
+//   DIAGNOSABILITY · T3 S63's instrumentation is what changed the ask. The spec prints its own phase
+//     and elapsed time, so the ~17% flake, if it recurs, arrives as `✗ DIED IN PHASE "<name>" at
+//     +Xs` in a nightly log instead of as a bare timeout. A flake that names its own phase is
+//     diagnosable by whoever finds it red · which is the property that was missing, not the rate.
 // ── THE STABILITY QUESTION, AND WHAT SIX RUNS ACROSS TWO SESSIONS ACTUALLY SAY (T3 S62 + S63) ────────────
 // S62: PASS, FAIL at 32.1s, PASS · and I captured the failing run's reason for NONE of them, which is how
 // a diagnosable defect became an undiagnosed one and left this spec blocked on a number rather than on a
