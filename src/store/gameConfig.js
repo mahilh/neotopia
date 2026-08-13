@@ -91,4 +91,39 @@ export const priceOf = (_card) => CARD_PRICE
 // `mode` already has. A module constant is identical for every client of one BUILD, and a client on
 // an older bundle would then disagree with its peer about whether cards cost money, which is a
 // divergence in a replayed reducer (Rule 32). Safe today only because the flag is off everywhere.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// ⚠ THE FLIP WAS ATTEMPTED AND MEASURED IN T2 S70, AND REVERTED. READ THIS BEFORE FLIPPING IT.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// THE GAME IS FINE. That was the open question and it is closed: with T1's dbdd622 (the End Turn
+// escape asks affordability, not existence) a PRICED game ends. src/store/walletSoftLock.test.js,
+// 24 rows, 12 seeds each · 21 of 21 priced rows produce a game that ENDS, 0 hangs anywhere. It was
+// 0 of 21 and three of four policies hanging 12/12 one session ago. The ladder survives too:
+// architect over builder 60.0% [56.8, 63.1] at n=932 (docs/WALLET_PRICE_SWEEP.md §1c).
+//
+// WHAT STOPS IT IS NOT THE GAME, IT IS THE COST TO THE SUITE. Council asked for "a commit that does
+// nothing else". Measured with the flag ON at HEAD, it does three things else:
+//
+//   cardEconomics.test.js   RED · my own S68 premise guard, firing exactly as written ("if the flag
+//                           has been turned on, this guard is now unreachable everywhere and needs
+//                           a new home"). Real, small: that file must mock the flag OFF to keep
+//                           testing the flag-off path (Rule 135 · a suite that only ever runs in the
+//                           default configuration tests the default).
+//   ladderSpacing.test.js   RED at its DEFAULT 10 seeds (builder 55% over architect), GREEN at 40.
+//                           A sample-size weakness the price EXPOSED rather than caused · the file
+//                           already skips its evenness claim below 40 for this reason and the
+//                           ordering claim was left running at 20 games.
+//   bonusBalance.test.js    TIMES OUT · 266s against its 120s limit. Priced games cost more loop
+//                           iterations per action.
+//   the FULL suite          >10 minutes, against ~4.5 today. A permanent tax on every CI run for
+//                           all three lanes.
+//
+// None of that is a defect in the wallet. All of it is real, and it was discovered in the last hour
+// of the last engineering session · too late to fix three gates and re-verify them honestly, and a
+// red merge gate is the worst thing to hand someone who is about to sit down and play.
+//
+// TO FLIP IT: fix those three (all in src/store/, all small), then flip alone, then verify IN THE
+// ARTIFACT with `npm run build` · the minified price `7e7` must move 0 -> 1. Do NOT check
+// `insufficient_funds` or the name `CARD_PRICE`: measured on two real builds, the reason strings are
+// present at 2 in BOTH states and the constant's NAME reads 0 in both, so either would report
+// success on a bundle where nothing shipped. src/store/walletBundle.test.js gates the value.
 export const WALLET_ENABLED = false
