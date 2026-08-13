@@ -390,19 +390,37 @@ export default function GameBoard({
             of the ellipse, i.e. inside the fade, and the land above them went. This puts the ramp
             entirely outside them and lets it reach zero exactly at the viewBox boundary, so there is
             no edge left to see. */}
-        <radialGradient id="neo-island" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"  stopColor="#fff" stopOpacity="1" />
-          <stop offset="84%" stopColor="#fff" stopOpacity="1" />
-          <stop offset="94%" stopColor="#fff" stopOpacity="0.5" />
-          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-        </radialGradient>
+        {/* ── AND THE ISLAND IS GONE (T1 S64) ───────────────────────────────────────────────────
+            Everything above is the record of how the porthole was ARGUED FOR, and the argument was
+            sound for the shape it was solving. What it never had was a measurement of what it cost,
+            and the cost is the whole board: an ellipse inscribed in a nearly-square viewBox leaves
+            its four corners fully black BY CONSTRUCTION, so the world was a disc in a void at every
+            viewport. Measured masked-vs-unmasked on the deployed board, same pixels, four widths:
+                320   25.9% of the board area changes, mean delta 72.7
+                768   19.3%      1280  23.1%      1440  22.8%
+            THE THING THAT MADE THIS SAFE TO DO, and it corrects my own S63 claim rather than
+            confirming it: I said removing the mask would expose the flat-top painted zones under the
+            pointy-top slabs. It does not, because that experiment removed the mask ENTIRELY and took
+            the three HOLES with it. Removing only the admitting shape keeps every hole, and the
+            nearest CHANGED PIXEL to a region centre lands exactly at the platter edge and never
+            inside it · 63/63/64px against a 64px platter at 320, 141/140/142 against 143 at 1440.
+            Nothing under or beside a district moves. The registration error stays hidden, which is
+            the honest statement: this makes the board fill its frame, it does NOT make the art
+            correct, and v6 is still the only thing that would.
+            WHAT A PLAYER ACTUALLY GAINS AND LOSES: gains a painted world to all four corners; loses
+            a soft edge, because the image ends 4-5 units outside the viewBox and now ends there
+            visibly. A hard rectangle reads as a framed map rather than a knife cut at every width I
+            rendered · but it IS the change of character in this diff, and if it wants softening the
+            cheap version is a narrow feather on the RECT, never a return to a shape whose corners
+            fall outside the box. */}
         <mask id="neo-backdrop-mask" maskUnits="userSpaceOnUse"
               x={BACKDROP_BOX.x} y={BACKDROP_BOX.y} width={BACKDROP_BOX.w} height={BACKDROP_BOX.h}>
-          {/* white shows, black hides · the island admits the painting, the three districts take it back */}
-          <ellipse
-            cx={minX + width / 2} cy={minY + height / 2}
-            rx={width / 2} ry={height / 2}
-            fill="url(#neo-island)"
+          {/* white shows, black hides · the painting is admitted whole, the three districts take it back */}
+          <rect
+            data-board-admit
+            x={BACKDROP_BOX.x} y={BACKDROP_BOX.y}
+            width={BACKDROP_BOX.w} height={BACKDROP_BOX.h}
+            fill="#fff"
           />
           {REGIONS.map(reg => {
             const { x, y } = hexToPixel(reg.cq, reg.cr)

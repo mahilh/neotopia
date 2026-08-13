@@ -246,6 +246,66 @@ describe('the painted world never reaches the play', () => {
     expect(by + bh, 'unpainted ground at the BOTTOM edge').toBeGreaterThanOrEqual(VB.minY + VB.height)
   })
 
+  it('the painting is admitted to all four CORNERS · the porthole cannot come back', () => {
+    // T1 S64. Nothing gated this, which is why an inscribed ellipse survived from S37 to S64 leaving
+    // the four corners of a nearly-square viewBox fully black at every viewport · a disc in a void.
+    //
+    // THE ASSERTION IS THE PROPERTY, NOT THE TAG. "It must be a <rect>" would be a rule about syntax
+    // and would say nothing about why; and the tempting geometric check, comparing BOUNDING BOXES,
+    // cannot fail at all here · an ellipse with rx = w/2 has exactly the same bbox as the rect that
+    // replaced it, so a bbox test greens on the thing it exists to forbid (Rule 92 · two sides that
+    // agree by construction). So this asks the shape whether it CONTAINS each corner, which is the
+    // question, and an inscribed ellipse answers no at all four.
+    const c = board()
+    const shape = c.querySelector('#neo-backdrop-mask [data-board-admit]')
+    expect(shape, 'no admitting shape · the backdrop is masked out entirely and the board is black')
+      .not.toBeNull()
+
+    const contains = (el, px, py) => {
+      const n = el.tagName.toLowerCase()
+      if (n === 'rect') {
+        const x = +el.getAttribute('x'), y = +el.getAttribute('y')
+        const w = +el.getAttribute('width'), h = +el.getAttribute('height')
+        return px >= x && px <= x + w && py >= y && py <= y + h
+      }
+      if (n === 'ellipse' || n === 'circle') {
+        const cx = +el.getAttribute('cx'), cy = +el.getAttribute('cy')
+        const rx = +(el.getAttribute('rx') ?? el.getAttribute('r'))
+        const ry = +(el.getAttribute('ry') ?? el.getAttribute('r'))
+        return ((px - cx) / rx) ** 2 + ((py - cy) / ry) ** 2 <= 1
+      }
+      return false   // an unknown shape is not proof of coverage
+    }
+
+    // the corners of the DRAWING AREA, derived · these are the pixels that were black
+    const corners = [
+      [VB.minX, VB.minY], [VB.minX + VB.width, VB.minY],
+      [VB.minX, VB.minY + VB.height], [VB.minX + VB.width, VB.minY + VB.height],
+    ]
+    for (const [px, py] of corners) {
+      expect(contains(shape, px, py),
+        `the viewBox corner ${px.toFixed(0)},${py.toFixed(0)} is NOT admitted by the ` +
+        `<${shape.tagName.toLowerCase()}> · that corner renders black. An inscribed ellipse fails ` +
+        'all four by construction, which is what the porthole was.').toBe(true)
+    }
+
+    // COUNTERWEIGHT · the check must be able to say no. If `contains` returned true for everything
+    // the four assertions above would be decoration, and this is the exact shape that was there.
+    const inscribed = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse')
+    inscribed.setAttribute('cx', String(VB.minX + VB.width / 2))
+    inscribed.setAttribute('cy', String(VB.minY + VB.height / 2))
+    inscribed.setAttribute('rx', String(VB.width / 2))
+    inscribed.setAttribute('ry', String(VB.height / 2))
+    for (const [px, py] of corners) {
+      expect(contains(inscribed, px, py),
+        'the containment test admits a corner of an INSCRIBED ELLIPSE · it cannot detect the porthole ' +
+        'it exists to forbid').toBe(false)
+    }
+    // and it must accept the centre, or it is simply always-false
+    expect(contains(inscribed, VB.minX + VB.width / 2, VB.minY + VB.height / 2),
+      'the containment test rejects the dead centre · it is always-false and proves nothing').toBe(true)
+  })
+
   it('the DECLARED file shape matches the file on disk · a swapped terrain is silent otherwise', () => {
     // T1 S63. THE HAZARD THIS SESSION WAS ABOUT. BACKDROP.fileW/fileH are typed constants and the
     // image is placed at fileW*scale x fileH*scale, so dropping a 16:9 terrain in over a 0.956 one
