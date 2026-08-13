@@ -20,10 +20,17 @@
 // HexCell and fires on `element` going empty -> occupied, so it has no way to know who placed. There
 // is no author-conditional anywhere on that path. P3 as briefed is a NON-FINDING.
 //
-// THE DISTRICT SETTLE IS ASYMMETRIC, and it is the bigger animation · 620ms of the whole completed
-// pattern lighting up, against 400ms of six particles. It is fired from GameRoom.jsx:1776, INSIDE
-// the hand card's onClick, and a bot does not click a card. That is Council's observation landing on
-// the animation next door to the one they named.
+// THE DISTRICT SETTLE WAS ASYMMETRIC, and it was the bigger animation · 620ms of the whole completed
+// pattern lighting up, against 400ms of six particles. It fired from INSIDE the hand card's onClick,
+// and a bot does not click a card. That is Council's observation landing on the animation next door
+// to the one they named.
+//
+// ✅ CLOSED T1 S70. T2 shipped `region.lastBuiltKeys` from inside tryScoreCard (c4fc244 · the SAME
+// `matches[0]` the engine validated, not a recomputation), and the settle now fires from a STORE
+// effect keyed on a monotone district count rather than from the click. ONE mechanism for both
+// actors · firing in both places would be two guards, neither mutation-testable because either is
+// sufficient (Rule 118), plus a double-fire on every human score.
+// The assertion below was `it.fails` for one session and is a real assertion now.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, screen, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -118,20 +125,19 @@ describe('counterweight · the district settle is real and this file can see it'
 // THE FINDING · and it is carried as an EXPECTED FAILURE, not as a red gate
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
 describe('a district built by a BOT', () => {
-  // ⚠ CARRIED AS it.fails BECAUSE THE FIX NEEDS A DATUM I DO NOT HAVE, AND FABRICATING IT WOULD BE A
-  // SECOND RULES ENGINE. The settle needs WHICH HEXES completed the pattern. The human path has them
-  // for free · `buildableMatches.find(...).matchedHexKeys`, read at click time · and after a bot's
-  // `scoreCard` they are gone: the store records that a card was scored and into which region, not
-  // the six coordinates that satisfied it. Re-deriving them in the UI would put a second pattern
-  // matcher next to `findBuildableCards` (Rule 45), and it would be wrong in exactly the 8.5% of
-  // completions where two cards are buildable at once (measured S59).
+  // ⚠ THIS WAS `it.fails` FOR ONE SESSION AND THE HANDOFF WORKED EXACTLY AS DOCUMENTED. I refused to
+  // re-derive the completed hexes in the UI · a second pattern matcher beside findBuildableCards
+  // (Rule 45), wrong in exactly the 8.5% of completions with two buildable cards · and routed the
+  // datum instead. T2 shipped it, this went red on the next boot ("Expect test to fail"), and red
+  // was the signal to promote it. Two lanes, one field, no second engine.
   //
-  // ROUTED TO T2: `tryScoreCard` already computes the match it validates against. Recording those
-  // keys on the store · a `lastBuiltKeys` beside the existing `lastBuiltIllustration` · costs them
-  // one line and makes this test go GREEN, which is the signal to delete the `.fails`.
-  // Rule 103b: never red a shared gate for another lane, and the counterweights above are the WORKS
-  // guard, because an it.fails cannot notice its own broken setup.
-  it.fails('T2 ROUTED · lights its pattern the way a human-built one does', async () => {
+  // ⚠ AND IT WAS PASSING FOR THE WRONG REASON THE WHOLE TIME, which is the more useful lesson.
+  // See the fixture note below: my S69 setup discarded the seeded pattern, so the bot never scored,
+  // so of course no ring appeared. The it.fails was green because of a broken fixture rather than
+  // because of the defect it named · and the defect WAS real, so nothing about the outcome would
+  // have told me. Rule 120 inside a fixture: I asserted an absence in a state I had failed to
+  // create. The positive control on scoredCardIds is what makes that impossible now.
+  it('lights its pattern the way a human-built one does', async () => {
     render(<MemoryRouter><GameRoom practice practiceBots={1} /></MemoryRouter>)
     await until(() => screen.queryAllByTestId('factory').length > 0)
     const st = state()
@@ -142,17 +148,30 @@ describe('a district built by a BOT', () => {
 
     // Complete the pattern on the board and let the ENGINE score it for the bot · the exact call
     // useBotTurns makes. No click, because a bot does not click, which is the whole point.
+    // ⚠ TWO SETSTATES, AND THE ORDER IS THE WHOLE THING. My S69 version did ONE, spreading
+    // `seed.patch` and then overriding `regions` with a map over the PRE-PATCH regions · so the
+    // seeded pattern was thrown away, only the completing hex was placed, the pattern was never
+    // complete and scoreCard silently REFUSED. The it.fails then passed for the wrong reason: not
+    // "the settle does not fire for a bot" but "no bot ever scored". Rule 120's shape inside a
+    // fixture · I asserted an absence in a state I had failed to create.
+    await act(async () => { useGameStore.setState({ ...seed.patch, currentSeat: botSeat }, false) })
     await act(async () => {
       const s = state()
       const [q, r] = seed.missingKey.split(',').map(Number)
       useGameStore.setState({
-        ...seed.patch,
-        currentSeat: botSeat,
         regions: s.regions.map(reg => (reg.id === seed.regionId
           ? { ...reg, hexes: { ...reg.hexes, [`${q},${r}`]: { element: seed.requiredType, placedBy: botSeat } } } : reg)),
       }, false)
     })
+    const scoredBefore = state().players.reduce((n, p) => n + (p.scoredCardIds?.length ?? 0), 0)
     await act(async () => { state().scoreCard(botSeat, seed.card.id, seed.regionId, seed.missingKey) })
+    const scoredAfter = state().players.reduce((n, p) => n + (p.scoredCardIds?.length ?? 0), 0)
+    // THE CONTROL THIS ASSERTION ALWAYS NEEDED. "No settle ring" is produced identically by "the
+    // settle is silent for bots" and by "the bot never scored", and for a whole session it was the
+    // second one. Assert the district was actually BUILT before asserting anything about its
+    // animation (Rule 120 · an absence needs a positive control, and mine was in the fixture).
+    expect(scoredAfter, `the bot did not score · scoredCardIds went ${scoredBefore} -> ${scoredAfter}. ` +
+      'Nothing below is about animation.').toBeGreaterThan(scoredBefore)
     await until(() => settleRings() > 0, 40)
 
     expect(settleRings(), 'a bot completed a district and not one hex lit up. The player watching ' +

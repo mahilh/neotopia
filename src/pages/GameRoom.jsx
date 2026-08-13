@@ -350,6 +350,38 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
   // A refusal describes THIS turn. Cleared when the turn moves, never on a clock (see the state).
   useEffect(() => { setDrawRefusal(null) }, [turnNumber, currentSeat])
 
+  // ── THE DISTRICT SETTLE, FOR WHOEVER BUILT IT (T1 S70 · T2 shipped the datum in c4fc244) ────────
+  // Council's P3 was "the bot's action has no motion while the player's does". Measured in S69: the
+  // placement BURST fires for bots and cannot be asymmetric, but the 620ms settle · the whole
+  // completed pattern lighting up, the bigger of the two · fired from the hand card's onClick, and a
+  // bot does not click a card.
+  // I refused to re-derive the completed hexes in the UI (a second pattern matcher beside
+  // findBuildableCards, wrong in exactly the 8.5% of completions with two buildable cards) and
+  // routed it. `region.lastBuiltKeys` is now written inside tryScoreCard from `matches[0]` · the
+  // SAME object the engine validated · so this reads the authoritative keys for every actor.
+  //
+  // KEYED ON A MONOTONE COUNT, NOT ON THE KEYS (Rule 107). Two identical patterns built in the same
+  // region produce equal key arrays, and a change-detector keyed on the value would silently skip
+  // the second · the exact class that froze this project's bots three times. scoredCardIds only
+  // ever grows, so it cannot be constant across a real build no matter what else is true.
+  const districtsBuilt = useGameStore(
+    s => s.players.reduce((n, p) => n + (p.scoredCardIds?.length ?? 0), 0))
+  const prevBuiltRef = useRef({ count: districtsBuilt, keys: regions.map(r => r.lastBuiltKeys) })
+  useEffect(() => {
+    const prev = prevBuiltRef.current
+    const keysNow = regions.map(r => r.lastBuiltKeys)
+    if (districtsBuilt === prev.count) { prevBuiltRef.current = { count: districtsBuilt, keys: keysNow }; return }
+    // WHICH region · by identity against the previous render, because the count says a district was
+    // built and not where. Immer gives a fresh array on write, so identity is the cheap discriminator.
+    const i = regions.findIndex((r, n) => r.lastBuiltKeys !== prev.keys[n])
+    prevBuiltRef.current = { count: districtsBuilt, keys: keysNow }
+    if (i < 0) return
+    const keys = regions[i].lastBuiltKeys ?? []
+    if (!keys.length) return          // nothing to light · never a settle over zero hexes
+    builtSeq.current += 1
+    setBuiltDistrict({ keys, regionId: regions[i].id, seq: builtSeq.current })
+  }, [districtsBuilt, regions])
+
   const myPlayer = players.find(p => p.seat === mySeat) ?? currentPlayer
   // The player whose PERSONAL state the action bar shows · wallet and held bonus tokens. Same
   // fallback as myPlayer above, extracted so the mySeat-vs-currentSeat choice is drivable: practice
@@ -663,6 +695,15 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     }
     return best
   }, [ph0, ph1, ph2])
+
+  // How many cards in MY hand carry a badge · the same map the badges are rendered from, so the
+  // count and the cards can never disagree. Scoreable cards are excluded here for the same reason
+  // CardFrame excludes them: a card that can be scored right now is a completion, not a near-miss.
+  const handNearMissCount = useMemo(() => (currentPlayer?.hand ?? [])
+    .filter(c => nearMissByCard.has(c.id)
+      && !(uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === c.id)))
+    .length,
+  [currentPlayer?.hand, nearMissByCard, uiPhase, buildableMatches])
 
   // ── AUTO-END-TURN (T1 S35) ────────────────────────────────────────────────────────────────────
   // "No actions left · end your turn" beside an End Turn button is a required click that
@@ -1666,7 +1707,30 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
 
           {/* HAND */}
           <div>
-            <div style={sectionLabel}>Hand · {currentPlayer?.hand?.length ?? 0}</div>
+            {/* ── THE BADGE COUNT, BECAUSE THE BADGES ARE OFF SCREEN (T1 S70 · from PLAYING it) ──
+                Measured in a real priced game at 1280, turn 9, wallet spent down to $20M:
+                    hand 17 · fullyVisible 2 · near-miss cards 6 · OF THOSE VISIBLE: 0
+                    badge indices [2, 5, 6, 9, 11, 14] · the strip shows 0 and 1
+                Six of my seventeen cards were one placement from completing and not one of them was
+                on screen. The S66 badge exists to tell a player which card is worth chasing, and at
+                the hand size THE WALLET ITSELF PERMITS (3 starting + 14 purchases = 17, which is the
+                ceiling and is what the simplest possible strategy produces) it is never visible.
+                Nothing was wrong with the badge or the strip. The two were measured separately and
+                never together, which is this project's oldest failure shape wearing new clothes.
+                THIS IS A MITIGATION, NOT A FIX, and it is labelled as one: it converts an invisible
+                fact into a visible count and moves nothing. The player still scrolls. The real
+                tension · a 17-card ceiling against a 2-card window · is a Council question about the
+                wallet's size, not something a label can answer, and it is in the handover.
+                `nearMissByCard` is already computed for the badges themselves, so this reads the
+                same map and cannot disagree with what the cards show (Rule 45). */}
+            <div style={sectionLabel}>
+              Hand · {currentPlayer?.hand?.length ?? 0}
+              {handNearMissCount > 0 && (
+                <span data-testid="hand-nearmiss-count" style={{ color: 'rgba(255,180,50,0.95)' }}>
+                  {` · ${handNearMissCount} close`}
+                </span>
+              )}
+            </div>
             {/* ── ONE ROW, AT ANY HAND SIZE (T1 S65 · Council) ──────────────────────────────────
                 The hand was `flexWrap: wrap`, so at 320 it laid out two cards per row and the panel
                 was a STEP FUNCTION of hand size. Measured on the real sheet, seeding hands of 3-12:
@@ -1750,15 +1814,15 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                       // matchedHexKeys per card, and 8.5% of completions offer two cards at once
                       // (measured S59), so celebrating patternHighlight would light hexes that
                       // belong to a card the player did NOT score.
-                      // Captured BEFORE the call, because handleCardScore calls reset().
-                      const builtKeys = buildableMatches.find(m => m.cardId === card.id)?.matchedHexKeys ?? []
                       const scored = handleCardScore(card.id)
                       if (scored?.card) {
                         // THE PAYOFF. A player who scores a district currently gets an 11px line in
                         // error red; this is meant to be the one sound they want to hear again.
                         playSound('district-score')
-                        builtSeq.current += 1
-                        setBuiltDistrict({ keys: builtKeys, regionId: scored.regionId, seq: builtSeq.current })
+                        // THE SETTLE IS NO LONGER FIRED HERE · it is driven from the STORE, so a
+                        // bot's district lights up too (T1 S70). Firing in both places would be two
+                        // mechanisms for one animation, neither mutation-testable because either
+                        // alone is sufficient (Rule 118), and a double-fire for every human score.
                         setScoreFlash({ card: scored.card, regionName: REGION_NAMES[scored.regionId] })
                         addLogEntry(`scored ${scored.card.name}: +${scored.card.points}`, '#C89440')
                       }
