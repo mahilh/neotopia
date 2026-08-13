@@ -24,9 +24,14 @@
 // asserted below rather than assumed, because the entire economics rests on them.
 
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { playOnce, bots, makeReporter } from './ladderHarness'
 import { DIFFICULTIES } from '../lib/botPolicy'
 import { PROJECT_CARDS } from '../lib/projectCards'
+
+const SRC_ROOT = join(process.cwd(), 'src') + '/'
+const BOT_DECISION_FILES = ['lib/botPolicy.js', 'hooks/useBotTurns.js']
 
 const SEEDS = Number(process.env.ECON_SEEDS || 10)
 const OFFSET = Number(process.env.ECON_OFFSET || 0)
@@ -266,6 +271,45 @@ describe('card economy · the accounting closes before any of it is read', () =>
       `and classic produced turns=${c.turnsPlayed} deck=${c.deckAtEnd} · identical means the mode ` +
       'argument is being dropped and the Flow row below is the Classic row wearing a label')
       .not.toEqual([c.turnsPlayed, c.deckAtEnd])
+  })
+
+  // 7 · THE PREMISE OF THE WHOLE FILE, GUARDED · THESE BOTS DO NOT KNOW WHAT MONEY IS.
+  //     Everything measured here is "the basket when cards are FREE", and that sentence is only true
+  //     while no bot decision reads a wallet. The day a wallet-aware policy lands, every number in
+  //     docs/CARD_ECONOMY.md silently becomes a measurement of a different game · no error, no red,
+  //     and the doc goes on being quoted, which is exactly how a stale claim survives (Rule 97).
+  //
+  //     I ALMOST DID NOT WRITE THIS, and the reason is the interesting part. bonusBalance.test.js
+  //     carries the identical guard for BONUS state and I checked whether it would cover me: it
+  //     tests `/bonus/i` against these same files, so a wallet-aware bot passes it untouched. The
+  //     existing guard's scope is its subject, not its shape, and inheriting protection from a
+  //     neighbour's guard is a thing you have to CHECK rather than assume.
+  //
+  //     THE ALARM IS PRECISE AND THE REMEDY IS PROVISIONAL (Rule 98a): this says what stopped being
+  //     true and who to ask. It deliberately does NOT say "re-run the measurement", because that is
+  //     a guess about a future I cannot see · S43's guard fired correctly and then prescribed a
+  //     re-run that would have replayed bit-identical games.
+  it('PREMISE · no bot decision reads money · the basket measured here is the FREE-DRAW basket', () => {
+    //     It matches COMMENTS as well as code, deliberately: bonusBalance's guard on these same two
+    //     files does the same, and a guard that is quieter than the one beside it is the odd one out
+    //     rather than the careful one. The cost is a red on a comment that merely mentions money,
+    //     which is one human read of a message that explains itself · and any mention of money in a
+    //     bot DECISION file is worth that read. Word-bounded, not a substring (Rule 112).
+    const MONEY = /\b(wallet|afford|priceOf|CARD_PRICE|insufficient_funds)\b/i
+    for (const f of BOT_DECISION_FILES) {
+      const src = readFileSync(join(SRC_ROOT, f), 'utf8')
+      // PRESENCE ANCHOR, in the same assertion block (Rule 125b): an absence-only check passes on an
+      // empty file, a moved file or a typo'd path, and would then certify the premise forever.
+      expect(src.length, `${f} read as empty · this guard would report "no bot reads money" about a ` +
+        'file it never loaded, which is the vacuous pass Rule 125b exists to stop').toBeGreaterThan(500)
+      expect(MONEY.test(src), `${f} now reads money, so a bot's DRAW decision can depend on what it ` +
+        'can afford. Every figure in docs/CARD_ECONOMY.md is then a measurement of a game that no ' +
+        'longer exists · it says of itself that it measures the basket "when cards are free". Do not ' +
+        'assume the fix is a re-run: ask what the new policy budgets with, because a bot with a FIXED ' +
+        'draw bias that simply stops when broke is one specific and rather poor budgeting strategy, ' +
+        'and comparing it against an adaptive one is the actual open question (see ' +
+        'docs/WALLET_AND_DEMOLITION_CONTRACT.md).').toBe(false)
+    }
   })
 
   // 6 · FOUR SEATS REALLY PLAY. A four-player cell whose seats 2 and 3 never act is a two-player
