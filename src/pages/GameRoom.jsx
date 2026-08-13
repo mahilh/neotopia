@@ -23,6 +23,7 @@ import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { TURN_TIME_LIMIT, WALLET_ENABLED, priceOf } from '../store/gameConfig'
 import { formatMoney } from '../utils/formatMoney'
 import { viewingPlayer } from '../utils/viewingPlayer'
+import { drawRefusalCopy } from '../utils/drawRefusal'
 import { playSound, installSoundUnlock, isMuted, setMuted, subscribeMuted } from '../utils/sound'
 
 // READ, NEVER RETYPED (T1 S63). This file alone held THREE copies of the region names · this
@@ -298,6 +299,19 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
 
   const [refusalMessage, setRefusalMessage] = useState('')
   const refusalIdRef = useRef(0)
+  // The last refused DRAW, in words, shown under the Offer. Null is "nothing to explain" and is
+  // a different state from an empty string (utils/drawRefusal.js).
+  //
+  // ⚠ IT IS CLEARED ON THE TURN, NOT ON A TIMER, and that is the whole lifetime decision. A timer
+  // here would be the S35/S76 hazard exactly: this component re-renders once a second for the turn
+  // clock, so a setTimeout inside an effect with churning deps is cancelled by its own cleanup and
+  // never fires · silently, with nothing in the console. It killed ScoreFlash's auto-unmount in
+  // shipped code.
+  // AND THE TURN IS ALSO THE RIGHT SEMANTICS RATHER THAN THE SAFE ONE: `no_actions` stops being
+  // true at the next turn, while `insufficient_funds` is DURABLE · a wallet only ever decreases, so
+  // a broke player is still broke, and a message that faded after three seconds would be telling
+  // them something they have to re-discover by clicking again.
+  const [drawRefusal, setDrawRefusal] = useState(null)
 
   // Subscribe to individual slices · avoids a full re-render on every state change.
   const phase         = useGameStore(s => s.phase)
@@ -332,6 +346,9 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
 
   // Dual-score view (T1 S13) · the "my" column follows my seat · in solo dev mySeat is null, so fall back
   // to the active player · opponent = the other SEATED real player (absent in solo → single column · no crash).
+  // A refusal describes THIS turn. Cleared when the turn moves, never on a clock (see the state).
+  useEffect(() => { setDrawRefusal(null) }, [turnNumber, currentSeat])
+
   const myPlayer = players.find(p => p.seat === mySeat) ?? currentPlayer
   // The player whose PERSONAL state the action bar shows · wallet and held bonus tokens. Same
   // fallback as myPlayer above, extracted so the mySeat-vs-currentSeat choice is drivable: practice
@@ -560,12 +577,33 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       })
       // error is surfaced inline under The Offer (drawError) · never tear down the turn (do not crash).
       if (!error) addLogEntry(`drew ${drawn?.name ?? card.name}`)
-    } else if (handleDrawCard('offer', i).ok) {
+    } else {
       // `.ok` · handleDrawCard returns the engine's outcome since T2 S68, not a boolean. Without the
       // property this condition is an object and therefore ALWAYS truthy, and the log would claim a
       // draw on every refusal. One token, changed with the hook rather than after it, so the shared
-      // gate is never red · the refusal SURFACE (reason -> draw-status) is T1's and is untouched here.
-      addLogEntry(`drew ${card.name}`)
+      // gate is never red · the refusal SURFACE (reason -> draw-status) is T1's and lands here.
+      const r = handleDrawCard('offer', i)
+      if (r.ok) { setDrawRefusal(null); addLogEntry(`drew ${card.name}`) }
+      else {
+        // ── THE REFUSAL THE PLAYER CAN READ (T1 S69) ────────────────────────────────────────────
+        // T2 carried the enum from tryDrawCard to this caller in S68 and stopped there on purpose;
+        // I routed the same finding in S67 and said the surface was mine. This is it, and it is a
+        // DESCRIPTION of a decision the engine already made · never a second predicate (Rule 45).
+        // Everything below is read off the engine's own return value.
+        //
+        // insufficient_funds carries the NUMBERS because they are the only version a player can act
+        // on: "you cannot afford this" invites them to click again, "$50M · this costs $70M" ends
+        // the question. cost and balance come from the same object that refused.
+        const why = drawRefusalCopy(r)
+        setDrawRefusal(why)
+        playSound('refused')
+        // Same assertive announcer the refused hex-tap uses, including its NBSP alternation · a
+        // second IDENTICAL string is not a text mutation and most screen readers say nothing. The
+        // NBSP rather than a plain space is inherited and deliberate: an ordinary trailing space is
+        // collapsed before it reaches the accessibility tree, so it would not alternate at all.
+        refusalIdRef.current += 1
+        setRefusalMessage(why + (refusalIdRef.current % 2 ? '\u00A0' : ''))
+      }
     }
   }
 
@@ -747,7 +785,31 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     // `regions` is in the deps because a placement's legality depends on what is already down.
   }, [isMyTurn, phase, actionsLeft, factories, regions])
 
-  const canDraw = actionsLeft > 0 && (theOffer.length > 0 || deckCount > 0)
+  // ── A CARD EXISTING AND A CARD BEING BUYABLE ARE THE SAME QUESTION ONLY WHILE CARDS ARE FREE ────
+  // This read `theOffer.length > 0 || deckCount > 0` from S44 until S69, and under a price those
+  // come apart. T2 measured the consequence against the real engine at the SHIPPING budget ($1B
+  // against a $70M card · a 14-card wallet): three of four adversarial-but-legal policies soft-lock
+  // 12 games out of 12, and an INFINITE budget hangs 0 of 12 under every policy. A broke player
+  // facing 46 cards has no legal move, this line said they had one, so End Turn stayed disabled and
+  // they could neither act nor pass. endGameTriggered does not rescue them, because the two-round
+  // burn is driven by seats ENDING TURNS (Rule 103 · the S44 lock returning through a door the
+  // wallet opened).
+  //
+  // THE PREDICATE IS T2'S, NOT A SECOND COPY (Rule 45/94). canAcquireCard reads the same
+  // `cheapestAvailableCost` that tryDrawCard charges, so the gate and the refusal cannot disagree ·
+  // which is the whole reason I declined to re-derive affordability here in S67 and routed it.
+  // It prices only the two REACHABLE cards (Offer slot 0, deck top), because a card buried in a
+  // blind deck has no price a player could act on.
+  //
+  // WITH THE FLAG OFF THIS IS EXACTLY THE OLD QUESTION, and that is arithmetic rather than a hope:
+  // costOf returns 0 for every card, so cheapestAvailableCost is 0 whenever a reachable card exists
+  // and null when none does, and `wallet >= 0` is true for every wallet. Driven in
+  // GameRoom.softlock.test.jsx rather than argued (Rule 135b).
+  //
+  // currentSeat, not mySeat: this is a question about the seat that is ACTING. Both consumers
+  // (noLegalMove, the idle instruction) already gate on isMyTurn, where the two are the same seat.
+  const canAcquire = useGameStore(s => s.canAcquireCard(currentSeat))
+  const canDraw = actionsLeft > 0 && canAcquire
   const hasLegalMove = buildableMatches.length > 0 || canDraw || legalPlacements.total > 0
   // The escape hatch. Not "the game is over" · just "this player cannot act", which is the only
   // condition that has to unlock End Turn early. T2 is shipping real terminal-state detection in
@@ -791,7 +853,23 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     // Every string below used to be static, so each described the HAPPY path and kept describing it
     // after the board ran out. All three were unrecoverable except by an undocumented click on the
     // same factory again. They are gated on real counts now · the same counts the buttons use.
-    if (noLegalMove) return 'No legal move left · end your turn'
+    if (noLegalMove) {
+      // ── AND IT MUST SAY WHICH KIND OF STUCK (T1 S69) ──────────────────────────────────────────
+      // A player who CAN pass but is not told why is the state this line has already lied about
+      // three times. Under a price the two causes look identical from the board and are completely
+      // different to the player: an empty factory is the game moving on, an empty wallet is a
+      // decision they made eight draws ago. "No legal move left" in front of four face-up cards
+      // reads as a bug.
+      // DERIVED FROM THE TWO VALUES ALREADY ON SCREEN · a card exists, and canAcquireCard says no ·
+      // so this is a DESCRIPTION of the gate above rather than a second reading of the rules.
+      // ⚠ UNREACHABLE WITH THE FLAG OFF, by arithmetic rather than by intent: costOf is 0 for every
+      // card, so canAcquire is exactly `a reachable card exists` and `cardsExist && !canAcquire` is
+      // `x && !x`. The old string is what every player sees today, unchanged.
+      const cardsExist = theOffer.length > 0 || deckCount > 0
+      return cardsExist && !canAcquire
+        ? 'Nothing you can afford · end your turn'
+        : 'No legal move left · end your turn'
+    }
     switch (uiPhase) {
       case 'factorySelected': {
         // "the dashed hexes show where it can go" was printed even when strokeDasharray matched ZERO
@@ -1585,12 +1663,19 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
             </div>
             {/* Draw status · mid-flight hint or the RPC's own refusal message (e.g. 'deck is empty' ·
                 'not your turn') · inline + non-blocking so a failed draw never crashes the turn. */}
-            {(isDrawingCard || drawError) && (
-              <div data-testid="draw-status" style={{
+            {(isDrawingCard || drawError || drawRefusal) && (
+              <div data-testid="draw-status"
+                   data-refusal={drawRefusal ? 'local' : drawError ? 'rpc' : undefined}
+                   style={{
                 marginTop: 6, textAlign: 'center', fontSize: 11, letterSpacing: 0.3,
-                color: drawError ? 'rgba(226,75,74,0.9)' : 'rgba(255,255,255,0.4)',
+                color: (drawError || drawRefusal) ? 'rgba(226,75,74,0.9)' : 'rgba(255,255,255,0.4)',
               }}>
-                {isDrawingCard ? 'Drawing…' : drawError}
+                {/* ORDER IS A DECISION, not a formatting choice. `isDrawingCard` outranks both
+                    because it is the only TRANSIENT state · a refusal from the previous click must
+                    not sit on top of a draw that is currently in flight. The RPC's own error
+                    outranks the local one because in a real room the server is authoritative and
+                    the local path did not run (isRealRoom picks exactly one of the two). */}
+                {isDrawingCard ? 'Drawing…' : (drawError ?? drawRefusal)}
               </div>
             )}
           </div>
