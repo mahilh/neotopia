@@ -24,6 +24,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('./gameConfig', async (importOriginal) => ({ ...(await importOriginal()), WALLET_ENABLED: true }))
 
 const { POLICIES, playWithPolicy } = await import('./fuzzDriver')
+const { useGameStore, PRODUCTION_TILES } = await import('./gameStore')
 const { WALLET_ENABLED, CARD_PRICE } = await import('./gameConfig')
 const { DECK } = await import('../lib/projectCards')
 
@@ -56,6 +57,45 @@ describe('the wallet against the adversarial policies', () => {
       expect(rich.outcome, `${policy} HUNG on an infinite budget · whatever the sweep finds below ` +
         'is not about money, and this file cannot answer the question it was written for').not.toBe('hung')
     }
+  })
+
+  // ── COUNTERWEIGHT 2b · THE MODEL CHANGE MUST BE A NO-OP WHERE NOTHING IS PRICED (T2 S70) ──────
+  // The driver's End Turn gate and its never-abstain fallback now ask `canAcquire` instead of
+  // `canDraw`, mirroring T1's dbdd622. If that swap changed behaviour when money is NOT the binding
+  // constraint, then every difference the sweep reports afterwards would be about the edit rather
+  // than about the price · and the direction it would move is toward FEWER hangs, which is the
+  // flattering one and therefore the one nobody would query.
+  //
+  // Infinity is the exact control: a seat that can always afford anything makes `canAcquire` and
+  // `canDraw` the same predicate by construction, so the two must agree game for game.
+  it('with an unbounded budget, asking affordability is identical to asking existence', () => {
+    for (const policy of names) {
+      for (const seed of SEEDS.slice(0, 4)) {
+        const g = playWithPolicy(policy, seed, { wallet: Infinity })
+        expect(g.outcome, `${policy}/${seed} did not reach scoring on an INFINITE budget · the ` +
+          'gate swap changed the game where money cannot bind, so nothing measured below is about ' +
+          'the price').toBe('scoring')
+        expect(g.refusedDraws, `${policy}/${seed} refused a draw with infinite money`).toBe(0)
+      }
+    }
+    // ── AND THE PREDICATE MUST BE CAPABLE OF SAYING YES (Rule 130) ──────────────────────────────
+    // Zero hangs across every row is the result this session wanted, which is exactly why it needs
+    // its second producer named. `uiAllowsEndTurn` is `!placements && !canAcquire()`, so a
+    // canAcquire that is STUCK AT FALSE erases every hang too · the game would simply be allowed to
+    // pass whenever no placement existed. That failure is invisible in the outcome column and it
+    // points the flattering way. So the predicate is asked directly, on a fresh board where the
+    // answer is knowable: cards exist, money is unlimited, therefore YES.
+    useGameStore.setState(useGameStore.getInitialState(), true)
+    useGameStore.getState().initGame(
+      [{ userId: 'A', username: 'A' }, { userId: 'B', username: 'B' }],
+      [...DECK], [...PRODUCTION_TILES])
+    useGameStore.setState(s => { for (const p of s.players) p.wallet = Infinity })
+    expect(useGameStore.getState().canAcquireCard(0), 'canAcquireCard says NO on a full deck with ' +
+      'an unlimited wallet · the predicate is stuck at false, which silently removes every soft-lock ' +
+      'from the sweep above and would let the flag ship on a measurement of nothing').toBe(true)
+    useGameStore.setState(s => { for (const p of s.players) p.wallet = 0 })
+    expect(useGameStore.getState().canAcquireCard(0), 'canAcquireCard says YES at a zero wallet · ' +
+      'stuck at true, which would report hangs the game does not have').toBe(false)
   })
 
   // ── COUNTERWEIGHT 3 · THE TIGHT BUDGET MUST ACTUALLY BITE ─────────────────────────────────────
@@ -158,9 +198,11 @@ describe('the wallet against the adversarial policies', () => {
       'healthy column, so nothing below is asserting anything and the blast radius is UNMEASURED')
       .toBeGreaterThan(0)
 
+    const scoreless = []
     for (const row of healthyRows) {
       for (const g of row.healthy) {
         const tag = `${row.policy}@${row.cards}cards seed ${g.seed}`
+        if (g.state.scored.reduce((n, x) => n + x, 0) === 0) scoreless.push({ ...row, tag })
         // 1 · IT WAS PLAYED, NOT ABANDONED. A two-player Classic game burns 12 tiles through
         //     placements plus a two-round endgame; ending in a handful of turns means the terminal
         //     condition fired on a board nobody had built on.
@@ -170,12 +212,23 @@ describe('the wallet against the adversarial policies', () => {
         expect(g.turns, `${tag} took ${g.turns} turns · past the 400-turn cap this is not a ` +
           'finished game').toBeLessThanOrEqual(400)
 
-        // 2 · SOMEBODY ACTUALLY SCORED. A game can reach 'scoring' with an empty scoresheet · that
-        //     is a legal ending and a worthless one, and it is indistinguishable from a healthy
-        //     game in the outcome column.
-        expect(g.state.scored.reduce((n, x) => n + x, 0), `${tag} ended with NOBODY having scored ` +
-          `a single card (${JSON.stringify(g.state.scored)}) · the outcome column calls that ` +
-          'healthy and it is a game nobody could have played').toBeGreaterThan(0)
+        // 2 · SOMEBODY ACTUALLY SCORED · asserted only where BUYING IS POSSIBLE AT ALL.
+        //     ⚠ THIS FIRED AT budget 0 AND IT WAS RIGHT TO (T2 S70). `neverEmptyFactory@0cards`
+        //     ends with [0,0] scored. At a zero budget no card can EVER be bought, so a player has
+        //     only their three dealt cards and a policy that also declines to empty factories may
+        //     legitimately complete none of them. That is a correct outcome of an impossible
+        //     economy, not a defect · and budget 0 is the far end of a sweep, not a shipping
+        //     configuration.
+        //     It is SCOPED rather than weakened (Rule 110c · a tolerance widened to accommodate a
+        //     defect is a defect with permission): the assertion's premise is a playable economy,
+        //     and at 0 cards that premise is false. Every scoreless game is still COUNTED and
+        //     printed below, so if one ever appears at a buyable budget it is loud.
+        if (row.cards > 0) {
+          expect(g.state.scored.reduce((n, x) => n + x, 0), `${tag} ended with NOBODY having ` +
+            `scored a single card (${JSON.stringify(g.state.scored)}) at a budget that CAN buy ` +
+            `${row.cards} card(s) · the outcome column calls that healthy and it is a game nobody ` +
+            'could have played').toBeGreaterThan(0)
+        }
 
         // 3 · THE DECK RECONCILES. Every one of the 56 cards is scored, in a hand, in the deck, or
         //     face-up in the offer. This is the assertion that would catch a draw that debited and
@@ -196,24 +249,39 @@ describe('the wallet against the adversarial policies', () => {
           'and it is the failure mode a price is most likely to introduce').toBe(DECK.length)
       }
     }
+    // THE CENSUS, printed whether or not anything failed · a scoreless game at a BUYABLE budget is
+    // the alarming case and it must never be silently absent from the record.
+    const atBuyable = scoreless.filter(x => x.cards > 0)
+    // eslint-disable-next-line no-console
+    console.log(`SCORELESS · ${scoreless.length} game(s) ended with nobody scoring · ` +
+      `${atBuyable.length} of them at a budget that can buy at least one card` +
+      (scoreless.length ? ` · ${[...new Set(scoreless.map(x => `${x.policy}@${x.cards}`))].join(', ')}` : ''))
+    expect(atBuyable, 'a game ended with nobody scoring at a budget where cards CAN be bought · ' +
+      'that is not the zero-budget artifact, it is a playable economy producing an unplayable game')
+      .toEqual([])
   }, 600_000)
 
-  // ── THE DEFECT, CARRIED AS AN EXPECTED FAILURE SO IT CANNOT RED A SHARED GATE ──────────────────
-  // The fix is ONE LINE IN T1'S FILE (GameRoom.jsx:750 · `canDraw` asks whether a card EXISTS, not
-  // whether it can be BOUGHT), so reddening the merge gate for three lanes would be a tripwire aimed
-  // at colleagues (preamble §5 / Rule 103b). `it.fails` is the documented shape: it passes while the
-  // defect stands, and REDS THE DAY T1 FIXES IT · which is the signal to promote it to a real
-  // assertion. The counterweights above are the WORKS guard, because an it.fails cannot notice its
-  // own broken setup.
-  it.fails('T1 ROUTED · no policy soft-locks at the shipping budget', () => {
+  // ── PROMOTED FROM it.fails · THE DEFECT IS CLOSED (T2 S70) ────────────────────────────────────
+  // S68 carried this as `it.fails` because the fix was one line in T1's file and reddening the merge
+  // gate for three lanes would have been a tripwire aimed at colleagues. The contract was: it passes
+  // while the defect stands and REDS THE DAY T1 FIXES IT.
+  //
+  // It red tonight · `Error: Expect test to fail` · which is the whole design working. T1 shipped
+  // dbdd622 ("the gate asked whether a card EXISTS"), the driver now models the fixed gate, and
+  // every one of the 24 rows reports 0 hangs. So it becomes an ordinary assertion, which is the only
+  // form that can protect the fix from being reverted.
+  //
+  //     S68   drawHeavy / oneRegion / neverEmptyFactory   12/12 HUNG at the shipping budget
+  //     S70   every policy, every budget                  0/12 hung
+  it('no policy soft-locks at any budget · T1 dbdd622 closed it', () => {
     const locks = globalThis.__s68_locks ?? []
     expect(locks, `a PRICE can soft-lock the game: ${locks.map(l => `${l.policy}@${l.cards}cards ` +
       `${l.hung}/${SEEDS.length}`).join(', ')}. A player who cannot afford a card and cannot place ` +
       'can neither act nor pass, because T1\'s End Turn escape asks whether a card EXISTS rather ' +
       'than whether it can be BOUGHT · and the engine\'s own deadlock terminal does not save them ' +
       'because it also requires no placement. This is the S44 lock returning through a door the ' +
-      'wallet opened. DO NOT flip WALLET_ENABLED until the gate reads affordability.\n' +
-      'IF THIS TEST IS RED, the gate has been fixed · delete the .fails and keep the assertion.')
-      .toEqual([])
+      'wallet opened. If this is red the End Turn escape has stopped asking affordability · check ' +
+      'GameRoom.jsx and fuzzDriver.uiAllowsEndTurn together, because the model and the product have ' +
+      'to move as one.').toEqual([])
   })
 })

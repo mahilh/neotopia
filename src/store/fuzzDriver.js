@@ -9,9 +9,15 @@
 // NOTHING BELOW CHANGED IN THE MOVE. adversarialFuzz.test.js imports it and its numbers are
 // unchanged · which is asserted by that file continuing to pass, not by this sentence.
 //
-// ⚠ `canDraw` DELIBERATELY ASKS ONLY WHETHER A CARD EXISTS, NOT WHETHER IT CAN BE BOUGHT. That is
-// faithful to what it models · T1's End Turn escape reads the same question · and it is precisely
-// why walletSoftLock.test.js exists: under a price those two stop being the same question.
+// ⚠ `canDraw` ASKS WHETHER A CARD EXISTS. `canAcquire` ASKS WHETHER ONE CAN BE BOUGHT. Under a
+// price those are different questions, and WHICH ONE each consumer wants is the whole subject of
+// this file (T2 S68 measured the difference at 12/12 soft-locks; T1 fixed the product in dbdd622).
+//     uiAllowsEndTurn  -> canAcquire   models T1's FIXED escape · a broke player must be able to pass
+//     anyLegalMove     -> canAcquire   the never-abstain fallback must return a move that WORKS
+//     the POLICIES     -> canDraw      deliberately: a bot that tries and is refused is MORE
+//                                      adversarial than one that knows its own balance, and the
+//                                      real chooseBotAction reads no money state either
+//     hang evidence    -> BOTH         so a hang says which of the two it was
 
 import { useGameStore, PRODUCTION_TILES } from './gameStore'
 import { CARD_PRICE } from './gameConfig'
@@ -47,6 +53,10 @@ export function legalPlacements() {
   return opts
 }
 export const canDraw = () => store().theOffer.length > 0 || store().deck.length > 0
+/** Can the seat whose turn it is actually BUY a card · the engine's own predicate, never a copy
+ *  (Rule 45). This is the same `canAcquireCard` T1's GameRoom.jsx:812 reads, so the model and the
+ *  product cannot drift: if one is wrong they are wrong together and the browser gate catches it. */
+export const canAcquire = () => store().canAcquireCard(store().currentSeat)
 
 // ── THE UI GATE, MODELLED (this is also P2's composition test) ──────────────────────────────────────
 // T1 S44 ships: End Turn is enabled when the actions are spent OR when no legal action exists (their
@@ -59,7 +69,7 @@ export const canDraw = () => store().theOffer.length > 0 || store().deck.length 
 export function uiAllowsEndTurn(gate) {
   if (store().actionsRemaining === 0) return true
   if (gate === 'legacy') return false
-  return !legalPlacements().length && !canDraw()   // T1's escape
+  return !legalPlacements().length && !canAcquire()   // T1's escape, FIXED in dbdd622
 }
 
 // ── POLICIES · each is a legal way to play, chosen to stall the placement-driven clock ──────────────
@@ -98,7 +108,10 @@ export const POLICIES = {
 export function anyLegalMove() {
   const p = legalPlacements()
   if (p.length) return { place: p[0] }
-  return canDraw() ? { draw: true } : null
+  // canAcquire, NOT canDraw · this is the guarantee that a policy never abstains, so it must return
+  // a move the engine will ACCEPT. Returning a draw the seat cannot afford makes the fallback itself
+  // futile: the action is never spent and the harness reports a hang the game did not produce.
+  return canAcquire() ? { draw: true } : null
 }
 
 // Returns 'scoring' | 'hung' | 'capped'. A HANG is the finding: the turn cannot be ended and no action
@@ -163,7 +176,7 @@ export function playWithPolicy(policyName, seed, { gate = 't1', turnCap = 400, m
       return { outcome: 'hung', turns, refusedDraws, tilesAtTrigger, maxHand,
         // WHY the turn could not end · the whole point under a wallet, where "a card exists" and
         // "a card can be bought" stop being the same question.
-        cardsExist: canDraw(), placements: legalPlacements().length,
+        cardsExist: canDraw(), canAcquire: canAcquire(), placements: legalPlacements().length,
         broke: store().players.every(p => (p.wallet ?? 0) < CARD_PRICE), state: snapshot() }
     }
     store().endTurn()

@@ -88,6 +88,12 @@ const createInitialRegions = () => REGION_DEFS.map(r => ({
   center: { q: r.cq, r: r.cr },
   hexes: {},
   lastBuiltIllustration: null,
+  // The hexes that completed the most recent district here · [] until one is built (T2 S70).
+  // PRESENT FROM THE START rather than appearing on first score, so the serialized state SHAPE does
+  // not change mid-game · the reconnect fixture pins that shape, and a field that materialises later
+  // is a second shape nobody declared (the same reason `wallet` was added to every player in S66
+  // before the behaviour that uses it).
+  lastBuiltKeys: [],
   scores: {},
   bonusPile: createRegionBonusPile(),
 }))
@@ -606,6 +612,22 @@ export const useGameStore = create(immer((set, get) => ({
       if (!Array.isArray(p.scoredCardIds)) p.scoredCardIds = []
       p.scoredCardIds.push(cardId)
       r.lastBuiltIllustration = card.illustration
+      // ── WHICH HEXES COMPLETED IT  (T2 S70 · routed by T1 in GameRoom.botmotion.test.jsx) ────────
+      // The district-settle animation lights the hexes that satisfied the pattern. A HUMAN scoring
+      // gets them for free · GameRoom reads `buildableMatches.find(...).matchedHexKeys` at click
+      // time · and a BOT does not click, so after `scoreCard` the keys were simply gone: the store
+      // recorded THAT a card was scored and into WHICH region, never the coordinates.
+      //
+      // T1 correctly refused to re-derive them in the UI. That would put a second pattern matcher
+      // beside findBuildableCards (Rule 45) and it would be wrong in exactly the 8.5% of completions
+      // where two cards are buildable at once · a second engine that agrees most of the time is the
+      // shape this project has now paid for four times.
+      //
+      // `matches[0]` is the SAME object the validation above accepted, not a re-computation. It is
+      // the one place in the codebase where these keys already exist and are known correct.
+      // Serialisable (an array of 'q,r' strings), so it round-trips through game_sessions.state like
+      // lastBuiltIllustration beside it (Rule 22).
+      r.lastBuiltKeys = matches[0].matchedHexKeys
 
       // Bonus earn (T2 S38 · this granter had never run, because the pile was always empty).
       //
