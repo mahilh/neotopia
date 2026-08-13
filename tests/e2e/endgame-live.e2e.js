@@ -198,6 +198,62 @@ const readSessionRow = (page, roomId) => page.evaluate(async (rid) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+/**
+ * IS THE CHANNEL SUBSCRIBED · HAS THE ROW MOVED · DID THIS CLIENT FAIL TO APPLY IT · AND WERE ITS OWN
+ * WRITES REFUSED. Four readings that separate explanations needing opposite responses (T3 S41).
+ *
+ * ⚠ EXTRACTED IN S69 BECAUSE IT WAS BOLTED TO ONE GATE AND THE OTHER GATE IS WHERE THE RUN DIED.
+ * It sat inside the agree-poll catch in the action loop. The S69 live run never reached the action
+ * loop: it died in the ADOPTION gate with `seat 1 never received the armed state`, seat 0 having
+ * adopted, the row holding 1 and seat 1's store holding 12 for a full 30 seconds. Four explanations
+ * fit that · the channel never subscribed, it subscribed and the row never moved, it moved and this
+ * client did not apply it, or this client's own writes were refused · and the instrument that
+ * separates them was two hundred lines below, in the same file, written by me for exactly this
+ * question. Rule 100: a guard applied to one member of a class rots the moment the class grows, and
+ * here the class was "gates that can report a client not seeing a change", which has always had two
+ * members.
+ *
+ * SO THE S69 RUN PRODUCED AN OBSERVATION AND NOT A DIAGNOSIS, and that is the honest report of it.
+ * I am NOT re-asserting the syncFromServer defect I retracted in S65: a retraction is not
+ * self-verifying (Rule 109b) and neither is its reversal, which needs MORE evidence than the original
+ * claim, not the same amount. `useGameSync` re-seeds via REST on SUBSCRIBED, so the obvious
+ * subscribe-after-write race predicts RECOVERY and is contradicted by 30 seconds of 12 · which
+ * narrows the field and settles nothing. The next run answers it in one line instead of costing
+ * another three identities to ask again.
+ */
+async function syncDiagnostic(page, roomId) {
+  return await page.evaluate(async (rid) => {
+    const st = window.__neotopia_store?.getState?.()
+    const out = {
+      localSeat: st?.currentSeat,
+      localTurn: st?.turnNumber,
+      // The adoption gate's own subject · without it this reads as a turn-sync probe in a place
+      // where nobody has taken a turn yet.
+      localTiles: st?.productionTilesRemaining,
+    }
+    try {
+      const m = await import('/src/lib/supabase.js')
+      out.channels = m.supabase.getChannels().map(c => `${c.topic}:${c.state}`)
+      if (!out.channels.length) out.channels = 'NONE SUBSCRIBED · this client is not listening'
+      const { data, error } = await m.supabase.from('game_sessions')
+        .select('current_seat, turn_number, phase, state').eq('room_id', rid).maybeSingle()
+      out.server = error ? `READ REFUSED: ${error.message}`
+        : data ? {
+          column_seat: data.current_seat, column_turn: data.turn_number, column_phase: data.phase,
+          state_seat: data.state?.currentSeat, state_turn: data.state?.turnNumber,
+          state_tiles: data.state?.productionTilesRemaining,
+        } : `NO ROW for room_id ${rid} · UNMEASURED, not "the game is missing"`
+    } catch (e) { out.server = `UNMEASURED · ${e.message}` }
+    // AND WHAT THIS CLIENT'S OWN WRITES DID · the fourth possibility the three above do not cover:
+    // the write was neither lost nor undelivered, it was REFUSED by the state_version predicate and
+    // nothing retried it. Two clients count versions independently, so a client whose counter is
+    // behind the row has every write turned away · writeOrder.js anticipates exactly this ("B can
+    // re-sync and retry") and no retry exists yet.
+    out.writeorder = window.__neotopia_writeorder ?? 'NO SEAM (production build?)'
+    return out
+  }, roomId).catch((e) => ({ error: `the diagnostic itself failed: ${e.message}` }))
+}
+
 test.describe('a real room reaches its own ending · the composition nobody had run', () => {
 
   // ── FREE, OFFLINE · proves the seed this spec depends on is a state the engine actually reaches ────────
@@ -322,13 +378,22 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       //     S66 run 2   tiles  1  turn 17  [2,1,4]         arrived
       //     S67 run 2   tiles  1  turn 17  [2,1,4]         arrived      (S67 run 1 never got this far · it
       //                                                    was a WRONG-PROJECT run, see projectAgreement.js)
-      // 4 of 5 overall and 4 of 4 since the gate could fail. The seed is not the blocker.
+      //     S69 run 1   seat 0 arrived · SEAT 1 READ 12 FOR 30s      ASYMMETRIC · never seen before
+      // 4 of 6 fully, and every run since S65 made the gate capable of failing has had the seed reach
+      // at least one client. The seed is not the blocker · but S69 is the first run where the two
+      // clients DISAGREED, which is a different fact from "it did not arrive" and is why the adoption
+      // gate now carries the four-way diagnostic instead of a message listing two candidate causes.
       // AND THE TRIGGER HAS NOW BEEN WITNESSED LIVE FIVE TIMES · 3362f77, S64 run 2, both S66 runs and
       // S67 run 2 · every one at `tiles 0 · rounds 2 · turn 17`, the same signature CLAUDE.md records. The
       // composition it calls the honest remaining gap keeps happening; what fails is the driver after it.
       // THE REMAINING FAILURES ARE ALL IN THE ACTION LOOP AND EACH NAMES ITS OWN STAGE:
       //     S66 run 1  +40.0s  the agreement check vs the app's own auto-end (see below)
       //     S66 run 2  +28.3s  `offer-inert` · seat 0 clicked the offer and nothing happened
+      //     S69 run 1  +46.3s  the ADOPTION gate, correctly labelled `armed` · so the re-read fix for
+      //                        `play/agree` was NEVER EXERCISED and remains unwitnessed. That is the
+      //                        honest answer to the question S69 was sent to settle: not "it recovers"
+      //                        and not "it still hangs" · the run died before reaching it. `[project]
+      //                        AGREE` printed, so this was not the S67 environment defect.
       //     S67 run 2  +39.4s  the agreement check AGAIN · `play/agree`, turn 18, read "0:false" want
       //                        "1:true" while the host still saw seat 1 holding one action. TWO samples
       //                        of one failure at 40.0 and 39.4 seconds · which is what the S67 loop
@@ -364,7 +429,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // ARRIVED and a stalled driver step · both mine, both harness, and neither was visible before the
       // phase heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names
       // itself AND the gate that was supposed to catch run 1 can now fail.
-      test.fixme(true, 'the live room reaches its own ending (TRIGGER witnessed live five times, always tiles 0/rounds 2/turn 17) · the SEED ARRIVES 4 of 4 since the gate could fail · what fails is the driver action loop, and S67 narrowed it from "play" to `play/agree` twice at +40.0s and +39.4s · the re-read fix for that is in and has NOT yet been witnessed recovering · T3 S67')
+      test.fixme(true, 'the live room reaches its own ending (TRIGGER witnessed live five times, always tiles 0/rounds 2/turn 17) · S69 died in the ADOPTION gate instead: seat 0 adopted and seat 1 read 12 for 30s, the first ASYMMETRIC adoption ever seen here, so the `play/agree` re-read fix was not exercised and stays unwitnessed. The gate now carries the four-way diagnostic rather than a message naming two candidate causes · T3 S69')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -512,12 +577,31 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         // commit compares tiles by VALUE, so it would have caught run 1 at the right place with the
         // right name. The diagnosis attached to that commit was wrong; the guard in it was right.
         for (const [i, page] of [p1, p2].entries()) {
-          await expect.poll(async () => (await read(page))?.tiles, {
-            timeout: 30_000,
-            message: `seat ${i} never received the armed state over postgres_changes · the row holds ` +
-              'productionTilesRemaining 1, so this is the subscription or syncFromServer. A FRESH game ' +
-              'reads 12 here and used to satisfy this check by substring.',
-          }).toBe(1)
+          try {
+            await expect.poll(async () => (await read(page))?.tiles, { timeout: 30_000 }).toBe(1)
+          } catch {
+            // ── AND IF IT NEVER ADOPTS, SAY WHY IT COULD NOT (T3 S69) ──────────────────────────────
+            // This used to throw a MESSAGE naming two candidate causes ("this is the subscription or
+            // syncFromServer") and measure neither. The S69 run died exactly here · seat 0 adopted,
+            // seat 1 read 12 for the full 30s · and produced an observation nobody could act on,
+            // while the probe that separates the four explanations sat in the action loop below.
+            // A failure message that lists causes is not a diagnosis; it is a list of things to go
+            // and measure, printed instead of measuring them.
+            const why = await syncDiagnostic(page, roomId)
+            const peer = await syncDiagnostic(i === 0 ? p2 : p1, roomId)
+            throw new Error(
+              `seat ${i} never adopted the armed state · its store still reads ` +
+              `productionTilesRemaining ${why.localTiles}, and the seeded value is 1.\n` +
+              '  WHICH OF THE FOUR: channels empty means this client never subscribed; server.state_tiles ' +
+              'still 12 means the WRITE is the defect and not the delivery; server.state_tiles 1 with a ' +
+              'subscribed channel means this client received it and did not apply it; and a writeorder ' +
+              'carrying overtakes means its own writes were refused and nothing retried.\n' +
+              `  THIS CLIENT  ${JSON.stringify(why)}\n` +
+              `  THE PEER     ${JSON.stringify(peer)}\n` +
+              '  (the peer is here because "one client adopted and the other did not" is a different ' +
+              'finding from "neither did", and only S69 has ever seen the first.)'
+            )
+          }
         }
 
         // ── THE PREMISE, ASSERTED · this is what makes the witness below non-fakeable ──────────────────
@@ -723,29 +807,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
             // false zeroes) and looked the row up by a roomId it guessed from location.pathname, which
             // returned "no row". Both are Rule 80 inside a Rule 90 fix. The client comes from the app's own
             // module and the roomId is PASSED IN from the test, which already knows it.
-            const why = await page.evaluate(async (rid) => {
-              const st = window.__neotopia_store?.getState?.()
-              const out = { localSeat: st?.currentSeat, localTurn: st?.turnNumber }
-              try {
-                const m = await import('/src/lib/supabase.js')
-                out.channels = m.supabase.getChannels().map(c => `${c.topic}:${c.state}`)
-                if (!out.channels.length) out.channels = 'NONE SUBSCRIBED · this client is not listening'
-                const { data, error } = await m.supabase.from('game_sessions')
-                  .select('current_seat, turn_number, phase, state').eq('room_id', rid).maybeSingle()
-                out.server = error ? `READ REFUSED: ${error.message}`
-                  : data ? {
-                    column_seat: data.current_seat, column_turn: data.turn_number, column_phase: data.phase,
-                    state_seat: data.state?.currentSeat, state_turn: data.state?.turnNumber,
-                  } : `NO ROW for room_id ${rid} · UNMEASURED, not "the game is missing"`
-              } catch (e) { out.server = `UNMEASURED · ${e.message}` }
-              // AND WHAT THIS CLIENT'S OWN WRITES DID · the fourth possibility the three above do not
-              // cover: the write was neither lost nor undelivered, it was REFUSED by the state_version
-              // predicate and nothing retried it. Two clients count versions independently, so a client
-              // whose counter is behind the row has every write turned away · writeOrder.js anticipates
-              // exactly this ("B can re-sync and retry") and no retry exists yet.
-              out.writeorder = window.__neotopia_writeorder ?? 'NO SEAM (production build?)'
-              return out
-            }, roomId).catch((e) => ({ error: `the diagnostic itself failed: ${e.message}` }))
+            const why = await syncDiagnostic(page, roomId)
             const otherWO = await (bySeat[1 - g.currentSeat]?.evaluate(
               () => window.__neotopia_writeorder ?? null).catch(() => null))
             throw new Error(`seat ${g.currentSeat}'s own browser never agreed the turn was its own · read ` +
