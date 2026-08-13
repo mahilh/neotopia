@@ -2,6 +2,35 @@
 
 **T2 · S32 measurement, S33 write-up · input to a design decision, not a proposal**
 
+---
+
+> ## ⚠ SCOPE · EVERY MEASUREMENT BELOW WAS TAKEN UNDER THE PRE-S35 CLUSTER RULE (added T2 S64)
+>
+> **This document is true of the game it measured and is no longer true of the game we have.** Nothing
+> in it has been edited; it is dated instead, which is the honest repair (Rule 133c).
+>
+> Result A · *"placement quality is noise, 56%"* · was measured when the cluster bonus was
+> **board-global**: one number added identically to every player, and therefore arithmetically
+> incapable of deciding anything at all, however large it got (Rule 73 · it sat at 40 points in a real
+> finished game and moved nobody). **S35 gave hexes a `placedBy` owner and made the term per-player**,
+> and re-scored the SAME 60 games under both rules: greedy-beats-random went **46.7% → 64.3%**, control
+> 50.0%. So placement was not noise; it was a term that could not yet vary between players.
+>
+> **The document's CONCLUSION survives and its NULL does not.** Draw rate did dominate, and still does
+> · S64 measures 33% to 47% of every action in NeoTopia as a card purchase. What has changed is the
+> answer to "and is there anything else": there is, and it is placement.
+>
+> This matters because the null is the part that gets quoted. In S63 I built a closing recommendation
+> on Result A, predicted that pricing cards would flatten the difficulty ladder into a handicap
+> system, and was wrong: `docs/WALLET_PRICE_SWEEP.md` §1 measures the architect's entire card
+> advantage falling to **exactly zero** while its win rate plateaus near **75%**, on the placement
+> axis this document had measured as worthless. A null result is the finding a later fix is most
+> likely to overturn, and the one nobody re-runs.
+>
+> **The counterweight this section owes you:** none of the numbers below is retracted, and Result C's
+> ladder ordering (0.05 → 13%, 0.55 → 100%) is separately stale for an unrelated and documented
+> reason · the ladder was retuned in S50 to 0.30 / 0.30 / 0.39. See `docs/LADDER_CALIBRATION.md`.
+
 This document exists because a bot difficulty ladder failed to work, and the reason it failed turned
 out to be a fact about NeoTopia rather than a fact about the bot. It is deliberately written as
 evidence first and options last. Nothing here has been acted on.

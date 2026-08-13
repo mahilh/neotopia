@@ -291,7 +291,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (132 · cumulative · the highest rule number, and it read 125 from S57
+PERMANENT ANTI-REGRESS RULES (133 · cumulative · the highest rule number, and it read 125 from S57
 until T2 S63 while seven more were added under it · a hand-maintained count is a counter resting at
 a plausible value, which is Rule 80 in the header of the file Rule 80 lives in):
   1.  NEVER git add -A · pathspec from git status
@@ -586,6 +586,52 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 133 (T2 S64 · August 12 2026):
+A FINDING IS SCOPED TO THE RULESET IT WAS MEASURED UNDER, AND A LATER RULE CHANGE CAN INVALIDATE IT
+WITHOUT ALTERING A WORD OF IT · SO IT GOES ON READING AS TRUE, IN THE SAME FILE, FOREVER.
+I predicted in S63 that a wallet would compress the difficulty ladder into a handicap system, and
+said a flat $1B would therefore be wrong. Measured: the architect's entire CARD advantage goes to
+exactly zero (4.27 cards to 0.00) exactly as predicted, and its win rate falls only from 87.8% to a
+plateau near 75%. It does not approach 50%. The mechanism was right, the measurement OF the mechanism
+was right, and the conclusion was wrong · because I took the whole prediction from
+docs/ACTION_ECONOMY_FINDING.md, which says placement quality is noise (56%, a coin flip).
+THAT DOCUMENT IS STILL TRUE OF THE GAME IT MEASURED AND FALSE OF THE GAME WE HAVE. It was written in
+S33. In S35 cluster ownership made the cluster term PER-PLAYER, and until that landed the term was
+board-global and identical for everybody · arithmetically incapable of deciding anything (Rule 73).
+S35 measured the same comparison at 46.7% -> 64.3% on identical games. So two documents in docs/
+contradict each other, both are correct about their own world, neither is marked, and I read the
+older one and built a session's headline claim on it.
+  133a · THE TELL IS A DOCUMENT THAT EXPLAINS WHY SOMETHING DOES NOT MATTER. A null result is
+        precisely the finding a later fix is most likely to overturn, because "X does not matter" is
+        usually "X cannot matter YET" (Rule 73's shape, in the time domain), and nobody re-runs an
+        experiment that concluded nothing. A positive finding gets re-derived whenever it is used; a
+        null gets quoted.
+  133b · SO WHEN YOU SHIP A FIX THAT MAKES SOMETHING CAPABLE OF MATTERING, SEARCH FOR THE FINDINGS
+        THAT SAID IT DID NOT. S35 was mine. I wrote Rule 73 about it, in those words, and did not
+        walk back to ACTION_ECONOMY_FINDING.md to date-stamp the sentence it falsified. That is
+        Rule 128b one level up: there I recorded "X is a bad discriminator" next to the code it
+        EXPLAINED and never carried it to the code it INDICTED; here I recorded a rule and never
+        carried it to the DOCUMENT it indicted.
+  133c · THE CHEAP REPAIR IS A SCOPE LINE, NOT A REWRITE. "Measured under the pre-S35 board-global
+        cluster rule" costs one sentence and makes the contradiction visible to the next reader
+        instead of resolvable only by whoever remembers both sessions. The practice already exists
+        in this repo pointed FORWARD · docs/CARD_ECONOMY.md §7 itemises which measurements a wallet
+        will invalidate · and the same discipline aimed BACKWARD is what was missing.
+COROLLARY, and it is the better half of the finding rather than the error: the composition is a
+genuinely good result. A price removes the draw-volume axis and leaves the placement axis standing,
+which is exactly what ACTION_ECONOMY_FINDING.md went looking for in S33 and could not find. It could
+not find it because placement could not yet matter. Three sessions · S33's problem, S35's enabling
+fix, S64's measurement · compose into an answer none of them could reach alone, and the only reason
+it was visible tonight is that the sweep measured the win rate and the basket SEPARATELY. Had I
+reported only the basket gap (4.27 -> 0.00) the headline would have been "the wallet flattens the
+ladder", which is the opposite of the truth and is what my prediction expected to see.
+SECOND COROLLARY, a small instance of a rule I already had: my first pacing counterweight went RED on
+working code because it asserted a PROXY (total refusals) for the property it meant (a ration holds
+money back EARLY). A ration that refuses early draws has more money later and refuses fewer late
+ones, so its total can land either side · measured 3 against 2, the opposite of the naive
+expectation. Preamble §2 already says assert the arm's DEFINING property; the trap is that "refuses
+more often" FEELS like the definition of a stricter policy and is merely a consequence of it, usually.
 
 RULE 132 (T2 S63 · August 12 2026):
 A MUTATION CAN LAND IN THE FILE AND STILL NOT LAND IN THE MEASUREMENT · THE FIXTURE MAY ALREADY BE
