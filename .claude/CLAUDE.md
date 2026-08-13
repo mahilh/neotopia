@@ -291,7 +291,9 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (125 · cumulative):
+PERMANENT ANTI-REGRESS RULES (132 · cumulative · the highest rule number, and it read 125 from S57
+until T2 S63 while seven more were added under it · a hand-maintained count is a counter resting at
+a plausible value, which is Rule 80 in the header of the file Rule 80 lives in):
   1.  NEVER git add -A · pathspec from git status
   2.  NO em dashes · use ·
   3.  NO window.confirm() · hold-to-confirm
@@ -584,6 +586,50 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 132 (T2 S63 · August 12 2026):
+A MUTATION CAN LAND IN THE FILE AND STILL NOT LAND IN THE MEASUREMENT · THE FIXTURE MAY ALREADY BE
+SITTING ON THE VALUE YOU MUTATED TO, AND THE RESULT IS INDISTINGUISHABLE FROM A GUARD WITH NO TEETH.
+Eight mutations against the new card-economy gates. Seven reddened. M4 replaced `deckAtEnd:
+st.deck.length` with a hardcoded `0` and came back GREEN, which I was one sentence from recording as
+a hole in my own conservation assertion. The assertion was fine. The FIXTURE was a four-player game,
+and a four-player game exhausts its deck in 58-98% of games · so the real value was already 0, the
+substitution changed nothing observable, and a term the assertion explicitly names had never been
+exercised once. Rule 124's corollary says prove the mutation landed, and I did: the md5 changed. That
+is proof it landed in the SOURCE, and the source is not where a mutation is measured.
+  132a · THE TELL IS A MUTATION TO A CONSTANT, AND THE QUESTION IS WHETHER THE FIXTURE CAN EVER
+        DIFFER FROM IT. `-> 0`, `-> []`, `-> false`, `-> null` are the cheapest mutations to write and
+        the likeliest to be inert, because the values they choose are exactly the values a real
+        fixture rests at. Before believing a green mutation, print the UNMUTATED value the fixture
+        produces at that line. If it equals the mutant, the run said nothing.
+  132b · THIS IS RULE 130 AIMED AT MUTATION TESTING, which is the one instrument that was supposed to
+        be immune. 130 asks of a green result how many ways it could have been produced; a green
+        MUTATION result has exactly two, no teeth and a blind fixture, and they are opposite findings
+        with opposite fixes. Widening the gate would have been the wrong one here and it is the one
+        the green invites.
+  132c · AND THE REPAIR IS A POSITIVE CONTROL ON THE TERM, NOT A BETTER MUTATION. The conservation
+        test now runs on a two-player game AND asserts `deckAtEnd > 0` first, with a message saying
+        why: if the deck is empty the term contributes nothing and the sum is one term short of what
+        it claims. That assertion is permanent, whereas a mutation is a thing somebody did once
+        (Rule 120 · an absence needs a positive control, here applied to a SUMMAND rather than to a
+        finding).
+COROLLARY, and it cost me the session's third-largest number: A FILE CAN CONTAIN BOTH THE TRUTH AND
+THE FALSEHOOD, AND YOU WILL MEET THE FALSEHOOD FIRST, BECAUSE IT SITS AT THE POINT OF USE.
+gameStore.js:402 called `actionsRemaining` a "place/draw/score counter". Scoring has never
+decremented it · the decrement exists in placeElement and drawCard and nowhere else · and the
+deadlock proof TWO HUNDRED LINES ABOVE, in the same file, says so in terms: "scoring a card is still
+possible and costs no action". I read the wrong one because it was attached to the line I was
+changing, took a third term into my denominator, and understated the draw share of every cell by
+about seven points in a document written to price the game. Proximity is not authority. When two
+comments in one file describe the same quantity, the one next to the code is the one that got copied
+forward without being re-derived · and the cheap settlement is not to prefer either, it is to measure
+(actionsRemaining was 1 before and 1 after a successful tryScoreCard · four seconds).
+SECOND COROLLARY, the free one: AN INSTRUMENT THAT REPRODUCES A PARAMETER TABLE IT WAS NEVER SHOWN
+HAS VALIDATED ITSELF MORE STRONGLY THAN ANY ASSERTION IN IT. POLICIES sets drawBias to 0.30 / 0.30 /
+0.39; the measured baskets came back 16.90 / 17.56 / 22.76 · the two equal-bias rungs equal, the
+third larger by 1.32 against the 1.30 its policy predicts. Nothing in the harness reads drawBias.
+Look for that prediction BEFORE running a new instrument, because it is available for free, it is
+quantitative, and it fails loudly in a way a green suite cannot.
 
 RULE 131 (T2 S62 · August 12 2026):
 TWO DISCIPLINES CAN BOTH BE RIGHT AND COMPOSE INTO A DEFECT · AND NEITHER ONE'S TESTS CAN SEE IT,

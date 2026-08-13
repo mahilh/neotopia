@@ -38,6 +38,10 @@ are deliberately not creating (86).
 - Redundant guards make each other untestable. Two guards, either sufficient, no mutation can red
   either. Delete one.
 - Read the BASELINE green first (110b). A mutation that breaks compilation tests nothing.
+- A MUTATION THAT LANDED IN THE FILE MAY NOT HAVE LANDED IN THE MEASUREMENT. Mutating to a constant
+  (0, [], false, null) is inert whenever the fixture already rests there · faking deckAtEnd to 0 stayed
+  green because the 4-player fixture exhausts its deck. Print the unmutated value at that line before
+  believing a green, and repair it with a positive control on the term, not a better mutation (132).
 - Size a rate guard against its baseline, never zero. spends > 0 passed at 0.01/game.
 - A wire sized from the run that produced it is a flake with a delay. Derive from a structural
   constant, not an observed rate.
