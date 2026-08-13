@@ -117,6 +117,16 @@ are deliberately not creating (86).
 ## 4 · WHAT YOU SAY IS AN ARTIFACT
 - A stated LIMIT needs the same counterweight as a stated finding. Limitations get believed harder
   because they sound like rigour. One false limit cost three live runs, disproved in ninety seconds.
+- AND THE LIMIT YOU STATE ABOUT SOMEONE ELSE'S INSTRUMENT IS THE ONE YOU WILL NEVER RUN, because
+  running it means learning their tool and you already "know" the answer. I closed S63 saying the
+  third CI rung · a commit with no run at all · was "the state nothing in the receipt currently
+  names". It names it: `NO RUN for this commit`, on its own line, distinct from a cancelled run's
+  `DID NOT COMPLETE · "<step>"`. One command. The claim had already become the next session's brief
+  by then (108a), so a limit invented in a closing recommendation propagates faster than a finding
+  does. Before writing "X cannot do Y", run X against Y · and if the honest gap survives, it is
+  usually smaller and more specific than the one you were about to claim (here: the receipt is
+  per-commit BY DESIGN and correct to be, and what was missing was only that nobody had counted
+  across commits).
 - A retraction is not self-verifying (109b). It reads as rigour, so it gets trust the claim had to earn.
 - A CORRECT RECOMMENDATION PROTECTS A WRONG EXPLANATION FROM EVER BEING EXAMINED. Advice that works is
   never re-derived, so the mechanism bolted to it is the least-audited sentence you will ever write and
