@@ -34,6 +34,8 @@ import path from 'node:path'
 import { useGameStore } from '../store/gameStore'
 import { clearSaved } from '../hooks/useLocalSession'
 import { completableStatePatch } from './scorePendingFixture'
+import { handCardBudget, handStripWidthFor } from '../utils/handStrip'
+import { CARD_SIZES } from '../components/CardFrame'
 
 vi.mock('../lib/supabase', () => ({
   supabase: {}, GLOBAL_INDEX_BASE: 147823,
@@ -177,6 +179,35 @@ describe('the hand strip', () => {
     expect(s.getAttribute('role')).toBe('group')
     expect(s.getAttribute('aria-label'), 'the tab stop announces nothing · a group with no name is a ' +
       'stop a screen reader cannot explain').toMatch(/12/)
+  })
+
+  it('the strip\'s own gap and padding, priced at EVERY width · not just the one I measured', async () => {
+    // THE GATE S66 DID NOT HAVE. handStrip.test.js holds the curve; this binds it to the values the
+    // component actually renders, so a change to the gap or a reintroduced horizontal padding is
+    // priced at the desktop sidebar (255px) and the phone sheet (288px) in the same run instead of
+    // at whichever width the author happened to open. My 4px cost the second card at 768, 1280 AND
+    // 1440 and I measured only 320, where it is free.
+    //
+    // Rule 92a: cardW comes from CardFrame's own table and gap/padding are READ OFF THE DOM. A copy
+    // of either in this file would make the comparison agree with itself.
+    await handOf(12)
+    const s = strip()
+    const gap = parseFloat(s.style.gap)
+    expect(Number.isFinite(gap), 'the strip declares no gap · the budget cannot be priced').toBe(true)
+    // `padding: '18px 0'` · the horizontal term is the second value, and 0 is the S66 fix.
+    const padX = parseFloat(s.style.padding.trim().split(/\s+/)[1] ?? '0')
+    expect(Number.isFinite(padX), 'the strip\'s horizontal padding is unreadable').toBe(true)
+
+    const p = { cardW: CARD_SIZES.hand.width, gap, padX }
+    // MEASURED containers (Chromium, T1 S67): 288 phone sheet at 320, 255 desktop sidebar at
+    // 768/1280/1440. Two cards is Council's requirement · comparison has to survive (S65).
+    expect(handCardBudget({ containerW: 288, ...p }),
+      `at the 320 phone sheet the strip shows fewer than two cards (gap ${gap}, padX ${padX}) · ` +
+      'adjacent comparison is the requirement this strip is constrained by').toBeGreaterThanOrEqual(2)
+    expect(handCardBudget({ containerW: 255, ...p }),
+      `at the desktop sidebar the strip shows fewer than two cards (gap ${gap}, padX ${padX}) · ` +
+      `two need ${handStripWidthFor(2, p)}px and the sidebar gives 255. This is exactly the S66 ` +
+      'defect, and it is invisible at 320 where the window is 288.').toBeGreaterThanOrEqual(2)
   })
 
   it('SCOPE · the Offer is untouched · it is capped at four and was never the variable term', async () => {
