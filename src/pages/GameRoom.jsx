@@ -560,7 +560,11 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
       })
       // error is surfaced inline under The Offer (drawError) · never tear down the turn (do not crash).
       if (!error) addLogEntry(`drew ${drawn?.name ?? card.name}`)
-    } else if (handleDrawCard('offer', i)) {
+    } else if (handleDrawCard('offer', i).ok) {
+      // `.ok` · handleDrawCard returns the engine's outcome since T2 S68, not a boolean. Without the
+      // property this condition is an object and therefore ALWAYS truthy, and the log would claim a
+      // draw on every refusal. One token, changed with the hook rather than after it, so the shared
+      // gate is never red · the refusal SURFACE (reason -> draw-status) is T1's and is untouched here.
       addLogEntry(`drew ${card.name}`)
     }
   }

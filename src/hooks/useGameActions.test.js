@@ -1,6 +1,9 @@
 import { renderHook, act } from '@testing-library/react'
-import { describe, test, expect, beforeEach } from 'vitest'
-import { useGameStore } from '../store/gameStore'
+import { describe, test, it, expect, beforeEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { useGameStore, PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
+import { DECK } from '../lib/projectCards'
 import { useGameActions } from './useGameActions'
 
 // useGameStore is a module singleton shared across tests · reset the slices these
@@ -82,5 +85,151 @@ describe('useGameActions', () => {
     expect(result.current.validTargets).toEqual([])
     expect(result.current.patternHighlight).toEqual([])
     expect(result.current.buildableMatches).toEqual([])
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// handleDrawCard · THE SEAM THAT CARRIES THE REFUSAL REASON  (T2 S68)
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// This function had NO test of any kind before tonight · 86 lines in this file and every one of them
+// about the placement state machine. It is the layer that discarded `tryDrawCard`'s outcome for two
+// sessions, so a refused draw was silent before any wallet existed, and it is the last link in the
+// chain Council ordered (engine S66 -> T3's seam guard S66 -> T1's readout S67 -> this).
+describe('handleDrawCard · the engine answers and the answer survives', () => {
+  const freshGame = (n = 2) => {
+    act(() => {
+      useGameStore.setState(useGameStore.getInitialState(), true)
+      useGameStore.getState().initGame(
+        Array.from({ length: n }, (_, i) => ({ userId: `u${i}`, username: `P${i}` })),
+        shuffleArray([...DECK]), shuffleArray([...PRODUCTION_TILES]))
+    })
+  }
+
+  // ── COUNTERWEIGHT, FIRST AND ALONE (Rule 90) ────────────────────────────────────────────────────
+  // The whole claim is that the caller now receives THE ENGINE'S outcome. A hook that synthesised a
+  // plausible `{ ok: false, reason: ... }` of its own would satisfy every other assertion below and
+  // would be the same defect one layer up · a second producer of the same vocabulary (Rule 45).
+  //
+  // `no_card` is the discriminator BECAUSE THIS HOOK CONTAINS NO CODE FOR IT. There is no branch
+  // here that could invent it, so its arrival proves the value travelled from tryDrawCard rather
+  // than being manufactured in between. A reason the hook CAN produce (`not_your_turn`) would prove
+  // nothing, which is exactly why it is not the one used here.
+  it('a reason this hook cannot produce reaches the caller', () => {
+    freshGame()
+    act(() => { useGameStore.setState(s => { s.deck = [] }) })
+    const { result } = renderHook(() => useGameActions())
+    let r
+    act(() => { r = result.current.handleDrawCard('deck', 0) })
+    expect(r?.reason, 'the caller did not receive `no_card`, which is a reason NOTHING in ' +
+      'useGameActions can construct · so either the outcome is not the engine\'s or it is being ' +
+      'discarded again, and the refusal surface has no producer').toBe('no_card')
+    expect(r.ok).toBe(false)
+    // POSITIVE CONTROL · an empty deck must not also be an empty offer, or `no_card` would be
+    // reachable for a reason this test is not about.
+    expect(useGameStore.getState().theOffer.length, 'the offer is empty too, so this measured the ' +
+      'wrong emptiness').toBeGreaterThan(0)
+  })
+
+  it('a successful draw returns ok and the card actually lands in the hand', () => {
+    freshGame()
+    const before = useGameStore.getState().players[0].hand.length
+    const { result } = renderHook(() => useGameActions())
+    let r
+    act(() => { r = result.current.handleDrawCard('offer', 0) })
+    expect(r.ok).toBe(true)
+    expect(r.reason).toBe('ok')
+    expect(useGameStore.getState().players[0].hand.length, 'ok was reported without a card arriving')
+      .toBe(before + 1)
+  })
+
+  // The gate this replaced returned a bare falsy `undefined` from the hook's own pre-check. The
+  // engine answers it now and the caller learns WHY · which is the entire point of the change.
+  it('no actions left is refused BY THE ENGINE, with a reason', () => {
+    freshGame()
+    act(() => { useGameStore.setState({ actionsRemaining: 0 }) })
+    const { result } = renderHook(() => useGameActions())
+    let r
+    act(() => { r = result.current.handleDrawCard('offer', 0) })
+    expect(r.reason, 'the hook still short-circuits with an untyped falsy value · T1 has nothing to ' +
+      'render and the click is silent').toBe('no_actions')
+    expect(r.ok).toBe(false)
+  })
+
+  it('a seat that is not this client is refused by the HOOK, which is the only layer that can see it', () => {
+    freshGame()
+    act(() => { useGameStore.setState({ currentSeat: 1 }) })
+    const { result } = renderHook(() => useGameActions({ mySeat: 0 }))
+    let r
+    act(() => { r = result.current.handleDrawCard('offer', 0) })
+    expect(r.reason).toBe('not_your_turn')
+    expect(useGameStore.getState().players[1].hand.length, 'the draw went through for the other seat')
+      .toBe(3)
+  })
+
+  // ── THE EQUIVALENCE, DRIVEN RATHER THAN ARGUED (Rule 135b) ──────────────────────────────────────
+  // The old code inferred success from `actionsRemaining` moving. That is correct ONLY because this
+  // path passes `currentSeat`, so the engine's `if (s.currentSeat === seat)` decrement always
+  // applies. It is a coincidence, not a contract, and the comment in useGameActions.js says so ·
+  // this is the measurement that makes that sentence a record rather than a hope.
+  it('the retired actions-counter proxy and the engine\'s ok agree on this path', () => {
+    freshGame()
+    const { result } = renderHook(() => useGameActions())
+    for (const [source, idx] of [['offer', 0], ['offer', 0], ['deck', 0], ['offer', 0]]) {
+      const before = useGameStore.getState().actionsRemaining
+      let r
+      act(() => { r = result.current.handleDrawCard(source, idx) })
+      const committed = useGameStore.getState().actionsRemaining !== before
+      expect(committed, `old proxy said ${committed} and the engine said ${r.ok} for ${source} · the ` +
+        'two disagree, so replacing one with the other was a behaviour change and not a rewiring')
+        .toBe(r.ok)
+      if (!r.ok) break
+    }
+  })
+
+  // ── THE CROSS-FILE CONTRACT THIS CHANGE CREATED, AND IT HAS NO OWNER (Rule 115) ─────────────────
+  // Returning an object made one specific mistake SILENT: an object is always truthy, so
+  // `if (handleDrawCard(...))` without `.ok` logs "drew X" on every refusal. Every alternative shape
+  // was worse (the only falsy values in JS carry no properties, so nothing can be both falsy-on-
+  // refusal and carry a reason), which means the hazard is inherent and has to be guarded rather
+  // than designed away.
+  //
+  // ⚠ I ASSUMED THIS WAS ALREADY DEFENDED AND IT WAS NOT. My mutation run reported the `.ok`
+  // deletion as RED, so I recorded it as covered. Re-run with nothing else on the machine it is
+  // GREEN · 52 passed · and the earlier red came from a full serial suite I had left running in the
+  // background (Rule 33 / Rule 77). A mutation harness is the WORST place for a load flake, because
+  // a spurious red reads as "this has teeth" · the flattering direction · and retires the question.
+  //
+  // The behavioural half (a refused draw adds no log entry) belongs to T1: GameRoom.jsx and the
+  // action log are their lane, and it is routed in comms. This is the half that is mine, and it is
+  // the same shape as the tick-health <-> e2e.yml job-name guard: assert the RELATION across the
+  // two files, not the presence of a token (preamble §2 · a name appearing is not a name being used).
+  it('every GameRoom call site reads .ok · an object condition is always truthy', () => {
+    const src = readFileSync(join(process.cwd(), 'src/pages/GameRoom.jsx'), 'utf8')
+    const calls = [...src.matchAll(/handleDrawCard\s*\(([^)]*)\)(\s*\.\s*ok)?/g)]
+    // POSITIVE CONTROL FIRST · a renamed handler, a moved call, or a bad path yields ZERO matches,
+    // and "all zero of them read .ok" passes forever. Naming the value that would redden it is the
+    // only thing that separates a guard from decoration (preamble §3, fifth shape).
+    expect(calls.length, 'no handleDrawCard call site found in GameRoom.jsx · this guard is passing ' +
+      'vacuously. Either the handler was renamed or this path is wrong; find it before trusting the ' +
+      'assertion below').toBeGreaterThan(0)
+    const bare = calls.filter(m => !m[2]).map(m => m[0])
+    expect(bare, 'a GameRoom call to handleDrawCard does not read `.ok`. It returns the engine ' +
+      'OUTCOME OBJECT since T2 S68, and every object is truthy · so this condition is true even when ' +
+      'the draw was refused for money, and the action log announces a card the player never got. ' +
+      'Add `.ok`.').toEqual([])
+  })
+
+  it('a refused draw does not persist, and a successful one does', () => {
+    freshGame()
+    const pushed = []
+    const sync = { pushState: (t) => pushed.push(t) }
+    const { result } = renderHook(() => useGameActions({ sync }))
+    act(() => { result.current.handleDrawCard('offer', 0) })
+    expect(pushed, 'a successful draw was not synced · every other client keeps the old hand')
+      .toEqual(['draw'])
+    act(() => { useGameStore.setState({ actionsRemaining: 0 }) })
+    act(() => { result.current.handleDrawCard('offer', 0) })
+    expect(pushed, 'a REFUSED draw pushed state · the wire now carries a move that never happened')
+      .toEqual(['draw'])
   })
 })

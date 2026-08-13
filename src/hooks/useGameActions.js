@@ -154,15 +154,38 @@ export function useGameActions({ sync = null, mySeat = null } = {}) {
   }, [isMyTurn, uiPhase, selectedFactory, selectedElement, selectedRegion, validTargets, currentSeat, reset, persist])
 
   // Draw a card (The Offer at cardIndex, or the deck top) · one action. Turn-gated + synced.
+  //
+  // ── RETURNS THE ENGINE'S OUTCOME, NOT A BOOLEAN  (T2 S68 · T1 asked for this shape in comms) ────
+  // `{ ok, reason, cost, balance }` · reason ∈ ok | not_your_turn | no_actions | no_card |
+  // insufficient_funds | no_seat. tryDrawCard has returned that since S66 and TWO layers discarded
+  // it: the void `drawCard` wrapper by design, and this function by inferring success from the
+  // actions counter. So a refused draw was SILENT · no message, no reason, nothing on screen ·
+  // before any wallet existed. With `WALLET_ENABLED` true it becomes "the card did nothing and
+  // nobody said why", which is the failure the enum was built in S66 to make impossible.
+  //
+  // WHY THE ACTIONS PRE-CHECK IS GONE. `if (store.actionsRemaining <= 0) return` answered a question
+  // the engine already answers, from the same value, one line later · two guards, either sufficient,
+  // neither mutation-testable (Rule 118, the third instance in three sessions). Deleting it changes
+  // no behaviour and turns a silent falsy return into the engine's own `no_actions`.
+  //
+  // WHY THE TURN CHECK STAYS. It is NOT redundant: this calls the engine with `currentSeat`, so
+  // tryDrawCard's seat test compares currentSeat to itself and can never fire. `mySeat` is what
+  // makes this a turn gate at all, and the engine cannot see it on this path. Passing `mySeat`
+  // instead would let the engine answer · and in Flow it would also start PERMITTING the off-turn
+  // draws SIMULTANEOUS_DRAW allows, which is a game-behaviour change and does not belong in a
+  // plumbing commit.
+  //
+  // WHY NOT THE OLD `committed` PROXY. It compared actionsRemaining before and after, and it was
+  // right only by coincidence: the engine decrements ONLY when `s.currentSeat === seat`, which holds
+  // here purely because we pass `currentSeat`. The day this passes `mySeat` under Flow, a successful
+  // off-turn draw would decrement nothing and read as refused · a real draw dropped from the log and
+  // never persisted. Reading `ok` removes the coincidence. The equivalence is asserted, not argued
+  // (useGameActions.test.js · they must agree on this path today).
   const handleDrawCard = useCallback((source, cardIndex) => {
-    if (!isMyTurn) return
-    const store = useGameStore.getState()
-    if (store.actionsRemaining <= 0) return
-    const beforeActions = store.actionsRemaining
-    store.drawCard(currentSeat, source, cardIndex)
-    const committed = useGameStore.getState().actionsRemaining !== beforeActions
-    if (committed) persist('draw') // committed · sync (→ draw_card)
-    return committed // gate the action log on a real commit, not the disabled-prop (T1 S15 review)
+    if (!isMyTurn) return { ok: false, reason: 'not_your_turn', cost: 0, balance: null }
+    const r = useGameStore.getState().tryDrawCard(currentSeat, source, cardIndex)
+    if (r.ok) persist('draw') // committed · sync (→ draw_card)
+    return r
   }, [isMyTurn, currentSeat, persist])
 
   // Scoring: player clicks a glowing card in their hand.
