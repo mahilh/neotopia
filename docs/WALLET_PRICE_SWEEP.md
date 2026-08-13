@@ -73,6 +73,40 @@ an 18.7-point range. The *shape* is solid: every block at $0-40M is at or above 
 at $85M and above is at or below 82.0% and at or above 66.7%. The plateau's exact level is ±8 and
 should not be quoted more tightly than that.
 
+> **§1b · MEASURED AT DEPTH (T2 S65), because the sentence above was not enough.** A breadth sweep
+> answers "what shape does price impose"; it cannot answer "what IS the level", and the level is the
+> number a pricing decision rests on. Mahil has since ruled **flat $70M**, so that is the price worth
+> depth. 120 seeds x 4 blocks x both seatings, ~950 decided games per cell, Wilson 95% intervals.
+>
+> | matchup | unpriced | **at $70M** | change |
+> |---|---|---|---|
+> | architect vs apprentice | 85.8% [83.4, 87.8] | **79.4% [76.7, 81.8]** | −6.4 |
+> | architect vs builder | 70.6% [67.6, 73.4] | **60.0% [56.8, 63.1]** | −10.6 |
+> | builder vs apprentice | 66.7% [63.7, 69.7] | **68.8% [65.7, 71.6]** | +2.1 |
+>
+> **The ladder survives $70M intact** · 79.4 / 60.0 / 68.8, every rung ordered, none near 50%.
+>
+> **And the compression is mechanistic rather than statistical, which is the part worth keeping.**
+> `POLICIES` gives apprentice and builder the SAME drawBias (0.30) and architect a higher one (0.39).
+> A price on draws can therefore only touch pairs that differ in draw appetite · and that is exactly
+> what happened. The two matchups involving architect compress by 6.4 and 10.6 points with
+> non-overlapping intervals; the one pair with identical drawBias moves +2.1 with intervals that
+> overlap, i.e. not at all. The instrument reproduced the parameter table it was never shown, for the
+> second time (S63 predicted the basket ratio at 1.30 and measured 1.32).
+>
+> Architect vs builder compresses MOST (−10.6), which follows: those two share `placement: affinity`,
+> so draw appetite is a larger share of architect's total edge against builder than against
+> apprentice, and removing it costs proportionally more.
+>
+> **The breadth sweep was imprecise, not wrong.** Its $70M reading of 77.4% sits inside the depth
+> interval [76.7, 81.8]. What was wrong was quoting a one-decimal mean off a 25-seed block and
+> calling the plateau "near 75%".
+>
+> Reproduce: `DEPTH_SEEDS=120 DEPTH_BLOCKS=4 npx vitest run src/store/walletPriceSweep.test.js -t "depth at the shipping price"`.
+> The precision gate ( intervals must beat the breadth sweep's own 18.7-point spread ) **skips**
+> below 100 seeds via `ctx.skip()` rather than failing, so the CI default exercises the code path
+> without reddening a shared gate or making a claim its sample cannot support.
+
 ### The prediction scorecard
 
 | # | prediction (written before the run) | outcome |

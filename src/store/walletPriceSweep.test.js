@@ -58,6 +58,41 @@ const pctile = (a, p) => {
 /** price 0 means NO wallet at all · the unpriced control, not a wallet with a free price. */
 const walletFor = (price, pacing) => (price === 0 ? null : { price, budget: WALLET, pacing })
 
+// ── DEPTH (T2 S65) · answering S64's own closing critique, at the price Mahil has since ruled ────
+const DEPTH_SEEDS = Number(process.env.DEPTH_SEEDS || 12)
+const DEPTH_BLOCKS = Number(process.env.DEPTH_BLOCKS || 2)
+
+/** A duel over an EXPLICIT seed list, returning raw counts so intervals can be computed from n. */
+function duelOn(seedList, levelA, levelB, price) {
+  let winsA = 0, winsB = 0
+  for (const seed of seedList) {
+    for (const swap of [false, true]) {
+      const aSeat = swap ? 1 : 0, bSeat = 1 - aSeat
+      const g = playOnce(bots(swap ? levelB : levelA, swap ? levelA : levelB), seed, undefined,
+        { wallet: walletFor(price, 'naive') })
+      const A = g.seats[aSeat], B = g.seats[bSeat]
+      const sA = A.base + 3 * A.earned, sB = B.base + 3 * B.earned
+      if (sA > sB) winsA++; else if (sB > sA) winsB++
+    }
+  }
+  return { winsA, winsB, decided: winsA + winsB }
+}
+
+/**
+ * Wilson score interval · the right one for a proportion, and not the textbook normal approximation.
+ * This ladder produces rates near 90%, where the normal approximation's interval runs past 100% and
+ * quietly reports an impossible bound as though it were a measurement (Rule 80's shape in a
+ * statistic). Wilson stays inside [0,1] by construction and does not need a large-n excuse.
+ */
+function wilson(wins, n, z = 1.96) {
+  if (!n) return [0, 1]
+  const p = wins / n, z2 = z * z
+  const denom = 1 + z2 / n
+  const centre = (p + z2 / (2 * n)) / denom
+  const halfWidth = (z * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n))) / denom
+  return [Math.max(0, centre - halfWidth), Math.min(1, centre + halfWidth)]
+}
+
 /**
  * One matchup at one price, played both ways round on every seed so seat order cancels exactly
  * (the same device ladderRow uses, and an S48 mutation proved it carries).
@@ -228,4 +263,74 @@ describe(`the price curve · ${SEEDS} seeds x ${PRICES.length} prices (offset ${
     }
     expect(out.length).toBeGreaterThan(0)
   }, 900_000)
+})
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// DEPTH AT THE SHIPPING PRICE  (T2 S65 · answering my own S64 closing critique)
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// S64 reported the plateau as "near 75%" from three 25-seed blocks spanning 18.7 points
+// (170M: 69.4 / 85.4 / 66.7). I flagged the spread and then quoted a one-decimal mean off it anyway.
+// A breadth sweep answers "what SHAPE does price impose"; it cannot answer "what IS the level", and
+// the level is the number a pricing decision rests on.
+//
+// Mahil has now ruled FLAT $70M, so that is the one price worth depth · it is what the game will
+// ship with and nobody has measured it at n.
+//
+// THE OUTPUT IS A RANGE, NOT A MEAN, and that is the whole point of the exercise. A pooled rate with
+// a Wilson interval, plus the per-block spread, because those two disagree in an informative way:
+// the interval says how precise the estimate is IF the blocks are samples of one thing, and the
+// block spread says whether they are.
+describe(`depth at the shipping price · ${DEPTH_SEEDS} seeds x ${DEPTH_BLOCKS} blocks`, () => {
+  it('measures the ladder at $70M and at the unpriced control, as intervals', (ctx) => {
+    const out = { priceM: 70, seedsPerBlock: DEPTH_SEEDS, blocks: DEPTH_BLOCKS, rows: [] }
+    for (const [a, b] of [['architect', 'apprentice'], ['architect', 'builder'], ['builder', 'apprentice']]) {
+      for (const price of [0, 70 * M]) {
+        const blocks = []
+        for (let blk = 0; blk < DEPTH_BLOCKS; blk++) {
+          const seedList = Array.from({ length: DEPTH_SEEDS }, (_, i) => 9000 + blk * 977 + i * 31)
+          blocks.push(duelOn(seedList, a, b, price))
+        }
+        const wins = sum(blocks.map(x => x.winsA))
+        const games = sum(blocks.map(x => x.decided))
+        out.rows.push({
+          matchup: `${a} vs ${b}`, priceM: price / M,
+          pooledPct: round(100 * wins / games, 1), games,
+          ci95: wilson(wins, games).map(x => round(100 * x, 1)),
+          blockPcts: blocks.map(x => round(100 * x.winsA / x.decided, 1)),
+        })
+      }
+    }
+    report(`S65_depth_${DEPTH_SEEDS}x${DEPTH_BLOCKS}`, out)
+    for (const r of out.rows) {
+      // eslint-disable-next-line no-console
+      console.log(`DEPTH ${r.matchup.padEnd(24)} $${String(r.priceM).padStart(3)}M  ` +
+        `${String(r.pooledPct).padStart(5)}%  95% CI [${r.ci95[0]}, ${r.ci95[1]}]  ` +
+        `n=${r.games}  blocks ${r.blockPcts.join(' ')}`)
+    }
+    // ── THE PRECISION GATE, AND WHY IT SKIPS AT THE DEFAULT ────────────────────────────────────
+    // The assertion is that the intervals are narrow enough to be worth quoting: a depth run whose
+    // interval is as wide as the breadth sweep's own spread has bought nothing but a longer wait.
+    //
+    // At the CI default (12 x 2 = 48 decided games) it is 20.9 points wide and the gate would go
+    // RED on entirely working code · so the file would red the merge gate for all three lanes,
+    // which I have now done twice and will not do again. The measurement still RUNS at the default,
+    // deliberately, so the code path cannot rot unexercised (Rule 79); only the precision CLAIM
+    // waits for the sample that can support it.
+    //
+    // ctx.skip() and not a bare `return`: vitest does not surface console output for a passing test,
+    // so a silent early return is indistinguishable from an assertion that ran (Rule 128a · a skip
+    // announced through a channel the runner swallows is a pass). This prints `1 skipped`.
+    const DEPTH_ENOUGH = 100
+    if (DEPTH_SEEDS < DEPTH_ENOUGH) {
+      ctx.skip(`precision gate needs DEPTH_SEEDS >= ${DEPTH_ENOUGH} (have ${DEPTH_SEEDS}); the ` +
+        'numbers above are reported, not certified')
+      return
+    }
+    for (const r of out.rows) {
+      const width = round(r.ci95[1] - r.ci95[0], 1)
+      expect(width, `${r.matchup} at $${r.priceM}M has a 95% interval ${width} points wide · that is ` +
+        'no better than the 25-seed breadth sweep it was meant to replace, so raise DEPTH_SEEDS ' +
+        'rather than quoting the midpoint').toBeLessThan(18.7)
+    }
+  }, 1_800_000)
 })
