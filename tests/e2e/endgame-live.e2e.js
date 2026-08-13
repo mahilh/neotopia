@@ -313,6 +313,29 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // alarm and its remedy age differently, so state what is MEASURED and let the remedy stay open).
       // The old message said "the driver is not yet reliably green", which was one session's impression
       // and turns out to name at most one of the two things that happen. Lifted and run twice tonight:
+      // ── T3 S66 · THE QUESTION IS ANSWERED: THE SEED ARRIVES ────────────────────────────────────
+      // S65 fixed the adoption gate so it can fail. Two runs since, plus the value-based at-play-start
+      // reading from S64, give FOUR observations of the seed by VALUE rather than by substring:
+      //     S64 run 1   tiles 12  a FRESH board            DID NOT ARRIVE
+      //     S64 run 2   tiles  1  turn 17  [2,1,4]         arrived
+      //     S66 run 1   tiles  1  turn 17  [2,1,4]         arrived · first run with an honest gate
+      //     S66 run 2   tiles  1  turn 17  [2,1,4]         arrived
+      // 3 of 4 overall and 3 of 3 since the gate could fail. The seed is not the blocker.
+      // AND THE TRIGGER HAS NOW BEEN WITNESSED LIVE FOUR TIMES · 3362f77, S64 run 2, and both S66 runs
+      // · every one at `tiles 0 · rounds 2 · turn 17`, the same signature CLAUDE.md records. The
+      // composition it calls the honest remaining gap keeps happening; what fails is the driver after it.
+      // THE REMAINING FAILURES ARE ALL IN THE ACTION LOOP AND EACH NAMES ITS OWN STAGE:
+      //     S66 run 1  +40.0s  the agreement check vs the app's own auto-end (see below)
+      //     S66 run 2  +28.3s  `offer-inert` · seat 0 clicked the offer and nothing happened
+      // ⚠ THE AGREEMENT CHECK IS RACING A REAL PRODUCT FEATURE, read from source rather than guessed:
+      // GameRoom.jsx:622 `canAutoEnd = phase==='playing' && isMyTurn && actionsLeft===0 && uiPhase==='idle'
+      // && buildableMatches.length===0 && !scoreFlash && bonusTokens.length===0`, then a timer. So a seat
+      // that spends its last action has its turn ENDED BY THE APP. The harness captures `g.currentSeat`,
+      // then polls that seat's browser to agree for 20s · comparing a STALE expectation against a live
+      // client that has legitimately moved on. Run 1 read "0:false" while the host's snapshot still said
+      // seat 1, which is exactly that. Stated as a measured hypothesis, not fixed: ONE sample, and a
+      // harness fix built on one sample is how this spec acquired its last wrong diagnosis.
+      //
       //   run 1  THE SEED NEVER ARRIVED · the store read tiles 12 on a fresh board before a single
       //          click, and died at `factory-inert` +22.2s. NOT the driver.
       //          ⚠ I FIRST WROTE THIS AS "both clients adopted tiles:1 and then LOST it" and reasoned
@@ -330,7 +353,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // ARRIVED and a stalled driver step · both mine, both harness, and neither was visible before the
       // phase heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names
       // itself AND the gate that was supposed to catch run 1 can now fail.
-      test.fixme(true, 'the live room reaches its own ending (trigger witnessed live, tiles 0/rounds 2/turn 17) · 0 of 2 runs green: one seed that never arrived (the adoption gate could not fail · fixed S65), one stalled seat')
+      test.fixme(true, 'the live room reaches its own ending (trigger witnessed live, tiles 0/rounds 2/turn 17) · the SEED ARRIVES (3 of 3 since the gate could fail) and the TRIGGER fires live · what fails now is the driver action loop, and each failure names its own stage · T3 S66')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -531,6 +554,14 @@ test.describe('a real room reaches its own ending · the composition nobody had 
             'them writes, so a fresh-game snapshot overwrote the seed. Do NOT read this as a driver ' +
             'defect · the driver has not run yet.').toBe(1)
         }
+
+        // ⚠ THIS MARKER WAS LOST IN THE S64 PORT AND THE INSTRUMENT MISLABELLED ITS OWN FINDING
+        // (T3 S66). S66's run died inside the play loop and the catch reported `DIED IN PHASE
+        // "armed · the seeded state is on the wire"`, which sends the reader to the seeding code.
+        // A phase label that is WRONG is worse than one that is absent: absent makes you look, wrong
+        // makes you look somewhere else. Four markers were written in S64 and only three survived the
+        // port into this file · nothing could notice, because a heartbeat has no assertion.
+        at('play · driving the ending with real clicks')
         for (const who of ['host', 'joiner']) {
           expect(seats[who].seat, `${who} could not resolve its own seat from the synced roster · mySeat ` +
             'would be null in the app too, and every turn gate silently stops applying').not.toBeNull()
