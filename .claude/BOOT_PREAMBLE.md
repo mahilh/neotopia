@@ -56,6 +56,16 @@ are deliberately not creating (86).
 - A wire sized from the run that produced it is a flake with a delay. Derive from a structural
   constant, not an observed rate.
 - A gate that asserts every file has a name does not assert every name has a caller.
+- AN ASSERTION THAT A NAME APPEARS IS NOT AN ASSERTION THAT IT IS USED, AND A COUNT IS NOT AN
+  IDENTITY. Two lanes shipped this in one session from opposite ends. My wallet seam was satisfied by
+  `\bwallet\b` anywhere in the terminal body · a log line or a destructure would have passed the
+  biconditional the whole feature rests on. T1's Diverse City gate was `badges().length < before`, so
+  ANOTHER card's badge disappearing satisfied it, and deleting the rule left it green under mutation.
+  Both are the substring class one level up: the check fires on the APPEARANCE of the subject rather
+  than on the subject, and both read as rigour because a name and a tally are concrete. The repair is
+  the same shape in each · assert the RELATION, never the presence or the total (compared against a
+  price; THIS named card's badge absent). The tell is a gate whose subject is a token or a number
+  when the claim is about a thing.
 - ENUMERATE THE MUTATIONS BEFORE WRITING THE MESSAGES. A failure message is the most-read line in a
   test and the only one that can never go red, so it is where claimed scope silently exceeds real
   scope. Mine named the Rule 107 latch class; the mutation for that class came back GREEN, and I
