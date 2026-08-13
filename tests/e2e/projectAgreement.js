@@ -83,17 +83,51 @@ export function compareProjects(nodeUrl, browserHosts) {
  * one identity instead of two plus a five-minute run plus a wrong diagnosis (Rule 93's corollary · prove
  * the isolated thing works BEFORE you pay for a measurement inside it).
  *
- * @returns {Promise<'AGREE'|'MISMATCH'|'UNMEASURED'>} · MISMATCH never returns, it throws
+ * ⚠ AND IT REQUIRES A **MEASURED** VERDICT, NOT MERELY THE ABSENCE OF A MISMATCH (T3 S69).
+ * S67 shipped this printing `[project] AGREE` and asserting nothing. I wrote the log line specifically
+ * to expose the state where the guard is present and inert · and then exposed it to a human reading a
+ * log rather than to an assertion, which is the same defect one level up. One observation of AGREE is
+ * not evidence that UNMEASURED cannot happen: it arises whenever the test process has no
+ * VITE_SUPABASE_URL, or the page has issued no request yet on a slow boot, and in BOTH of those states
+ * a wrong-project run proceeds exactly as it did before this file existed.
+ *
+ * `require` defaults TRUE and the opt-out takes a REASON, so switching it off is a decision somebody
+ * wrote down rather than a default nobody chose.
+ *
+ * DENOMINATOR, because a finding needs one (Rule 121) and because I overstated this in S67: the only
+ * runtime callers of runTwoHumanLobby are endgame-live (in NO workflow) and host-departure-live (the
+ * nightly). I published "imported by 15 specs" · that number is in lobby.js's header, it belongs to
+ * `seedHelpers` before the S47 split, and I attached a true number to the wrong subject (Rule 97b).
+ * lobby.js is imported by TWO. So this guard protects one nightly spec and every local live run I
+ * make, which is where it actually fired.
+ *
+ * @returns {Promise<'AGREE'|'MISMATCH'|'UNMEASURED'>} · MISMATCH and (by default) UNMEASURED throw
  */
-export async function assertProjectAgreement(page, { context = '' } = {}) {
+export async function assertProjectAgreement(page, { context = '', require = true, why = '' } = {}) {
+  const where = context ? ` (${context})` : ''
   const r = compareProjects(process.env.VITE_SUPABASE_URL, await readBrowserProjectHosts(page))
   if (r.verdict === 'MISMATCH') {
     throw new Error(
-      `PRECONDITION${context ? ` (${context})` : ''}: WRONG PROJECT · not a feature regression, not an ` +
+      `PRECONDITION${where}: WRONG PROJECT · not a feature regression, not an ` +
       `outage, and not a sync defect.\n  ${r.why}\n` +
       'This cost a live run and two identities in S67, and it reported itself as "the seeded state ' +
       'never arrived over postgres_changes".'
     )
+  }
+  if (r.verdict === 'UNMEASURED' && require) {
+    throw new Error(
+      `PRECONDITION${where}: THE PROJECT GUARD COULD NOT MEASURE · so it is present and inert, and a ` +
+      'wrong-project run from here on is indistinguishable from a correct one.\n' +
+      `  ${r.why}\n` +
+      '  node side    ' + (r.nodeHost ?? 'ABSENT · run through the env guard (`npm run test:e2e --`)') + '\n' +
+      '  browser side ' + (r.browserHosts.length ? r.browserHosts.join(', ')
+        : 'NO *.supabase.co request observed yet · call this after the first sign-in, not before') + '\n' +
+      'If a caller genuinely cannot measure, pass { require: false, why: "<reason>" } · which is a ' +
+      'decision somebody wrote down rather than a silent default.'
+    )
+  }
+  if (r.verdict === 'UNMEASURED' && !require) {
+    console.log(`[project] UNMEASURED · REQUIREMENT WAIVED${where} · ${why || 'no reason given'}`)
   }
   return r.verdict
 }

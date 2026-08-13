@@ -125,6 +125,23 @@ are deliberately not creating (86).
   control that could not fail. Same OUTCOME every time, five mechanisms. A known-present control
   covers the first three; nothing but running the probe from a file covers the fourth; and only
   naming the value that would redden it covers the fifth.
+- A QUANTITY YOU COLLECT IS NOT A QUANTITY YOU ASSERT, AND A VERDICT ABOUT AN ABSENT SUBJECT IS NOT
+  A VERDICT. Four instruments, two sessions, all three lanes, one outcome · a green run that says
+  nothing. Verified against each artifact rather than taken from a summary:
+      T3  `[project] AGREE` was PRINTED and never required. I added that log line specifically to
+          expose the guard being present and inert, then addressed it to a human reading a log.
+      T2  `tickVerdicts` counted a SKIPPED job as a verdict · a run whose only job skips still
+          reports `success` at the run level (scripts/tick-health.cjs).
+      T2  hung/scoring/capped collected into rows and asserted nowhere · found and CLOSED by them
+          in the same file, with a positive control first (walletSoftLock.test.js:134).
+      T1  a control whose two branches were the same value, because practice runs `mySeat` null so
+          `myPlayer` falls back to `currentPlayer` (GameRoom.wallet.test.jsx:131).
+  TWO SUB-SHAPES, and they are found by different questions. OBSERVED-BUT-UNASSERTED is found by
+  grepping your own output for a value no `expect` reads · if you printed it, you cared, so say why
+  in an assertion. SUBJECT-ABSENT is found by asking what input would make the two branches DIFFER,
+  and if you cannot name one, the branch never ran. The reason this is worth a line rather than a
+  rule: all four were written by the person who then read the green, and every one of them read as
+  rigour · a printed verdict, a tally, a column of results, a control.
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
 - A BOUND IS A CLAIM ABOUT A NOISE FLOOR, AND ONE SAMPLE OF THE FLOOR IS NOT A MEASUREMENT OF IT.

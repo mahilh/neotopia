@@ -43,9 +43,11 @@ export async function runTwoHumanLobby(p1, p2, { expect, hostName, joinerName, b
   // AND HERE rather than a line later, because p2's context has not navigated yet · a mismatch caught
   // now costs ONE identity, and the run it replaces cost two plus a five-minute driver failure that
   // read as a multiplayer sync defect. UNMEASURED never throws, so this cannot red anybody's gate.
-  // The VERDICT is printed, not just the throw. AGREE and UNMEASURED are different facts and only one of
-  // them is protection: UNMEASURED means the traffic read found nothing and this guard is present but
-  // inert, which is precisely the state a green run cannot distinguish from a working one (Rule 79d).
+  // ⚠ THE VERDICT IS NOW REQUIRED, NOT PRINTED (T3 S69). S67 shipped this logging `[project] AGREE` and
+  // asserting nothing, with a comment saying "AGREE and UNMEASURED are different facts and only one of
+  // them is protection". That was true and it was addressed to a human reading a log · so the state the
+  // line existed to expose could occur on every run and nothing would fail. It throws on UNMEASURED now,
+  // naming which half was missing; a caller that genuinely cannot measure passes { require: false, why }.
   console.log(`[project] ${await assertProjectAgreement(p1, { context: 'runTwoHumanLobby · host signed in' })}`)
 
   // MODE MUST BE CHOSEN BEFORE Create Room, not after (T3 S54). Create Room reads the CURRENT gameMode

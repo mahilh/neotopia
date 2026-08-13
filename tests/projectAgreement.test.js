@@ -13,8 +13,8 @@
 // aimed at the product. The resolution is that only two PRESENT, DISAGREEING hosts throw. Neither
 // absence can produce the defect, because it needs the node side pointed at a WRONG host, not no host.
 
-import { describe, test, expect } from 'vitest'
-import { compareProjects } from './e2e/projectAgreement.js'
+import { describe, test, expect, afterEach } from 'vitest'
+import { compareProjects, assertProjectAgreement } from './e2e/projectAgreement.js'
 
 const REAL = 'https://wynccumuisjxbptjlfwq.supabase.co'   // NeoTopia
 const DEAD = 'https://gsogycwtllthrenqaxlh.supabase.co'   // the shell's inherited AetherMind project
@@ -82,5 +82,70 @@ describe('the node side and the browser side must be on one project (Rule 93 · 
     // anything. A null surviving into the list would make `[null]` look like measured traffic and turn
     // an UNMEASURED into a MISMATCH · a false positive on a shared gate.
     expect(compareProjects(REAL, [null, undefined]).verdict).toBe('UNMEASURED')
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// A GUARD, NOT A NOTE ABOUT A GUARD (T3 S69) · my own S67 critique, made checkable
+//
+// S67 shipped this printing `[project] AGREE` and asserting nothing. I added that log line SPECIFICALLY
+// to expose the state where the guard is present and inert · and then routed it to a human reading a
+// log rather than to an assertion, which is the same defect one level up. I had exactly ONE observation
+// of AGREE, and one observation is not evidence that UNMEASURED cannot happen: it arises whenever the
+// test process has no VITE_SUPABASE_URL, or the page has issued no request yet on a slow boot, and in
+// BOTH of those states a wrong-project run proceeds exactly as it did before the file existed.
+//
+// The page is a stub because `assertProjectAgreement` uses exactly one page capability · `evaluate` ·
+// and a real browser would add nothing but time to a decision that is already pure below it.
+const stubPage = (hosts) => ({ evaluate: async () => hosts })
+const REAL_HOST = ['wynccumuisjxbptjlfwq.supabase.co']
+
+describe('the requirement · UNMEASURED must not pass silently (T3 S69)', () => {
+  const saved = process.env.VITE_SUPABASE_URL
+  afterEach(() => {
+    if (saved === undefined) delete process.env.VITE_SUPABASE_URL
+    else process.env.VITE_SUPABASE_URL = saved
+  })
+
+  test('COUNTERWEIGHT · it THROWS when it cannot measure · otherwise this whole change is decoration', async () => {
+    process.env.VITE_SUPABASE_URL = REAL
+    await expect(assertProjectAgreement(stubPage([]), { context: 'self-test' }),
+      'a page that has talked to nothing let the run continue · which is the exact state the S67 log ' +
+      'line was added to expose, and it was exposed to nobody').rejects.toThrow(/COULD NOT MEASURE/)
+  })
+
+  test('COUNTERWEIGHT · and it names WHICH half was missing, both ways round', async () => {
+    // "It could not measure" with no side named sends the reader to check both, and the two fixes are
+    // in different places · one is how you invoked the runner, the other is where you called it from.
+    process.env.VITE_SUPABASE_URL = REAL
+    await expect(assertProjectAgreement(stubPage([]), {})).rejects.toThrow(/NO \*\.supabase\.co request/)
+    delete process.env.VITE_SUPABASE_URL
+    await expect(assertProjectAgreement(stubPage(REAL_HOST), {})).rejects.toThrow(/npm run test:e2e/)
+  })
+
+  test('a MEASURED agreement passes and returns its verdict', async () => {
+    process.env.VITE_SUPABASE_URL = REAL
+    await expect(assertProjectAgreement(stubPage(REAL_HOST), {})).resolves.toBe('AGREE')
+  })
+
+  test('a MISMATCH still throws, and it outranks the requirement', async () => {
+    process.env.VITE_SUPABASE_URL = DEAD
+    await expect(assertProjectAgreement(stubPage(REAL_HOST), { require: false }),
+      'the waiver silenced a real mismatch · `require` is about what to do when the guard is BLIND, ' +
+      'never about whether a measured disagreement matters').rejects.toThrow(/WRONG PROJECT/)
+  })
+
+  test('the waiver is possible, and it ANNOUNCES itself', async () => {
+    process.env.VITE_SUPABASE_URL = REAL
+    const lines = []
+    const real = console.log
+    console.log = (...a) => lines.push(a.join(' '))
+    try {
+      await expect(assertProjectAgreement(stubPage([]), { require: false, why: 'offline spec' }))
+        .resolves.toBe('UNMEASURED')
+    } finally { console.log = real }
+    expect(lines.join('\n'), 'a waived requirement that prints nothing is indistinguishable from a ' +
+      'requirement that held · which is the S67 defect, re-entering through the opt-out')
+      .toMatch(/REQUIREMENT WAIVED[\s\S]*offline spec/)
   })
 })
