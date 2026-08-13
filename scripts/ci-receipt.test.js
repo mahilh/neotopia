@@ -183,14 +183,31 @@ describe('ci-receipt · the conditional-step parser, against the real workflows'
     // import.meta.url is an http:// URL and readFileSync throws "The URL must be of scheme file".
     // The same convention every other fs-reading test in this repo uses, for the same reason.
     const text = readFileSync(join(process.cwd(), '.github', 'workflows', 'e2e.yml'), 'utf8')
-    const rawIfLines = text.split('\n').filter(l => /^\s+if:/.test(l)).length
+    const lines = text.split('\n')
+    // ⚠ THIS COUNTED EVERY INDENTED `if:` UNTIL T2 S65, AND THAT PREMISE EXPIRED THE DAY A JOB
+    // GAINED ONE. e2e.yml's tip-tick guard adds `if: needs.needed.outputs.run == 'true'` at JOB
+    // level (four spaces), which is not a step conditional and must not be parsed as one · the
+    // parser was right and the guard was asserting a fact about the file rather than about the
+    // parser. Measured across every workflow in the repo: 13 `if:` at eight spaces, 1 at four.
+    // Rule 133 in miniature · a correct assertion scoped to a file as it happened to be.
+    const stepIfLines = lines.filter(l => /^ {8}if:/.test(l)).length
+    const jobIfLines = lines.filter(l => /^ {4}if:/.test(l)).length
     const found = conditionalStepNames('e2e.yml')
-    expect(rawIfLines, 'e2e.yml has no `if:` step at all · this test is asserting nothing, and the ' +
+    expect(stepIfLines, 'e2e.yml has no `if:` STEP at all · this test is asserting nothing, and the ' +
       'exclusion it protects is unexercised').toBeGreaterThan(0)
-    expect(found.size, `parsed ${found.size} conditional steps from e2e.yml against ${rawIfLines} ` +
-      'raw `if:` lines · the parser is missing steps, so they will be reported as NEVER RAN on ' +
-      'every cancelled run and the reader will be read as noise').toBe(rawIfLines)
+    expect(found.size, `parsed ${found.size} conditional steps from e2e.yml against ${stepIfLines} ` +
+      'step-level `if:` lines · the parser is missing steps, so they will be reported as NEVER RAN ' +
+      'on every cancelled run and the reader will be read as noise').toBe(stepIfLines)
     expect([...found].some(n => /failure/i.test(n))).toBe(true)
+
+    // AND THE NEW HALF: a job-level `if:` must not leak into the conditional-STEP set. If it did,
+    // the receipt would silently stop counting one real step as gradeable · a green step list that
+    // is one step short and says nothing about it.
+    expect(jobIfLines, 'no job-level `if:` in e2e.yml · the tip-tick guard has been removed, so the ' +
+      'exclusion asserted below is unexercised and this file should say so rather than pass')
+      .toBeGreaterThan(0)
+    expect([...found].some(n => /needs\.needed|tip/i.test(n)),
+      'a job-level condition was parsed as a conditional STEP').toBe(false)
   })
 
   it('a workflow file that does not exist yields an empty set, not a throw', () => {

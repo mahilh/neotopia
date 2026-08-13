@@ -19,6 +19,27 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # ── THE TIP TICK  (T2 S65) ────────────────────────────────────────────────────────────────────
+  # MEASURED, because the brief called this "the merge gate at 25%" and the merge gate is fine:
+  #     canary.yml (NeoTopia CI)   no concurrency block at all   56/56 commits   100%
+  #     THIS workflow             cancel-in-progress: true       21/60 commits    35%
+  #     e2e-placement-guard.yml   cancel-in-progress: true       45/60 commits    75%
+  # 39 of the last 60 runs here were CANCELLED. Three lanes push inside the ~5 minutes a run takes,
+  # so a verdict needs a quiet window longer than the run · and T3's tripwire fired twice on it, a
+  # correctly-red test going unread for three nights because every run between was superseded.
+  #
+  # NOT a debounce, which was the first shape proposed and is worse: sleeping before the work
+  # extends the quiet window a run must survive from `runtime` to `sleep + runtime`. It collapses a
+  # burst into one run (cheaper) and lowers the verdict rate (the thing being fixed).
+  #
+  # Every half hour, off the hour because GitHub's on-the-hour schedule queue is the congested one.
+  # The tick does NO work unless the tip is unmeasured and nothing is in flight · see the guard job.
+  # COST, stated rather than hoped: one extra run per quiet window that follows a burst, not one per
+  # tick. At ~4 still-unseeded browser contexts per run (scripts/pool-conversion.cjs) that is roughly
+  # 40-80 identities a day against a ~968/day baseline. The thing it buys is that a red test cannot
+  # sit unread behind a wall of cancellations.
+  schedule:
+    - cron: '19,49 * * * *'
 
 # ⚠ T2 S49 · THIS WAS BRIEFLY A GROUP SHARED WITH e2e-placement-guard.yml. THAT DISABLED THAT GATE.
 #
@@ -44,13 +65,46 @@ on:
 # purge so it cannot take a room it did not create · scripts/migrations/024, written and awaiting
 # approval. A local live run racing CI is untouched either way, which is what `gh run list` before a
 # live run is for (documented in global-teardown.js).
+#
+# ⚠ THE EVENT NAME IS PART OF THE GROUP KEY (T2 S65) AND THAT IS NOT COSMETIC.
+# `github.ref` is refs/heads/main for a push AND for a schedule, so one group would mean the tick
+# SUPERSEDES SOMEBODY'S FRESH PUSH RUN · strictly worse than the defect it is fixing, and invisible,
+# because a cancelled push run looks exactly like a quiet CI. Splitting the key means the two can
+# never cancel each other; the guard job below then refuses to run a tick while anything is in
+# flight, so they cannot collide either (their teardowns both purge rooms project-wide).
 concurrency:
-  group: neotopia-e2e-${{ github.ref }}
+  group: neotopia-e2e-${{ github.ref }}-${{ github.event_name == 'schedule' && 'tick' || 'push' }}
   cancel-in-progress: true
 
 jobs:
+  # ── IS THIS TICK NEEDED AT ALL? ───────────────────────────────────────────────────────────────
+  # The decision lives in scripts/tip-verdict-needed.cjs, not in this YAML, because the judgement is
+  # the risk and a bash blob in a workflow file can never be unit-tested or mutation-proven. It has
+  # 14 tests; the two that matter assert that a push or pull_request run is NEVER gated, and that a
+  # tick never proceeds while another run is live.
+  needed:
+    name: Does the tip still need a verdict?
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/tip-verdict-needed.cjs --workflow e2e.yml --event "${{ github.event_name }}" --sha "${{ github.sha }}"
+
   reconnect:
     name: Reconnect + backend-down E2E
+    needs: needed
+    # `!= 'false'`, NOT `== 'true'`, and the difference is the whole safety property. If the guard
+    # ever fails to write its output · a node error, a renamed script, a GITHUB_OUTPUT that is not
+    # set · then `== 'true'` is FALSE, this job is SKIPPED, and a workflow run with a skipped job
+    # still reports SUCCESS. That is a green merge gate that ran nothing, which is precisely the
+    # class of defect this feature exists to remove. Failing open costs at most one extra run.
+    if: needs.needed.outputs.run != 'false'
     runs-on: ubuntu-latest
     env:
       VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
