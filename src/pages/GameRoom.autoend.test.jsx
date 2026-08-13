@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
 import { DECK } from '../lib/projectCards'
 import { clearSaved } from '../hooks/useLocalSession'
+import { REGIONS } from '../utils/hexUtils'
 
 // ── The turn ends itself · and the one case where it must NOT ────────────────────────────────────
 // "No actions left · end your turn" beside an End Turn button was a required click that communicated
@@ -129,7 +130,12 @@ describe('it must not end a turn that still has a district in it', () => {
     })
     fireEvent.click(screen.getAllByTestId('factory')[0])
     fireEvent.click(document.querySelector(`[data-element="${TYPE}"]`))
-    const region = screen.getAllByTestId('region-btn').find(b => /sacred city/i.test(b.textContent))
+    // BY THE REGION'S OWN NAME, read from hexUtils rather than typed (T1 S63). This matched
+    // /sacred city/i and simply found nothing after the rename · fireEvent then reports "provide
+    // a DOM element", which reads like a harness bug rather than a stale string.
+    const wanted = REGIONS.find(r => r.id === 0).name.toLowerCase()
+    const region = screen.getAllByTestId('region-btn').find(b => b.textContent.toLowerCase().includes(wanted))
+    expect(region, `no region button named "${wanted}"`).toBeTruthy()
     fireEvent.click(region)
     const hexes = screen.getAllByTestId('hex-valid')
     fireEvent.click(hexes[0])

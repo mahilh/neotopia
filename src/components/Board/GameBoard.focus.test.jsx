@@ -167,13 +167,34 @@ describe('nothing is clipped · the failure that is invisible by construction', 
         const c = hexToPixel(reg.cq, reg.cr)
         return Number.isFinite(y) && Math.abs(Number(t.getAttribute('x')) - c.x) < 1 && y < c.y
       })
+    // TWO rows since T1 S63 (district name + score). It was THREE while a terrain caption sat on
+    // top; the districts now carry their own terrain, so that row would have said the same word
+    // twice. This floor is the vacuity guard, not the claim · it fired correctly on the collapse.
     expect(labels.length, 'no labels found for this region · the containment check would be vacuous')
-      .toBeGreaterThanOrEqual(3)
+      .toBeGreaterThanOrEqual(2)
     for (const t of labels) {
       const y = Number(t.getAttribute('y'))
       const half = Number(t.getAttribute('font-size') || 20) / 2
       expect(inY(y - half), `label "${t.textContent}" at y=${y} is clipped off the top`).toBe(true)
     }
+
+    // 3 · HORIZONTALLY, which nothing here could hold until the label became the long one.
+    // jsdom has no layout, so the width cannot be measured here (Rule 78's corollary · do not write
+    // a test that pretends to). What CAN live here is the DECISION, against an advance measured in a
+    // real browser on the deployed board via getBBox, in the same user units this viewBox is in:
+    //     FOREST DISTRICT   fs 20, letterSpacing 2.2   198.6 units over 15 characters
+    // The label is centred on the region, so the budget is the whole focus width. Stated as a
+    // character count because THE COPY is the input that varies (preamble §8 · pin the string).
+    // Sized at fs 20 deliberately: the same string at the old caption's fs 26 is 277.3 units, 90% of
+    // this box, and GRASSLAND DISTRICT there is 347 · over it. That is why FOREST, and why fs 20.
+    const UNITS_PER_CHAR = 198.6 / 15
+    const budget = Math.floor(vb.width / UNITS_PER_CHAR)
+    expect(budget, 'the derived budget is nonsense · check the viewBox').toBeGreaterThan(10)
+    expect(reg.name.length,
+      `"${reg.name}" is ${reg.name.length} chars · about ${(reg.name.length * UNITS_PER_CHAR).toFixed(0)} ` +
+      `units against a ${vb.width.toFixed(0)}-unit one-region viewBox at 320px. It will be clipped at ` +
+      `both ends on a phone, silently, because an SVG outside its viewBox does not error.`)
+      .toBeLessThanOrEqual(budget)
   })
 
   it('the full board is unchanged · same viewBox as before this feature', () => {

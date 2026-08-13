@@ -44,16 +44,17 @@ const labelOffsets = (container) => {
     const terrain = container.querySelector(`text[data-terrain-label="${reg.terrain}"]`)
     const group = terrain?.parentElement
     if (!group) continue
-    const [tText, nText, sText] = [...group.querySelectorAll('text')]
+    // TWO rows since T1 S63 · the district name (which now carries the terrain word, so
+    // data-terrain-label rides on it) and the score. There was a third, a bare terrain caption above
+    // the name, and it went when the names stopped needing a translation.
+    const [nText, sText] = [...group.querySelectorAll('text')]
     const cy = hexToPixel(reg.cq, reg.cr).y
     out.push({
       region: reg.name,
-      terrain: cy - Number(tText.getAttribute('y')),
       name: cy - Number(nText.getAttribute('y')),
       score: cy - Number(sText.getAttribute('y')),
       nameSize: Number(nText.getAttribute('font-size')),
       scoreSize: Number(sText.getAttribute('font-size')),
-      terrainSize: Number(tText.getAttribute('font-size')),
     })
   }
   return out
@@ -90,7 +91,8 @@ describe('the labels cannot take a click from a cell', () => {
   it('still overlaps · the fix is pointer-events, not a nudge, and this proves it stayed that way', () => {
     const c = board()
     expect(c.querySelectorAll('text').length,
-      'no text rendered · every assertion in this file would pass vacuously').toBeGreaterThanOrEqual(9)
+      'no text rendered · every assertion in this file would pass vacuously').toBeGreaterThanOrEqual(
+        REGIONS.length * 2)   // name + score per region · was 3 rows until S63 collapsed the stack
 
     const offsets = labelOffsets(c)
     expect(offsets, 'no label groups found').toHaveLength(REGIONS.length)
@@ -113,10 +115,15 @@ describe('the labels cannot take a click from a cell', () => {
       expect(Math.abs(o.score - rowsAboveCentre[1]),
         `${o.region}: the score is a horizontal miss, not a vertical one`).toBeLessThan(o.scoreSize / 2)
 
-      // The terrain word is the contrast case · 35.5 units clear of the nearest row. It never had
-      // this problem, which is why "one of the three labels overlaps" is a real finding rather than
-      // a general observation about labels.
-      expect(Math.abs(o.terrain - rowsAboveCentre[0])).toBeGreaterThan(o.terrainSize / 2)
+      // ⚠ THE CONTRAST CASE IS GONE, AND SAYING SO IS THE POINT (T1 S63). A third assertion here
+      // pinned the TERRAIN caption at 35.5 units clear of the nearest hex row · it was the label
+      // that never had this problem, which is what made "one of the three overlaps" a finding
+      // rather than a general remark about labels. That row no longer exists: the districts carry
+      // their own terrain now, so the caption above them was the same word twice. The assertion is
+      // not weakened, it is about a node the board does not draw · and deleting it silently would
+      // leave the file reading as though the contrast had been tested today (Rule 101).
+      // What survives is stronger anyway: with two rows instead of three, BOTH of them are now
+      // asserted to sit over a hex row, so the pointer-events guarantee covers the whole stack.
     }
   })
 

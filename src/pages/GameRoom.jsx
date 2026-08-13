@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { useGameStore } from '../store/gameStore'
-import { ELEMENT_COLORS } from '../utils/hexUtils'
+import { ELEMENT_COLORS, REGIONS } from '../utils/hexUtils'
 import { useAuth } from '../hooks/useAuth'
 import { useGameSync } from '../hooks/useGameSync'
 import { useLocalSession, clearSaved, PRACTICE_HUMAN_ID, PRACTICE_STORAGE_KEY } from '../hooks/useLocalSession'
@@ -23,7 +23,13 @@ import { PRODUCTION_TILES, shuffleArray } from '../store/gameStore'
 import { TURN_TIME_LIMIT } from '../store/gameConfig'
 import { playSound, installSoundUnlock, isMuted, setMuted, subscribeMuted } from '../utils/sound'
 
-const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
+// READ, NEVER RETYPED (T1 S63). This file alone held THREE copies of the region names · this
+// constant plus two inline arrays, in the place-into-region buttons and the score panel. A rename
+// that missed one would leave a control naming a region the board no longer shows, which is the
+// one outcome worse than the old name. Sorted by id because every caller indexes by region id.
+const REGIONS_BY_ID = [...REGIONS].sort((a, b) => a.id - b.id)
+const REGION_NAMES = REGIONS_BY_ID.map(r => r.name)
+const REGION_COLORS = REGIONS_BY_ID.map(r => r.color)
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s)
 
 // A card's primary element = the most common element type across its pattern · drives the CardFrame
@@ -1382,8 +1388,8 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
               <div style={sectionLabel}>Place into region</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {factory.betweenRegions.map(rid => {
-                  const regionNames = ['Sacred City', 'Living Earth', 'Free Energy']
-                  const regionColors = ['#7F77DD', '#1D9E75', '#E24B4A']
+                  const regionNames = REGION_NAMES
+                  const regionColors = REGION_COLORS
                   // A REGION WITH NO LEGAL HEX IS NOT A CHOICE (T1 S44). These rendered as ordinary
                   // enabled buttons on a full region, so the player picked one, the board lit nothing,
                   // and the header told them to click a highlighted hex that did not exist. Counted
@@ -1566,7 +1572,7 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
                   </span>
                 </div>
               )}
-              {['Sacred City', 'Living Earth', 'Free Energy'].map((name, i) => (
+              {REGION_NAMES.map((name, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center',
                   padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',

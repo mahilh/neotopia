@@ -20,13 +20,18 @@ import { calculateFinalScore } from '../lib/patternMatcher'
 // the export is not yet present; a namespace read is `undefined` instead, so the cluster section simply
 // hides until T2's export lands (Rule 65 · the consumer degrades gracefully across an unsynced seam).
 import * as patternMatcher from '../lib/patternMatcher'
-import { ELEMENT_COLORS } from '../utils/hexUtils'
+import { ELEMENT_COLORS, REGIONS } from '../utils/hexUtils'
 import { DECK } from '../lib/projectCards'
 import { getGlobalIndex, recordCivilizationContribution, getGlobalCivilizationTotal, recordCivilizationDetail, awardGameWin } from '../lib/supabase'
 import { buildGameEndEvent } from '../lib/gameEndEvent'
 
-const REGION_NAMES = ['Sacred City', 'Living Earth', 'Free Energy']
-const REGION_COLORS = ['#7F77DD', '#1D9E75', '#E24B4A']
+// READ, NEVER RETYPED (T1 S63). These were two hand-written arrays and there were SEVEN such copies
+// of the region identity across shipped code · rename one and the others go on saying the old thing,
+// which is precisely how a score row can name a region the board no longer shows. Ordered by id so
+// index === region id, which every caller here already assumes.
+const BY_ID = [...REGIONS].sort((a, b) => a.id - b.id)
+const REGION_NAMES = BY_ID.map(r => r.name)
+const REGION_COLORS = BY_ID.map(r => r.color)
 const GLOBAL_INDEX_BASE = 147823 // canonical seed · fallback only · getGlobalIndex already folds this in.
 // Display names for the lowercase element keys getClusterDetail returns (energy/biofarming/…) · the colour
 // comes straight from ELEMENT_COLORS keyed off the same lowercase key (the board's single colour source).
@@ -580,7 +585,13 @@ export default function FinalScore({
                 <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 13, fontWeight: 500 }}>
                   {ELEMENT_LABELS[c.element] ?? c.element}
                 </span>
-                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>· {c.regionName}</span>
+                {/* BY ID, NOT BY THE NAME THE ENGINE STAMPED (T1 S63). getClusterDetail copies
+                    `regionName` off the STORE's own region objects (gameStore.js, T2's lane), which
+                    hold a second hand-written list of region names. Rendering that string here would
+                    have put the OLD names on the cluster rows of a score screen whose board says the
+                    new ones · a row naming a region the player cannot find. The id is the thing both
+                    lists agree on, so it is the thing to render from. */}
+                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>· {REGION_NAMES[c.regionId] ?? c.regionName}</span>
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 10 }}>
                   <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
                     {c.count} connected

@@ -3,6 +3,7 @@
 //   ScoreFlash  (named)    · the 2.2s full-screen "story moment" shown after a card is scored
 // T1 owns this file.
 import { useEffect, useRef, useState } from 'react'
+import { REGIONS } from '../utils/hexUtils'
 
 const ELEMENT_COLORS = { energy: '#E24B4A', biofarming: '#1D9E75', technology: '#7F77DD', community: '#378ADD' }
 
@@ -13,7 +14,9 @@ const DISTRICT_NAMES = {
   6: 'Architecture', 7: 'Tech', 8: 'Culture', 9: 'Diplomacy',
 }
 // The flash is accented by the REGION the card was built in (where the district now lives).
-const REGION_COLORS = { 'Sacred City': '#7F77DD', 'Living Earth': '#1D9E75', 'Free Energy': '#E24B4A' }
+// Keyed by NAME because ScoreFlash is handed a regionName string, not an id · built from REGIONS so
+// a rename cannot leave the flash unaccented (T1 S63 · it was three typed literals).
+const REGION_COLORS = Object.fromEntries(REGIONS.map(r => [r.name, r.color]))
 
 // The irreplaceable reward · a 1-of-its-kind district was just built. Shows the card's
 // story (its description), then auto-unmounts. This is the near-miss payoff made tangible.

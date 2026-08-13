@@ -3,6 +3,8 @@
 // Each icon is pure SVG, centered at local 0,0: energy=bolt · biofarming=sprout · technology=gear/atom ·
 // community=figure. The colored disc + a white mark. Extracted from HexCell's inline set (T1 S11).
 
+import { REGIONS, ELEMENT_COLORS } from '../../utils/hexUtils'
+
 // Raw shapes centered at 0,0 · for an SVG context where the caller positions/scales a wrapping <g>.
 const ICON_SHAPES = {
   energy: (color, size) => (
@@ -47,11 +49,23 @@ const ICON_SHAPES = {
 // Plato's Myth of Metals · each element token IS a soul-metal made playable (PLATO_BOOKS · Pillar 1).
 // Co-located with the marks themselves so the board, card frames and element picker all read ONE table
 // (Rule 62 · never re-hardcode lore that can drift across surfaces). Keys match ICON_SHAPES (lowercase).
+//
+// ⚠ THE `district` FIELD WAS TWO KINDS OF THING AT ONCE (found T1 S63 by the rename). Two entries
+// held real board regions ('Free Energy', 'Living Earth') and two held lore that is not a region
+// ('AetherNet', 'Source Temple') · so the same field named a place a player can point at on half the
+// rows and a place that exists only in the documents on the other half. Renaming the regions forced
+// the question and there is only one non-inventing answer: name the region this element BUILDS IN,
+// read from REGIONS. `color` on a region is byte-identical to that element's ELEMENT_COLORS entry
+// (hexUtils says so and a test holds it), so the pairing is already in the data and is not a guess.
+// community has no region of its own and keeps its lore name.
+// AetherNet is not lost, it is just no longer pretending to be a district on the board.
+const DISTRICT_OF = (element) =>
+  REGIONS.find(r => r.color === ELEMENT_COLORS[element])?.name ?? null
 export const ELEMENT_SOUL_METAL = {
-  technology: { metal: 'Gold',   virtue: 'Wisdom',      district: 'AetherNet' },
-  energy:     { metal: 'Silver', virtue: 'Courage',     district: 'Free Energy' },
-  biofarming: { metal: 'Bronze', virtue: 'Nourishment', district: 'Living Earth' },
-  community:  { metal: 'Iron',   virtue: 'Belonging',    district: 'Source Temple' },
+  technology: { metal: 'Gold',   virtue: 'Wisdom',      district: DISTRICT_OF('technology') ?? 'AetherNet' },
+  energy:     { metal: 'Silver', virtue: 'Courage',     district: DISTRICT_OF('energy')     ?? 'AetherNet' },
+  biofarming: { metal: 'Bronze', virtue: 'Nourishment', district: DISTRICT_OF('biofarming') ?? 'AetherNet' },
+  community:  { metal: 'Iron',   virtue: 'Belonging',   district: DISTRICT_OF('community')  ?? 'Source Temple' },
 }
 
 // "Technology · Gold · Wisdom · AetherNet" · the one hover label every element surface shares.

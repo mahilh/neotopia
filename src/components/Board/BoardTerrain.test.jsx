@@ -1,9 +1,37 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
-import GameBoard from './GameBoard'
+import fs from 'node:fs'
+import path from 'node:path'
+import GameBoard, { computeViewBox } from './GameBoard'
 import { REGIONS, TERRAIN, FACTORIES, ELEMENT_COLORS, hexToPixel, hexesInRadius, HEX_SIZE } from '../../utils/hexUtils'
 
 afterEach(cleanup)
+
+// The DRAWING AREA, derived. Read from the same exported function the component calls, never typed:
+// four literals frozen from a computed viewBox are a snapshot that goes stale with no diff, and the
+// coverage assertion below would then be describing a board that no longer exists (Rule 92 · a check
+// whose two sides come from one source, here separated by time rather than by file).
+const VB = computeViewBox(null)
+
+// Real pixel dimensions out of a JPEG's SOF marker · no decoder, ~15 lines. Used to bind the TYPED
+// fileW/fileH against the actual asset (Rule 128 · a guard about an artifact must read the artifact).
+function jpegSize(file) {
+  const b = fs.readFileSync(file)
+  if (b.readUInt16BE(0) !== 0xffd8) return null   // not a JPEG
+  let i = 2
+  while (i < b.length - 9) {
+    if (b[i] !== 0xff) { i++; continue }
+    const m = b[i + 1]
+    if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue }
+    const len = b.readUInt16BE(i + 2)
+    // every SOF except DHT(c4)/JPG(c8)/DAC(cc) carries the frame header
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) {
+      return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7) }
+    }
+    i += 2 + len
+  }
+  return null
+}
 
 // ── The regions are places now, not labels ───────────────────────────────────────────────────────
 // Mahil compared the screen to the physical board: it shows desert, water and forest/grassland ·
@@ -94,16 +122,37 @@ describe('the terrain data itself', () => {
 })
 
 describe('the board shows what each region is made of', () => {
-  it('names the terrain once per region', () => {
+  // ⚠ WHAT THESE TWO USED TO ASSERT, kept because the old number is the argument for the new one
+  // (Rule 101b). Until T1 S63 the board drew TWO rows per region · a terrain caption reading
+  // 'Water'/'Grass'/'Desert', and the district name under it · and the first of these pinned exactly
+  // those three strings while the second pinned "the district name survived". Both were true and both
+  // stopped being true the moment the districts were renamed to Water/Forest/Desert District: the
+  // stack would have read "WATER" over "WATER DISTRICT". One row now, carrying the district name,
+  // which contains the terrain. The pair of claims collapses into one and it is a stronger one.
+  it('names each region exactly ONCE on the board · one row, not a word repeated in two sizes', () => {
     const labels = [...board().querySelectorAll('[data-terrain-label]')].map(n => n.textContent)
-    expect(labels.sort()).toEqual(['Desert', 'Grass', 'Water'])
+    expect(labels.length, 'one label row per region').toBe(REGIONS.length)
+    expect(labels.slice().sort()).toEqual(REGIONS.map(r => r.name).slice().sort())
+    // and the terrain word is IN that name rather than above it
+    for (const r of REGIONS) {
+      const label = labels.find(l => l === r.name)
+      expect(label.toLowerCase(), `${r.name} no longer says what it is made of`)
+        .toContain(TERRAIN[r.terrain].name.toLowerCase())
+    }
   })
 
-  it('still names the district · terrain was added, not swapped in', () => {
-    // The owner's explicit constraint. The physical game carries both: the district lives in the
-    // rulebook, the terrain is what is painted.
-    const text = board().textContent
-    for (const r of REGIONS) expect(text, `${r.name} must survive the terrain rename`).toContain(r.name)
+  it('the district name is the only place the region is named · no second row to drift', () => {
+    // The counterweight to the collapse. If someone re-adds a terrain caption, the board says the
+    // same word twice again and this reds · which is the thing the rename existed to remove.
+    const c = board()
+    const texts = [...c.querySelectorAll('text')].map(n => n.textContent)
+    for (const r of REGIONS) {
+      const terrainWord = TERRAIN[r.terrain].name
+      const bare = texts.filter(t => t === terrainWord || t === terrainWord.toUpperCase())
+      expect(bare, `the board draws a bare "${terrainWord}" caption as well as "${r.name}"`).toEqual([])
+    }
+    // and the district name is still ON the board · this whole block would pass on an empty board
+    for (const r of REGIONS) expect(c.textContent, `${r.name} is not drawn at all`).toContain(r.name)
   })
 
   it('draws every label big enough to survive the phone', () => {
@@ -187,10 +236,47 @@ describe('the painted world never reaches the play', () => {
     expect(Math.hypot(anchorX - bcx, anchorY - bcy),
       'the painting is no longer anchored on the middle of the board').toBeLessThan(1)
     // And it has to cover the whole drawing area, or the world ends in a straight cut.
-    expect(bx).toBeLessThanOrEqual(-198)
-    expect(by).toBeLessThanOrEqual(-214)
-    expect(bx + bw).toBeGreaterThanOrEqual(630)
-    expect(by + bh).toBeGreaterThanOrEqual(651)
+    // ⚠ THESE WERE FOUR TYPED LITERALS (-198 / -214 / 630 / 651) UNTIL T1 S63. They were a correct
+    // snapshot of computeViewBox() on the day they were written and nothing bound them to it, so any
+    // change to a region, a factory or the pad would have moved the viewBox while the guard went on
+    // certifying coverage of the old one · silently, with no diff on this file. Derived now.
+    expect(bx, 'unpainted ground at the LEFT edge').toBeLessThanOrEqual(VB.minX)
+    expect(by, 'unpainted ground at the TOP edge').toBeLessThanOrEqual(VB.minY)
+    expect(bx + bw, 'unpainted ground at the RIGHT edge').toBeGreaterThanOrEqual(VB.minX + VB.width)
+    expect(by + bh, 'unpainted ground at the BOTTOM edge').toBeGreaterThanOrEqual(VB.minY + VB.height)
+  })
+
+  it('the DECLARED file shape matches the file on disk · a swapped terrain is silent otherwise', () => {
+    // T1 S63. THE HAZARD THIS SESSION WAS ABOUT. BACKDROP.fileW/fileH are typed constants and the
+    // image is placed at fileW*scale x fileH*scale, so dropping a 16:9 terrain in over a 0.956 one
+    // WITHOUT editing them renders the painting squashed to 54% of its width. Nothing throws, nothing
+    // is missing, and the failure looks like an art problem rather than a code one.
+    //
+    // COUNTERWEIGHT, and it is the whole reason this can be trusted: the file measured is the one the
+    // BOARD names, resolved from the rendered href · not a path retyped here. A gate that reads a
+    // file the component does not use agrees with itself by construction (Rule 92) and would pass
+    // while the board pointed somewhere else entirely (Rule 125b · an absence needs a presence anchor).
+    const c = board()
+    const img = c.querySelector('[data-board-backdrop]')
+    expect(img, 'no backdrop · this assertion would be about nothing').not.toBeNull()
+    const href = img.getAttribute('href') || img.getAttribute('xlink:href')
+    expect(href, 'the backdrop has no href to follow').toBeTruthy()
+
+    const file = path.resolve(__dirname, '../../../public', href.replace(/^\//, ''))
+    expect(fs.existsSync(file), `the board points at ${href} and there is no such file in public/`).toBe(true)
+    const real = jpegSize(file)
+    expect(real, `${href} is not a JPEG this reader understands · it cannot be checked, which is a red`).not.toBeNull()
+    expect(real.w, 'degenerate width').toBeGreaterThan(0)
+    expect(real.h, 'degenerate height').toBeGreaterThan(0)
+
+    const declared = (+img.getAttribute('width')) / (+img.getAttribute('height'))
+    const actual = real.w / real.h
+    expect(Math.abs(declared - actual),
+      `the board draws ${href} at aspect ${declared.toFixed(4)} and the file is ${real.w}x${real.h} = ` +
+      `${actual.toFixed(4)} · the painting is being stretched by ${((declared / actual - 1) * 100).toFixed(0)}%. ` +
+      'Update BACKDROP.fileW/fileH to the new file, and re-fit anchorX/anchorY/scale · a new terrain ' +
+      'is not a drop-in (see the v6 note in GameBoard.jsx).')
+      .toBeLessThan(0.005)
   })
 
   it('never takes a click', () => {

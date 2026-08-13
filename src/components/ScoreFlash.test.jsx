@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 import { ScoreFlash } from './ProjectCard'
 import { DECK } from '../lib/projectCards'
+import { REGIONS } from '../utils/hexUtils'
 
 // ── The reward has to be able to leave ───────────────────────────────────────────────────────────
 // ScoreFlash is a position:fixed, inset:0, z-index 100 overlay with NO dismiss control. Everything
@@ -27,13 +28,13 @@ describe('ScoreFlash dismisses itself', () => {
   it('leaves, even though its caller hands it a new onDone every render', async () => {
     const done = vi.fn()
     // Exactly what GameRoom does: an inline arrow, so the prop identity changes on every render.
-    const view = render(<ScoreFlash card={CARD} regionName="Sacred City" onDone={() => done()} />)
+    const view = render(<ScoreFlash card={CARD} regionName={REGIONS[0].name} onDone={() => done()} />)
     expect(document.querySelector('.score-flash'), 'it should be on screen to begin with').not.toBeNull()
 
     // Re-render faster than the 2.2s timer · this is the turn countdown ticking once a second.
     for (let i = 0; i < 4; i++) {
       await act(async () => {
-        view.rerender(<ScoreFlash card={CARD} regionName="Sacred City" onDone={() => done()} />)
+        view.rerender(<ScoreFlash card={CARD} regionName={REGIONS[0].name} onDone={() => done()} />)
         await vi.advanceTimersByTimeAsync(1000)
       })
     }
@@ -48,7 +49,7 @@ describe('ScoreFlash dismisses itself', () => {
     // The other half. A flash that dismisses instantly is the same failure in the other direction ·
     // this is the one moment that tells the player what they just built.
     const done = vi.fn()
-    render(<ScoreFlash card={CARD} regionName="Sacred City" onDone={done} />)
+    render(<ScoreFlash card={CARD} regionName={REGIONS[0].name} onDone={done} />)
     await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
     expect(document.querySelector('.score-flash'), 'gone before it could be read').not.toBeNull()
     expect(done).not.toHaveBeenCalled()
@@ -72,7 +73,7 @@ describe('ScoreFlash dismisses itself', () => {
 // flash, not relocation.
 describe('the board is still visible through the celebration', () => {
   const flash = () => {
-    render(<ScoreFlash card={DECK[20]} regionName="Sacred City" onDone={() => {}} />)
+    render(<ScoreFlash card={DECK[20]} regionName={REGIONS[0].name} onDone={() => {}} />)
     return document.querySelector('.score-flash')
   }
 

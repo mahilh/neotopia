@@ -37,6 +37,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { useGameStore } from '../store/gameStore'
 import { clearSaved } from '../hooks/useLocalSession'
+import { REGIONS } from '../utils/hexUtils'
 
 vi.mock('../lib/supabase', () => ({
   supabase: {}, GLOBAL_INDEX_BASE: 147823,
@@ -256,7 +257,7 @@ describe('the four moments have a voice', () => {
     const s = await aimed()
     await click(validTargets()[0])
     await until(() => polite().textContent.trim().length > 0)
-    expect(polite().textContent).toMatch(/placed Energy in Sacred City/i)
+    expect(polite().textContent).toMatch(new RegExp(`placed Energy in ${REGIONS.find(r => r.id === 0).name}`, 'i'))
   })
 
   it('A TAP IS REFUSED · names the reason, and the commonest reason is the wrong region', async () => {
@@ -273,7 +274,7 @@ describe('the four moments have a voice', () => {
     await until(() => alert().textContent.trim().length > 0)
     expect(alert().textContent, 'a tap in the wrong region was explained as an adjacency problem')
       .toMatch(/wrong region/i)
-    expect(alert().textContent, 'the message does not say which region was chosen').toMatch(/Sacred City/)
+    expect(alert().textContent, 'the message does not say which region was chosen').toMatch(REGIONS.find(r => r.id === 0).name)
   })
 
   it('THE TURN PASSES · including the direction the log structurally cannot carry', async () => {

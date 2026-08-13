@@ -113,6 +113,47 @@ const BACKDROP = {
   holeSolid: 162,
   holeFade: 198,
 }
+// ── "MAKE THE BOARD FILL THE SCREEN" · WHAT IS AND IS NOT POSSIBLE (T1 S63) ──────────────────────
+// Written here rather than only in a handoff, because this is where the next attempt starts and it
+// has now been attempted three times from a spec that could not work (Rule 108c).
+//
+// THE POSSIBLE HALF, PROVEN LIVE rather than reasoned: content outside the viewBox is NOT clipped to
+// the viewBox. It is clipped to the SVG VIEWPORT, i.e. the whole element. Widening this image on the
+// deployed board painted terrain straight through both 202px letterbox margins at 1440x900. So the
+// porthole is not a limit of SVG and it is not a limit of the file · the file already covers the
+// viewBox by 4-5 units on all four sides, at every viewport size, because the box is in USER UNITS
+// and does not vary with the screen. THE PORTHOLE IS THE `neo-island` ELLIPSE BELOW, which is
+// inscribed in the viewBox and therefore leaves its four corners black by construction.
+//
+// WHY THE MASK CANNOT SIMPLY GO, TODAY: two independent reasons, both measured.
+//   1. board_terrain.jpg carries its OWN painted vignette · corner mean luminance 20.6 / 25.3 / 71.4
+//      / 79.4 against 176 at the centre. Dropping the ellipse swaps a round porthole for a square
+//      one. The mask and the artwork agree; that is why it was built this way.
+//   2. The mask has been HIDING A REGISTRATION ERROR. The painted pale hexagons in every terrain
+//      file to date are FLAT-TOP (measured: top-edge run 0.50 of width, left vertex a point, W/H
+//      1.17-1.21). The slab they must sit under is POINTY-TOP · `bigHex` uses PLATTER_ROT = pi/6, so
+//      its vertices are at 90 and 270 degrees, W/H 0.8660. They are 30 degrees apart and always have
+//      been. Nobody could see it because the hole covers them. Remove the mask and it is the first
+//      thing you see.
+//
+// THE SPEC NO ART BRIEF HAS EVER CARRIED, and the reason 16:9 was the wrong ask. The image scale is
+// PINNED by registration (the three painted zones must land on the three region centres, which are
+// 432 units apart), so the file's pixel dimensions decide how far the painting reaches. Measured
+// across eight real viewports, the element spans up to 2098 units wide (3440 ultrawide) and up to
+// 1612 units tall (768x1024 portrait, where the board column is width-bound). One file has to serve
+// both, so it must span 2098 x 1612 board units · ASPECT 1.301, and 2.53x wider than the 828-unit
+// play area. A 16:9 canvas cannot do it: at 2098 wide it is 1180 tall and leaves the portrait cases
+// unpainted top and bottom.
+//   canvas          aspect 1.301 or wider-and-taller · zones occupy the MIDDLE, not the width
+//   zone shape      POINTY-TOP hexagon · a point at top and bottom, flat edges left and right
+//                   W/H 0.8660 · 288 x 332 board units = 0.1371 of canvas width x 0.2060 of height
+//   zone centres    water  0.3970, 0.3646   grass 0.6030, 0.3646   desert 0.5000, 0.6354
+//   the triangle    base 0.2060 of width, apex 0.2708 of height BELOW it · height/base 1.0104
+//   no vignette     the four corners must be painted ground at full value
+// Both candidates were measured against this and both fail, by the triangle rather than by the
+// hexagons: the board's region triangle has height/base 1.0104 and v4 is 0.5169, v5 0.5640 · roughly
+// half. Best-fit similarity worst residual, v3 (shipped) 12.0 units, v4 104.9, v5 90.3. v5 is the
+// better of the two and is still 7.5x worse than what is on the board now.
 // Derived, never typed: move a region and the anchor follows the board (rule 32).
 const BACKDROP_BOX = {
   x: BOARD_CX - BACKDROP.scale * BACKDROP.anchorX,
@@ -144,7 +185,10 @@ const BACKDROP_BOX = {
 // 155.9. A focus box built from the hexes alone clips all three, and it clips them silently,
 // because an SVG outside its viewBox does not error, it just is not there (the same invisibility
 // that let card art read 0/56 for fifteen sessions).
-const LABEL_STACK_TOP = HEX_SIZE * 4.45 + 26 / 2 + 4  // terrain caption offset + half its font + slack
+// Offset of the TOPMOST label row + half its font + slack. Was 4.45/26 when a terrain caption sat
+// above the district name; S63 collapsed the stack to one line, so the top row IS the name row and
+// the focus box gains 35 units of headroom it used to spend on a duplicated word.
+const LABEL_STACK_TOP = HEX_SIZE * 3.55 + 20 / 2 + 4
 const HEX_HALF_H = Math.sqrt(3) / 2 * HEX_SIZE
 const FOCUS_PAD = HEX_SIZE * 0.3
 
@@ -654,7 +698,6 @@ export default function GameBoard({
       {REGIONS.map(reg => {
         const {x, y} = hexToPixel(reg.cq, reg.cr)
         const score = regionScores[reg.id] ?? 0
-        const t = TERRAIN[reg.terrain]
         return (
           <g key={`label-${reg.id}`} className={dimRegion(reg.id) ? 'region-dimmed' : undefined} style={{userSelect:'none', pointerEvents:'none'}}>
             {/* SIZED FROM THE PHONE, NOT FROM THE FILE. These are SVG user units and the board is
@@ -665,16 +708,23 @@ export default function GameBoard({
                 7.7px and 11.5px, and the three lines clear each other by 1.3-1.7px · the first
                 spacing I tried overlapped them by 0.8px and 1.6px, which the render showed and the
                 arithmetic had not. Re-measure after any change to the board's height budget. */}
+            {/* ONE LINE (T1 S63). The terrain caption above this used to read WATER / GRASS / DESERT
+                and the row below it the district name. With the districts renamed to carry their own
+                terrain, the stack read "WATER" over "WATER DISTRICT" · the same word twice, in two
+                sizes, in two colours.
+                THE SURVIVOR IS THE DISTRICT ROW, unchanged in size, spacing and colour, and that is a
+                measurement rather than a preference. In the real font, at the one-region viewBox the
+                phone uses (309.6 units at 320px):
+                    fs 20, the shipped size   FOREST DISTRICT  198.6 units   64% of the box
+                    fs 26, the caption's size FOREST DISTRICT  277.3 units   90% of the box
+                Today's widest label is LIVING EARTH at 51%, so promoting to 26 would be a change in
+                kind · 8 units of clearance each side, on the viewport where Rule 83 says a layout
+                charges the most compressible thing. It keeps `reg.color` for the reason S35 gave and
+                that reason still holds: it ties the name to the colour its score and its target rings
+                are drawn in. `data-terrain-label` moves here so the terrain is still nameable from a
+                test, and it is now on the element that actually says the terrain word. */}
             <text
               data-terrain-label={reg.terrain}
-              x={x} y={y - HEX_SIZE * 4.45}
-              textAnchor="middle" dominantBaseline="central"
-              fill={t.ink} fontSize={26} fontWeight={600}
-              style={{textTransform:'uppercase', letterSpacing:4}}
-            >
-              {t.name}
-            </text>
-            <text
               x={x} y={y - HEX_SIZE * 3.55}
               textAnchor="middle" dominantBaseline="central"
               fill={reg.color} fontSize={20} fontWeight={500}

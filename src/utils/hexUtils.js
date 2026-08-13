@@ -171,18 +171,23 @@ export const ELEMENT_SYMBOLS = {
 // Mahil compared the screen to the physical NeoTopia board and the gap was structural, not stylistic.
 // The physical board shows terrain a player can SEE · desert/canyon, water/coastal city, forest and
 // grassland. The screen showed three abstract labels ("Sacred City") over three tinted blobs, which is
-// a different label, not a place. So each region now declares what it IS MADE OF, and the district
-// name becomes the subtitle · the physical game carries both, the district in the rulebook and the
-// terrain in the paint.
+// a different label, not a place. So each region declared what it IS MADE OF, and the district name
+// became the subtitle · the physical game carries both, the district in the rulebook and the terrain
+// in the paint.
+// ⚠ AND THE SUBTITLE IS GONE AGAIN (T1 S63), because the district names now CARRY the terrain.
+// Two rows existed only to bridge "Water" and "Sacred City"; "Water District" needs no bridge, and
+// two rows saying the same word is worse copy than one. See REGIONS below.
 //
 // THE MAPPING IS THE OWNER'S, TAKEN FROM THE BOARD IN FRONT OF HIM, and it is worth writing down
-// because it CONTRADICTS the mapping in src/lib/terrainBiomes.js (T2 S10), which reads Sacred City as
-// 'desert dawn' and Free Energy as 'volcanic coastal' · i.e. reversed on two regions out of three.
-// That module is no longer consumed by the board; flagged to T2 rather than edited (its lane).
+// because it CONTRADICTS the mapping in src/lib/terrainBiomes.js (T2 S10), which reads the id-0
+// region as 'desert dawn' and the id-2 region as 'volcanic coastal' · i.e. reversed on two regions
+// out of three. That module is no longer consumed by the board; flagged to T2 rather than edited
+// (its lane), and re-flagged in S63 now that its keys are old names that exist nowhere else.
 //
 // `color` is UNTOUCHED on purpose. It is the region's ELEMENT identity (byte-identical to
-// ELEMENT_COLORS above · Sacred City is the technology purple, Living Earth the biofarming green,
-// Free Energy the energy red) and it drives gameplay SIGNALS: the valid-target ring, the near-miss
+// ELEMENT_COLORS above · Water District is the technology purple, Forest District the biofarming
+// green, Desert District the energy red · terrain and element are deliberately NOT the same axis)
+// and it drives gameplay SIGNALS: the valid-target ring, the near-miss
 // ring, the score labels. Repainting those in terrain colours would teach the player a new colour
 // language for the thing they already learned. Terrain is scenery; `color` is instruction.
 export const TERRAIN = {
@@ -206,7 +211,12 @@ export const TERRAIN = {
     ink:  'rgba(122,208,224,0.92)',  // the terrain word
   },
   grass:  {
-    name: 'Grass',
+    // FOREST, not Grass or Grassland (Mahil, S63). Two reasons and one of them is a measurement:
+    // the painting is terraced woodland, and at the board's label size GRASSLAND DISTRICT renders
+    // 347 units wide against a 309.6-unit one-region viewBox at 320px · it does not fit. FOREST
+    // DISTRICT is 198.6 at the shipped size. The key stays `grass` because it is the wash/fill id
+    // and renaming it would touch four gradient ids for a caption change.
+    name: 'Forest',
     fill: 'rgba(96,158,62,0.42)',
     wash: '54,100,38',
     ink:  'rgba(160,214,120,0.92)',
@@ -220,10 +230,20 @@ export const TERRAIN = {
 }
 
 // 3 regions + 3 factories · source of truth for board layout
+// ── THE DISTRICT NAMES SAY WHAT THE PLACE IS (T1 S63, Mahil's call) ─────────────────────────────
+// Sacred City / Living Earth / Free Energy are gone from the product. They were abstract: three
+// proper nouns that told a player nothing about the board in front of them, which is the same
+// complaint that put terrain on the ground in S35 · and it is why the label needed TWO rows, one
+// saying what the region is made of and one saying what it is called.
+// A name that carries the terrain collapses that: the board now draws ONE line per region.
+// THE NAME MUST START WITH ITS OWN TERRAIN and there is a gate on it, because the failure mode here
+// is silent and this repo has already shipped it once · terrainBiomes.js reads Sacred City as
+// 'desert dawn' and Free Energy as 'volcanic coastal', reversed on two of three, and nothing went
+// red because nothing consumed it (Rule 45 · a second contract drifts where no one is watching).
 export const REGIONS = [
-  {id:0, name:'Sacred City',  label:'SC', cq:0,  cr:0,  radius:2, color:'#7F77DD', theme:'purple', terrain:'water'},
-  {id:1, name:'Living Earth', label:'LE', cq:8,  cr:-4, radius:2, color:'#1D9E75', theme:'green',  terrain:'grass'},
-  {id:2, name:'Free Energy',  label:'FE', cq:4,  cr:5,  radius:2, color:'#E24B4A', theme:'red',    terrain:'desert'},
+  {id:0, name:'Water District',  label:'WD', cq:0,  cr:0,  radius:2, color:'#7F77DD', theme:'purple', terrain:'water'},
+  {id:1, name:'Forest District', label:'FD', cq:8,  cr:-4, radius:2, color:'#1D9E75', theme:'green',  terrain:'grass'},
+  {id:2, name:'Desert District', label:'DD', cq:4,  cr:5,  radius:2, color:'#E24B4A', theme:'red',    terrain:'desert'},
 ]
 
 export const FACTORIES = [
