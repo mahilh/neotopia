@@ -240,6 +240,9 @@ T3: src/hooks/useGameRoom.js · useGameSync.js · usePresence.js · tests/e2e/
       `git add -p`            fixes the S66 sweep (my own whole-file add of a shared doc)
                               and does NOTHING here · my add was already correctly scoped
       `git commit -m … -- <paths>`   COMMITS ONLY THOSE PATHS AND IGNORES THE INDEX.  ← this one
+                              ⚠ TRACKED FILES ONLY · a NEW file needs `git add` first, and that add
+                              is the one moment the shared index can still bite you. Add it, then
+                              commit path-scoped in the same breath, then read the stat.
       `git show --stat HEAD`  read it EVERY time · the file COUNT is the tell, and it is how I caught
                               this one commit too late
   Repair, and it loses nothing: `git reset --soft HEAD~1`, `git restore --staged <their files>`,
