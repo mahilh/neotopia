@@ -291,7 +291,7 @@ GAME MECHANICS:
 
 NEOTOPIA: Stage 2 of 5 · Every card scored = rehearsal of real district built by 2055
 
-PERMANENT ANTI-REGRESS RULES (134 · cumulative · the highest rule number, and it read 125 from S57
+PERMANENT ANTI-REGRESS RULES (135 · cumulative · the highest rule number, and it read 125 from S57
 until T2 S63 while seven more were added under it · a hand-maintained count is a counter resting at
 a plausible value, which is Rule 80 in the header of the file Rule 80 lives in):
   1.  NEVER git add -A · pathspec from git status
@@ -586,6 +586,41 @@ S45 signature reproduced exactly. THE GATE ASSERTS THE MECHANISM, NOT THE OUTCOM
 alone would pass on a build where the bot seat was skipped entirely, so it requires the bot to have HELD at
 least two turns and given each up, and the human to have clicked no more than its own two. One test,
 mutation-proven against all three lanes.
+
+RULE 135 (T2 S66 · August 13 2026):
+A SUITE THAT ONLY EVER RUNS IN THE DEFAULT CONFIGURATION TESTS THE DEFAULT, NOT THE FEATURE · AND
+"THE FLAG GATES CORRECTLY" AND "THE FEATURE IS INERT" PRODUCE IDENTICAL GREENS.
+I shipped the wallet behind `WALLET_ENABLED = false` and wrote seventeen tests. All seventeen passed.
+Ask Rule 130's question of that green and it has two producers:
+    1 · the flag gates correctly and the enabled engine works
+    2 · tryDrawCard can NEVER refuse for money under any circumstances, and the flag is decorative
+A flag-off suite cannot separate them, and the second ships a feature that does nothing on the day
+somebody flips the constant · which is this project's "writer with no caller" (award_game_win S35,
+useBonus S37, card art S42, two dead sounds S55) arriving one level up, as a FEATURE with no
+reachable branch. Six instances of the class and every one rested at a value that looked correct.
+THE FIX IS A SECOND FILE THAT MOCKS THE FLAG AND DRIVES THE REAL SUBJECT · not a model of the
+feature, the actual store with one constant replaced. It found things the first suite structurally
+could not reach: the debit, the boundary at EXACTLY the price (`<` and `<=` differ only there, and
+getting it wrong makes the last affordable card the one it can never buy), and both terminal cases.
+  135a · ITS FIRST ASSERTION MUST BE THAT THE MOCK TOOK EFFECT. If the mock silently fails, every
+        line below runs against the DISABLED engine and passes for the wrong reason · a whole file
+        describing a branch it never entered, which is worse than not having the file, because it
+        reads as coverage (Rule 130b · a control firing through the wrong path).
+  135b · AND THE FLAG-OFF SUITE STILL OWES YOU AN EQUIVALENCE, DRIVEN RATHER THAN ARGUED. "With the
+        flag off this is byte-for-byte the old predicate" is a claim. Play a deadlocked board and a
+        healthy one in both states and compare; the comment is then the record of a measurement
+        instead of a hope.
+  135c · THE COUNT IS THE TELL, and it is available before you write anything: if every test in a
+        feature's suite runs with the feature switched off, the suite's subject is the switch.
+COROLLARY, and it bit in the same commit · A CONTROL BUILT FROM THE NAME OF A FIELD THAT DOES NOT
+EXIST YET STOPS CONTROLLING ON THE DAY IT DOES. In S64 I proved my shape guard could notice drift by
+spreading `{ ...player, wallet: 1 }` and asserting the key set changed. `wallet` was a name from a
+design document, so it was the obvious synthetic token. Eleven days later it is a real field, the
+spread changed no key, and the counterweight asserted nothing. It failed LOUDLY only by luck of which
+way round the assertion was written · reversed, it would have passed forever. Rule 125 says a
+discriminator you did not author is not your fingerprint; this is its sibling and it is worse,
+because the name felt authored. A synthetic token must be one that CANNOT become real
+(`__drift_probe_never_a_real_field__`), and its absence asserted so that "cannot" stays true.
 
 RULE 134 (T2 S65 · August 13 2026):
 WHEN WORK IS LOST TO PREEMPTION, ANY MITIGATION THAT DELAYS THE START OF THAT WORK MAKES IT WORSE ·

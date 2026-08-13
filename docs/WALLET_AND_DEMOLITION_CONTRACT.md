@@ -331,3 +331,45 @@ Not a plan, an ordering that falls out of the above:
    ladder that the price itself invalidates.
 4. **Demolition last.** It is the only item here that breaks a closed proof, and §6b shows its value
    is bounded by leftover deck · which is the thing the wallet changes most.
+
+---
+
+## ✅ WHAT LANDED · T2 S66 (`b9feec8`) · the engine half
+
+Design above is unchanged; this records which parts are now code and which are still design.
+
+| contract § | state |
+|---|---|
+| §1 store shape · `player.wallet`, one default in `initGame` | **BUILT** · always present, never spread-conditionally |
+| §1 the shape guard cannot see a per-player field | **FIXED IN S64**, and it reddened on arrival exactly as intended |
+| §2 price is a FUNCTION whose body is a constant | **BUILT** · `priceOf(card)` in `gameConfig.js`, flat $70M |
+| §3 a refusal returns a REASON, not a boolean | **BUILT** · `tryDrawCard` → `ok / not_your_turn / no_actions / no_card / insufficient_funds / no_seat` |
+| §3 validate before debiting · the empty-deck draw | **BUILT** · `no_card` refuses before an action or a dollar is spent |
+| §4 serialises into `game_sessions.state` | **BUILT** · plain number, round-trip asserted both empty and spent |
+| §4 the atomic debit inside `draw_card_for_seat` | **NOT BUILT** · required only by Flow's simultaneous draw. Classic is turn-locked, so this is correctly sequenced after, and it is the largest remaining engineering item |
+| §5 terminal condition accounts for money | **BUILT** · inlined in `maybeForceDeadlockEndgame`, both cases driven |
+| §6 demolition | **NOT BUILT, deliberately** · Council put it after T3's guard and T1's readout because it is the part that touches the terminal proof |
+
+**The flag is OFF.** `WALLET_ENABLED = false` in `gameConfig.js`, so every price is 0 and nothing is
+refused for money. Flipping it is one line, and §4's note applies before it goes to a real room: a
+module constant is identical for every client of one BUILD, so a client on an older bundle would
+disagree with its peer about whether cards cost money · a divergence in a replayed reducer (Rule 32).
+**It should become per-game state, the shape `mode` already has, before it is ever true in production.**
+
+### The tripwire Council attached, and where the numbers to check it live
+
+If any of the three re-measurements moves outside its stated interval once the wallet is live, stop
+before demolition is added:
+
+```
+ladder at $70M     architect vs apprentice 79.4% [76.7, 81.8]   docs/WALLET_PRICE_SWEEP.md §1b
+                   architect vs builder    60.0% [56.8, 63.1]
+                   builder vs apprentice   68.8% [65.7, 71.6]
+hand P90 (peak)    9-12 inside the plausible price bracket       docs/WALLET_PRICE_SWEEP.md §4
+basket             13.9-19.8 purchases at 2 players              docs/CARD_ECONOMY.md §2
+```
+
+⚠ Those were measured with a HARNESS wallet (`playOnce({ wallet })`), which models the constraint
+faithfully and adaptation not at all. The engine wallet is the real thing, so a re-measurement is a
+genuine second reading rather than a repeat · and the harness should be re-pointed at the store's own
+`tryDrawCard` once the flag is live, so there is one purchase rule rather than two (Rule 45).
