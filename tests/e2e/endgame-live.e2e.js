@@ -320,13 +320,24 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       //     S64 run 2   tiles  1  turn 17  [2,1,4]         arrived
       //     S66 run 1   tiles  1  turn 17  [2,1,4]         arrived · first run with an honest gate
       //     S66 run 2   tiles  1  turn 17  [2,1,4]         arrived
-      // 3 of 4 overall and 3 of 3 since the gate could fail. The seed is not the blocker.
-      // AND THE TRIGGER HAS NOW BEEN WITNESSED LIVE FOUR TIMES · 3362f77, S64 run 2, and both S66 runs
-      // · every one at `tiles 0 · rounds 2 · turn 17`, the same signature CLAUDE.md records. The
+      //     S67 run 2   tiles  1  turn 17  [2,1,4]         arrived      (S67 run 1 never got this far · it
+      //                                                    was a WRONG-PROJECT run, see projectAgreement.js)
+      // 4 of 5 overall and 4 of 4 since the gate could fail. The seed is not the blocker.
+      // AND THE TRIGGER HAS NOW BEEN WITNESSED LIVE FIVE TIMES · 3362f77, S64 run 2, both S66 runs and
+      // S67 run 2 · every one at `tiles 0 · rounds 2 · turn 17`, the same signature CLAUDE.md records. The
       // composition it calls the honest remaining gap keeps happening; what fails is the driver after it.
       // THE REMAINING FAILURES ARE ALL IN THE ACTION LOOP AND EACH NAMES ITS OWN STAGE:
       //     S66 run 1  +40.0s  the agreement check vs the app's own auto-end (see below)
       //     S66 run 2  +28.3s  `offer-inert` · seat 0 clicked the offer and nothing happened
+      //     S67 run 2  +39.4s  the agreement check AGAIN · `play/agree`, turn 18, read "0:false" want
+      //                        "1:true" while the host still saw seat 1 holding one action. TWO samples
+      //                        of one failure at 40.0 and 39.4 seconds · which is what the S67 loop
+      //                        markers bought, because S66 could only say "play" for both of them.
+      // ⚠ AND S67 run 1 IS NOT IN THAT TABLE, deliberately: the TEST process was on a different Supabase
+      // project from the browser, so it measured my invocation and not this spec. It is the reason
+      // projectAgreement.js exists, and runTwoHumanLobby now refuses that state before the second
+      // identity is spent. `[project] AGREE` is printed by every run from S67 on · UNMEASURED there
+      // would mean the guard is present and inert, which a green run cannot distinguish (Rule 79d).
       // ⚠ THE AGREEMENT CHECK IS RACING A REAL PRODUCT FEATURE, read from source rather than guessed:
       // GameRoom.jsx:622 `canAutoEnd = phase==='playing' && isMyTurn && actionsLeft===0 && uiPhase==='idle'
       // && buildableMatches.length===0 && !scoreFlash && bonusTokens.length===0`, then a timer. So a seat
@@ -353,7 +364,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // ARRIVED and a stalled driver step · both mine, both harness, and neither was visible before the
       // phase heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names
       // itself AND the gate that was supposed to catch run 1 can now fail.
-      test.fixme(true, 'the live room reaches its own ending (trigger witnessed live, tiles 0/rounds 2/turn 17) · the SEED ARRIVES (3 of 3 since the gate could fail) and the TRIGGER fires live · what fails now is the driver action loop, and each failure names its own stage · T3 S66')
+      test.fixme(true, 'the live room reaches its own ending (TRIGGER witnessed live five times, always tiles 0/rounds 2/turn 17) · the SEED ARRIVES 4 of 4 since the gate could fail · what fails is the driver action loop, and S67 narrowed it from "play" to `play/agree` twice at +40.0s and +39.4s · the re-read fix for that is in and has NOT yet been witnessed recovering · T3 S67')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -670,6 +681,36 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           try {
             await expect.poll(agreed, { timeout: 20_000 }).toBe(`${g.currentSeat}:true`)
           } catch {
+            // ── THE EXPECTATION MAY SIMPLY HAVE EXPIRED (T3 S67 · two samples, then the fix) ────────────
+            // `g.currentSeat` was read from p1 at the top of this iteration and is a CLAIM about a moment
+            // that has passed. GameRoom.jsx:669 ends a seat's turn ITSELF · `canAutoEnd = phase==='playing'
+            // && isMyTurn && actionsLeft===0 && uiPhase==='idle' && buildableMatches.length===0 &&
+            // !scoreFlash && bonusTokens.length===0`, then a timer · and the host's copy of
+            // actionsRemaining lags the acting browser's, which the block sixty lines below already says
+            // in terms for a DIFFERENT step. So the loop can be polling a seat that has legitimately
+            // moved on, and then reporting a product defect.
+            //     S66 run 1   +40.0s   read "0:false" want "1:true"
+            //     S67 run 2   +39.4s   read "0:false" want "1:true"   turn 18, host still saw seat 1 act 1
+            // TWO samples, same stage, same shape. Not three (Rule 122's corollary), which is why this
+            // RE-READS rather than assuming: the fix is correct under either mechanism that could move
+            // the seat, and it does not require me to have pinned down which one produced these two.
+            //
+            // THE DETECTOR KEEPS ITS TEETH, which is the whole point of re-reading instead of widening
+            // the timeout. If the seat and the turn are BOTH unchanged, the browser genuinely never
+            // agreed and the rich diagnostic below runs exactly as before. A tolerance widened to
+            // accommodate a defect is a defect with permission (Rule 110c); this narrows the CLAIM
+            // instead, from "seat X must agree" to "seat X must agree while it is still seat X".
+            // ⚠ NOT YET WITNESSED RECOVERING. It is reasoned from two failures and one source read, and
+            // the next live run is its proof · stated here rather than in a commit message, because a
+            // harness fix that has never been seen to work is exactly the claim that reads as settled.
+            const moved = await read(p1)
+            if (moved && (moved.currentSeat !== g.currentSeat || moved.turnNumber !== g.turnNumber)) {
+              console.log(`[endgame] the turn moved under the poll · expected seat ${g.currentSeat} at ` +
+                `turn ${g.turnNumber}, the board now reads seat ${moved.currentSeat} at turn ` +
+                `${moved.turnNumber} · re-reading rather than accusing the browser`)
+              continue
+            }
+
             // ── AND IF IT NEVER AGREES, SAY WHY IT COULD NOT (T3 S41 · Rule 90's corollary) ─────────────
             // "seat 1 never agreed the turn was its own" is a symptom with at least three causes that need
             // opposite responses: the realtime channel is not subscribed (a connection defect), it is
