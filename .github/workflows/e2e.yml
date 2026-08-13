@@ -32,7 +32,18 @@ on:
   # extends the quiet window a run must survive from `runtime` to `sleep + runtime`. It collapses a
   # burst into one run (cheaper) and lowers the verdict rate (the thing being fixed).
   #
-  # Every half hour, off the hour because GitHub's on-the-hour schedule queue is the congested one.
+  # Asked for every half hour, off the hour because GitHub's on-the-hour queue is the congested one.
+  # ⚠ WHAT IS ACTUALLY DELIVERED IS ABOUT 39% OF THAT · MEASURED IN THIS REPO (T2 S66), not assumed:
+  #     health.yml asks `0,30 * * * *` (2/hour) and GitHub delivered 0.78/hour over 25.7 hours,
+  #     with gaps of min 48min, MEDIAN 77min, max 145min. e2e-live-nightly's `0 5 * * *` lands at
+  #     05:54-06:18 daily, i.e. 54-78 minutes late, every day.
+  # So read this as "roughly every 77 minutes, sometimes 145" rather than "every 30". That is still
+  # far inside the defect it replaces (a red test unread for three NIGHTS), but a reader who does not
+  # know it will conclude the tick is broken the first time they look at an empty schedule column ·
+  # which is why scripts/tick-health.cjs reports delivery and outcome as two separate numbers.
+  # ⚠ AND GITHUB SILENTLY DISABLES SCHEDULED WORKFLOWS after 60 days of repository inactivity. Not
+  # applicable while three lanes push nightly, and it is the failure that would look EXACTLY like a
+  # scheduler delay · zero rows, no error, nothing red. tick-health names it for that reason.
   # The tick does NO work unless the tip is unmeasured and nothing is in flight · see the guard job.
   # COST, stated rather than hoped: one extra run per quiet window that follows a burst, not one per
   # tick. At ~4 still-unseeded browser contexts per run (scripts/pool-conversion.cjs) that is roughly
@@ -95,6 +106,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/tip-verdict-needed.cjs --workflow e2e.yml --event "${{ github.event_name }}" --sha "${{ github.sha }}"
+      # THE OBSERVABLE, on every run of this job · which is every push, not only every tick. A cron
+      # that never fires is green forever and does nothing (Rule 79's shape in a trigger), and the
+      # only way to notice is a number somebody sees without going looking. Never gating: it reports
+      # into the step summary and exits 0. `--gate` exists for a human or a later session.
+      # ⚠ IT REPORTS TWO NUMBERS ON PURPOSE. "The verdict rate did not move" is caused by the tick
+      # never FIRING (GitHub's scheduler · measured at 39% delivery in this repo, median 77min
+      # between fires) and by the tick firing and NOT HELPING (this guard's logic). Opposite fixes.
+      - name: Tick health · verdict rate anchored to the wiring commit, and cron delivery
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/tick-health.cjs --since 881e5e7 || true
 
   reconnect:
     name: Reconnect + backend-down E2E

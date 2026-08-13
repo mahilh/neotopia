@@ -89,15 +89,41 @@ function decide(runs, { sha, event, selfId = null }) {
   return { needed: true, reason: 'TIP-UNMEASURED', detail: why }
 }
 
-/** Ask GitHub for this workflow's recent runs. Returns null on ANY failure · see fail-open above. */
-function fetchRuns(workflow, repo) {
+const ghApi = (path) => JSON.parse(execFileSync('gh', [
+  'api', path, '--jq', '[.workflow_runs[] | {head_sha, status, conclusion, id}]',
+], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))
+
+/**
+ * The runs `decide` needs, fetched as TARGETED queries rather than one page that can be outrun.
+ *
+ * ⚠ THIS WAS `?per_page=60` AND FILTERED CLIENT-SIDE UNTIL T2 S66 · my own S65 closing critique.
+ * Three lanes push in bursts; sixty runs is a few hours of that. Once the tip's runs fall off the
+ * page the client-side filter finds none and reports `no run of this workflow has ever been created
+ * for <sha>`, which is FALSE. It fails OPEN so the tick still runs and nothing breaks · and that is
+ * precisely what makes it dangerous, because a wrong REASON attached to a working mechanism is the
+ * least-audited line there will ever be (preamble §4). Verified before rewriting, with its control:
+ *     ?head_sha=4524230...  -> {total: 1, returned: 1}
+ *     ?head_sha=0000000...  -> {total: 0, returned: 0}     (the filter is real, not ignored)
+ * Same truncated-page class T3 hit with `--limit 6` and T1 hit with a NUL-truncated grep · three
+ * lanes, three instruments, one shape (preamble §3 · absence inside a truncated page is not absence).
+ *
+ * `api` is injectable so the UNION logic below can be tested without a network (the queries are
+ * trivial; combining them is where a mistake would live).
+ */
+function fetchRuns(workflow, repo, sha, api = ghApi) {
+  const base = `repos/${repo}/actions/workflows/${workflow}/runs`
   try {
-    const out = execFileSync('gh', [
-      'api', `repos/${repo}/actions/workflows/${workflow}/runs?per_page=60`,
-      '--jq', '[.workflow_runs[] | {head_sha, status, conclusion, id}]',
-    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-    const parsed = JSON.parse(out)
-    return Array.isArray(parsed) ? parsed : null
+    // 1 · every run for THIS commit · exact, server-side, cannot be outrun by other commits.
+    const mine = sha ? api(`${base}?head_sha=${sha}&per_page=100`) : []
+    // 2 · anything currently live, for ANY commit · the collision check is about the workflow, not
+    //     about this sha, so it needs its own query and cannot come from the one above.
+    const live = [...api(`${base}?status=in_progress&per_page=100`), ...api(`${base}?status=queued&per_page=100`)]
+    if (!Array.isArray(mine) || !Array.isArray(live)) return null
+    // Deduplicated by id: a run for THIS sha that is also in flight appears in both, and counting it
+    // twice would be harmless today and is exactly the kind of thing that stops being harmless.
+    const byId = new Map()
+    for (const r of [...mine, ...live]) byId.set(r.id, r)
+    return [...byId.values()]
   } catch {
     return null
   }
@@ -114,7 +140,7 @@ function main() {
   const repo = arg('repo', process.env.GITHUB_REPOSITORY || 'mahilh/neotopia')
   const selfId = process.env.GITHUB_RUN_ID ? Number(process.env.GITHUB_RUN_ID) : null
 
-  const runs = event === 'schedule' ? fetchRuns(workflow, repo) : []
+  const runs = event === 'schedule' ? fetchRuns(workflow, repo, sha) : []
   const d = decide(runs, { sha, event, selfId })
 
   const line = `${d.needed ? 'RUN' : 'SKIP'} · ${d.reason} · ${d.detail}`
@@ -131,4 +157,4 @@ function main() {
 
 if (require.main === module) main()
 
-module.exports = { decide, TERMINAL, LIVE }
+module.exports = { decide, fetchRuns, TERMINAL, LIVE }

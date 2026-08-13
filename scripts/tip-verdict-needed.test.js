@@ -136,3 +136,48 @@ describe('tip-verdict-needed · the case it exists for', () => {
     expect(d.reason).toBe('ALREADY-RUNNING')
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// THE FETCH · targeted queries, not a page that can be outrun  (T2 S66 · my own S65 critique)
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// The old fetch asked for 60 runs and filtered client-side. Three lanes push in bursts, so the tip's
+// runs fall off that page and the filter reports "no run has ever been created for <sha>" · which is
+// false, fails OPEN (so nothing breaks), and therefore prints a wrong REASON on a working mechanism.
+// That is the least-audited line in any tool (preamble §4).
+//
+// `api` is injected here. The queries themselves are one line each and were verified live against
+// the real API with a control; what is worth testing is the UNION, which is where a mistake lives.
+describe('fetchRuns · the queries and how they combine', () => {
+  const { fetchRuns } = require('./tip-verdict-needed.cjs')
+
+  it('asks for THIS sha server-side, and for live runs separately', () => {
+    const asked = []
+    const api = (p) => { asked.push(p); return [] }
+    fetchRuns('e2e.yml', 'o/r', 'deadbeef', api)
+    expect(asked.some(p => p.includes('head_sha=deadbeef')), 'the sha is not in the query · the ' +
+      'filter is still client-side and can still be outrun by other commits').toBe(true)
+    expect(asked.some(p => p.includes('status=in_progress')), 'nothing asks for in-flight runs · the ' +
+      'collision check is about the WORKFLOW, not about this sha, so it cannot come from the sha query')
+      .toBe(true)
+    expect(asked.every(p => p.includes('per_page=100'))).toBe(true)
+  })
+
+  it('unions the two queries and de-duplicates by id', () => {
+    // A run for THIS sha that is ALSO in flight appears in both answers. Counting it twice is
+    // harmless today and is exactly the kind of thing that stops being harmless.
+    const mine = [{ id: 1, head_sha: 'abc', status: 'in_progress', conclusion: null }]
+    const live = [{ id: 1, head_sha: 'abc', status: 'in_progress', conclusion: null },
+                  { id: 2, head_sha: 'other', status: 'queued', conclusion: null }]
+    const api = (p) => (p.includes('head_sha') ? mine : p.includes('in_progress') ? live : [])
+    const out = fetchRuns('e2e.yml', 'o/r', 'abc', api)
+    expect(out.map(r => r.id).sort()).toEqual([1, 2])
+  })
+
+  it('a failing query means UNMEASURED, not an empty history', () => {
+    // The distinction the whole fail-open design rests on: [] would be read as "no runs exist" and
+    // could produce a confident TIP-UNMEASURED or a confident skip. null cannot be mistaken for data.
+    const api = () => { throw new Error('gh exploded') }
+    expect(fetchRuns('e2e.yml', 'o/r', 'abc', api), 'a thrown query resolved to a value · an API ' +
+      'outage would then be reported as a fact about the run history').toBe(null)
+  })
+})
