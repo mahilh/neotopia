@@ -3,12 +3,30 @@
 // S63 bracketed the price and did not derive it: below ~$32M the wallet constrains nobody, above
 // ~$200M it constrains everybody. This runs the wallet and measures what happens in between.
 //
-// THE MODEL, AND ITS LIMIT, FIRST. The engine has no wallet. `playOnce({ wallet })` refuses to ISSUE
-// a draw the seat cannot afford and re-asks the policy with the deck and offer hidden, which is a
-// state chooseBotAction already handles. So the CONSTRAINT is faithful and the ADAPTATION is not: a
-// real player who knows cards cost money buys different cards at different moments. Bot draw bias is
-// a fixed constant. That is exactly why there are two pacing arms · they are the only adaptation
-// this harness can express, and the gap between them is the upper bound on what budgeting is worth.
+// ══ T2 S67 · THIS FILE NOW DRIVES THE ENGINE'S PURCHASE RULE, NOT THE HARNESS'S ══════════════════
+// S64 wrote its own affordability check because the engine had no wallet. S66 gave the engine one.
+// For one session there were TWO purchase rules, and every number Council's stop-work tripwire is
+// stated in came from the harness one · so on the day the flag flips, a divergence would read as
+// "the wallet changed the game" when the honest question is "which of my two rules moved". The
+// harness rule is gone (see ladderHarness playOnce); `WALLET_ENABLED` is mocked TRUE here and the
+// engine charges, refuses and debits for real.
+//
+// THE SWEEP THEREFORE VARIES THE BUDGET, NOT THE PRICE, and that is an exact identity rather than a
+// convenience. Every wallet term in the system depends on price only through the ratio budget/price:
+//     affordability   wallet >= price          <=>   cards bought so far < budget/price
+//     the ration      spent + p <= B*c + p*L   <=>   nBought + 1 <= (B/p)*c + L      [divide by p]
+//     the terminal    wallet >= CARD_PRICE     <=>   the same question again
+// So price P at a $1B budget is byte-identical to the SHIPPING price at a budget of $70M x (1B/P),
+// and running it this way means the sweep exercises the real shipped CARD_PRICE constant instead of
+// a mocked one. Price 0 becomes an INFINITE budget · which is the free game exactly, not
+// approximately: Infinity - 70M is Infinity, so it can neither refuse nor drift (Rule 111's
+// corollary · assert the identity, never a tolerance).
+//
+// THE MODEL, AND ITS LIMIT, FIRST. The CONSTRAINT is now the engine's and is faithful by
+// construction; the ADAPTATION is still absent · a real player who knows cards cost money buys
+// different cards at different moments, and bot draw bias is a fixed constant. That is exactly why
+// there are two pacing arms · they are the only adaptation this harness can express, and the gap
+// between them is the upper bound on what budgeting is worth.
 //
 // ══ PREDICTIONS, WRITTEN BEFORE THE FIRST RUN ════════════════════════════════════════════════════
 // Recorded because a prediction made after seeing the number is not one, and because S63's closing
@@ -33,8 +51,17 @@
 // with something · which is S63's own sentence, "the decision is not what the number is, it is what
 // the number scales with".
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// ONE CONSTANT REPLACED, AND NOTHING ELSE. Not a model of the wallet · the actual store, with the
+// flag flipped. CARD_PRICE and priceOf are deliberately NOT mocked, so this sweep runs against the
+// price the game will ship with (preamble §3 · when the harness simulates the subject, the harness
+// is maximally suspect · here it simulates only the FLAG).
+vi.mock('./gameConfig', async (importOriginal) => ({ ...(await importOriginal()), WALLET_ENABLED: true }))
+
 import { playOnce, bots, makeReporter } from './ladderHarness'
+import { useGameStore } from './gameStore'
+import { WALLET_ENABLED, CARD_PRICE } from './gameConfig'
 
 const SEEDS = Number(process.env.SWEEP_SEEDS || 8)
 const OFFSET = Number(process.env.SWEEP_OFFSET || 0)
@@ -47,6 +74,15 @@ const M = 1_000_000
 // one, so both ends of the bracket are inside the measured range rather than assumed.
 const PRICES = [0, 25 * M, 40 * M, 55 * M, 70 * M, 85 * M, 100 * M, 130 * M, 170 * M, 250 * M]
 
+/**
+ * The budget that makes the SHIPPING price behave exactly like `price` against a $1B wallet.
+ * See the header for the derivation · every wallet term depends on budget/price alone, so this is an
+ * identity and not a rescaling that approximately preserves the shape.
+ *
+ * `price === 0` is the unpriced control and returns Infinity, which cannot refuse and cannot drift.
+ */
+const budgetFor = (price) => (price === 0 ? Infinity : CARD_PRICE * (WALLET / price))
+
 const sum = a => a.reduce((n, x) => n + x, 0)
 const mean = a => (a.length ? sum(a) / a.length : 0)
 const round = (x, n = 2) => +x.toFixed(n)
@@ -55,8 +91,12 @@ const pctile = (a, p) => {
   const s = [...a].sort((x, y) => x - y)
   return s[Math.min(s.length - 1, Math.floor(p * s.length))]
 }
-/** price 0 means NO wallet at all · the unpriced control, not a wallet with a free price. */
-const walletFor = (price, pacing) => (price === 0 ? null : { price, budget: WALLET, pacing })
+/**
+ * price 0 means an INFINITE budget · the unpriced control. It is still a wallet arm, deliberately:
+ * an arm of `null` would take a different code path through playOnce (no seeding, no quote, no
+ * engine debit) and the control would then differ from the treatment in two ways instead of one.
+ */
+const walletFor = (price, pacing) => ({ budget: budgetFor(price), pacing })
 
 // ── DEPTH (T2 S65) · answering S64's own closing critique, at the price Mahil has since ruled ────
 const DEPTH_SEEDS = Number(process.env.DEPTH_SEEDS || 12)
@@ -145,14 +185,25 @@ function duel(levelA, levelB, price, { pacing = 'naive', mode, pacingB = null } 
 // COUNTERWEIGHTS · FIRST AND ALONE (Rule 90)
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
 describe('price sweep · the wallet is real before any of it is read', () => {
+  // 0 · THE MOCK TOOK EFFECT. If it silently failed, every assertion below would run against the
+  //     SHIPPED (disabled) engine · every card free, nothing refused, a complete and self-consistent
+  //     sweep reporting that price does not matter. That is Rule 135 and it is the whole reason this
+  //     file changed hands this session. playOnce ALSO throws in this state, so there are two
+  //     independent guards; this one names the cause in one line instead of in a stack trace.
+  it('WALLET_ENABLED really is ON in this file', () => {
+    expect(WALLET_ENABLED, 'the module mock did not take effect · the engine is charging 0 for every ' +
+      'card and every row below is the FREE game wearing a price label').toBe(true)
+  })
+
   // 1 · THE DEFINING PROPERTY OF THE ARM. A wallet that does not actually stop anybody produces a
   //     complete, self-consistent sweep in which every price behaves like price 0 · and the finding
   //     would be "price does not matter", which is the most publishable wrong answer available.
   it('a high price REFUSES draws, and a zero price refuses none', () => {
-    const free = playOnce(bots('builder', 'builder'), 6200)
-    const dear = playOnce(bots('builder', 'builder'), 6200, undefined, { wallet: { price: 250 * M, budget: WALLET } })
-    expect(sum(free.seats.map(s => s.refusedByPrice)), 'the unpriced control refused a draw · then ' +
-      'the control is not a control').toBe(0)
+    const free = playOnce(bots('builder', 'builder'), 6200, undefined, { wallet: walletFor(0) })
+    const dear = playOnce(bots('builder', 'builder'), 6200, undefined, { wallet: walletFor(250 * M) })
+    expect(sum(free.seats.map(s => s.refusedByPrice)), 'the unpriced control refused a draw · an ' +
+      'INFINITE budget cannot be short of anything, so the engine is refusing for some other reason ' +
+      'and the control is not a control').toBe(0)
     expect(sum(dear.seats.map(s => s.refusedByPrice)), 'a $250M price refused NOTHING against a $1B ' +
       'wallet, which buys 4 cards · the wallet is not being applied and every row below is price 0')
       .toBeGreaterThan(0)
@@ -161,25 +212,63 @@ describe('price sweep · the wallet is real before any of it is read', () => {
   // 2 · AND IT MUST CHANGE THE GAME, not merely the bookkeeping. A refusal that still lets the draw
   //     through would tick the counter and leave the basket identical.
   it('a refused draw does not happen · the basket really shrinks', () => {
-    const free = playOnce(bots('builder', 'builder'), 6200)
-    const dear = playOnce(bots('builder', 'builder'), 6200, undefined, { wallet: { price: 250 * M, budget: WALLET } })
+    const free = playOnce(bots('builder', 'builder'), 6200, undefined, { wallet: walletFor(0) })
+    const dear = playOnce(bots('builder', 'builder'), 6200, undefined, { wallet: walletFor(250 * M) })
     const cards = g => sum(g.seats.map(s => s.scoredPoints.length + s.handAtEnd))
     expect(cards(dear), `priced game acquired ${cards(dear)} cards against ${cards(free)} free · the ` +
       'refusal is cosmetic and the seat drew anyway').toBeLessThan(cards(free))
   })
 
-  // 3 · SPENDING IS BOUNDED BY THE WALLET. If it is not, "the wallet binds" is not what is being
-  //     measured and every price on the curve is really a smaller price.
-  it('no seat ever spends more than it has', () => {
+  // 3 · SPENDING IS BOUNDED BY THE WALLET, and the ENGINE'S TWO ACCOUNTS AGREE (T2 S67).
+  //     `spent` is the sum of the costs tryDrawCard REPORTED charging; `walletAtEnd` is what it
+  //     actually took out of the player. Those are two observations of one operation, from the
+  //     return value and from the state, so they are genuinely two sources (Rule 92) · and a debit
+  //     that lands in the return value but not in the store is precisely how a feature ships inert.
+  it('no seat spends more than it has, and the reported cost equals the actual debit', () => {
     for (const price of [40 * M, 100 * M, 250 * M]) {
-      const g = playOnce(bots('architect', 'architect'), 6200, undefined, { wallet: { price, budget: WALLET } })
+      const budget = budgetFor(price)
+      const g = playOnce(bots('architect', 'architect'), 6200, undefined, { wallet: { budget } })
       for (const s of g.seats) {
-        expect(s.spent, `a seat spent ${s.spent} of a ${WALLET} wallet at price ${price}`)
-          .toBeLessThanOrEqual(WALLET)
-        expect(s.spent % price, 'spend is not a whole number of cards · the debit is not the price')
-          .toBe(0)
+        expect(s.spent, `a seat spent ${s.spent} of a ${budget} budget (price ${price} equivalent)`)
+          .toBeLessThanOrEqual(budget)
+        expect(s.spent % CARD_PRICE, 'spend is not a whole number of cards · the engine debited ' +
+          'something other than priceOf()').toBe(0)
+        expect(budget - s.walletAtEnd, 'the engine reported charging ' + s.spent + ' and the wallet ' +
+          'moved by ' + (budget - s.walletAtEnd) + ' · the return value and the debit disagree')
+          .toBe(s.spent)
       }
     }
+  })
+
+  // 3b · A TRIPWIRE, AND IT IS LABELLED ONE BECAUSE ITS ZERO CANNOT BE FALSIFIED FROM HERE.
+  //      `refusedByEngine` counts no_card / no_actions / not_your_turn / no_seat · the four refusals
+  //      chooseBotAction guards. Under bot play it is UNREACHABLE: the policy never asks for a card
+  //      that is not there, never draws out of turn and never draws at zero actions, and the only
+  //      re-ask hides the supply so it cannot produce a second draw. So the fixture rests at 0, and
+  //      a mutation that hardcodes the counter to 0 stays green · this assertion has no teeth today
+  //      and saying so is the point (Rule 132a · the tell is a constant the fixture already equals).
+  //
+  //      IT IS KEPT ANYWAY, for the one thing it CAN do: fire the day botPolicy changes and starts
+  //      issuing draws the engine rejects, which would silently inflate every acquisition figure in
+  //      this file. The counter existing at all is the else-branch Rule 114 is about.
+  //
+  //      THE POSITIVE CONTROL IS ON THE MECHANISM, NOT ON THE COUNTER (Rule 130b · a control must
+  //      exercise the thing you are about to assert the absence of). It proves the engine really
+  //      does return a non-money refusal, so a non-zero count would MEAN something rather than
+  //      being a value nobody has ever seen the system produce.
+  it('the engine can refuse for a reason other than money, and under bot play never does', () => {
+    const g = playOnce(bots('architect', 'apprentice'), 6200, undefined, { wallet: walletFor(250 * M) })
+    // POSITIVE CONTROL, in the same run and against the same store the game just finished in.
+    const drained = useGameStore.getState()
+    useGameStore.setState(s => { s.deck = [] })
+    const r = useGameStore.getState().tryDrawCard(drained.currentSeat, 'deck', 0)
+    expect(r.reason, 'a draw against an emptied deck was not refused as no_card · then a zero in ' +
+      'refusedByEngine is a value the engine cannot produce, and this assertion is decoration')
+      .toBe('no_card')
+
+    expect(sum(g.seats.map(s => s.refusedByEngine)), 'the engine refused a draw for a reason other ' +
+      'than funds · the bot asked for a card that was not there, so every acquisition figure in ' +
+      'this file is counting a draw that did not land').toBe(0)
   })
 
   // 4 · THE PACED ARM MUST ACTUALLY PACE. `paced` that behaves identically to `naive` would make the
@@ -196,10 +285,9 @@ describe('price sweep · the wallet is real before any of it is read', () => {
     // Asserted on an aggregate rather than one seed, because a refusal changes the game from that
     // point on (the bot places instead) and two arms are two different games after their first
     // divergence · which is a property of the mechanic, not a flaw in the measurement.
-    const price = 100 * M
     const run = (pacing) => sum([6200, 6223, 6246, 6269, 6292].map(seed =>
       sum(playOnce(bots('builder', 'builder'), seed, undefined,
-        { wallet: { price, budget: WALLET, pacing } }).seats.map(s => s.spentAtHalf))))
+        { wallet: walletFor(100 * M, pacing) }).seats.map(s => s.spentAtHalf))))
     const n = run('naive'), p = run('paced')
     expect(p, `paced had spent ${(p / 1e9).toFixed(2)}B by the half-clock and naive ${(n / 1e9).toFixed(2)}B ` +
       '· the ration is not holding anything back, so the two arms are one policy under two names and ' +
@@ -209,7 +297,7 @@ describe('price sweep · the wallet is real before any of it is read', () => {
   // 5 · THE PEAK HAND IS A REAL PEAK. If it equalled handAtEnd it would be the same field twice, and
   //     T1 would size a layout against a number that has already had its completable cards played out.
   it('the peak hand is at least the final hand, and usually more', () => {
-    const g = playOnce(bots('architect', 'architect'), 6200)
+    const g = playOnce(bots('architect', 'architect'), 6200, undefined, { wallet: walletFor(0) })
     for (const s of g.seats) expect(s.handPeak).toBeGreaterThanOrEqual(s.handAtEnd)
     expect(Math.max(...g.seats.map(s => s.handPeak)), 'peak never exceeded the final hand in a whole ' +
       'game · the sampler is reading the wrong moment')

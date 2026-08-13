@@ -107,6 +107,43 @@ should not be quoted more tightly than that.
 > below 100 seeds via `ctx.skip()` rather than failing, so the CI default exercises the code path
 > without reddening a shared gate or making a claim its sample cannot support.
 
+> **§1c · RE-MEASURED AGAINST THE ENGINE'S OWN PURCHASE RULE (T2 S67), and this is the row Council's
+> stop-work tripwire should be read against.** Every number in §1b was produced by a wallet the
+> HARNESS implemented, because when they were measured the engine had none. S66 gave the engine one,
+> so for one session there were two purchase rules and the tripwire would have compared engine
+> behaviour to harness-measured intervals · a divergence would have read as "the wallet changed the
+> game" when the honest question is "which of my two rules moved". `playOnce` now asks
+> `tryDrawCard` for every card and reads its refusal; the harness owns only the starting budget and
+> the pacing policy.
+>
+> | matchup | S65 · harness rule | **S67 · engine rule** | |
+> |---|---|---|---|
+> | architect vs apprentice | 79.4% [76.7, 81.8] | **79.4% [76.7, 81.8]** | identical |
+> | architect vs builder | 60.0% [56.8, 63.1] | **60.0% [56.8, 63.1]** | identical |
+> | builder vs apprentice | 68.8% [65.7, 71.6] | **68.8% [65.7, 71.6]** | identical |
+>
+> Not "inside the interval" · **bit-identical**, pooled rates, Wilson bounds and per-block spreads,
+> across 5,650 decided games in six cells. The tripwire does not fire and the §1b numbers stand
+> unchanged.
+>
+> **Why identical rather than merely close, because that is the result to distrust.** The two rules
+> were the same predicate written twice: `spent + price <= budget` is `budget - spent >= price` is
+> `wallet >= price`, and a refusal had the same consequence in both (re-ask the policy with the card
+> supply hidden). Agreement is what that looks like. The engine additionally refuses `no_card` /
+> `no_actions` / `not_your_turn`, which `chooseBotAction` guards · now counted rather than assumed,
+> and measured at exactly 0.
+>
+> **The one genuinely structural difference, and it changes nothing YET.**
+> `maybeForceDeadlockEndgame` ends a game in which cards exist, nobody can afford one, and no
+> placement is possible. The old harness could never express it: it ran with the shipped flag OFF,
+> so `!WALLET_ENABLED` short-circuited that term in every game ever measured. Now it is live.
+> Measured in `src/store/walletTerminalReach.test.js`: the money **precondition** is reached in
+> **58 of 80** games at the shipping price · it is not exotic · and the composite still fires **0**
+> times, because a broke player can always still place. Confirmed directly by neutralising the term
+> in the store and replaying the identical 80 games: 0 differ in turns, deck, offer, base score,
+> tokens, spend or refusals. That test asserts the 0 permanently, with the 58 as its positive
+> control, and reds the day the wallet's terminal term starts deciding real games.
+
 ### The prediction scorecard
 
 | # | prediction (written before the run) | outcome |

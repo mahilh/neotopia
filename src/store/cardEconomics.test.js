@@ -27,6 +27,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { playOnce, bots, makeReporter } from './ladderHarness'
+import { WALLET_ENABLED } from './gameConfig'
 import { DIFFICULTIES } from '../lib/botPolicy'
 import { PROJECT_CARDS } from '../lib/projectCards'
 
@@ -181,7 +182,41 @@ describe('card economy · the accounting closes before any of it is read', () =>
         'draw actions · a card reached a hand by a route this measurement does not model, so every ' +
         'basket size below is wrong and the derived prices with them')
         .toBeLessThanOrEqual(s.dealt + s.drawActions)
+      // T2 S67 · AND NOW IT IS AN EQUALITY, because the harness asks the ENGINE for each card and
+      // reads its refusal instead of assuming one never happens. Before S67 the gap between the two
+      // sides was UNATTRIBUTED · the file's own header claims `dealt + drawsThatLanded === scored +
+      // heldAtEnd` and could only assert `<=`, so a lost draw and a correct game were the same
+      // reading (Rule 114 · `if (found) { act }` with no else makes the shortfall unmeasurable).
+      //
+      // ⚠ AND THIS TERM RESTS AT ZERO UNDER BOT PLAY, which is exactly the shape Rule 132 is about:
+      // chooseBotAction guards all four non-money refusals, so `<=` and `===` are the same assertion
+      // on today's fixture and no mutation can tell them apart. It is written as the equality anyway
+      // because the DAY they differ is the day the inequality silently absorbs a real defect · and
+      // walletPriceSweep carries the positive control proving the engine can produce the refusal.
+      expect(acquired + s.refusedByEngine, 'the conservation identity does not close: the engine ' +
+        `refused ${s.refusedByEngine} draws and the shortfall is ` +
+        `${s.dealt + s.drawActions - acquired} · those must be the same number, or a card left the ` +
+        'accounting by a route neither the harness nor the engine reports')
+        .toBe(s.dealt + s.drawActions)
     }
+  })
+
+  // 1b · THE FLAG-OFF GUARD FIRES (T2 S67). playOnce THROWS if handed a wallet arm while
+  //      WALLET_ENABLED is false, because the engine would then charge 0 for every card and the arm
+  //      would measure the FREE game under a price label · a complete, self-consistent, entirely
+  //      wrong sweep (Rule 135).
+  //
+  //      IT IS TESTED HERE AND NOT WHERE IT IS USED, and that is the whole point. walletPriceSweep
+  //      mocks the flag ON, so the guard is unreachable in the only file that passes a wallet · a
+  //      mutation deleting it there stays green (measured, M2). A guard whose subject is absent from
+  //      the environment it runs in is Rule 128, and the cheap fix is to assert it somewhere the
+  //      subject exists. This file does not mock, so the flag really is false here.
+  it('playOnce refuses a priced arm while the wallet flag is off', () => {
+    expect(WALLET_ENABLED, 'this file mocks nothing, so the shipped flag must be false here · if it ' +
+      'has been turned on, this guard is now unreachable everywhere and needs a new home').toBe(false)
+    expect(() => playOnce(bots('builder', 'builder'), 4100, undefined, { wallet: { budget: 1e9 } }),
+      'a wallet arm ran with the flag off and returned a result · every price it reports is 0')
+      .toThrow(/WALLET_ENABLED is false/)
   })
 
   // 2 · CONSERVATION ACROSS THE WHOLE DECK. The stronger form, and it is the one that would catch a

@@ -18,6 +18,7 @@ import { useGameStore, PRODUCTION_TILES } from './gameStore'
 import { PROJECT_CARDS } from '../lib/projectCards'
 import { chooseBotAction, makeRng } from '../lib/botPolicy'
 import { calculateFinalScore, getClusterTotal } from '../lib/patternMatcher'
+import { priceOf, WALLET_ENABLED } from './gameConfig'
 
 const api = () => useGameStore.getState()
 
@@ -51,12 +52,21 @@ export const bots = (...levels) =>
 // Defaulting to undefined keeps every existing caller byte-identical (initGame's own default is
 // DEFAULT_GAME_MODE), so this is a widening and not a change.
 // T2 S64 · A WALLET, SIMULATED IN THE HARNESS AND NOWHERE ELSE.
+// T2 S67 · ⚠ NO LONGER TRUE, AND THAT SENTENCE IS THE WHOLE REASON THIS SESSION EXISTS.
 //
-// The engine has no wallet and this does not give it one. A draw the seat cannot afford is simply not
-// ISSUED: the policy is re-asked with an empty deck and offer, which is precisely the state
-// chooseBotAction already handles (`theOffer.length > 0` / `deck.length > 0` are its own guards), so
-// the bot places or ends its turn exactly as it would if the cards had run out. No new decision code
-// exists, and therefore no second rules engine can drift from the first (Rule 45).
+// S66 put a wallet in the ENGINE (`tryDrawCard`, behind `WALLET_ENABLED`). For one session this file
+// and gameStore.js each held a complete, independent purchase rule · which is Rule 45 with a
+// stopwatch on it, because Council's stop-work tripwire is stated in numbers this harness produced.
+// The moment the flag flips, the tripwire compares ENGINE behaviour against HARNESS-measured
+// intervals, and a divergence reads as "the wallet changed the game" when the honest question is
+// "which of my two rules moved". That is unanswerable after the fact and free to prevent before it.
+//
+// SO THE ENGINE OWNS AFFORDABILITY AND THE DEBIT, and this file owns only the two things that are
+// genuinely a harness's:
+//     the BUDGET each seat starts with     (seeded into player.wallet, then never touched again)
+//     the PACING policy                    (a bot's voluntary abstention · see PACING below)
+// Every refusal below is the engine's refusal, read from its return value. `spent` is the sum of the
+// costs the ENGINE reported charging, not a shadow ledger this file keeps.
 //
 // ⚠ WHAT THIS MODEL CANNOT SEE, stated before any number is read (preamble §3 · when the harness
 // simulates the subject, the harness is maximally suspect). It models the CONSTRAINT faithfully · a
@@ -64,6 +74,10 @@ export const bots = (...levels) =>
 // cost money buys different cards, at different moments, and places differently in between. Bot draw
 // bias is a fixed constant, so the only adaptation available here is the pacing policy below, which
 // is why there are two arms rather than one.
+//
+// PACING IS A POLICY AND NOT A RULE, and keeping that distinction visible is the point of the split.
+// The engine has no opinion about whether a solvent player SHOULD buy; it only answers whether they
+// MAY. A ration is a bot deciding not to ask.
 const PACING = {
   // Spend freely until broke. The whole budget is available from turn 1.
   naive: () => true,
@@ -82,9 +96,40 @@ const PACING = {
 // then share the deck, the seeds, the board and the opponent exactly, and the comparison is a
 // difference rather than a difference-of-averages.
 export function playOnce(configs, seed, mode, { recordCrossings = false, wallet = null, walletBySeat = null } = {}) {
+  // ── COUNTERWEIGHT, FIRST · a priced arm that is silently free (T2 S67) ──────────────────────────
+  // Now that the ENGINE owns the price, a wallet arm run with `WALLET_ENABLED` false charges 0 for
+  // every card, refuses nothing, and returns a complete self-consistent sweep in which every price
+  // behaves like price 0. The finding would be "price does not matter" · the most publishable wrong
+  // answer available, produced by a green run of working code. Rule 135 exactly: "the flag gates
+  // correctly" and "the feature is inert" are indistinguishable from the flag-off side.
+  //
+  // It THROWS rather than warning. A warning here is a console line inside a 900-second sweep that
+  // nobody reads, and the failure it announces invalidates every number the sweep prints.
+  const wantsWallet = !!(wallet || walletBySeat)
+  if (wantsWallet && !WALLET_ENABLED) {
+    throw new Error('playOnce was given a wallet arm while WALLET_ENABLED is false. The ENGINE owns ' +
+      'the purchase rule since T2 S67, so with the flag off every card costs 0 and nothing is ever ' +
+      'refused · this arm would measure the FREE game and report it under a price (Rule 135). Mock ' +
+      "./gameConfig with WALLET_ENABLED: true in the test file, the way walletEnabled.test.js does.")
+  }
+
   useGameStore.setState(useGameStore.getInitialState(), true)
   const rng = makeRng(seed)
   api().initGame(configs, shuffled(PROJECT_CARDS, rng), shuffled(PRODUCTION_TILES, rng), mode)
+
+  // The one thing a harness legitimately owns: how much money each seat STARTS with. After this line
+  // nothing in this file writes to a wallet · every subsequent change is the engine's debit.
+  // `walletBySeat[k]` overrides `wallet` for individual seats, so two BUDGETING POLICIES can be
+  // compared inside ONE game rather than between two blocks (Rule 74: the arms then share the deck,
+  // the seeds, the board and the opponent exactly, and the comparison is a difference rather than a
+  // difference-of-averages).
+  const seatWalletFor = (k) => (walletBySeat && walletBySeat[k] !== undefined) ? walletBySeat[k] : wallet
+  if (wantsWallet) {
+    useGameStore.setState(s => {
+      for (const p of s.players) { const w = seatWalletFor(p.seat); if (w) p.wallet = w.budget }
+    })
+  }
+
   let lastPlacedKey = null
   const heldPrev = configs.map(() => 0)
   const grantOrder = []
@@ -147,8 +192,19 @@ export function playOnce(configs, seed, mode, { recordCrossings = false, wallet 
   // T2 S64 · wallet bookkeeping. `spent` is per seat; `refused` counts draws the price prevented,
   // which is the whole point of the instrument · a purchase that does not happen leaves no trace
   // anywhere else, and an unrecorded refusal is an unmeasured constraint (Rule 114).
+  //
+  // T2 S67 · ALL THREE ARE NOW THE ENGINE'S NUMBERS, READ BACK. `spent` accumulates the `cost` the
+  // engine reports charging; `refusedByPrice` counts `insufficient_funds` returned by the engine;
+  // `abstainedByPacing` counts the harness POLICY declining to ask at all, which is a different
+  // event with a different owner and was previously summed into the same counter as a refusal.
   const spent = configs.map(() => 0)
   const refusedByPrice = configs.map(() => 0)
+  const abstainedByPacing = configs.map(() => 0)
+  // Every OTHER refusal the engine can return · no_card, no_actions, not_your_turn, no_seat. The bot
+  // policy guards all four, so this must be 0, and that is a CLAIM: it is reported rather than
+  // believed, and cardEconomics.test.js turns the conservation inequality into an equality with it
+  // (Rule 114 · `if (found) { act }` with no else makes demand unmeasurable · here the else exists).
+  const refusedByEngine = configs.map(() => 0)
   const tilesTotal = api().productionTilesRemaining
   // Cumulative spend at the moment the tile clock passes its halfway mark. This is the DEFINING
   // property of a rationing policy · it must hold back early money · and it is the only observable
@@ -190,25 +246,65 @@ export function playOnce(configs, seed, mode, { recordCrossings = false, wallet 
     })
     let a = ask(api())
 
-    // ── THE PRICE, applied at the only place a card is bought ────────────────────────────────────
-    const seatWallet = (walletBySeat && walletBySeat[seat] !== undefined) ? walletBySeat[seat] : wallet
+    // ── THE RATION · a bot declining to ask, which is the only thing here that is not the engine's ─
+    // Quoted, not guessed: the card the engine will resolve is resolved the same way and handed to
+    // the same `priceOf`. That is one expression duplicated and it is CHECKED on every purchase
+    // below (`quoted !== r.cost` throws), so it cannot drift into a second pricing rule · a shop
+    // quotes before it charges, and the till is what settles the argument.
+    const seatWallet = seatWalletFor(seat)
+    let quoted = null
     if (seatWallet && a.type === 'drawCard') {
-      const { price, budget, pacing = 'naive', lookahead } = seatWallet
-      const affordable = spent[seat] + price <= budget &&
-        PACING[pacing]({ spent: spent[seat], price, budget, tilesRemaining: api().productionTilesRemaining, tilesTotal, lookahead })
-      if (affordable) {
-        spent[seat] += price
-      } else {
-        refusedByPrice[seat]++
+      const st0 = api()
+      quoted = priceOf(a.source === 'offer' ? st0.theOffer[a.cardIndex] : st0.deck[0])
+      const { budget, pacing = 'naive', lookahead } = seatWallet
+      if (!PACING[pacing]({ spent: spent[seat], price: quoted, budget,
+        tilesRemaining: st0.productionTilesRemaining, tilesTotal, lookahead })) {
+        abstainedByPacing[seat]++
+        quoted = null
         // Re-ask with the card supply hidden. NOT a substitute action chosen here: the policy makes
         // the decision, through the same branch it already uses when the deck and offer are empty.
-        a = ask({ ...api(), theOffer: [], deck: [] })
+        a = ask({ ...st0, theOffer: [], deck: [] })
       }
     }
-    if (a.type === 'placeElement') { api().placeElement(seat, a.factoryId, a.elementType, a.q, a.r, a.regionId); lastPlacedKey = `${a.q},${a.r}`; placeActions[seat]++ }
-    else if (a.type === 'scoreCard') { api().scoreCard(seat, a.cardId, a.regionId, a.lastPlacedKey); lastPlacedKey = null; scoreActions[seat]++ }
-    else if (a.type === 'drawCard') { api().drawCard(seat, a.source, a.cardIndex); drawActions[seat]++ }
-    else { api().endTurn(); lastPlacedKey = null }
+
+    // ── EXECUTE · a draw is ASKED OF THE ENGINE and may be refused, which costs nothing ───────────
+    // The refusal is DISCOVERED rather than predicted. `tryDrawCard` validates fully before debiting
+    // (Rule 29), so asking and being told no is free · which means the harness never needs to model
+    // affordability at all, and therefore cannot model it differently.
+    //
+    // Bounded at two passes. The re-ask hides the supply, so `chooseBotAction`'s own
+    // `deck.length > 0` / `theOffer.length > 0` guards make a second draw impossible · which is a
+    // claim about somebody else's module, so the bound is structural and a second refusal falls
+    // through to `refusedByEngine` where it is counted rather than looping.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (a.type === 'placeElement') { api().placeElement(seat, a.factoryId, a.elementType, a.q, a.r, a.regionId); lastPlacedKey = `${a.q},${a.r}`; placeActions[seat]++; break }
+      if (a.type === 'scoreCard') { api().scoreCard(seat, a.cardId, a.regionId, a.lastPlacedKey); lastPlacedKey = null; scoreActions[seat]++; break }
+      if (a.type !== 'drawCard') { api().endTurn(); lastPlacedKey = null; break }
+
+      const r = api().tryDrawCard(seat, a.source, a.cardIndex)
+      if (r.ok) {
+        drawActions[seat]++
+        spent[seat] += r.cost
+        if (quoted !== null && r.cost !== quoted) {
+          throw new Error(`the harness quoted ${quoted} and the engine charged ${r.cost} · the ` +
+            'pacing policy is pricing cards differently from the engine, which is the two-rules ' +
+            'defect this rewrite closed, reappearing (Rule 45)')
+        }
+        break
+      }
+      if (r.reason === 'insufficient_funds' && attempt === 0) {
+        refusedByPrice[seat]++
+        quoted = null
+        a = ask({ ...api(), theOffer: [], deck: [] })
+        continue
+      }
+      // no_card / no_actions / not_your_turn / no_seat · every one of which chooseBotAction guards.
+      // Counted as an ATTEMPT (it was issued) so the conservation gap stays readable, and recorded
+      // so that "the bot never asks for a card that is not there" is a measurement and not a belief.
+      refusedByEngine[seat]++
+      drawActions[seat]++
+      break
+    }
   }
   // Final sweep · a token granted by the LAST scoring action of the game would otherwise be missed,
   // because the loop samples holdings at the top of each iteration and there is no iteration after
@@ -254,6 +350,12 @@ export function playOnce(configs, seed, mode, { recordCrossings = false, wallet 
     offerAtEnd: st.theOffer.length,
     turnsPlayed: st.turnNumber,
     tilesTotal,
+    // T2 S67 · THE DISCRIMINATOR FOR HOW THE GAME ENDED, and in Classic it is exact. Only three
+    // things set endGameTriggered: refillFactoryDraft when the tile stack runs out,
+    // maybeForceDeadlockEndgame, and maybeForceFlowEndgame (Flow only). So a CLASSIC game that ends
+    // with tiles STILL ON THE STACK ended by deadlock and by nothing else · which is the only way to
+    // see the wallet's terminal term decide a real game rather than a constructed board.
+    tilesAtEnd: st.productionTilesRemaining,
     seats: configs.map((_, seat) => {
       const p = st.players.find(x => x.seat === seat)
       return {
@@ -292,6 +394,16 @@ export function playOnce(configs, seed, mode, { recordCrossings = false, wallet 
         spent: spent[seat],
         spentAtHalf: spentAtHalf[seat] ?? spent[seat],   // a game that never reached half spent it all
         refusedByPrice: refusedByPrice[seat],
+        // T2 S67 · the two events S64 summed into one counter, now separable. A refusal is the
+        // ENGINE saying no; an abstention is the bot's ration deciding not to ask. They have
+        // opposite meanings for "is budgeting a skill" and reporting their sum answered neither.
+        abstainedByPacing: abstainedByPacing[seat],
+        refusedByEngine: refusedByEngine[seat],
+        // The engine's own debit, read back off the player. `spent` above is the sum of the costs
+        // the engine REPORTED; this is what it actually took out of the wallet. Two observations of
+        // one operation, from the return value and from the state · genuinely two sources (Rule 92),
+        // and walletPriceSweep asserts they agree.
+        walletAtEnd: p.wallet,
       }
     }),
   }
