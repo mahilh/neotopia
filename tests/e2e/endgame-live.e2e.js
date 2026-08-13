@@ -402,7 +402,17 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       const t0 = Date.now()
       const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1)
       let phase = 'start'
-      const at = (name) => { phase = name; console.log(`[endgame] +${elapsed()}s · ${name}`) }
+      // TWO SETTERS, ONE READER (T3 S67). `at` LOGS · it names a top-level stage and there are four of
+      // them. `mark` is SILENT and is for the inside of the action loop, which runs dozens of times: six
+      // extra lines per iteration would bury the per-iteration heartbeat that already exists, and the only
+      // reader either of them has is the catch below. MEASURED, which is why the loop got marked at all:
+      // the play region carries 18 of this spec's 37 awaits under ONE label, against a worst case of 7 in
+      // host-departure-live, the file this mechanism was ported FROM. Both S66 failures landed in it · the
+      // agreement poll at +40.0s and spendOneAction at +28.3s · and both reported the same word. A label
+      // that cannot separate the failures it names is one better than no label and one short of a
+      // diagnosis. Gated by tests/phaseHeartbeat.test.js, which pins the stage KEYS from a second file.
+      const mark = (name) => { phase = name }
+      const at = (name) => { mark(name); console.log(`[endgame] +${elapsed()}s · ${name}`) }
 
       try {
         at('lobby · two real identities through the real lobby')
@@ -588,6 +598,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         let lastProgressAt = Date.now()
 
         while (Date.now() - started < BUDGET_MS) {
+          mark('play/read-host · asking the host browser where the game is')
           const g = await read(p1)
           if (!g) throw new Error('the store seam vanished mid-game')
 
@@ -633,6 +644,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           // column_phase 'finished' / state_turn 21 with both clients agreeing, and this loop went on
           // waiting for seat 1 and threw "never agreed the turn was its own". The ending is the SUCCESS
           // condition · check it before demanding another turn.
+          mark(`play/terminal-check · has the room already ended · turn ${g.turnNumber} seat ${g.currentSeat}`)
           const term = await readSessionRow(page, roomId)
           if (term?.statePhase === 'scoring' || term?.column === 'finished') {
             console.log(`[endgame] the room ENDED on its own · column ${term.column} · state ` +
@@ -650,6 +662,11 @@ test.describe('a real room reaches its own ending · the composition nobody had 
             const root = document.querySelector('[data-ui-phase]')
             return `${s?.currentSeat}:${root?.getAttribute('data-my-turn')}`
           }).catch(() => 'unreadable')
+          // S66 RUN 1 DIED HERE, at +40.0s, and reported only "play". This is also the step with the
+          // standing hypothesis against it (see the header): `g.currentSeat` is a STALE expectation and
+          // GameRoom may have auto-ended the turn underneath it. Its own name is what makes the next
+          // failure comparable to that one instead of merely simultaneous with it.
+          mark(`play/agree · seat ${g.currentSeat}'s browser must agree the turn is its own · turn ${g.turnNumber}`)
           try {
             await expect.poll(agreed, { timeout: 20_000 }).toBe(`${g.currentSeat}:true`)
           } catch {
@@ -704,10 +721,15 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           // that found this reported place:5 for a 3-action turn and then stopped at offer-inert with
           // myTurn false · both numbers are the lag, not the game. Whose turn it is comes from the shared
           // state; what that seat may still DO is only answerable by the browser doing it.
+          mark(`play/read-acting · what seat ${g.currentSeat} may still do, from its OWN browser`)
           const acting = await read(page)
           if (!acting) throw new Error(`the store seam vanished in seat ${g.currentSeat}'s browser`)
 
           if (acting.actionsRemaining > 0) {
+            // S66 RUN 2 DIED HERE, at +28.3s, stage `offer-inert` · a different failure from run 1's,
+            // reported under the same word. spendOneAction has its own named stages inside it; this marker
+            // is what says the run got as far as ASKING for one.
+            mark(`play/act · seat ${g.currentSeat} spending an action · turn ${g.turnNumber} act ${acting.actionsRemaining}`)
             const did = await spendOneAction(page, { expect })
             if (did.action) {
               actions[did.action]++
@@ -731,6 +753,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
               `offer ${g.offer} · placed ${g.placed} · tiles ${g.tiles}\n` +
               `  so far: ${JSON.stringify(actions)}`)
           }
+          mark(`play/end-turn · seat ${g.currentSeat} at zero actions · turn ${g.turnNumber}`)
           const endTurn = page.getByTestId('end-turn-btn')
           await expect(endTurn, `End Turn never enabled for seat ${g.currentSeat} at zero actions`)
             .toBeEnabled({ timeout: 10_000 })
