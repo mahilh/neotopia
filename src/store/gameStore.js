@@ -7,7 +7,7 @@ import { immer } from 'zustand/middleware/immer'
 import { enableMapSet } from 'immer'
 import { findBuildableCards, getClusterDetail as computeClusterDetail, getClusterTotal as computeClusterTotal, calculateFinalScore } from '../lib/patternMatcher'
 import { hexesInRadius, REGIONS as REGION_DEFS } from '../utils/hexUtils'
-import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig } from './gameConfig'
+import { TURN_TIME_LIMIT, DEFAULT_GAME_MODE, getModeConfig, STARTING_WALLET, CARD_PRICE, priceOf, WALLET_ENABLED } from './gameConfig'
 
 // Immer does not draft Map/Set unless this is enabled. pendingMoves is a Set that
 // the optimistic-update flow mutates, so without this the first mutation throws.
@@ -227,10 +227,33 @@ function anyPlacementPossible(state) {
 // Sets the SAME endGameTriggered flag the natural clock sets (Rule 62 · extend, never replace), so the
 // existing endTurn 2-round → 'scoring' path does the ending. All modes: the deadlock is a property of
 // the board, not of the draw rules.
+// ⚠ THE WALLET ADDS A FOURTH EXHAUSTION AND IT IS MONOTONE (T2 S66 · the contract's §5, and T3's
+// tests/walletTerminalSeam.js is the biconditional that made this a red rather than a paragraph).
+//
+//     before   DEAD  ⇔  no card available                 AND  no legal placement
+//     now      DEAD  ⇔  (no card available OR no money)   AND  no legal placement
+//
+// A player with forty cards in the deck and an empty wallet is EXACTLY as stuck as one with an empty
+// deck, and the early return below would have declined to notice. Money only ever decreases (nothing
+// refunds it until demolition, which is deliberately not built yet), so "no money" is permanent and
+// the proof stays CLOSED rather than becoming a heuristic.
+//
+// The affordability term is INLINED rather than extracted into a helper, and that is not style: T3's
+// guard reads the BODY of this function for the money field, because a terminal condition that
+// delegates its money question elsewhere is exactly as easy to get wrong and much harder to see.
+//
+// WITH THE FLAG OFF THIS IS BYTE-FOR-BYTE THE OLD PREDICATE · `affordable` is unconditionally true,
+// so `cardExists && affordable` reduces to `cardExists`. That equivalence is asserted, not asserted-
+// by-comment: gameStore.test.js drives a deadlocked board with the flag in both states.
 function maybeForceDeadlockEndgame(state) {
   if (state.endGameTriggered) return
   if (state.phase !== 'playing') return
-  if (state.deck.length > 0 || state.theOffer.length > 0) return
+  const cardExists = state.deck.length > 0 || state.theOffer.length > 0
+  // `.some`, not the current seat: the question is whether the GAME can still move, and a game in
+  // which one player is broke and another can buy is not dead. Flat pricing makes CARD_PRICE the
+  // cheapest card there is, so this is exact rather than an approximation of "the cheapest card".
+  const affordable = !WALLET_ENABLED || (state.players ?? []).some(p => (p.wallet ?? 0) >= CARD_PRICE)
+  if (cardExists && affordable) return
   if (anyPlacementPossible(state)) return
   state.endGameTriggered = true
 }
@@ -290,6 +313,14 @@ export const useGameStore = create(immer((set, get) => ({
       bonusTokens: [],
       scores: [0, 0, 0],
       scoredCardIds: [], // ids of cards this player scored · drives the FinalScore "Districts Built" record (T1 S6)
+      // THE WALLET (T2 S66). ALWAYS PRESENT, even while WALLET_ENABLED is false · a field that
+      // appears only under a flag would change the serialized state shape on the day the flag flips,
+      // and that shape is pinned by tests/e2e/fixtures/seededState.json. Shape first, behaviour
+      // second, so the two risks are never in one diff.
+      // NOT spread-conditionally like isBot: every player has a wallet in every game, so an absent
+      // one is a bug and must read as `undefined` loudly rather than be papered over with `?? ` at
+      // the read sites (docs/WALLET_AND_DEMOLITION_CONTRACT.md §1). One default, here.
+      wallet: STARTING_WALLET,
       // Practice mode (T2 S32) · a bot seat is an ordinary seat with a policy attached. NOTHING in the
       // store branches on these: turn order is seat-based, colours come from the same list, and every
       // bot move goes through the same actions a human click uses. They exist so useBotTurns knows whose
@@ -402,54 +433,72 @@ export const useGameStore = create(immer((set, get) => ({
     // T1 reads getBuildableCards(regionId, hexKey) to highlight completions.
   }),
 
-  // Draw a card · Flow mode makes the DRAW GATE turn-agnostic (T2 S17 Task A · simultaneous draw).
-  drawCard: (seat, source, cardIndex) => set(state => {
+  // ── BUYING A CARD  (T2 S66) ─────────────────────────────────────────────────────────────────────
+  // Returns an OUTCOME with a REASON, following tryScoreCard's precedent exactly rather than adding a
+  // second shape for the same idea (Rule 45). The reason is an enumerated string and not a boolean
+  // for one measured purpose: T1 has to tell "you are broke" apart from "it is not your turn" apart
+  // from "you have no actions left", and a boolean collapses all three into a silent no-op · which
+  // this project has paid for four times (Rule 80 · a counter that cannot measure must say so).
+  //
+  //   ok | not_your_turn | no_actions | no_card | insufficient_funds | no_seat
+  //
+  // ⚠ VALIDATE FULLY BEFORE DEBITING (Rule 29), and `no_card` is not hypothetical · it was live.
+  // The old drawCard decremented actionsRemaining and THEN did `deck.shift()` unchecked, so a draw
+  // against an empty deck cost an action and delivered nothing. No bot ever hit it (chooseBotAction
+  // guards deck.length > 0 · measured ZERO refused draws across 103,750 acquisitions, which is why
+  // this fix cannot move a single number in docs/CARD_ECONOMY.md), but a human clicking an empty
+  // deck could. Under a wallet that becomes money for nothing.
+  tryDrawCard: (seat, source, cardIndex) => {
+    const state = get()
     const player = state.players.find(p => p.seat === seat)
-    if (!player) return
+    if (!player) return { ok: false, reason: 'no_seat', cost: 0, balance: 0 }
 
     const isCurrentSeat = state.currentSeat === seat
-    // SIMULTANEOUS_DRAW (getModeConfig · classic=false · flow=true): in Flow, drawing is NOT gated by whose
-    // turn it is — each player draws into their OWN hand within their own 15s window (Flow's defining mechanic).
-    // Classic stays strictly turn-locked. The draw is deterministic (offer index / deck.shift on a deck shuffled
-    // ONCE at init · host-authoritative + persisted · NO Math.random in this reducer · rule 32), so T3 can
-    // serialize concurrent draw_card events server-side without divergence (the channel is the remaining seam).
     const simultaneous = getModeConfig(state.mode).SIMULTANEOUS_DRAW
-    if (!isCurrentSeat && !simultaneous) return // classic / non-current → reject (classic behavior unchanged)
+    if (!isCurrentSeat && !simultaneous) return { ok: false, reason: 'not_your_turn', cost: 0, balance: player.wallet }
+    if (isCurrentSeat && state.actionsRemaining <= 0) return { ok: false, reason: 'no_actions', cost: 0, balance: player.wallet }
 
-    // Action budget: actionsRemaining is the CURRENT turn-holder's single shared PLACE/DRAW counter (the
-    // engine is still turn-based). The current seat spends from it exactly as before. A non-current simultaneous
-    // draw must NOT touch it — decrementing the active player's budget would corrupt their turn (rule 65 · the
-    // composed seam). It is instead bounded by the shared deck/offer emptying; a true per-player action budget +
-    // per-player 15s timer is the cross-lane Flow follow-up (engine + T3 channel · see comms · NOT this slice).
-    // Only the DRAW GATE is turn-agnostic here · Flow is not yet fully simultaneous and the comment does not claim it.
-    //
-    // ⚠ IT IS NOT A SCORE COUNTER · this line read "place/draw/score counter" until T2 S63, and scoring has
-    // never decremented it. `actionsRemaining--` exists in placeElement and in drawCard and NOWHERE ELSE, and
-    // the deadlock proof at line 186 already said so in terms ("scoring a card is still possible and costs no
-    // action") · so the file disagreed with itself and the wrong half was the one a reader meets first.
-    // MEASURED rather than re-read: actionsRemaining is 1 before and 1 after a successful tryScoreCard.
-    // The wrong word cost a wrong denominator in docs/CARD_ECONOMY.md's action split and understated the draw
-    // share of every cell by ~7 points before a counterweight computed the constraint and reddened. A comment
-    // that is wrong goes red never (Rule 105a), and this one was load-bearing for a pricing decision.
-    if (isCurrentSeat && state.actionsRemaining <= 0) return
+    // WHICH card, before anything is spent. The offer is addressed and the deck is the top of a
+    // shuffled stack; both can be absent, and absent is a refusal rather than a silent nothing.
+    const card = source === 'offer' ? state.theOffer[cardIndex] : state.deck[0]
+    if (!card) return { ok: false, reason: 'no_card', cost: 0, balance: player.wallet }
 
-    if (source === 'offer') {
-      const card = state.theOffer[cardIndex]
-      if (!card) return
-      player.hand.push(card)
-      state.theOffer.splice(cardIndex, 1)
-      // Offer is replenished in endTurn().
-    } else {
-      const card = state.deck.shift()
-      if (card) player.hand.push(card)
-    }
+    // priceOf takes the card it currently ignores · see gameConfig. With the flag off the cost is 0,
+    // so no purchase can ever be refused for money and the engine is unchanged.
+    const cost = WALLET_ENABLED ? priceOf(card) : 0
+    const balance = player.wallet ?? 0
+    if (cost > 0 && balance < cost) return { ok: false, reason: 'insufficient_funds', cost, balance }
 
-    if (isCurrentSeat) state.actionsRemaining-- // only the active turn-holder spends an action (rule 65)
+    set(s => {
+      const p = s.players.find(x => x.seat === seat)
+      if (!p) return
+      if (source === 'offer') {
+        const c = s.theOffer[cardIndex]
+        if (!c) return                       // re-checked inside the write · validated state can age
+        p.hand.push(c)
+        s.theOffer.splice(cardIndex, 1)      // The Offer is replenished in endTurn().
+      } else {
+        const c = s.deck.shift()
+        if (!c) return
+        p.hand.push(c)
+      }
+      if (cost > 0) p.wallet = (p.wallet ?? 0) - cost
+      // Only the active turn-holder spends an action · a non-current simultaneous draw must not
+      // touch the current player's budget (rule 65 · the composed seam).
+      if (s.currentSeat === seat) s.actionsRemaining--
+      // The draw that empties the card supply is one of the two seams that can complete the Flow
+      // soft-lock (the other is a tile-consuming refill · see refillFactoryDraft).
+      maybeForceFlowEndgame(s)
+      maybeForceDeadlockEndgame(s)
+    })
+    return { ok: true, reason: 'ok', cost, balance: balance - cost }
+  },
 
-    // The draw that empties the card supply is one of the two seams that can complete the Flow soft-lock
-    // (the other is a tile-consuming refill · see refillFactoryDraft). Re-check after every draw.
-    maybeForceFlowEndgame(state)
-  }),
+  // Draw a card · Flow mode makes the DRAW GATE turn-agnostic (T2 S17 Task A · simultaneous draw).
+  // VOID WRAPPER, delegating to tryDrawCard so the purchase rule lives in exactly ONE place · the
+  // same relationship scoreCard has with tryScoreCard.
+  drawCard: (seat, source, cardIndex) => { get().tryDrawCard(seat, source, cardIndex) },
+
 
   // Score a card · returns true on a real award, false if rejected (wrong seat, card not in
   // hand, Diverse-City violation, or the pattern isn't actually complete on the board).

@@ -83,7 +83,19 @@ describe('e2e reconnect fixture (seededState.json)', () => {
       .toBeGreaterThan(4)
     // And the check must be capable of noticing a difference · proven against a synthetic drift
     // rather than trusted, because a key-set comparison that silently normalises would not.
-    expect(keysOf({ ...fixture.players[0], wallet: 1 }))
+    //
+    // ⚠ THIS USED `wallet: 1` AND WENT VACUOUS THE DAY THE WALLET LANDED (T2 S66). I picked the name
+    // of a field that did not exist, and eleven days later it did · at which point spreading it over
+    // a player that already has one changed no key and the counterweight asserted nothing. It failed
+    // loudly rather than silently only because `toEqual` then matched, which is luck: had I written
+    // it the other way round it would have passed forever. The token for a synthetic drift must be
+    // one that CANNOT become a real field, and its absence is asserted so that "cannot" stays true
+    // (Rule 125 · a discriminator has to be one you own, and a name you invented for a future field
+    // is precisely one you do not).
+    const SYNTHETIC = '__drift_probe_never_a_real_field__'
+    expect(keysOf(fixture.players[0]), `${SYNTHETIC} is now a real player field · pick another, or ` +
+      'this control is comparing a key set to itself').not.toContain(SYNTHETIC)
+    expect(keysOf({ ...fixture.players[0], [SYNTHETIC]: 1 }))
       .not.toEqual(keysOf(fixture.players[0]))
   })
 
