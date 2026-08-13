@@ -71,10 +71,39 @@ export function findPatternHighlights(regionHexes, playerHand, lastBuiltIllustra
     completeCardIds.add(m.cardId)
   }
 
-  // 2. Near-miss: cards in hand that are NOT already complete and NOT Diverse-City-blocked.
-  const nearMissHand = playerHand.filter(
-    c => c.illustration !== lastBuiltIllustration && !completeCardIds.has(c.id),
-  )
+  // 2. Near-miss: cards in hand that are NOT already complete.
+  //
+  // ⚠ THIS USED TO RE-CHECK DIVERSE CITY (`c.illustration !== lastBuiltIllustration`) AND THAT
+  // MADE THE REAL RULE UNTESTABLE (T2 S67, from T1's S66 measurement · Rule 118). The matcher
+  // applies the rule itself, unconditionally and first · patternMatcher.js:58, `if (card.
+  // illustration === lastBuiltIllustration) continue` · so the rule was enforced in two places,
+  // either was sufficient, and NO SINGLE MUTATION COULD RED EITHER. T1 measured all three arms
+  // against their near-miss badge spec: remove the pre-filter GREEN, remove the matcher's argument
+  // GREEN, remove both RED. Two guards that make each other invisible while both report as present.
+  //
+  // T1 ROUTED IT RATHER THAN DELETING A LINE IN MY FILE, and asked the right question: the
+  // pre-filter shrinks the hand before the O(candidateHexes x 4 types) hypothetical loop, so it is
+  // real work as an OPTIMISATION even where it is redundant as a RULE. That is a design call, and
+  // a declared redundancy would have been a perfectly good answer.
+  //
+  // MEASURED, BECAUSE A PERFORMANCE ARGUMENT IS A CLAIM (Rule 122a · the justification is the
+  // least-audited place in a diff). The deck holds 44 distinct illustrations across 56 cards and at
+  // most THREE share one, so the filter usually removes nothing at all. At the largest overlap the
+  // deck permits · a 12-card hand with all 3 'garden' cards blocked, i.e. a quarter of the hand ·
+  // four blocks of 40 reps measured the saving at +0.8%, -4.8%, -24.4%, +1.7%. It flips sign and
+  // the spread dwarfs it: there is no effect to keep. The blocked cards are cheap for the matcher
+  // to reject too, so removing them early saves almost nothing.
+  //
+  // SO THE MATCHER IS THE SINGLE ENFORCEMENT POINT, which is also what this file's own header
+  // promises ("we do NOT reimplement rotation/matching · the single, fuzz-tested matcher owner").
+  // A second copy of a matcher rule is a second contract (Rule 45), and this one would have failed
+  // SILENTLY and toward under-reporting if the two ever diverged.
+  //
+  // THE `completeCardIds` CLAUSE STAYS AND IS NOT REDUNDANT · the matcher has no idea which cards
+  // are already complete on the real board, and an already-complete card is a solid glow rather
+  // than a near-miss (see the header). Deleting it would put complete cards back into the near-miss
+  // set, which is why the two clauses are not the same kind of thing despite sharing a line.
+  const nearMissHand = playerHand.filter(c => !completeCardIds.has(c.id))
   if (nearMissHand.length === 0) return { completeKeys, partialKeys, completionCandidates }
 
   const boundSet = regionHexKeys instanceof Set ? regionHexKeys : new Set(regionHexKeys || [])
