@@ -50,9 +50,20 @@
 // ⚠ AND AS OF T3 S62 IT COSTS ZERO IDENTITIES · both contexts take pool members 0 and 1, so the only
 // thing this 653-line spec now asks for is one run line · SUBJECT TO THE SAME CHECK ITS SIBLING JUST
 // FAILED. host-departure-live was converted in the same commit and then RUN: 2 of 3 passed, one failed
-// at 32.1s. This file has NOT been run in S62 and its stability is therefore UNMEASURED · not good, not
-// bad. Do not read the conversion as readiness (Rule 79a). It is the composition CLAUDE.md still calls the
-// honest remaining gap, proven once on 3362f77 and gated by nothing for twelve sessions
+// at 32.1s.
+// ⚠ AND THE ONE-LINE ASK IS FOR THE **ENGINE** TEST ONLY · `--grep "ENGINE"` in e2e.yml, which is where
+// four-player-live's and multiplayer-endgame-live's engine halves already run. THAT DISTINCTION IS
+// LOAD-BEARING AND I HAD NOT STATED IT PLAINLY IN THREE ROUTING NOTES (T3 S64): the LIVE half below is
+// `test.fixme(true)`, so adding the FILE to a workflow without the grep would produce a GREEN job
+// containing a SKIPPED test · coverage that reports itself as present and asserts nothing, which is
+// Rule 79d arriving through my own ask. Measured tonight rather than reasoned: running the file as it
+// stands prints `1 passed | 1 skipped`.
+// ⚠ ITS STABILITY IS NO LONGER UNMEASURED (T3 S64). The fixme was lifted in a worktree and the live half
+// run twice: 0 of 2 green, and the two failures have DIFFERENT causes and different owners · see the
+// note above the fixme. The product reached its own ending again on run 2, trigger witnessed live at
+// tiles 0 / rounds 2 / turn 17, the same signature CLAUDE.md records for 3362f77.
+// It is the composition CLAUDE.md still calls the honest remaining gap, proven on 3362f77, re-witnessed
+// on 09aec83, and gated by nothing for thirteen sessions
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // AND IT READ AS WIRED THE WHOLE TIME, WHICH IS THE PART WORTH RECORDING (T3 S50). The spec-runner audit in
 // preconditions.e2e.js asked `workflowText.includes('endgame-live.e2e.js')` · and that string is a SUFFIX OF
@@ -298,7 +309,20 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // to bot-hosted rooms of ANY status") had already replaced that body. 006 is the FIRST definition of
       // the function, not the current one (Rule 109).
       // SO: run `gh run list` before any live run. It costs nothing and rules out the whole class.
-      test.fixme(true, 'the live room DOES reach its own ending (column_phase finished, turn 21) · the driver is not yet reliably green · T3 S45')
+      // ⚠ STILL FIXME, AND THE ALARM IS NOW PRECISE WHERE IT USED TO BE A GUESS (T3 S64 · Rule 98 · an
+      // alarm and its remedy age differently, so state what is MEASURED and let the remedy stay open).
+      // The old message said "the driver is not yet reliably green", which was one session's impression
+      // and turns out to name at most one of the two things that happen. Lifted and run twice tonight:
+      //   run 1  the SEED WAS CLOBBERED · both clients adopted "tiles":1, then the store read tiles 12 on
+      //          a fresh board before a single click · died at `factory-inert` +22.2s. NOT the driver.
+      //   run 2  the seed HELD (tiles 1 · turn 17 · writeorder {overtakes:[],version:0} on both clients),
+      //          the ending was played, and `TRIGGER witnessed · tiles 0 · rounds 2 · turn 17` fired LIVE ·
+      //          byte-identical to the signature CLAUDE.md records for 3362f77, nineteen sessions later.
+      //          Then seat 1 sat at t18/act3 and the run hit its 300s ceiling at +299.5s.
+      // So: the PRODUCT reached its own ending again, and the two failures are a sync-layer clobber and a
+      // stalled driver step · different owners, different fixes, and neither was visible before the phase
+      // heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names itself.
+      test.fixme(true, 'the live room reaches its own ending (trigger witnessed live, tiles 0/rounds 2/turn 17) · 0 of 2 runs green: one seed clobber, one stalled seat · T3 S64')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -337,7 +361,20 @@ test.describe('a real room reaches its own ending · the composition nobody had 
 
       let roomId = null
       let hostSession = null
+
+      // ── PHASE HEARTBEAT (T3 S64) · ported from host-departure-live, where it eliminated a third of the
+      //    candidate space for a 32.1s failure in a single run. This spec is 653 lines across six stages
+      //    and its own fixme said only that the driver "still loses steps", so every failure it has ever
+      //    had arrived as a bare timeout with no stage attached. It earned itself immediately: the two
+      //    runs below failed in the same phase for COMPLETELY DIFFERENT reasons, and nothing except this
+      //    would have separated them. A flake you can describe is a bug; one you can only count is a rumour.
+      const t0 = Date.now()
+      const elapsed = () => ((Date.now() - t0) / 1000).toFixed(1)
+      let phase = 'start'
+      const at = (name) => { phase = name; console.log(`[endgame] +${elapsed()}s · ${name}`) }
+
       try {
+        at('lobby · two real identities through the real lobby')
         // ── THE REAL LOBBY LOOP · the shared helper, not a fourth copy ─────────────────────────────────
         // The copy this replaced waited for the Start control to be VISIBLE and clicked it. It is
         // `disabled={!canStart}` (Lobby.jsx:629), so the click did nothing and the spec died 20s later at
@@ -362,6 +399,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           ])
         }
         expect(seed, 'could not reach an armed opening in 8 deals · see the ENGINE test above').toBeTruthy()
+        at('armed · the seeded state is on the wire')
         console.log(`[endgame] armed · factories ${JSON.stringify(seed.factories)} · seat ${seed.currentSeat} ` +
           `· actions ${seed.actionsRemaining} · offer ${seed.offer} · deck ${seed.deck}`)
 
@@ -438,6 +476,33 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         })
         const seats = { host: await seatOfPage(p1), joiner: await seatOfPage(p2) }
         console.log('[endgame] seats', JSON.stringify(seats))
+
+        // ── THE SEED MUST STILL HOLD WHEN PLAY BEGINS, AND THAT IS NOT THE ASSERTION THIRTY LINES ABOVE
+        //    (T3 S64). Not a redundant guard (Rule 118) · a SECOND OBSERVATION of the same property at a
+        //    LATER TIME, and the whole reason it exists is that the two disagreed. Measured, first run:
+        //      adoption poll   both clients "tiles":1        PASSED
+        //      first heartbeat tiles 12 · factories [4,4,4] · placed 0 · a FRESH GAME
+        //    Nothing between the two writes to the store · the block in between only reads · so the APP
+        //    overwrote the armed seed after both clients had adopted it. Without this the run died ten
+        //    seconds later at `factory-inert`, which reads as a driver defect and is not one.
+        //    __neotopia_writeorder is the S43 overtake detector, built for exactly this hazard and until
+        //    now read only at the END of the run · i.e. never, on any failing run.
+        for (const [i, page] of [p1, p2].entries()) {
+          const snap = await page.evaluate(() => {
+            const g = window.__neotopia_store?.getState?.()
+            return {
+              tiles: g?.productionTilesRemaining,
+              factories: g?.factories?.map(f => f.elements.reduce((a, e) => a + e.count, 0)),
+              turn: g?.turnNumber, seat: g?.currentSeat, acts: g?.actionsRemaining,
+              wo: window.__neotopia_writeorder ?? null,
+            }
+          })
+          console.log(`[endgame] at-play-start seat${i} ${JSON.stringify(snap)}`)
+          expect(snap.tiles, `seat ${i} ADOPTED the armed state and then lost it before a single click · ` +
+            `the store reads ${JSON.stringify(snap)}. The adoption poll above passed, nothing between ` +
+            'them writes, so a fresh-game snapshot overwrote the seed. Do NOT read this as a driver ' +
+            'defect · the driver has not run yet.').toBe(1)
+        }
         for (const who of ['host', 'joiner']) {
           expect(seats[who].seat, `${who} could not resolve its own seat from the synced roster · mySeat ` +
             'would be null in the app too, and every turn gate silently stops applying').not.toBeNull()
@@ -615,6 +680,7 @@ test.describe('a real room reaches its own ending · the composition nobody had 
           await page.waitForTimeout(150) // let the pushState land before the next read
         }
 
+        at('terminal · reading the ending out of the server columns')
         console.log(`[endgame] played · ${JSON.stringify(actions)} · ${Date.now() - started}ms`)
 
         // ── THE WRITE-ORDER DETECTOR HAS A CONSUMER NOW (T3 S44 · P3) ────────────────────────────────
@@ -674,6 +740,13 @@ test.describe('a real room reaches its own ending · the composition nobody had 
             `seat ${i} reached 'scoring' but rendered no civilization record`).toBeVisible({ timeout: 30_000 })
         }
         expect(httpErrors, 'the backend refused something during a played endgame').toEqual([])
+      } catch (err) {
+        // Records and RETHROWS · a caught error that does not rethrow is Rule 93 wearing a
+        // diagnostic's hat. Playwright prints the assertion; only this prints WHICH of six stages
+        // was in flight and how far into the run it got.
+        console.log(`[endgame] \u2717 DIED IN PHASE "${phase}" at +${elapsed()}s \u00b7 ` +
+          `${String(err?.message ?? err).split('\n')[0].slice(0, 200)}`)
+        throw err
       } finally {
         console.log('[endgame] http errors', JSON.stringify(httpErrors))
         console.log('[endgame] draw RPC calls', JSON.stringify(drawCalls))
