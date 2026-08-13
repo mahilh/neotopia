@@ -37,6 +37,40 @@ const readViewBox = (svg) => {
   const [minX, minY, width, height] = svg.getAttribute('viewBox').split(/\s+/).map(Number)
   return { minX, minY, width, height }
 }
+// ── HOW WIDE IS A DISTRICT NAME · MEASURED, NOT MODELLED FROM ONE STRING (T1 S64) ────────────────
+// ⚠ THIS REPLACES `UNITS_PER_CHAR = 198.6 / 15`, which I shipped in S63 and criticised in the same
+// breath without fixing: two strings of the SAME length are ONE sample, and FOREST/DESERT DISTRICT
+// measuring 198.6 and 198.3 read as confirmation when it was the same character count twice.
+// Calibrated properly in a real browser on the deployed board, at the shipped font-size 20 /
+// letterSpacing 2.2, each advance isolated from side bearings by differencing two lengths:
+//
+//     W 21.149   M 19.22   O/Q 17.086   H 16.626   G 16.576   N 16.53   U 16.42   D 16.177
+//     C 16.081   X 15.44   A 15.414     V 15.329   Y 14.989   K 14.979  B 14.873  Z 14.848
+//     R 14.822   S 14.53   P 14.434     T 14.332   E 13.615   F 13.135  L 13.059  J 12.715
+//     I 7.211    space 6.91
+//
+// A CHARACTER COUNT CANNOT BOUND A WIDTH, and the calibration is what proves it rather than my
+// opinion: the advances span 2.9x, so fifteen characters is 108.2 units of "IIIIIIIIIIIIIII" or
+// 317.3 of "WWWWWWWWWWWWWWW" · and the second OVERFLOWS this 309.6-unit box while the first uses a
+// third of it. My old budget said both were fine at 23 characters.
+// Width is affine in length with a ~zero intercept (M x 1/2/4/8/16/24 measured 19.24 / 38.45 / 76.9
+// / 153.79 / 307.55 / 461.3, i.e. 19.22 per M throughout), so SUMMING advances is the right form.
+// A SPACE MEASURES 0 IN ISOLATION because SVG strips leading and trailing whitespace · taking that
+// at face value would model a space as free. Isolated in context instead: w('M M') - w('MM').
+const ADVANCE = {
+  A: 15.414, B: 14.873, C: 16.081, D: 16.177, E: 13.615, F: 13.135, G: 16.576, H: 16.626,
+  I: 7.211,  J: 12.715, K: 14.979, L: 13.059, M: 19.22,  N: 16.53,  O: 17.086, P: 14.434,
+  Q: 17.086, R: 14.822, S: 14.53,  T: 14.332, U: 16.42,  V: 15.329, W: 21.149, X: 15.44,
+  Y: 14.989, Z: 14.848, ' ': 6.91,
+}
+// The board renders the name UPPERCASE (textTransform), so the advance is looked up uppercased.
+// An unknown character must NOT contribute 0 · that is the silent way a name with a digit, a hyphen
+// or an accent reads as narrower than it is and sails through the gate (Rule 80's shape, inside a
+// model). It returns Infinity so the fit assertion fails loudly and names the character.
+const predictWidth = (s) => [...s.toUpperCase()]
+  .reduce((w, ch) => w + (ADVANCE[ch] ?? Infinity), 0)
+const unknownChars = (s) => [...s.toUpperCase()].filter(ch => !(ch in ADVANCE))
+
 const mount = (focusRegion = null) => {
   const { container } = render(<GameBoard focusRegion={focusRegion} />)
   return container.querySelector('svg[role="img"]')
@@ -142,6 +176,58 @@ describe('a focused region clears 44px', () => {
   })
 })
 
+describe('counterweight · the width model asserts its own premise before anything uses it', () => {
+  // WRITTEN BEFORE THE ASSERTION IT DEFENDS (Rule 90). A width model is exactly the construct that
+  // can be confidently wrong: it produces a plausible number for any input and nothing here can see
+  // a real glyph. So it is checked against widths MEASURED IN THE BROWSER, on the deployed board,
+  // in the same run as the calibration · three strings, three independent chances to be wrong.
+  const MEASURED = {                       // getBBox, user units, deployed board, fs 20 / ls 2.2
+    'WATER DISTRICT': 187.55,
+    'FOREST DISTRICT': 198.47,
+    'DESERT DISTRICT': 198.15,
+    'GRASSLAND DISTRICT': 248.08,
+    'MOUNTAIN DISTRICT': 232.11,
+    WWWWWWWWWWWWWWW: 317.29,
+    IIIIIIIIIIIIIII: 108.23,
+  }
+
+  it('reproduces every string measured in a real browser, within 2%', () => {
+    for (const [s, real] of Object.entries(MEASURED)) {
+      const p = predictWidth(s)
+      expect(Math.abs(p - real) / real,
+        `"${s}" predicts ${p.toFixed(2)} against a measured ${real} · the advance table has drifted ` +
+        'from the font, or the board changed size/spacing. Re-calibrate in a browser; do not widen ' +
+        'this tolerance.').toBeLessThan(0.02)
+    }
+  })
+
+  it('a character count could NOT have done this · the reason the model exists', () => {
+    // The disproof of the thing I shipped in S63. Same length, 2.9x the width, and the wide one is
+    // over the box the narrow one uses a third of. Any budget expressed in characters passes both.
+    expect('WWWWWWWWWWWWWWW'.length).toBe('IIIIIIIIIIIIIII'.length)
+    expect(MEASURED.WWWWWWWWWWWWWWW / MEASURED.IIIIIIIIIIIIIII).toBeGreaterThan(2.5)
+    expect(MEASURED.WWWWWWWWWWWWWWW, 'fifteen wide characters must OVERFLOW the focus box, or this ' +
+      'file is arguing for a model it does not need').toBeGreaterThan(computeViewBox(0).width)
+    expect(MEASURED.IIIIIIIIIIIIIII).toBeLessThan(computeViewBox(0).width)
+  })
+
+  it('an unknown character is not free · it must fail loudly, never silently narrow', () => {
+    // A digit, a hyphen or an accent would otherwise contribute 0 and make a name read as narrower
+    // than it renders · a plausible number from a model that did not measure (Rule 80, in a model).
+    expect(unknownChars('WATER-9 DISTRICT')).toEqual(['-', '9'])
+    expect(predictWidth('WATER-9 DISTRICT')).toBe(Infinity)
+    expect(unknownChars('WATER DISTRICT'), 'the shipped names must be fully covered by the table')
+      .toEqual([])
+  })
+
+  it('every shipped district name is covered by the table', () => {
+    for (const r of REGIONS) {
+      expect(unknownChars(r.name), `"${r.name}" contains characters the advance table has never ` +
+        'measured · re-calibrate before trusting any width claim about it').toEqual([])
+    }
+  })
+})
+
 describe('nothing is clipped · the failure that is invisible by construction', () => {
   it.each(REGIONS.map(r => [r.id, r.name]))('region %i (%s) · every hex and every label is inside the viewBox', (id) => {
     const svg = mount(id)
@@ -180,21 +266,15 @@ describe('nothing is clipped · the failure that is invisible by construction', 
 
     // 3 · HORIZONTALLY, which nothing here could hold until the label became the long one.
     // jsdom has no layout, so the width cannot be measured here (Rule 78's corollary · do not write
-    // a test that pretends to). What CAN live here is the DECISION, against an advance measured in a
-    // real browser on the deployed board via getBBox, in the same user units this viewBox is in:
-    //     FOREST DISTRICT   fs 20, letterSpacing 2.2   198.6 units over 15 characters
-    // The label is centred on the region, so the budget is the whole focus width. Stated as a
-    // character count because THE COPY is the input that varies (preamble §8 · pin the string).
-    // Sized at fs 20 deliberately: the same string at the old caption's fs 26 is 277.3 units, 90% of
-    // this box, and GRASSLAND DISTRICT there is 347 · over it. That is why FOREST, and why fs 20.
-    const UNITS_PER_CHAR = 198.6 / 15
-    const budget = Math.floor(vb.width / UNITS_PER_CHAR)
-    expect(budget, 'the derived budget is nonsense · check the viewBox').toBeGreaterThan(10)
-    expect(reg.name.length,
-      `"${reg.name}" is ${reg.name.length} chars · about ${(reg.name.length * UNITS_PER_CHAR).toFixed(0)} ` +
-      `units against a ${vb.width.toFixed(0)}-unit one-region viewBox at 320px. It will be clipped at ` +
-      `both ends on a phone, silently, because an SVG outside its viewBox does not error.`)
-      .toBeLessThanOrEqual(budget)
+    // a test that pretends to). What lives here is the DECISION, computed from advances measured in
+    // a real browser on the deployed board · see ADVANCE above.
+    const predicted = predictWidth(reg.name)
+    // The label is centred on the region (textAnchor="middle"), so it must fit the whole focus width.
+    expect(predicted,
+      `"${reg.name}" predicts ${predicted.toFixed(1)} units against a ${vb.width.toFixed(0)}-unit ` +
+      'one-region viewBox at 320px. It will be clipped at both ends on a phone, silently, because ' +
+      'an SVG outside its viewBox does not error and the focus view sets overflow:hidden.')
+      .toBeLessThan(vb.width)
   })
 
   it('the full board is unchanged · same viewBox as before this feature', () => {

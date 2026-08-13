@@ -78,6 +78,22 @@ are deliberately not creating (86).
   and the session's central finding nearly rested on it.
 - An idempotency guard that greps for a symbol matches its USES, not its declaration. Mine skipped adding
   an import because the line it was about to add contained the name (112 in a script).
+- EVERY ABSENCE-PROBE CARRIES A KNOWN-PRESENT CONTROL IN THE SAME RUN, and the cheap tell when you
+  forgot one is that the ANSWER IS UNIFORM. A probe returning the same value for every input has not
+  measured anything; the uniformity is the finding, not the value. I polled production fifteen times
+  over eight minutes reading "not deployed" off a deploy that had been live the whole time —
+  `$(curl …)` into a bash variable truncates a 636KB bundle at a NUL and `grep` then reclassifies it
+  as binary, so it returned 0 for EVERY token. The only reason I caught it is that it also returned 0
+  for a string I knew was there. Ask the probe something whose answer you already know, in the same
+  run, or its zero is unreadable (Rule 120, aimed at the instrument rather than at the finding).
+  Concretely for artifacts: `curl -s URL -o f` then read the FILE (python/`grep -a`), never the shell
+  variable — and poll on CONTENT, because a hash differs between a local and a CI build whose env
+  values are inlined.
+  ⚠ THE THREE PLAUSIBLE ZEROES THIS PROJECT HAS PAID FOR ARE NOT ONE SHAPE, and flattening them is
+  its own error: the deploy probe was uniform-zero, the district-settle count was a probe that
+  answered too FAST (one snapshot at 90ms for a cue that peaks at 266ms), and the raster measured a
+  letterboxed board that was not the one on screen. Same OUTCOME, three mechanisms. The control is
+  what covers all three; the uniformity tell only covers the first.
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
 - A BOUND IS A CLAIM ABOUT A NOISE FLOOR, AND ONE SAMPLE OF THE FLOOR IS NOT A MEASUREMENT OF IT.

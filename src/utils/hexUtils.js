@@ -211,11 +211,21 @@ export const TERRAIN = {
     ink:  'rgba(122,208,224,0.92)',  // the terrain word
   },
   grass:  {
-    // FOREST, not Grass or Grassland (Mahil, S63). Two reasons and one of them is a measurement:
-    // the painting is terraced woodland, and at the board's label size GRASSLAND DISTRICT renders
-    // 347 units wide against a 309.6-unit one-region viewBox at 320px · it does not fit. FOREST
-    // DISTRICT is 198.6 at the shipped size. The key stays `grass` because it is the wash/fill id
-    // and renaming it would touch four gradient ids for a caption change.
+    // FOREST, not Grass or Grassland (Mahil, S63). The painting is terraced woodland, and FOREST is
+    // shorter · FOREST DISTRICT measures 198.5 units against the 309.6-unit one-region viewBox the
+    // phone uses at 320, leaving 55.5 units clear each side (measured in the focus view itself,
+    // T1 S64).
+    // ⚠ AND THE SENTENCE THAT WAS HERE WAS FALSE, corrected by my own calibration one session later.
+    // It read "at the board's label size GRASSLAND DISTRICT renders 347 units wide ... it does not
+    // fit". 347 is the figure at font-size 26 · the size of the TERRAIN CAPTION I decided not to
+    // use. At the size actually shipped (20) GRASSLAND DISTRICT is 248.1 and it FITS, with 61 units
+    // to spare. The number was real and I attached it to the wrong subject (Rule 97b), in the
+    // comment, having labelled it correctly in the commit message an hour earlier.
+    // So the length argument is weaker than I wrote: FOREST wins on the terrain being right and on
+    // margin, NOT because the alternative overflowed. Recorded rather than quietly deleted, because
+    // a justification that gets stronger when nobody checks it is the one worth keeping honest.
+    // The key stays `grass` because it is the wash/fill id and renaming it would touch four gradient
+    // ids for a caption change.
     name: 'Forest',
     fill: 'rgba(96,158,62,0.42)',
     wash: '54,100,38',
