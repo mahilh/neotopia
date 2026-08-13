@@ -313,16 +313,24 @@ test.describe('a real room reaches its own ending · the composition nobody had 
       // alarm and its remedy age differently, so state what is MEASURED and let the remedy stay open).
       // The old message said "the driver is not yet reliably green", which was one session's impression
       // and turns out to name at most one of the two things that happen. Lifted and run twice tonight:
-      //   run 1  the SEED WAS CLOBBERED · both clients adopted "tiles":1, then the store read tiles 12 on
-      //          a fresh board before a single click · died at `factory-inert` +22.2s. NOT the driver.
+      //   run 1  THE SEED NEVER ARRIVED · the store read tiles 12 on a fresh board before a single
+      //          click, and died at `factory-inert` +22.2s. NOT the driver.
+      //          ⚠ I FIRST WROTE THIS AS "both clients adopted tiles:1 and then LOST it" and reasoned
+      //          toward a syncFromServer defect · a multiplayer correctness bug in every live room.
+      //          RETRACTED S65: the adoption gate compared `JSON.stringify(snapshot)` against the
+      //          SUBSTRING `"tiles":1`, and `{"tiles":12,...}` contains it. The poll never proved
+      //          adoption, so nothing was clobbered and there is no sync defect in evidence. See the
+      //          note at the adoption poll below · the retraction cost zero identities and one
+      //          `node -e`, and the claim it replaces would have cost a lane a week.
       //   run 2  the seed HELD (tiles 1 · turn 17 · writeorder {overtakes:[],version:0} on both clients),
       //          the ending was played, and `TRIGGER witnessed · tiles 0 · rounds 2 · turn 17` fired LIVE ·
       //          byte-identical to the signature CLAUDE.md records for 3362f77, nineteen sessions later.
       //          Then seat 1 sat at t18/act3 and the run hit its 300s ceiling at +299.5s.
-      // So: the PRODUCT reached its own ending again, and the two failures are a sync-layer clobber and a
-      // stalled driver step · different owners, different fixes, and neither was visible before the phase
-      // heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names itself.
-      test.fixme(true, 'the live room reaches its own ending (trigger witnessed live, tiles 0/rounds 2/turn 17) · 0 of 2 runs green: one seed clobber, one stalled seat · T3 S64')
+      // So: the PRODUCT reached its own ending again, and the two failures are A SEED THAT NEVER
+      // ARRIVED and a stalled driver step · both mine, both harness, and neither was visible before the
+      // phase heartbeat. 0 of 2 green, so this stays fixme; what changed is that a failure now names
+      // itself AND the gate that was supposed to catch run 1 can now fail.
+      test.fixme(true, 'the live room reaches its own ending (trigger witnessed live, tiles 0/rounds 2/turn 17) · 0 of 2 runs green: one seed that never arrived (the adoption gate could not fail · fixed S65), one stalled seat')
       test.skip(!ENV, 'no Supabase creds (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) · nightly-class live test')
       test.setTimeout(300_000)
 
@@ -439,13 +447,33 @@ test.describe('a real room reaches its own ending · the composition nobody had 
         expect(rowAfterWrite?.state?.productionTilesRemaining ?? rowAfterWrite?.tiles,
           `the armed state did not land in game_sessions · row reads ${JSON.stringify(rowAfterWrite)}`).toBe(1)
 
-        // Both clients must adopt it over the real subscription before anybody clicks anything.
+        // ── BY VALUE, NOT BY SUBSTRING · THIS ASSERTION HAS NEVER ONCE PROVED WHAT IT CLAIMS (T3 S65) ──
+        // It read `JSON.stringify(await read(page))` and `.toContain('"tiles":1')`. A FRESH GAME has
+        // twelve tiles, and `{"tiles":12,...}` CONTAINS the substring `"tiles":1`. Proven, not argued:
+        //     JSON.stringify({...tiles:12...}).includes('"tiles":1')  ->  true
+        //     JSON.stringify({...tiles: 1...}).includes('"tiles":1')  ->  true
+        // So the one gate standing between "the seed arrived" and "the ending we are about to witness
+        // is real" passed on the exact state it existed to exclude. Rule 112 · a substring match is an
+        // identity check with no boundary · in the load-bearing assertion of a 653-line spec, quoted by
+        // me twice this month while this sat here.
+        //
+        // ⚠ AND IT COST A WRONG HEADLINE, RETRACTED HERE (T3 S64 -> S65). I reported that run 1 showed
+        // "both clients ADOPTED the armed seed and then LOST it", and reasoned from there to a possible
+        // syncFromServer defect · a multiplayer correctness bug affecting every live room. There is no
+        // evidence for that and there never was: THE POLL NEVER PROVED ADOPTION. In run 1 the seed
+        // simply never reached the clients and this line said it had. Nothing was clobbered. The
+        // 'absence after presence' shape had a vacuous positive control (Rule 120), which is the one
+        // failure mode that makes an absence unmeasurable.
+        // The fix was already half-shipped by accident: the at-play-start check added in the same S64
+        // commit compares tiles by VALUE, so it would have caught run 1 at the right place with the
+        // right name. The diagnosis attached to that commit was wrong; the guard in it was right.
         for (const [i, page] of [p1, p2].entries()) {
-          await expect.poll(async () => JSON.stringify(await read(page)), {
+          await expect.poll(async () => (await read(page))?.tiles, {
             timeout: 30_000,
-            message: `seat ${i} never received the armed state (productionTilesRemaining 1) over ` +
-              'postgres_changes · the row holds it, so this is the subscription or syncFromServer',
-          }).toContain('"tiles":1')
+            message: `seat ${i} never received the armed state over postgres_changes · the row holds ` +
+              'productionTilesRemaining 1, so this is the subscription or syncFromServer. A FRESH game ' +
+              'reads 12 here and used to satisfy this check by substring.',
+          }).toBe(1)
         }
 
         // ── THE PREMISE, ASSERTED · this is what makes the witness below non-fakeable ──────────────────
