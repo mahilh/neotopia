@@ -89,9 +89,30 @@ are deliberately not creating (86).
   Concretely for artifacts: `curl -s URL -o f` then read the FILE (python/`grep -a`), never the shell
   variable — and poll on CONTENT, because a hash differs between a local and a CI build whose env
   values are inlined.
-  ⚠ THE THREE PLAUSIBLE ZEROES THIS PROJECT HAS PAID FOR ARE NOT ONE SHAPE, and flattening them is
-  its own error: the deploy probe was uniform-zero, the district-settle count was a probe that
-  answered too FAST (one snapshot at 90ms for a cue that peaks at 266ms), and the raster measured a
+  ⚠ AND THE FOURTH SHAPE, which the control CANNOT catch: A PROBE THAT ERRORED PRINTS THE SAME
+  THING AS A PROBE THAT MEASURED ZERO. My corrected deploy check, inlined in a shell loop as
+  `python3 -c` inside `$( )`, died on quoting; every field came back empty, including the
+  known-present control, and the loop ran twenty times reporting "not deployed" off a live deploy.
+  The control is a claim about the SUBJECT and says nothing when the HARNESS is what broke. Two
+  defences, and they are cheap: WRITE THE PROBE TO A FILE and run the file (a syntax error is then
+  loud and immediate instead of an empty string), and have it print a line that only a completed
+  run can produce · then a missing verdict is distinguishable from a negative one. Never inline a
+  probe inside a loop; the loop multiplies a silent failure into a convincing pattern.
+  ⚠ AND THE FIFTH, WHICH IS THE ONE ABOVE INVERTED: THE CONTROL WAS PRESENT AND COULD NOT FAIL. A
+  before/after claim rests entirely on its BEFORE half, and mine was not missing · it was vacuous.
+  `expect.poll(() => JSON.stringify(snapshot)).toContain('"tiles":1')` was the gate proving a seeded
+  state had ARRIVED, and `{"tiles":12,...}` contains `"tiles":1`, so a fresh game satisfied it. I then
+  observed the later state differ and published "they adopted it and then LOST it" · reasoning toward
+  a multiplayer sync defect that does not exist. A control that cannot fail is WORSE than a missing
+  one, because a missing control still nags and a present one retires the worry (86). So the question
+  to ask of a presence-half is not "is there a control" but "what value would make it red" · and if
+  you cannot name one in a sentence, it is decoration. Numeric JSON fields are where this hides:
+  compare the VALUE, never a substring of the stringified snapshot (112 · guarded now by
+  tests/jsonSubstringAssertions.test.js, so it is a function rather than this paragraph).
+  ⚠ THE THREE OTHER PLAUSIBLE ZEROES THIS PROJECT HAS PAID FOR ARE NOT ONE SHAPE, and flattening
+  them is its own error: the deploy probe was uniform-zero, the district-settle count was a probe
+  that answered too FAST (one snapshot at 90ms for a cue that peaks at 266ms), and the raster
+  measured a
   letterboxed board that was not the one on screen. Same OUTCOME, three mechanisms. The control is
   what covers all three; the uniformity tell only covers the first.
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
