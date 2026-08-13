@@ -16,7 +16,19 @@ Written S70, the last session in this lane. For a stranger, not for the people w
 | the CI identity pool | `e2ePool` + `[pool]` log lines | all three E2E workflows |
 | the endgame TRIGGER, live | `endgame-live.e2e.js` · witnessed **5 times**, always `tiles 0 · rounds 2 · turn 17` | **nowhere** — see §4 |
 
-Every spec is wired to a workflow **except one**, and that one is deliberate.
+**21 specs · 19 wired · 2 not**, and both DECLARE it in their own headers with a reason
+(`// RUNS-NOWHERE: <why>`, which the repo's own orphan gate in `preconditions.e2e.js` requires):
+
+- `endgame-live.e2e.js` — `test.fixme(true)`; wiring it would buy a green job containing a
+  switched-off test. See §4.
+- `turn-clock-live.e2e.js` — needs one line in `e2e-live-nightly.yml`. `.github/` is T2's lane;
+  routed in comms S60 and S61 and **still open**.
+
+⚠ I wrote "every spec except one" in the first version of this file and the check said **two**. A
+count restated from memory is the thing this whole lane spent twenty sessions learning not to trust ·
+the command is
+`node -e` over `.github/workflows` with comments stripped and both ends of the filename delimited,
+because a suffix and a `#` comment have each fooled me once.
 
 ---
 
