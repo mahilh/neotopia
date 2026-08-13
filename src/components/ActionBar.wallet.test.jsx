@@ -105,6 +105,27 @@ describe('the slot is fixed over the WHOLE reachable domain, not sized at the st
       'the widest reachable string does not fit its own slot').toBeLessThanOrEqual(MONEY_SLOT_PX)
   })
 
+  it('and the PREMISE under that domain · the price is flat', async () => {
+    // THE ASSERTION THE REST OF THIS BLOCK RESTS ON, and I nearly shipped it as a closing
+    // recommendation instead of a line of code (Rule 108b · the check is always cheaper than the
+    // recommendation). `reachableBalances` enumerates STARTING_WALLET - k*CARD_PRICE, which is the
+    // whole domain ONLY while every card costs the same. gameConfig calls priceOf "a function whose
+    // body is a constant" precisely so per-card pricing is a change to one body · and on that day
+    // the enumeration is wrong, the 46px bound rests on a domain that no longer exists, and nothing
+    // above would notice, because a per-card price still produces strings that are all in the
+    // measured table.
+    const { priceOf } = await import('../store/gameConfig')
+    const { DECK } = await import('../lib/projectCards')
+    const cheapest = DECK.reduce((a, c) => (c.points < a.points ? c : a))
+    const dearest = DECK.reduce((a, c) => (c.points > a.points ? c : a))
+    expect(cheapest.points, 'the deck has one point value · the two cards below are the same card ' +
+      'and this comparison is vacuous').not.toBe(dearest.points)
+    expect(priceOf(dearest), `priceOf is no longer flat (${cheapest.points}pt costs ` +
+      `${priceOf(cheapest)}, ${dearest.points}pt costs ${priceOf(dearest)}) · reachableBalances() ` +
+      'enumerates one constant subtracted repeatedly and is now the wrong domain. RE-DERIVE it and ' +
+      're-measure the slot before trusting MONEY_SLOT_PX.').toBe(priceOf(cheapest))
+  })
+
   it('refuses a balance it cannot render rather than printing a plausible number', async () => {
     // Rule 80. NaN formatted as "$NaNM" in a 46px slot is a number-shaped thing a player would read
     // as a balance. No readout at all is the honest state, and the dots come back with it.
