@@ -17,13 +17,13 @@
 
 import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, existsSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, existsSync, copyFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const require = createRequire(import.meta.url)
-const { findEnvLocal } = require('./with-project-env.cjs')
+const { findEnvLocal, readViteVars, shQuote } = require('./with-project-env.cjs')
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
 
@@ -130,5 +130,120 @@ describe('with-project-env · finding the project .env.local', () => {
       'path arithmetic is wrong and the fixtures above cannot see it').toBe(true)
     expect(['this checkout', undefined]).toContain(
       found.via.startsWith('the main worktree') ? undefined : found.via)
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// INJECTION AND QUOTING  (T2 S63 · both defects found by T3, both in a fix I closed as complete)
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+// EVERY TEST HERE SPAWNS THE REAL SCRIPT. A unit test of shQuote would assert my own model of what
+// /bin/sh does with a string, and the model is exactly the thing that was wrong · the S26 author
+// (me) believed spawn(cmd, args, {shell:true}) passed args through. The subject under test IS the
+// shell, so the harness may not simulate it (preamble §3).
+// Resolved from cwd, not from import.meta.url: vitest serves modules over a NON-file: URL, so
+// fileURLToPath(import.meta.url) throws "The URL must be of scheme file". Same constraint
+// tests/seededState.guard.test.js documents, and cwd is always the repo root under vitest.
+const SCRIPT = join(process.cwd(), 'scripts', 'with-project-env.cjs')
+
+/** Run the guard for real and capture the child's stdout. `env` REPLACES the inherited one. */
+function runGuard(args, env = {}) {
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], {
+    encoding: 'utf8',
+    // A clean base: PATH so binaries resolve, and nothing else unless the caller asks. Inheriting
+    // this machine's shell would import the very AetherMind vars these tests are about.
+    env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env },
+  })
+  return { out: (r.stdout || '').trim(), err: (r.stderr || '').trim(), code: r.status }
+}
+
+const PRINT = 'process.stdout.write(JSON.stringify(process.argv.slice(1)))'
+const PRINT_ENV = (n) => `process.stdout.write(String(process.env.${n}))`
+
+describe('with-project-env · the child gets what the caller meant', () => {
+  // ── COUNTERWEIGHT, FIRST · the shell must not touch the caller's arguments ────────────────────
+  // Written before the injection tests because it is the one that was silently wrong for 37
+  // sessions, and because an argv that survives is the precondition for trusting anything else
+  // this script reports about a run.
+  it('a shell metacharacter in an argument arrives as text, not as a pipeline', () => {
+    const { out, code } = runGuard([process.execPath, '-e', PRINT, 'keyboard audit|endgame diagnostic'])
+    expect(code, 'the child did not exit 0 · before quoting, sh read the | as a pipeline and ' +
+      'reported "endgame: command not found", which looks like a runner crash and not a quoting bug')
+      .toBe(0)
+    expect(JSON.parse(out)).toEqual(['keyboard audit|endgame diagnostic'])
+  })
+
+  it('and so do the other metacharacters, including a quote inside a quote', () => {
+    // POSITIVE CONTROL FOR THE ESCAPE ITSELF: a single quote is the ONE character single-quoting
+    // cannot pass through, so it is the only part of shQuote that can be wrong. If the
+    // close-escape-reopen is broken this hangs or errors rather than returning the string.
+    const nasty = ['a b', '$HOME', '`id`', 'x;y', "it's", '*', '']
+    const { out, code } = runGuard([process.execPath, '-e', PRINT, ...nasty])
+    expect(code).toBe(0)
+    expect(JSON.parse(out), 'an argument was expanded, split or swallowed by the shell').toEqual(nasty)
+  })
+
+  it('INJECTS the project value where the shell has none · the worktree case', () => {
+    // The defect T3 measured: S62 found the main clone's file and stripped the shadowing var, then
+    // handed the child nothing, because Vite loads env files from ITS OWN root and a worktree has
+    // none. `npm run dev` in a worktree died on "VITE_SUPABASE_URL ... required in .env.local".
+    const { out } = runGuard([process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')])
+    expect(out, 'the child received no VITE_SUPABASE_URL · the guard is still delete-only, so any ' +
+      'checkout without its own .env.local runs with nothing at all').not.toBe('undefined')
+    expect(out).toMatch(/^https:\/\//)
+  })
+
+  it('OVERRIDES a shell value that disagrees · the original S26 hazard, still closed', () => {
+    const { out, err } = runGuard(
+      [process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')],
+      { VITE_SUPABASE_URL: 'https://gsogycwtllthrenqaxlh.supabase.co' })   // the dead AetherMind project
+    expect(out, 'the shell\'s value for another Supabase project reached the child · this is the bug ' +
+      'the whole file exists for').not.toContain('gsogycwtllthrenqaxlh')
+    expect(err, 'the override happened silently · a value being replaced must say so').toMatch(/ignoring inherited/)
+  })
+
+  it('leaves a VITE_ var the project does not define completely alone', () => {
+    // Scope: this guard replaces what .env.local has an opinion about and nothing else. Without
+    // this, "the project's truth wins" could quietly become "the project's truth is all there is".
+    const { out } = runGuard(
+      [process.execPath, '-e', PRINT_ENV('VITE_SOMETHING_ELSE')], { VITE_SOMETHING_ELSE: 'kept' })
+    expect(out).toBe('kept')
+  })
+
+  it('CI keeps its silence · no .env.local anywhere means nothing is injected and nothing is said', () => {
+    // THE COUNTERWEIGHT THIS WHOLE FILE PROTECTS, now aimed at injection rather than stripping: CI
+    // supplies these as repo secrets, so a guard that injected an empty string or warned on every
+    // job would be worse than the hazard. Run from a temp dir that is not a git repo at all, which
+    // is what makes findEnvLocal return null.
+    const d = realpathSync(mkdtempSync(join(tmpdir(), 'envguard-ci2-')))
+    try {
+      mkdirSync(join(d, 'scripts'), { recursive: true })
+      copyFileSync(SCRIPT, join(d, 'scripts', 'with-project-env.cjs'))
+      const r = spawnSync(process.execPath,
+        [join(d, 'scripts', 'with-project-env.cjs'), process.execPath, '-e', PRINT_ENV('VITE_SUPABASE_URL')],
+        { encoding: 'utf8', cwd: d, env: { PATH: process.env.PATH, CI: 'true', VITE_SUPABASE_URL: 'from-ci-secrets' } })
+      expect(r.stdout.trim(), 'CI\'s env-supplied secret was replaced or blanked · the guard has ' +
+        'started removing a value that has no local replacement').toBe('from-ci-secrets')
+      expect(r.stderr.trim(), 'the guard printed something in CI · every job now carries noise it ' +
+        'cannot act on').toBe('')
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  })
+
+  it('the parser reads assignments, not prose', () => {
+    const d = realpathSync(mkdtempSync(join(tmpdir(), 'envguard-parse-')))
+    try {
+      writeFileSync(join(d, '.env.local'),
+        '# VITE_COMMENTED=no\nVITE_A=plain\nVITE_B="quoted"\n  VITE_C = spaced \nNOT_VITE=skip\nVITE_D=\n')
+      const v = readViteVars(join(d, '.env.local'))
+      expect([...v.keys()].sort()).toEqual(['VITE_A', 'VITE_B', 'VITE_C', 'VITE_D'])
+      expect(v.get('VITE_B'), 'the surrounding quotes are part of the value · every consumer would ' +
+        'then compare against a string nobody wrote').toBe('quoted')
+      expect(v.get('VITE_C')).toBe('spaced')
+      expect(v.get('VITE_D')).toBe('')
+    } finally { rmSync(d, { recursive: true, force: true }) }
+  })
+
+  it('shQuote is exported and is not a no-op · the tell if someone "simplifies" it away', () => {
+    expect(shQuote('a b')).not.toBe('a b')
+    expect(shQuote("it's")).toContain("'\\''")
   })
 })

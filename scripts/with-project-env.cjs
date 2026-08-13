@@ -14,8 +14,22 @@
  *   nasty one: the app silently talks to a paused database and every symptom looks like an outage.
  *
  * WHAT IT DOES
- *   If this repo has a .env.local, any INHERITED VITE_* var that .env.local also defines is deleted
- *   from the child's environment, so Vite falls back to the file · the project's own truth wins.
+ *   If this repo has a .env.local, every VITE_* var it defines is SET in the child's environment to
+ *   the file's value · the project's own truth wins, whether the shell disagreed or said nothing.
+ *
+ * ⚠ IT USED TO ONLY DELETE, AND THAT WAS HALF A FIX (T3 S63 found it; T2 S63 fixed it)
+ *   The S26 version deleted a shadowing var and relied on Vite falling back to .env.local. That
+ *   works in the main clone, where Vite's root HAS the file. It cannot work in a worktree, where
+ *   Vite's root has none · so the S62 worktree fix found the right file, stripped the wrong values,
+ *   and handed the child NOTHING:
+ *       worktree $ npm run dev
+ *       Error: NeoTopia: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY required in .env.local
+ *   Loud beats silent, so S62 was an improvement · but I closed it as "the worktree env trap is
+ *   fixed" and it was fixed in one direction only. Nobody saw it because playwright's
+ *   reuseExistingServer handed every worktree run the MAIN clone's already-credentialed dev server,
+ *   so a second defect was compensating for this one (T3's finding, and the better half of it).
+ *   Injecting what the file already parsed fixes dev, build and test at once, and removes the
+ *   dependency on WHERE Vite happens to look.
  *
  * WHY IT IS SAFE IN CI (the trap a naive `env -u` walks into)
  *   CI ships NO .env.local and legitimately passes these as repo secrets. With no .env.local this
@@ -75,6 +89,36 @@ function findEnvLocal(baseDir = __dirname) {
   return null
 }
 
+/** Every VITE_* assignment in an env file, as a Map. One parser, so no call site re-implements it. */
+function readViteVars(file) {
+  const vars = new Map()
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    const m = line.match(/^\s*(VITE_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
+    if (m) vars.set(m[1], m[2].replace(/^["']|["']$/g, ''))
+  }
+  return vars
+}
+
+/**
+ * POSIX single-quoting for one argv element.
+ *
+ * WHY THIS EXISTS (T3 S63, measured with its control):
+ *     node scripts/with-project-env.cjs echo "a|b"   ->   /bin/sh: b: command not found
+ *     node scripts/with-project-env.cjs echo "ab"    ->   ab
+ * `spawn(cmd, args, { shell: true })` joins argv WITH SPACES AND NO QUOTING and hands the result to
+ * /bin/sh, so every shell metacharacter in an argument is re-interpreted. It cost T3 twenty minutes
+ * because the symptom does not look like quoting: `--grep "keyboard audit|endgame diagnostic"` fails
+ * as `/bin/sh: endgame: command not found` followed by a Playwright EPIPE stack, which reads as a
+ * runner crash. shell:true is kept · it is what makes npm-installed binaries (vite, playwright)
+ * resolve on macOS and Linux alike · and the quoting makes each argv element literal, which is what
+ * the caller already believed it was.
+ *
+ * Single quotes make everything literal in sh; the only character needing care is a single quote
+ * itself, which is closed, escaped and reopened. POSIX shells only · this repo runs macOS and
+ * ubuntu-latest, and cmd.exe would need different quoting entirely.
+ */
+const shQuote = (s) => `'${String(s).replace(/'/g, "'\\''")}'`
+
 // Run only when run · requiring this file used to SPAWN A CHILD and could process.exit(2) out
 // of a test runner before a single assertion. The lookup below is the part worth testing.
 function main() {
@@ -86,27 +130,30 @@ function main() {
 
   const found = findEnvLocal()
   const env = { ...process.env }
-  const stripped = []
+  const overridden = []   // the shell had a DIFFERENT value · the original hazard
+  const provided = []     // the shell had NOTHING · the worktree case, silently broken until S63
 
   if (found) {
-    for (const line of fs.readFileSync(found.file, 'utf8').split('\n')) {
-      const m = line.match(/^\s*(VITE_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/)
-      if (!m) continue
-      const [, name, rawValue] = m
-      const fileValue = rawValue.replace(/^["']|["']$/g, '')
-      // Only strip when the shell is actually SHADOWING with a different value. An inherited var that
-      // already agrees with .env.local is not a bug, and removing it would be noise.
-      if (env[name] !== undefined && env[name] !== fileValue) {
-        delete env[name]
-        stripped.push(name)
-      }
+    for (const [name, fileValue] of readViteVars(found.file)) {
+      // An inherited var that already agrees with .env.local is not a bug and needs no message.
+      if (env[name] === fileValue) continue
+      ;(env[name] === undefined ? provided : overridden).push(name)
+      env[name] = fileValue
     }
   }
 
-  if (stripped.length) {
+  if (overridden.length) {
     console.warn(
-      `⚠️  with-project-env · ignoring inherited ${stripped.join(', ')} · your shell exports a value ` +
+      `⚠️  with-project-env · ignoring inherited ${overridden.join(', ')} · your shell exports a value ` +
       `that disagrees with this repo's .env.local (${found.via}). Using .env.local (NeoTopia's own project).`)
+  }
+  // Quiet by default in the main clone, where this list is empty because Vite would have found the
+  // file anyway. It is non-empty exactly in a worktree, which is the case worth naming out loud ·
+  // it is the one that used to fail with "required in .env.local" and look like a broken checkout.
+  if (provided.length) {
+    console.warn(
+      `ℹ️  with-project-env · supplying ${provided.join(', ')} from ${found.via} · this checkout has ` +
+      'no .env.local of its own, and Vite only loads env files from ITS OWN root.')
   }
 
   // ── THE STATE THAT USED TO BE SILENT  (T2 S62) ─────────────────────────────────────────────────
@@ -130,8 +177,9 @@ function main() {
     }
   }
 
-  // shell:true so this works with npm-installed binaries (vite) on macOS and Linux alike.
-  const child = spawn(argv[0], argv.slice(1), { stdio: 'inherit', env, shell: true })
+  // shell:true so this works with npm-installed binaries (vite) on macOS and Linux alike · and every
+  // argv element quoted, so the shell cannot re-parse what the caller passed (see shQuote).
+  const child = spawn(argv.map(shQuote).join(' '), { stdio: 'inherit', env, shell: true })
   child.on('exit', (code, signal) => process.exit(signal ? 1 : code ?? 0))
   child.on('error', (err) => {
     console.error(`with-project-env: failed to launch "${argv.join(' ')}" · ${err.message}`)
@@ -141,4 +189,4 @@ function main() {
 
 if (require.main === module) main()
 
-module.exports = { findEnvLocal }
+module.exports = { findEnvLocal, readViteVars, shQuote }
