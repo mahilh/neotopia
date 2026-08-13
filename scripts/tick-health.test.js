@@ -67,6 +67,32 @@ describe('tick-health · counterweights first', () => {
     expect(t.rescuedByTick, 'the tick is being credited with work the push did · the feature would ' +
       'look effective the moment it was merely present').toBe(0)
   })
+
+  // ⚠ THE ONE THAT WAS WRONG IN THE SHIPPED VERSION, caught on the first real reading (T2 S66).
+  // The first tick ever delivered fired on a commit that ALREADY had a successful push run, so the
+  // guard correctly skipped the expensive job · and a run whose only job is skipped still reports
+  // `success`. The report called that a rescue. Two paths (did real work / correctly skipped)
+  // producing one observable is Rule 130, in the tool written that same hour to avoid it.
+  it('a tick that ran on an ALREADY-MEASURED commit is not a rescue', () => {
+    const t = tally([
+      r({ headSha: 'z', event: 'push', conclusion: 'success' }),
+      r({ headSha: 'z', event: 'schedule', conclusion: 'success' }),
+    ], T0)
+    expect(t.ticks, 'the delivery count is separate and must still see it').toBe(1)
+    expect(t.rescuedByTick, 'a tick that correctly SKIPPED was counted as having rescued the commit ' +
+      '· the report then claims value the feature did not deliver, on the one number that is its ' +
+      'only direct evidence of value').toBe(0)
+  })
+
+  it('but a tick on a commit every push run CANCELLED is exactly what a rescue is', () => {
+    const t = tally([
+      r({ headSha: 'w', event: 'push', conclusion: 'cancelled' }),
+      r({ headSha: 'w', event: 'push', conclusion: 'cancelled' }),
+      r({ headSha: 'w', event: 'schedule', conclusion: 'success' }),
+    ], T0)
+    expect(t.rescuedByTick, 'the defect this whole feature exists for · if THIS is not a rescue, ' +
+      'nothing ever is and the number is permanently zero').toBe(1)
+  })
 })
 
 describe('tick-health · the cron is read, not typed', () => {

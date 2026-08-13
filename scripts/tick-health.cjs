@@ -60,8 +60,14 @@ function tally(runs, sinceTime) {
   const inWindow = runs.filter(r => new Date(r.createdAt) >= sinceTime)
   const byCommit = new Map()
   for (const r of inWindow) {
-    const e = byCommit.get(r.headSha) || { verdict: false, events: new Set() }
-    if (r.conclusion === 'success' || r.conclusion === 'failure') e.verdict = true
+    const e = byCommit.get(r.headSha) || { verdict: false, pushVerdict: false, events: new Set() }
+    const terminal = r.conclusion === 'success' || r.conclusion === 'failure'
+    if (terminal) {
+      e.verdict = true
+      // Tracked SEPARATELY · see rescuedByTick. A commit that a push run already measured was not
+      // rescued by anything, whatever else ran on it afterwards.
+      if (r.event !== 'schedule') e.pushVerdict = true
+    }
     e.events.add(r.event)
     byCommit.set(r.headSha, e)
   }
@@ -72,9 +78,18 @@ function tally(runs, sinceTime) {
     measured: commits.filter(c => c.verdict).length,
     ticks: inWindow.filter(r => r.event === 'schedule').length,
     tickVerdicts: inWindow.filter(r => r.event === 'schedule' && (r.conclusion === 'success' || r.conclusion === 'failure')).length,
-    // A commit whose ONLY verdict came from a tick is the feature working · it would have been
-    // unmeasured without one. Reported separately because it is the only direct evidence of value.
-    rescuedByTick: [...byCommit.entries()].filter(([, c]) => c.verdict && c.events.has('schedule')).length,
+    // A commit whose ONLY verdict came from a tick · the feature working, and the only direct
+    // evidence of value in this whole report.
+    //
+    // ⚠ THIS COUNTED ANY COMMIT A TICK TOUCHED UNTIL T2 S66 CLOSE, AND IT LIED ON ITS FIRST REAL
+    // READING. The first tick ever delivered fired on 17dd498, which ALREADY had a successful push
+    // run, so the guard correctly SKIPPED the expensive job · and a run whose only job is skipped
+    // still reports `success` at the run level. So a tick that did nothing, exactly as designed,
+    // was reported as "1 commit measured by a TICK that would otherwise be unmeasured". False.
+    // Two paths (did real work / correctly skipped) producing one observable (conclusion: success)
+    // is Rule 130, in the instrument built tonight to avoid exactly that. `pushVerdict` is the
+    // discriminator and it costs one field.
+    rescuedByTick: [...byCommit.values()].filter(c => c.verdict && !c.pushVerdict && c.events.has('schedule')).length,
   }
 }
 
