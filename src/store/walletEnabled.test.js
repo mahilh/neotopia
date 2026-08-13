@@ -109,6 +109,40 @@ describe('wallet ENABLED · the branch a flag-off suite cannot reach', () => {
       'catch up').toBe(STARTING_WALLET)
   })
 
+  // ── canAcquireCard · THE QUESTION THE UI HAS TO ASK BEFORE THE CLICK (T2 S68) ─────────────────
+  // GameRoom.jsx:750 asks whether a card EXISTS. Under a price that is a different question, and
+  // walletSoftLock.test.js measures what the difference costs: three of four adversarial policies
+  // soft-lock 12/12 at the SHIPPING budget, because a broke player's End Turn stays disabled.
+  it('a solvent seat can acquire, a broke one cannot, and an empty supply beats both', () => {
+    expect(api().canAcquireCard(0), 'a full wallet and a stocked offer cannot acquire').toBe(true)
+
+    useGameStore.setState(s => { s.players[0].wallet = CARD_PRICE - 1 })
+    expect(api().canAcquireCard(0), 'a seat one dollar short was told it can buy · this is the ' +
+      'predicate T1\'s End Turn escape will read, and a wrong TRUE is the soft-lock').toBe(false)
+
+    // AT the boundary, because `<` and `>=` differ only here and this must agree with tryDrawCard.
+    useGameStore.setState(s => { s.players[0].wallet = CARD_PRICE })
+    expect(api().canAcquireCard(0), 'exactly the price cannot acquire · off by one against ' +
+      'tryDrawCard, so the button and the refusal would disagree').toBe(true)
+
+    // ── IT MUST AGREE WITH THE ENGINE THAT CHARGES · the whole point of not re-deriving it ───────
+    // Two sides from one source would agree by construction (Rule 92), so this drives the ACTUAL
+    // purchase and compares outcomes rather than comparing the predicate to itself.
+    for (const w of [0, CARD_PRICE - 1, CARD_PRICE, CARD_PRICE * 3]) {
+      useGameStore.setState(s => { s.players[0].wallet = w; s.actionsRemaining = 3 })
+      const said = api().canAcquireCard(0)
+      const did = api().tryDrawCard(0, 'offer', 0).ok
+      expect(said, `canAcquireCard said ${said} at a wallet of ${w} and the purchase ${did ? '' : 'was refused'}` +
+        ' · the disabled state and the refusal disagree, which is exactly the drift T1 declined to ' +
+        'risk by re-deriving the predicate in the UI').toBe(did)
+    }
+
+    useGameStore.setState(s => { s.theOffer = []; s.deck = []; s.players[0].wallet = STARTING_WALLET })
+    expect(api().canAcquireCard(0), 'no cards anywhere and a full wallet reported as acquirable')
+      .toBe(false)
+    expect(api().canAcquireCard(99), 'a seat that does not exist reported as able to acquire').toBe(false)
+  })
+
   // ── THE TERMINAL SEAM · the reason T3's biconditional exists ───────────────────────────────────
   it('a board full of cards nobody can afford is a DEAD position', () => {
     // docs/WALLET_AND_DEMOLITION_CONTRACT.md §5. This is the case that does not exist today and is

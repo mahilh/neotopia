@@ -499,6 +499,38 @@ export const useGameStore = create(immer((set, get) => ({
   // same relationship scoreCard has with tryScoreCard.
   drawCard: (seat, source, cardIndex) => { get().tryDrawCard(seat, source, cardIndex) },
 
+  // ── CAN THIS SEAT ACQUIRE ANY CARD AT ALL?  (T2 S68 · for T1's End Turn escape) ─────────────────
+  // A QUESTION THE UI MUST ASK BEFORE THE CLICK, which tryDrawCard cannot answer without performing
+  // the purchase. GameRoom.jsx:750 currently asks whether a card EXISTS · `theOffer.length > 0 ||
+  // deckCount > 0` · and under a price those stop being the same question.
+  //
+  // MEASURED, and it is why this exists (src/store/walletSoftLock.test.js): at the SHIPPING budget
+  // of $1B against a $70M card, three of four adversarial-but-legal policies soft-lock 12 games out
+  // of 12. A broke player with 46 cards on the table has no legal move, the existence check says
+  // they do, so End Turn stays disabled · they can neither act nor pass. endGameTriggered does not
+  // rescue them: the two-round burn is driven by seats ENDING TURNS (Rule 103). The control is
+  // exact · an infinite budget hangs 0 of 12 under every policy.
+  //
+  // NO SECOND PREDICATE. T1 declined to re-derive affordability in the UI and was right to; this
+  // reads the same `WALLET_ENABLED ? priceOf(...) : 0` that tryDrawCard charges, so the disabled
+  // state and the refusal cannot disagree (Rule 45 / Rule 94 · one rule, one owner).
+  //
+  // ⚠ THE CHEAPEST AVAILABLE CARD IS THE RIGHT QUESTION, and with flat pricing every card is the
+  // cheapest. If priceOf ever becomes a function of the card this must take the MINIMUM over what is
+  // actually reachable · the deck is a blind draw, so its price cannot be quoted at all, which is
+  // the fourth argument for flat pricing recorded in docs/WALLET_AND_DEMOLITION_CONTRACT.md §2.
+  canAcquireCard: (seat) => {
+    const state = get()
+    const player = state.players.find(p => p.seat === seat)
+    if (!player) return false
+    const offered = state.theOffer[0]
+    const top = state.deck[0]
+    if (!offered && !top) return false
+    const cheapest = Math.min(...[offered, top].filter(Boolean)
+      .map(c => (WALLET_ENABLED ? priceOf(c) : 0)))
+    return (player.wallet ?? 0) >= cheapest
+  },
+
 
   // Score a card · returns true on a real award, false if rejected (wrong seat, card not in
   // hand, Diverse-City violation, or the pattern isn't actually complete on the board).
