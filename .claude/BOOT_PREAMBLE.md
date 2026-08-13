@@ -42,6 +42,16 @@ are deliberately not creating (86).
   (0, [], false, null) is inert whenever the fixture already rests there · faking deckAtEnd to 0 stayed
   green because the 4-player fixture exhausts its deck. Print the unmutated value at that line before
   believing a green, and repair it with a positive control on the term, not a better mutation (132).
+- AND THE SECOND WAY IT MISSES THE MEASUREMENT IS THAT NOTHING LOADED YOUR FILE (132, T3's instance,
+  same night, different mechanism · two lanes reaching one rule separately is a missing instrument,
+  not carelessness). Three mutations in a worktree came back green with an unmutated baseline,
+  identical to the character, because playwright reuseExistingServer handed the run the MAIN clone's
+  dev server on the shared port. Specs came from the worktree, the app came from somewhere else.
+  So ask of a green mutation both questions: could the fixture already equal the mutant, AND is the
+  artifact under test the one I edited? A dev server, a stale dist/, a cached bundle, a deployed
+  origin and another checkout all answer the second one wrong, and all of them answer it GREEN.
+  The generalisation: mutation testing verifies a MEASUREMENT PATH, so mutate one thing you are
+  certain must red before trusting any mutation that does not.
 - Size a rate guard against its baseline, never zero. spends > 0 passed at 0.01/game.
 - A wire sized from the run that produced it is a flake with a delay. Derive from a structural
   constant, not an observed rate.
