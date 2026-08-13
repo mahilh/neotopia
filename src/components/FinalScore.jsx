@@ -585,13 +585,19 @@ export default function FinalScore({
                 <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 13, fontWeight: 500 }}>
                   {ELEMENT_LABELS[c.element] ?? c.element}
                 </span>
-                {/* BY ID, NOT BY THE NAME THE ENGINE STAMPED (T1 S63). getClusterDetail copies
-                    `regionName` off the STORE's own region objects (gameStore.js, T2's lane), which
-                    hold a second hand-written list of region names. Rendering that string here would
-                    have put the OLD names on the cluster rows of a score screen whose board says the
-                    new ones · a row naming a region the player cannot find. The id is the thing both
-                    lists agree on, so it is the thing to render from. */}
-                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>· {REGION_NAMES[c.regionId] ?? c.regionName}</span>
+                {/* BY ID, NOT BY THE NAME THE ENGINE STAMPED (T1 S63, fallback removed S65).
+                    getClusterDetail copies `regionName` off the store's region objects, which held a
+                    second hand-written list of names; rendering that string would have put the OLD
+                    names on the cluster rows of a score screen whose board says the new ones.
+                    THE `?? c.regionName` FALLBACK IS GONE AND ITS REMOVAL IS THE POINT. It existed
+                    for exactly one session, to keep this screen correct while the store still
+                    disagreed. T2 derived the store from hexUtils in S64, so both sides now produce
+                    the identical string · which makes the fallback a REDUNDANT GUARD: either path
+                    yields the same output, so no mutation can red either one and the assertion I
+                    care about cannot be tested (Rule 130a). Deleting it gives the surviving read
+                    teeth. A missing id now renders nothing, loudly, instead of silently reaching for
+                    a second source of truth that is not supposed to exist any more. */}
+                <span style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12 }}>· {REGION_NAMES[c.regionId]}</span>
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'baseline', gap: 10 }}>
                   <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
                     {c.count} connected

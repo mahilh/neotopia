@@ -109,12 +109,12 @@ are deliberately not creating (86).
   you cannot name one in a sentence, it is decoration. Numeric JSON fields are where this hides:
   compare the VALUE, never a substring of the stringified snapshot (112 · guarded now by
   tests/jsonSubstringAssertions.test.js, so it is a function rather than this paragraph).
-  ⚠ THE THREE OTHER PLAUSIBLE ZEROES THIS PROJECT HAS PAID FOR ARE NOT ONE SHAPE, and flattening
-  them is its own error: the deploy probe was uniform-zero, the district-settle count was a probe
-  that answered too FAST (one snapshot at 90ms for a cue that peaks at 266ms), and the raster
-  measured a
-  letterboxed board that was not the one on screen. Same OUTCOME, three mechanisms. The control is
-  what covers all three; the uniformity tell only covers the first.
+  ⚠ THESE SHAPES ARE NOT ONE SHAPE, and flattening them is its own error: uniform-zero (the deploy
+  grep), answered-too-FAST (the district settle · one snapshot at 90ms for a cue peaking at 266ms),
+  a letterboxed raster measuring a board that was not on screen, a HARNESS that errored, and a
+  control that could not fail. Same OUTCOME every time, five mechanisms. A known-present control
+  covers the first three; nothing but running the probe from a file covers the fourth; and only
+  naming the value that would redden it covers the fifth.
 - NAME THE FAILURE YOUR MEASUREMENT CANNOT SEE BEFORE TRUSTING IT. One sentence. For overlays it is
   occlusion; for animation, two firing at once; for a focus trap, a dialog with nothing focusable.
 - A BOUND IS A CLAIM ABOUT A NOISE FLOOR, AND ONE SAMPLE OF THE FLOOR IS NOT A MEASUREMENT OF IT.

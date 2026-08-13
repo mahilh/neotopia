@@ -27,6 +27,11 @@ import { playSound, installSoundUnlock, isMuted, setMuted, subscribeMuted } from
 // constant plus two inline arrays, in the place-into-region buttons and the score panel. A rename
 // that missed one would leave a control naming a region the board no longer shows, which is the
 // one outcome worse than the old name. Sorted by id because every caller indexes by region id.
+// The vertical room the hand strip must leave for a SELECTED card's glow. CardFrame draws
+// `0 0 0 2px <ring>, 0 0 16px <blur>` (CardFrame.jsx:196), so the paint reaches 18px past the
+// card's own box. overflow-x:auto forces the vertical axis to auto as well, so without this the
+// scrollport clips the one cue that says which card can be scored. Gated, with the derivation.
+const HAND_GLOW_REACH = 18
 const REGIONS_BY_ID = [...REGIONS].sort((a, b) => a.id - b.id)
 const REGION_NAMES = REGIONS_BY_ID.map(r => r.name)
 const REGION_COLORS = REGIONS_BY_ID.map(r => r.color)
@@ -514,7 +519,19 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
     // After paint · the glowing card only exists once buildableMatches has rendered it.
     const id = requestAnimationFrame(() => {
       scoreCardRef.current?.focus?.({ preventScroll: true })
-      scoreCardRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+      // `inline` IS NOT OPTIONAL SINCE S65. block:'center' scrolls the vertical ancestor (the
+      // sheet); the hand is a HORIZONTAL scroller now, and the default inline:'nearest' scrolls it
+      // on that axis by the least it can get away with.
+      // ⚠ MEASURED, AND SMALLER THAN I FIRST WROTE HERE. I claimed this re-created the S44 defect ·
+      // "one pixel of a 168px card touching the scrollport". It does not: at 12 cards the default
+      // brings the glowing card FULLY into view, just 84px off centre, i.e. flush against the edge
+      // with no neighbour beside it. With inline:'center' the offset is 0.
+      //     without inline   fullyVisible true   centre offset 84px
+      //     with inline      fullyVisible true   centre offset  0px
+      // So the defect is not invisibility, it is that the card arrives with nothing next to it ·
+      // which matters here specifically, because COMPARISON is the requirement this whole strip is
+      // constrained by. Worth the one word, and not worth the sentence I nearly shipped.
+      scoreCardRef.current?.scrollIntoView?.({ block: 'center', inline: 'center', behavior: 'smooth' })
     })
     return () => cancelAnimationFrame(id)
   }, [uiPhase, buildableMatches])
@@ -1522,7 +1539,57 @@ function Board({ user, practice, practiceBots, onExitPractice }) {
           {/* HAND */}
           <div>
             <div style={sectionLabel}>Hand · {currentPlayer?.hand?.length ?? 0}</div>
-            <div data-hand style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+            {/* ── ONE ROW, AT ANY HAND SIZE (T1 S65 · Council) ──────────────────────────────────
+                The hand was `flexWrap: wrap`, so at 320 it laid out two cards per row and the panel
+                was a STEP FUNCTION of hand size. Measured on the real sheet, seeding hands of 3-12:
+                    hand   3     5     7     9    12
+                    panel 344   520   696   872  1048 px      · +176 per two cards
+                    sheet 619   795   971  1147  1323 px content against a ~344px window
+                The Offer collapse (S49) removed a CONSTANT; this is the variable term, and it was
+                the one that mattered. Council held this pending the wallet, then T2 priced it: P90
+                peak hand is 12 unpriced, 9-10 at $100M and still 6-7 at $250M · so the wallet is not
+                an unbounded-hand fix at any shippable price and the tripwire fired at every rung.
+
+                WHAT IT COSTS, because I named this cost myself when I recommended the option and it
+                is a REQUIREMENT rather than an accepted loss: matching cards to the board is the
+                game's core decision, so comparison has to survive. At 320 the strip window is 288px
+                and the pitch is 128 (120 card + 8 gap), so TWO cards are fully visible and a third
+                is half-shown · adjacent comparison is intact and the clipped third card is the
+                scroll affordance, free and standard. What is lost is comparing card 1 with card 9
+                without scrolling. If a playtester cannot compare, the answer is a second view (tap
+                to expand), never a return to the column · that is Council's tripwire, not mine.
+
+                overflowY IS NOT A CHOICE. Setting overflow-x to auto computes the other axis to auto
+                too, so a `visible` vertical overflow is not available and the SELECTED card's glow
+                (`0 0 0 2px` ring + `0 0 16px` blur = 18px of reach, CardFrame:196) would be clipped
+                by the scrollport · silently removing the affordance that says which card can score.
+                The vertical padding is that number, derived rather than chosen, and gated. */}
+            <div
+              data-hand
+              // A SCROLLABLE REGION WITH NO FOCUSABLE CHILD IS UNREACHABLE BY KEYBOARD (WCAG 2.1.1).
+              // The cards are focusable only at scorePending; the rest of the time the hand is
+              // informational and a keyboard player could not see past card two. One tab stop.
+              tabIndex={0}
+              role="group"
+              aria-label={`Hand · ${currentPlayer?.hand?.length ?? 0} cards`}
+              style={{
+                display: 'flex',
+                flexWrap: 'nowrap',
+                gap: 8,
+                overflowX: 'auto',
+                // `safe center` centres while the row fits and falls back to start when it does not.
+                // Plain `center` makes the OVERFLOW UNREACHABLE at the start edge · the first card
+                // scrolls off to the left with no way back, which is the classic centred-scroller
+                // bug and would have hidden card 1 of 12. Verified as a computed value, not assumed.
+                justifyContent: 'safe center',
+                // The horizontal scroll must not chain to the page · on a touch device that is the
+                // browser's back gesture, and losing the game to a sideways swipe on the hand is a
+                // worse defect than the one being fixed.
+                overscrollBehaviorX: 'contain',
+                // room for the selected card's 18px glow, which overflow:auto would otherwise clip
+                padding: `${HAND_GLOW_REACH}px 4px`,
+              }}
+            >
               {currentPlayer?.hand?.map(card => {
                 const isScoreable = uiPhase === 'scorePending' && buildableMatches.some(m => m.cardId === card.id)
                 return (
